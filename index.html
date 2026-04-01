@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مسبار الأمل - لوحة تحليل مباشرة</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root {
+  --primary: #0d9488;
+  --primary-light: #14b8a6;
+  --primary-dark: #0f766e;
+  --bg-dark: #0f172a;
+  --bg-card: #1e293b;
+  --bg-card-hover: #263348;
+  --accent: #14b8a6;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --green: #10b981;
+  --blue: #3b82f6;
+  --amber: #f59e0b;
+  --orange: #f97316;
+  --red: #ef4444;
+  --border: #334155;
+  --radius: 12px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+.light-mode {
+  --bg-dark: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f8fafc;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --border: #e2e8f0;
+  --shadow: 0 4px 24px rgba(0,0,0,0.08);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Tajawal', sans-serif;
+  background: var(--bg-dark);
+  color: var(--text-primary);
+  min-height: 100vh;
+  transition: background 0.3s, color 0.3s;
+}
+.container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, var(--bg-card) 0%, #162032 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 32px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+}
+.light-mode .header { background: linear-gradient(135deg, #ffffff 0%, #f0fdfa 100%); }
+.header::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at 80% 20%, rgba(13,148,136,0.08) 0%, transparent 50%);
+  pointer-events: none;
+}
+.header-right h1 {
+  font-size: 2rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--primary-light), var(--green));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 4px;
+}
+.header-right p { color: var(--text-secondary); font-size: 1rem; }
+.header-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.status-connected { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+.status-disconnected { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+.status-loading { background: rgba(245,158,11,0.15); color: var(--amber); border: 1px solid rgba(245,158,11,0.3); }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.status-connected .status-dot { background: var(--green); animation: pulse 2s infinite; }
+.status-disconnected .status-dot { background: var(--red); }
+.status-loading .status-dot { background: var(--amber); animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{ opacity:1; } 50%{ opacity:0.4; } }
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-family: 'Tajawal', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-light); transform: translateY(-1px); }
+.btn-outline { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+.btn-icon { padding: 8px 10px; }
+.timestamp { color: var(--text-muted); font-size: 0.8rem; }
+
+/* KPI Cards */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+  transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.kpi-card:hover { transform: translateY(-3px); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+.kpi-card .kpi-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  margin-bottom: 12px;
+}
+.kpi-card .kpi-value { font-size: 2rem; font-weight: 800; margin-bottom: 4px; }
+.kpi-card .kpi-label { color: var(--text-secondary); font-size: 0.9rem; }
+.kpi-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 80px;
+  height: 80px;
+  border-radius: 0 0 0 80px;
+  opacity: 0.07;
+}
+
+/* Charts */
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 20px;
+  margin-bottom: 24px;
+}
+@media (max-width: 860px) { .charts-grid { grid-template-columns: 1fr; } }
+.chart-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+.chart-card h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+}
+.chart-wrapper { position: relative; width: 100%; max-height: 350px; }
+.chart-wrapper canvas { width: 100% !important; }
+
+/* Filters */
+.filters-bar {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 24px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  box-shadow: var(--shadow);
+}
+.filter-group { display: flex; flex-direction: column; gap: 4px; }
+.filter-group label { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }
+.filter-group select, .filter-group input {
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 8px 14px;
+  font-family: 'Tajawal', sans-serif;
+  font-size: 0.9rem;
+  min-width: 160px;
+  transition: border-color 0.2s;
+}
+.filter-group select:focus, .filter-group input:focus { border-color: var(--primary); outline: none; }
+
+/* Table */
+.table-container {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  margin-bottom: 24px;
+}
+.table-header {
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.table-header h3 { font-weight: 700; }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 900px; }
+thead th {
+  background: rgba(13,148,136,0.1);
+  padding: 12px 16px;
+  text-align: right;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--primary-light);
+  border-bottom: 2px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+thead th:hover { background: rgba(13,148,136,0.2); }
+thead th .sort-icon { margin-right: 4px; font-size: 0.7rem; opacity: 0.5; }
+thead th.sorted .sort-icon { opacity: 1; color: var(--primary-light); }
+tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+tbody tr:hover { background: var(--bg-card-hover); }
+tbody td { padding: 10px 16px; font-size: 0.9rem; white-space: nowrap; }
+.score-cell {
+  font-weight: 700;
+  text-align: center;
+  border-radius: 6px;
+  padding: 4px 10px;
+  display: inline-block;
+  min-width: 42px;
+}
+.badge {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 14px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.badge-green { background: rgba(16,185,129,0.15); color: var(--green); }
+.badge-blue { background: rgba(59,130,246,0.15); color: var(--blue); }
+.badge-amber { background: rgba(245,158,11,0.15); color: var(--amber); }
+.badge-orange { background: rgba(249,115,22,0.15); color: var(--orange); }
+.badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
+
+/* Pagination */
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 24px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pagination-btns { display: flex; gap: 4px; }
+.pagination-btns button {
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: 'Tajawal', sans-serif;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+.pagination-btns button:hover { border-color: var(--primary); color: var(--primary); }
+.pagination-btns button.active { background: var(--primary); color: white; border-color: var(--primary); }
+.pagination-btns button:disabled { opacity: 0.4; cursor: default; }
+.pagination-info { color: var(--text-muted); font-size: 0.85rem; }
+
+/* Footer */
+.footer {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Loading */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-dark);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  transition: opacity 0.5s;
+}
+.loading-overlay.hidden { opacity: 0; pointer-events: none; }
+.spinner {
+  width: 56px;
+  height: 56px;
+  border: 4px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { color: var(--text-secondary); font-size: 1.1rem; }
+
+/* Error */
+.error-box {
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: var(--radius);
+  padding: 32px;
+  text-align: center;
+  margin: 40px auto;
+  max-width: 600px;
+}
+.error-box h3 { color: var(--red); margin-bottom: 12px; font-size: 1.3rem; }
+.error-box p { color: var(--text-secondary); line-height: 1.8; }
+.error-box code { background: var(--bg-dark); padding: 2px 8px; border-radius: 4px; font-size: 0.85rem; }
+
+/* Animations */
+@keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+.animate-in { animation: fadeUp 0.5s ease forwards; }
+.delay-1 { animation-delay: 0.1s; opacity: 0; }
+.delay-2 { animation-delay: 0.2s; opacity: 0; }
+.delay-3 { animation-delay: 0.3s; opacity: 0; }
+.delay-4 { animation-delay: 0.4s; opacity: 0; }
+.delay-5 { animation-delay: 0.5s; opacity: 0; }
+
+/* Print */
+@media print {
+  body { background: white !important; color: black !important; }
+  .header, .kpi-card, .chart-card, .filters-bar, .table-container, .footer { background: white !important; border-color: #ddd !important; color: black !important; box-shadow: none !important; }
+  .btn, .pagination, #themeToggle { display: none !important; }
+  .loading-overlay { display: none !important; }
+  thead th { color: #0f766e !important; }
+  tbody td, .kpi-label, .kpi-value, .timestamp, .header-right p { color: black !important; }
+  .header-right h1 { -webkit-text-fill-color: #0d9488 !important; }
+}
+@media (max-width: 640px) {
+  .container { padding: 12px; }
+  .header { padding: 18px; }
+  .header-right h1 { font-size: 1.4rem; }
+  .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  .kpi-card { padding: 16px; }
+  .kpi-card .kpi-value { font-size: 1.5rem; }
+  .filters-bar { padding: 14px; }
+  .filter-group select, .filter-group input { min-width: 130px; }
+}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">جاري تحميل البيانات من Google Sheets...</div>
+</div>
+
+<div class="container" id="mainContent" style="display:none;">
+
+  <!-- Header -->
+  <div class="header animate-in">
+    <div class="header-right">
+      <h1>🚀 مسبار الأمل</h1>
+      <p>لوحة تحليل الدرجات - الفصل الدراسي الثاني</p>
+      <span class="timestamp" id="lastRefresh"></span>
+    </div>
+    <div class="header-left">
+      <span class="status-badge status-loading" id="statusBadge">
+        <span class="status-dot"></span>
+        <span id="statusText">جاري الاتصال...</span>
+      </span>
+      <button class="btn btn-primary" onclick="refreshData()" id="refreshBtn">🔄 تحديث</button>
+      <button class="btn btn-outline btn-icon" id="themeToggle" onclick="toggleTheme()" title="تبديل الوضع">🌙</button>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-grid" id="kpiGrid">
+    <div class="kpi-card animate-in delay-1">
+      <div class="kpi-icon" style="background:rgba(13,148,136,0.15);color:var(--primary-light);">👨‍🎓</div>
+      <div class="kpi-value" id="kpiStudents">-</div>
+      <div class="kpi-label">إجمالي الطلاب</div>
+    </div>
+    <div class="kpi-card animate-in delay-2">
+      <div class="kpi-icon" style="background:rgba(59,130,246,0.15);color:var(--blue);">📊</div>
+      <div class="kpi-value" id="kpiAverage">-</div>
+      <div class="kpi-label">المعدل العام</div>
+    </div>
+    <div class="kpi-card animate-in delay-3">
+      <div class="kpi-icon" style="background:rgba(16,185,129,0.15);color:var(--green);">✅</div>
+      <div class="kpi-value" id="kpiPass">-</div>
+      <div class="kpi-label">نسبة النجاح (≥60)</div>
+    </div>
+    <div class="kpi-card animate-in delay-4">
+      <div class="kpi-icon" style="background:rgba(245,158,11,0.15);color:var(--amber);">🌟</div>
+      <div class="kpi-value" id="kpiExcellence">-</div>
+      <div class="kpi-label">نسبة التميز (≥90)</div>
+    </div>
+    <div class="kpi-card animate-in delay-5">
+      <div class="kpi-icon" style="background:rgba(239,68,68,0.15);color:var(--red);">📉</div>
+      <div class="kpi-value" id="kpiWeakest">-</div>
+      <div class="kpi-label">أضعف مادة</div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts-grid">
+    <div class="chart-card animate-in delay-2">
+      <h3>📊 متوسط الدرجات حسب الصف</h3>
+      <div class="chart-wrapper"><canvas id="chartGradeAvg"></canvas></div>
+    </div>
+    <div class="chart-card animate-in delay-3">
+      <h3>🎯 متوسطات المواد</h3>
+      <div class="chart-wrapper"><canvas id="chartRadar"></canvas></div>
+    </div>
+    <div class="chart-card animate-in delay-4">
+      <h3>🏆 توزيع التقديرات</h3>
+      <div class="chart-wrapper"><canvas id="chartDoughnut"></canvas></div>
+    </div>
+    <div class="chart-card animate-in delay-5">
+      <h3>✅ نسبة النجاح حسب الصف</h3>
+      <div class="chart-wrapper"><canvas id="chartPassRate"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters-bar animate-in delay-3">
+    <div class="filter-group">
+      <label>الصف</label>
+      <select id="filterGrade" onchange="applyFilters()">
+        <option value="">الكل</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>الشعبة</label>
+      <select id="filterSection" onchange="applyFilters()">
+        <option value="">الكل</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>التقدير</label>
+      <select id="filterRating" onchange="applyFilters()">
+        <option value="">الكل</option>
+        <option value="ممتاز">ممتاز</option>
+        <option value="جيد جداً">جيد جداً</option>
+        <option value="جيد">جيد</option>
+        <option value="مقبول">مقبول</option>
+        <option value="ضعيف">ضعيف</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>بحث بالاسم</label>
+      <input type="text" id="filterName" placeholder="اكتب اسم الطالب..." oninput="applyFilters()">
+    </div>
+    <div style="margin-right:auto;">
+      <button class="btn btn-outline" onclick="resetFilters()">🗑️ مسح الفلاتر</button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-container animate-in delay-4">
+    <div class="table-header">
+      <h3>📋 بيانات الطلاب <span id="rowCount" style="color:var(--text-muted);font-weight:400;font-size:0.85rem;"></span></h3>
+    </div>
+    <div class="table-scroll">
+      <table id="studentTable">
+        <thead>
+          <tr>
+            <th data-col="id" onclick="sortTable('id')"><span class="sort-icon">⇅</span> الرقم</th>
+            <th data-col="name" onclick="sortTable('name')"><span class="sort-icon">⇅</span> الاسم</th>
+            <th data-col="grade" onclick="sortTable('grade')"><span class="sort-icon">⇅</span> الصف</th>
+            <th data-col="section" onclick="sortTable('section')"><span class="sort-icon">⇅</span> الشعبة</th>
+            <th data-col="islamic" onclick="sortTable('islamic')"><span class="sort-icon">⇅</span> التربية الإسلامية</th>
+            <th data-col="arabic" onclick="sortTable('arabic')"><span class="sort-icon">⇅</span> اللغة العربية</th>
+            <th data-col="social" onclick="sortTable('social')"><span class="sort-icon">⇅</span> الاجتماعية</th>
+            <th data-col="english" onclick="sortTable('english')"><span class="sort-icon">⇅</span> الإنجليزية</th>
+            <th data-col="math" onclick="sortTable('math')"><span class="sort-icon">⇅</span> الرياضيات</th>
+            <th data-col="science" onclick="sortTable('science')"><span class="sort-icon">⇅</span> العلوم</th>
+            <th data-col="avg" onclick="sortTable('avg')"><span class="sort-icon">⇅</span> المعدل</th>
+            <th data-col="rating" onclick="sortTable('rating')"><span class="sort-icon">⇅</span> التقدير</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <div class="pagination-info" id="paginationInfo"></div>
+      <div class="pagination-btns" id="paginationBtns"></div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer animate-in delay-5">
+    <span>📡 البيانات مباشرة من Google Sheets - يتم التحديث تلقائياً عند تحديث الجدول</span>
+    <button class="btn btn-outline" onclick="window.print()">🖨️ طباعة</button>
+    <button class="btn btn-outline" onclick="exportCSV()">📥 تصدير CSV</button>
+  </div>
+</div>
+
+<script>
+// ========== CONFIGURATION ==========
+const SHEET_ID = '1ojilNfDg2XWTrlcRMmaoBNe8M0xE-YCnaMdVOC-LlsE';
+const SHEET_GID = '1846929810';
+const PER_PAGE = 25;
+
+// ========== STATE ==========
+let allStudents = [];
+let filteredStudents = [];
+let currentPage = 1;
+let sortCol = null;
+let sortAsc = true;
+let charts = {};
+
+const SUBJECTS = ['islamic','arabic','social','english','math','science'];
+const SUBJECT_NAMES = {
+  islamic: 'التربية الإسلامية', arabic: 'اللغة العربية', social: 'الدراسات الاجتماعية',
+  english: 'اللغة الإنجليزية', math: 'الرياضيات', science: 'العلوم'
+};
+const GRADE_ORDER = ['الصف الأول','الصف الثاني','الصف الثالث','الصف الرابع','الصف الخامس','الصف السادس','الصف السابع','الصف الثامن'];
+
+function getRating(avg) {
+  if (avg >= 90) return { text: 'ممتاز', cls: 'badge-green' };
+  if (avg >= 80) return { text: 'جيد جداً', cls: 'badge-blue' };
+  if (avg >= 70) return { text: 'جيد', cls: 'badge-amber' };
+  if (avg >= 60) return { text: 'مقبول', cls: 'badge-orange' };
+  return { text: 'ضعيف', cls: 'badge-red' };
+}
+function scoreColor(v) {
+  if (v >= 90) return 'var(--green)';
+  if (v >= 80) return 'var(--blue)';
+  if (v >= 70) return 'var(--amber)';
+  if (v >= 60) return 'var(--orange)';
+  return 'var(--red)';
+}
+
+
+// ========== EMBEDDED FALLBACK DATA ==========
+const EMBEDDED_DATA = [["20230004139", "جود على حسن عبدالله الهاشمي", "الصف الأول", "G1 -1", 90, 85, 97, 93, 89, 91], ["20230012665", "حصه حمود شايع حمود الهاجري", "الصف الأول", "G1 -1", 70, 70, 90, 76, 74, 78], ["20230001188", "حمدان عمر حسن عمر بلشرم", "الصف الأول", "G1 -1", 90, 88, 82, 74, 75, 78], ["20230012161", "حمدان مكتوم راشد خميس العلوي", "الصف الأول", "G1 -1", 90, 86, 80, 86, 81, 81], ["20230013828", "حميد مالك عجيل الشين الجحافى", "الصف الأول", "G1 -1", 83, 83, 75, 72, 72, 71], ["1023867", "حور احمد مبارك سيف الصالحى", "الصف الأول", "G1 -1", 94, 92, 90, 94, 94, 95], ["1059987", "ذياب خليفه رشيد عبده الظاهرى", "الصف الأول", "G1 -1", 93, 92, 90, 95, 95, 94], ["20230007757", "ريما عبدالله سالم حسن الكربى", "الصف الأول", "G1 -1", 90, 86, 83, 81, 78, 80], ["20230009484", "ساره عوض هادى فلاح الأحبابي", "الصف الأول", "G1 -1", 92, 87, 87, 92, 91, 91], ["20230001148", "سالم على سالم جمعه الجنيبي", "الصف الأول", "G1 -1", 94, 94, 85, 85, 85, 87], ["1121518", "سالم محمد سالم محمد سعيد", "الصف الأول", "G1 -1", 90, 90, 89, 85, 90, 94], ["20230004151", "سلامه حسن خليل  البيوك", "الصف الأول", "G1 -1", 81, 84, 87, 82, 85, 87], ["20230007659", "سيف صلاح عبدالله احمد النعيمي", "الصف الأول", "G1 -1", 86, 84, 85, 83, 86, 90], ["20230014336", "طحنون جمعه خميس راشد الكعبي", "الصف الأول", "G1 -1", 70, 66, 80, 71, 70, 73], ["20230020035", "ظبيه منصور عجيل الشين الجحافى", "الصف الأول", "G1 -1", 88, 85, 75, 70, 75, 74], ["20230000210", "عبدالعزيز مطر على نصيب البلوشى", "الصف الأول", "G1 -1", 84, 81, 91, 75, 85, 75], ["20230002078", "على سعيد عبيد سعيد الظنحاني", "الصف الأول", "G1 -1", 82, 80, 78, 81, 75, 82], ["20230001589", "على محمد على صالح الصيعري", "الصف الأول", "G1 -1", 85, 81, 90, 82, 74, 84], ["1264224", "مايد خالد سعيد سيف الريسى", "الصف الأول", "G1 -1", 90, 81, 88, 71, 74, 76], ["20230013323", "مبارك حمدان محمد ناجى احمد", "الصف الأول", "G1 -1", 71, 71, 90, 76, 77, 76], ["1273831", "محمد عبدالله نجيب ال عمير الشامسى", "الصف الأول", "G1 -1", 80, 72, 86, 83, 89, 90], ["1265430", "مريم عبدالله احمد على المشجرى", "الصف الأول", "G1 -1", 84, 80, 90, 79, 79, 77], ["1193114", "منصور عبدالكريم محمد ادم البلوشي", "الصف الأول", "G1 -1", 80, 82, 85, 82, 80, 80], ["20230003664", "نعيمه بنت سلطان بن خلفان بن راشد الغيثية", "الصف الأول", "G1 -1", 90, 83, 80, 86, 86, 91], ["20230002802", "نهيان احمد عبدالله سالمين عبدالله", "الصف الأول", "G1 -1", 71, 70, 85, 71, 73, 76], ["20230010172", "نوره يحيى سلطان سعيد الشامسى", "الصف الأول", "G1 -1", 87, 86, 78, 85, 89, 90], ["20230015475", "هاجر مسفر ناصر سعود المنصوري", "الصف الأول", "G1 -1", 90, 86, 95, 77, 77, 75], ["20230016701", "احمد خالد عبدالله مبارك النيادي", "الصف الأول", "G1 -2", 80, 82, 85, 78, 73, 83], ["20230017165", "احمد صالح جاسم سعيد البلوشي", "الصف الأول", "G1 -2", 67, 70, 67, 72, 72, 76], ["20230007334", "اليازيه مبروك احمد  بالحنف", "الصف الأول", "G1 -2", 91, 88, 91, 94, 94, 92], ["20230013449", "حمده سعيد راشد محمد الظاهري", "الصف الأول", "G1 -2", 91, 88, 88, 90, 93, 91], ["20230001187", "خالد محمد احمد عادل ابراهيم رسلان", "الصف الأول", "G1 -2", 90, 84, 90, 83, 82, 84], ["20230008790", "خليفه سليمان على السلحدى الشحي", "الصف الأول", "G1 -2", 92, 90, 92, 86, 80, 84], ["20230010045", "دانه على حسن على البلوشي", "الصف الأول", "G1 -2", 90, 86, 90, 86, 88, 90], ["20230015096", "روضه عيظه مبارك عيظه العامري", "الصف الأول", "G1 -2", 90, 86, 90, 78, 78, 79], ["20230001153", "زايد عبدالله حيى محيل الكعبي", "الصف الأول", "G1 -2", 80, 80, 80, 74, 77, 78], ["20230014333", "زايد محمد ناصر سعيد العامري", "الصف الأول", "G1 -2", 93, 93, 93, 84, 94, 90], ["1123507", "سالم صالح سالم البرك العامرى", "الصف الأول", "G1 -2", 95, 90, 94, 91, 94, 93], ["20230001147", "سلامه محمد راشد سالم الساعدي", "الصف الأول", "G1 -2", 88, 86, 88, 91, 90, 92], ["20230011560", "سيف سعيد البخيت على العامري", "الصف الأول", "G1 -2", 72, 72, 79, 72, 71, 73], ["20230003785", "شوق وليد محمد سيف الكعبي", "الصف الأول", "G1 -2", 95, 93, 92, 94, 86, 91], ["20230009643", "عبدالله ناصر عبدالله عيضه الصيعري", "الصف الأول", "G1 -2", 86, 80, 86, 81, 72, 81], ["20230001603", "على بن صالح بن عبدالله بن احمد البريكي", "الصف الأول", "G1 -2", 86, 81, 86, 79, 78, 84], ["20230003266", "على حسين مراد على المازم", "الصف الأول", "G1 -2", 90, 81, 90, 72, 71, 72], ["20230018725", "على حمد جابر الاحبابى الاحبابى", "الصف الأول", "G1 -2", 84, 80, 84, 83, 78, 83], ["20230014881", "على محمد على حسن الأحبابي", "الصف الأول", "G1 -2", 90, 80, 90, 71, 71, 76], ["20230013450", "عليا سعيد راشد محمد الظاهري", "الصف الأول", "G1 -2", 91, 86, 86, 90, 93, 93], ["20230007059", "غايه محمد حسين محسن الحارثي", "الصف الأول", "G1 -2", 80, 80, 80, 73, 77, 76], ["1261998", "لطيفه فيصل عبيد حمد النعيمى", "الصف الأول", "G1 -2", 81, 76, 81, 85, 93, 88], ["20230016603", "محمد ذياب محمد عبدالله اليافعي", "الصف الأول", "G1 -2", 92, 88, 84, 92, 90, 88], ["20230004143", "ناصر سالم على محمد الكربي", "الصف الأول", "G1 -2", 90, 88, 90, 71, 73, 75], ["1161763", "نوف على راشد سالم الغفلى", "الصف الأول", "G1 -2", 84, 81, 84, 83, 82, 79], ["20230010046", "هند على حسن على البلوشي", "الصف الأول", "G1 -2", 90, 86, 90, 86, 82, 91], ["20230007475", "وديمه بنت صالح بن زابن  الصيعري", "الصف الأول", "G1 -2", 81, 81, 81, 73, 74, 75], ["20240014156", "وديمه شايع عائل مسفر الاحبابى", "الصف الأول", "G1 -2", 80, 80, 80, 71, 71, 72], ["20230002653", "احمد محمد سالم سعيد الزيدى", "الصف الأول", "G1 -3", 96, 95, 98, 91, 92, 95], ["20230010347", "الجوهره حسام مبارك خميس العزيزي", "الصف الأول", "G1 -3", 88, 78, 89, 79, 80, 87], ["20230015063", "العنود على عبيد محمد العفاري", "الصف الأول", "G1 -3", 88, 75, 82, 78, 76, 82], ["1321127", "جواهر بن تميم", "الصف الأول", "G1 -3", 91, 89, 97, 78, 75, 87], ["1190352", "حامد هداف عبدالله كمعس المنهالي", "الصف الأول", "G1 -3", 80, 70, 80, 75, 73, 73], ["20230001361", "حسن محمد غازى عبده احمد", "الصف الأول", "G1 -3", 80, 77, 85, 78, 74, 73], ["1054337", "حمده فايز ناجى سيف محمد", "الصف الأول", "G1 -3", 95, 93, 95, 93, 91, 91], ["20230003502", "حور تركى سالم عبيد الكعبي", "الصف الأول", "G1 -3", 90, 81, 90, 77, 76, 80], ["925968", "ذياب محمد على خلف الغيثي", "الصف الأول", "G1 -3", 84, 74, 85, 75, 72, 70], ["20230012004", "ذياب ناصر خميس جمعه الكعبي", "الصف الأول", "G1 -3", 84, 76, 86, 75, 74, 70], ["20230012668", "راشد سعيد سالم سلطان الشامسى", "الصف الأول", "G1 -3", 77, 67, 89, 72, 70, 76], ["20230012425", "روضه يحيى سليم محمد البلوشي", "الصف الأول", "G1 -3", 80, 80, 91, 88, 85, 86], ["20240016625", "زايد سلطان راشد على الرشيدى", "الصف الأول", "G1 -3", 81, 80, 80, 71, 70, 72], ["1171345", "ساره طارق على عبدالله البلوشي", "الصف الأول", "G1 -3", 93, 93, 96, 90, 89, 94], ["20230004524", "سعود سامى رمضان عاشور الراشدي", "الصف الأول", "G1 -3", 90, 82, 90, 78, 72, 70], ["20230002666", "سعيد محمد سالم سعيد الزيدي", "الصف الأول", "G1 -3", 96, 94, 98, 93, 92, 95], ["20240013561", "سلمان عبدالله محمد عايض الاحبابى", "الصف الأول", "G1 -3", 85, 74, 95, 75, 72, 70], ["20230018845", "شيخه مسفر عايض مسفر الأحبابي", "الصف الأول", "G1 -3", 77, 66, 89, 74, 71, 70], ["20240011174", "عبدالله ناجى عبدالله راشد الجنيبي", "الصف الأول", "G1 -3", 91, 90, 95, 79, 79, 78], ["20230005911", "غاليه محمد سويد خميس النعيمي", "الصف الأول", "G1 -3", 86, 78, 91, 80, 80, 84], ["20230011866", "غاليه مسفر محمد مسفر الأحبابي", "الصف الأول", "G1 -3", 96, 94, 98, 93, 95, 95], ["20230018985", "مايد على سعيد عمير الظاهري", "الصف الأول", "G1 -3", 90, 89, 95, 79, 80, 81], ["20230002164", "مريم حسين مراد على المازم", "الصف الأول", "G1 -3", 92, 87, 96, 80, 79, 80], ["20230012296", "مهره حماد سعيد محمد الكعبي", "الصف الأول", "G1 -3", 94, 94, 98, 93, 94, 95], ["20230005018", "نهيان محمد احمد عبود سعيد", "الصف الأول", "G1 -3", 92, 89, 96, 92, 93, 95], ["20230001151", "نوره سعيد جابر سعيد الأحبابي", "الصف الأول", "G1 -3", 92, 89, 90, 88, 81, 83], ["1170488", "هزاع هيثم سالم البرك العامرى", "الصف الأول", "G1 -3", 93, 91, 96, 90, 92, 92], ["20230000837", "احمد محمد احمد سعيد البريكى", "الصف الأول", "G1 -4", 91, 91, 95, 90, 91, 92], ["1059225", "امل عادل سهيل احمد نوريه", "الصف الأول", "G1 -4", 90, 85, 90, 79, 72, 85], ["20230004966", "اميره هزاع خميس راشد الكعبي", "الصف الأول", "G1 -4", 88, 80, 90, 80, 81, 83], ["20250019313", "تميم بن حمدان بن احمد بن محمد الفقيه الحميري", "الصف الأول", "G1 -4", 85, 72, 85, 78, 74, 71], ["20250014111", "حسن بن سعد بن احمد العفارى", "الصف الأول", "G1 -4", 88, 83, 80, 78, 72, 72], ["20230015494", "حصه عبيد جابر عضيمان الأحبابي", "الصف الأول", "G1 -4", 92, 89, 93, 86, 84, 85], ["20230010980", "حمده سلطان حمد سيف العيسائي", "الصف الأول", "G1 -4", 91, 88, 92, 89, 92, 85], ["20230002760", "حمده صالح خاطر فايل المخينى", "الصف الأول", "G1 -4", 94, 90, 94, 93, 95, 94], ["20230017137", "راشد يوسف راشد سالم المسكري", "الصف الأول", "G1 -4", 90, 81, 90, 74, 71, 72], ["20230013322", "سالم خالد عبدالله محمد الجنيبي", "الصف الأول", "G1 -4", 87, 76, 85, 82, 76, 74], ["20230009542", "سلمان عبدالعزيز مسعود زايد الحراصى", "الصف الأول", "G1 -4", 68, 68, 77, 72, 70, 70], ["20230010341", "سيف عبدالكريم محمد ادم البلوشي", "الصف الأول", "G1 -4", 70, 66, 70, 72, 70, 73], ["20230004962", "شيخه سعيد صالح سعيد النهدي", "الصف الأول", "G1 -4", 96, 94, 95, 93, 95, 90], ["20230003514", "عائشه محمد سعيد سالم الهاشمي", "الصف الأول", "G1 -4", 92, 83, 88, 76, 71, 81], ["1162079", "عبدالله سالم على عبدالله الصيعري", "الصف الأول", "G1 -4", 71, 75, 75, 78, 75, 74], ["20230003820", "عبدالله سالم مصبح سرحان الكعبي", "الصف الأول", "G1 -4", 84, 66, 83, 71, 70, 70], ["20230012558", "عفراء عمران محمد شيبان المهيري", "الصف الأول", "G1 -4", 81, 71, 84, 83, 72, 70], ["1172489", "على عتيق على عبدالله مبارك", "الصف الأول", "G1 -4", 95, 94, 75, 90, 93, 95], ["20230000316", "على ناصر على جابر الأحبابي", "الصف الأول", "G1 -4", 71, 66, 88, 75, 71, 73], ["20230004965", "فاطمه هزاع خميس راشد الكعبي", "الصف الأول", "G1 -4", 82, 73, 95, 76, 70, 75], ["20230012626", "مبارك ابراهيم حسن سورى البلوشي", "الصف الأول", "G1 -4", 89, 80, 88, 85, 84, 73], ["20240018855", "مبارك حمد مبارك بن شيخه المرى", "الصف الأول", "G1 -4", 70, 70, 78, 70, 70, 70], ["1277745", "محمد بن خالد بن محمد بن سرحان الكعبى", "الصف الأول", "G1 -4", 87, 74, 95, 77, 71, 72], ["1168025", "محمد خالد سعيد نهيم العامري", "الصف الأول", "G1 -4", 80, 73, 83, 75, 70, 73], ["1265389", "ميره سلطان محمد عبدالله المهيرى", "الصف الأول", "G1 -4", 95, 94, 85, 93, 95, 93], ["20230015904", "نهيان عمر مصبح عبدالله الغيثى", "الصف الأول", "G1 -4", 81, 68, 81, 70, 70, 70], ["20230001862", "نوره سعد على هادى القحطانى", "الصف الأول", "G1 -4", 80, 68, 82, 71, 70, 72], ["1168255", "الريم سعود سالم محمد الكعبي", "الصف الأول", "G1 -5", 91, 88, 90, 90, 90, 86], ["20230000971", "المها احمد على سعيد المقبالى", "الصف الأول", "G1 -5", 92, 95, 93, 87, 90, 90], ["20230010642", "حصه احمد سالم حميد الريسي", "الصف الأول", "G1 -5", 95, 94, 95, 88, 90, 90], ["20230000969", "حليمه احمد على سعيد المقبالى", "الصف الأول", "G1 -5", 86, 95, 91, 86, 83, 83], ["20230016797", "حمدان خالد جمعه محمد البلوشى", "الصف الأول", "G1 -5", 90, 86, 83, 75, 76, 75], ["20230001146", "خالد عمر على المر الكعبي", "الصف الأول", "G1 -5", 90, 86, 87, 77, 77, 81], ["20230009531", "دانه جمال محمد غلام محمد", "الصف الأول", "G1 -5", 92, 85, 97, 83, 83, 90], ["20230002677", "ذياب احمد على سعيد المقبالى", "الصف الأول", "G1 -5", 93, 95, 94, 90, 94, 90], ["20230019729", "رفيعه بنت عبدالله بن حسن بن سبيل البلوشية", "الصف الأول", "G1 -5", 98, 98, 98, 92, 93, 92], ["940618", "زايد محمد سعيد حميد العيسائي", "الصف الأول", "G1 -5", 88, 83, 96, 80, 82, 80], ["20230006654", "سارة عمر عبدالله مراد البلوشي", "الصف الأول", "G1 -5", 94, 95, 89, 92, 90, 90], ["20230000999", "سلطان ابوبكر صالح الدابسى الدابسى", "الصف الأول", "G1 -5", 95, 92, 90, 80, 85, 81], ["1320050", "عائشه الفقير", "الصف الأول", "G1 -5", 98, 98, 98, 96, 94, 92], ["1216672", "عائشه بنت احمد بن سيف بن محمد الكعبيه", "الصف الأول", "G1 -5", 92, 89, 83, 83, 85, 86], ["20230011846", "عبدالله سلطان يعقوب سعيد الوحشي", "الصف الأول", "G1 -5", 89, 83, 85, 80, 87, 84], ["20230012667", "عمر مصطفى جابر محمد البلوشي", "الصف الأول", "G1 -5", 90, 91, 89, 81, 86, 86], ["20230001152", "فاطمه محمد راشد محمد الكعبي", "الصف الأول", "G1 -5", 98, 94, 98, 91, 90, 90], ["1100566", "فهد عبدالعزيز مراد عبدالله البلوشي", "الصف الأول", "G1 -5", 91, 87, 90, 76, 77, 76], ["20230014285", "مبارك عبدالله احمد سعيد المهري", "الصف الأول", "G1 -5", 88, 86, 87, 75, 77, 76], ["20230021443", "مزون عبدالله صالح محسن الحارثي", "الصف الأول", "G1 -5", 87, 83, 83, 77, 75, 76], ["20230018417", "مسعود مشعل هادى حمد الأحبابي", "الصف الأول", "G1 -5", 90, 86, 83, 76, 77, 74], ["20230001995", "مسفر خالد مسفر عايض الأحبابي", "الصف الأول", "G1 -5", 93, 91, 90, 80, 80, 80], ["20230010148", "موزه محمد سالم عبيد الشمرى", "الصف الأول", "G1 -5", 91, 91, 95, 94, 80, 86], ["20230001129", "هند محمد راشد ابراهيم المعمرى", "الصف الأول", "G1 -5", 79, 78, 75, 72, 73, 70], ["20230012089", "هند نادر سعيد مصبح الشامسى", "الصف الأول", "G1 -5", 94, 90, 91, 85, 88, 90], ["20230011948", "ونيس سالم عبيد احمد الكعبي", "الصف الأول", "G1 -5", 91, 88, 89, 93, 90, 90], ["1313511", "المها مسعود راشد مسعود السعيديه", "الصف الأول", "G1 -6", 89, 79, 82, 84, 80, 87], ["20230001969", "حامد هادى حمد فرحان الأحبابي", "الصف الأول", "G1 -6", 90, 87, 92, 82, 83, 88], ["20230006363", "حصه خميس سعيد خميس الكعبي", "الصف الأول", "G1 -6", 91, 89, 85, 82, 85, 85], ["20230016003", "حمدان خلفان على على الدرمكى", "الصف الأول", "G1 -6", 91, 92, 77, 90, 87, 88], ["20230005034", "حور على سالم مسعود الظاهري", "الصف الأول", "G1 -6", 91, 90, 86, 80, 82, 85], ["20230003878", "خالد صقر ابراهيم عبدالرحمن الكعبي", "الصف الأول", "G1 -6", 90, 90, 85, 80, 77, 78], ["20230005974", "خميس على خميس سعيد المقبالي", "الصف الأول", "G1 -6", 96, 96, 100, 91, 92, 90], ["20230005994", "دانه عبدالله على صالح المنصوري", "الصف الأول", "G1 -6", 90, 92, 92, 80, 74, 85], ["1034154", "راشد عمر صالح مبارك بن زوبع", "الصف الأول", "G1 -6", 70, 66, 70, 75, 70, 72], ["1263412", "رين احمد حسن على البلوشى", "الصف الأول", "G1 -6", 88, 83, 85, 84, 85, 86], ["20230007086", "زايد عبدالله سالم مبارك البريكي", "الصف الأول", "G1 -6", 95, 96, 95, 92, 90, 90], ["20230000324", "سعيد محمد مسلم حمد الجنيبي", "الصف الأول", "G1 -6", 83, 80, 83, 78, 76, 80], ["20230007916", "سلامه عبدالله حمدان محمد البلوشي", "الصف الأول", "G1 -6", 85, 83, 82, 80, 80, 86], ["20230001695", "سهيل فايز سعيد صالح العامري", "الصف الأول", "G1 -6", 91, 86, 87, 78, 80, 84], ["20230011554", "سيف عبدالله محمد حسن الكربي", "الصف الأول", "G1 -6", 95, 94, 88, 86, 90, 82], ["20230018091", "صقر محمد على هداد العرياني", "الصف الأول", "G1 -6", 96, 93, 94, 84, 92, 90], ["20230007851", "عبدالله عايظ سعيد مهمل الأحبابي", "الصف الأول", "G1 -6", 99, 96, 96, 83, 90, 88], ["20230011310", "غلا سعيد على سعيد الشامسى", "الصف الأول", "G1 -6", 95, 94, 95, 94, 95, 92], ["20230003755", "فاطمه عبدالله سالم سالمين المري", "الصف الأول", "G1 -6", 95, 96, 96, 95, 95, 92], ["20230007264", "فاطمه محسن احمد محسن عبدالله", "الصف الأول", "G1 -6", 95, 97, 98, 100, 100, 96], ["20230012013", "محمد محمود محمد احمد الحوقانى", "الصف الأول", "G1 -6", 92, 94, 95, 83, 90, 89], ["20230020037", "ميرا سلطان على جمعه مسعود", "الصف الأول", "G1 -6", 90, 87, 83, 80, 76, 80], ["20230006073", "ناصر حسن سالم حسن الكربي", "الصف الأول", "G1 -6", 83, 68, 75, 77, 75, 77], ["20230000563", "نوال ناصر جمعه الخوار الكعبي", "الصف الأول", "G1 -6", 91, 84, 89, 75, 75, 80], ["20230015152", "نوره صالح سليمان مبارك العامري", "الصف الأول", "G1 -6", 92, 88, 85, 79, 76, 76], ["20230012671", "نوره عمر على عبدالله البلوشي", "الصف الأول", "G1 -6", 97, 94, 93, 94, 92, 90], ["20220007229", "الريم عبدالله خلفان على الدرمكى", "الصف الثاني", "G2 -1", 95, 95, 97, 98, 98, 96], ["20220016302", "حامد محمد مسلم  حمد", "الصف الثاني", "G2 -1", 80, 90, 97, 93, 93, 92], ["20220001024", "حمدان سالم احمد سعيد", "الصف الثاني", "G2 -1", 90, 85, 90, 94, 95, 94], ["20220009770", "راكان بن عزيز بن خميس المنصورى", "الصف الثاني", "G2 -1", 90, 90, 88, 92, 91, 92], ["20220009223", "روضه احمد محمد  سعيد", "الصف الثاني", "G2 -1", 70, 70, 87, 79, 80, 78], ["1153077", "زايد صالح جاسم سعيد البلوشي", "الصف الثاني", "G2 -1", 90, 95, 96, 92, 81, 92], ["20220008480", "سالم صالح سالم حسن الكربي", "الصف الثاني", "G2 -1", 85, 85, 90, 93, 96, 92], ["20220022694", "سلطان عبدالله مصبح  محمد", "الصف الثاني", "G2 -1", 75, 75, 85, 84, 90, 84], ["20220002611", "سيف سعيد حمد  سيف", "الصف الثاني", "G2 -1", 90, 90, 97, 89, 90, 92], ["20220011247", "شما سالم عبيد  سيف", "الصف الثاني", "G2 -1", 75, 75, 95, 78, 78, 79], ["20220000598", "صالح ريكان المخيبى  بخيت", "الصف الثاني", "G2 -1", 85, 85, 92, 76, 71, 77], ["20220016300", "عائشه سلطان محمد نور البلوشي", "الصف الثاني", "G2 -1", 70, 75, 85, 65, 73, 71], ["20220017410", "عائشه عبدالله حمد سالم اليحيائي", "الصف الثاني", "G2 -1", 70, 75, 90, 69, 70, 77], ["20220001021", "على سليمان على  السلحدى", "الصف الثاني", "G2 -1", 80, 75, 93, 85, 86, 91], ["20220009131", "عوف عبدالرحمن ابراهيم  محمد", "الصف الثاني", "G2 -1", 85, 80, 95, 92, 91, 91], ["1099094", "غيث يوسف راشد  سالم", "الصف الثاني", "G2 -1", 85, 85, 96, 88, 90, 91], ["20220017726", "فاطمه عيظه مبارك  عيظه", "الصف الثاني", "G2 -1", 95, 90, 96, 93, 91, 90], ["20210010537", "فهد يوسف عبدالله  مراد", "الصف الثاني", "G2 -1", 75, 75, 85, 72, 78, 79], ["20220017727", "محمد عيظه مبارك  عيظه", "الصف الثاني", "G2 -1", 85, 80, 96, 90, 94, 92], ["20220011177", "ميثه حمدان محمد صالح الكربي", "الصف الثاني", "G2 -1", 95, 95, 96, 94, 95, 94], ["20220001408", "نايف حسين جابر  عضيمان", "الصف الثاني", "G2 -1", 90, 90, 97, 92, 94, 93], ["20220012242", "نوره حسن سالم  حسن", "الصف الثاني", "G2 -1", 80, 80, 96, 85, 89, 90], ["20220002616", "نوره سعيد حمد  سيف", "الصف الثاني", "G2 -1", 80, 80, 97, 87, 84, 90], ["20220006947", "هادى خليل هادى سعيد الأحبابي", "الصف الثاني", "G2 -1", 90, 85, 94, 91, 92, 90], ["20220009987", "هيا جمعه احمد محمد البلوشي", "الصف الثاني", "G2 -1", 80, 80, 90, 82, 81, 83], ["20220020798", "احمد شاجع احمد  صالح", "الصف الثاني", "G2 -2", 85, 80, 90, 80, 75, 79], ["20220012241", "الريم حمد محمد  صالح", "الصف الثاني", "G2 -2", 85, 85, 91, 81, 89, 87], ["20220005567", "العذوب محمد سالم  سعيد", "الصف الثاني", "G2 -2", 95, 95, 98, 100, 98, 98], ["20220012983", "بخيته عبدالله محمد  مبارك", "الصف الثاني", "G2 -2", 85, 85, 93, 82, 92, 85], ["20220005094", "حصه بنت صالح بن زابن  الصيعرى", "الصف الثاني", "G2 -2", 85, 85, 93, 81, 80, 75], ["20220015979", "حصه سالم احمد  سالم", "الصف الثاني", "G2 -2", 95, 95, 96, 98, 97, 98], ["20220000479", "حمدان على حمود  عبدالله", "الصف الثاني", "G2 -2", 80, 80, 85, 70, 75, 68], ["20220011157", "خليفه بن صالح بن عبدالله بن احمد البريكى", "الصف الثاني", "G2 -2", 80, 80, 95, 96, 92, 92], ["20220000702", "سالم سعيد راشد حميد السناني", "الصف الثاني", "G2 -2", 97, 95, 98, 100, 98, 98], ["20220020525", "سعيد عتيق سعيد  عبيد", "الصف الثاني", "G2 -2", 75, 75, 89, 74, 72, 68], ["1055929", "سلامه وراث ولى محمد غلام محمد", "الصف الثاني", "G2 -2", 85, 85, 90, 88, 88, 88], ["20220017376", "سلطان ناصر على  طالب", "الصف الثاني", "G2 -2", 90, 90, 95, 100, 97, 96], ["20220013088", "شيخه محمد فرج  مبارك", "الصف الثاني", "G2 -2", 95, 95, 98, 100, 96, 96], ["20240021758", "عبدالرحمن احمد عبدالله راشد الجنيبى", "الصف الثاني", "G2 -2", 80, 80, 98, 73, 76, 76], ["20220015633", "عبدالله ناصر فرج مبارك الكربي", "الصف الثاني", "G2 -2", 70, 70, 90, 78, 70, 70], ["20210010468", "عبدالله ناصر محمد  ضبيان اليحيائي", "الصف الثاني", "G2 -2", 85, 90, 98, 90, 92, 93], ["1161057", "مبارك عبدالله محمد وهيب احمد", "الصف الثاني", "G2 -2", 90, 90, 97, 95, 90, 91], ["20220013083", "محمد سليمان سالم مسعود", "الصف الثاني", "G2 -2", 95, 95, 85, 98, 96, 96], ["20220044369", "مهره احمد حسن شمال بيري البلوشي", "الصف الثاني", "G2 -2", 95, 95, 97, 100, 98, 98], ["20220012492", "مهره حسين عبدالله عايض الأحبابي", "الصف الثاني", "G2 -2", 85, 80, 91, 70, 80, 75], ["1119521", "مهره عبدالله على سعيد العلوي", "الصف الثاني", "G2 -2", 90, 90, 97, 98, 97, 96], ["20220009586", "موزه عبدالله حيى  محيل", "الصف الثاني", "G2 -2", 85, 80, 90, 86, 80, 78], ["20210019057", "ناصر سعيد ناصر على الشامسى", "الصف الثاني", "G2 -2", 85, 80, 93, 88, 85, 79], ["20230021615", "نوره مرزوق سعيد بالعاط المحرمى", "الصف الثاني", "G2 -2", 85, 80, 88, 85, 82, 69], ["20220015421", "احمد صقر محمد  بجير", "الصف الثاني", "G2 -3", 75, 68, 87, 80, 70, 70], ["20220003248", "الريم سالم على سالم الأحبابي", "الصف الثاني", "G2 -3", 92, 85, 96, 95, 91, 92], ["20220003477", "جمعه احمد جمعه سالم", "الصف الثاني", "G2 -3", 80, 75, 93, 72, 70, 71], ["20220014621", "حصه حمدان محمد  ناجى", "الصف الثاني", "G2 -3", 92, 85, 95, 80, 81, 83], ["20220004797", "حمد سيف سعيد  سالم", "الصف الثاني", "G2 -3", 92, 88, 91, 77, 80, 76], ["20220016143", "حمده على محمد  سالم", "الصف الثاني", "G2 -3", 80, 78, 90, 78, 80, 83], ["20220016724", "خالد محمد عوض  مبارك", "الصف الثاني", "G2 -3", 79, 70, 85, 76, 80, 80], ["1110740", "زايد محمد عمر  مبارك", "الصف الثاني", "G2 -3", 90, 89, 95, 100, 92, 98], ["20220012935", "ساره صلاح صالح سالم باهيصمي", "الصف الثاني", "G2 -3", 92, 86, 94, 92, 90, 90], ["20220003442", "سلامه طارق على عبدالله", "الصف الثاني", "G2 -3", 95, 95, 97, 92, 94, 96], ["20220007135", "سلامه على جابر سعيد الأحبابي", "الصف الثاني", "G2 -3", 94, 92, 97, 94, 88, 90], ["20220004890", "سلامه يس سليم  محمد", "الصف الثاني", "G2 -3", 95, 95, 97, 95, 94, 97], ["20220000692", "سيف حمدان محمد  عبدالله", "الصف الثاني", "G2 -3", 90, 89, 94, 100, 96, 100], ["20220000648", "سيف وليد حارب سالم الشامسي", "الصف الثاني", "G2 -3", 89, 85, 95, 80, 80, 80], ["20220014567", "شما على مراد جان", "الصف الثاني", "G2 -3", 95, 95, 97, 94, 90, 95], ["20220007140", "شهد على مسفر على الأحبابي", "الصف الثاني", "G2 -3", 85, 79, 94, 81, 82, 77], ["20220003685", "عائشه سالم على  جمعه", "الصف الثاني", "G2 -3", 85, 75, 92, 80, 80, 76], ["20220000185", "غانم على محمد الماس", "الصف الثاني", "G2 -3", 94, 90, 97, 85, 82, 85], ["20220009593", "فاطمه حسن على  سالم", "الصف الثاني", "G2 -3", 92, 88, 97, 93, 85, 86], ["20220003690", "فى اسحاق احمد  عبدالله", "الصف الثاني", "G2 -3", 88, 85, 95, 75, 75, 72], ["20220010392", "محمد جابر على جابر الأحبابي", "الصف الثاني", "G2 -3", 78, 82, 80, 80, 80, 81], ["882389", "محمد سعيد جمعه  سعيد", "الصف الثاني", "G2 -3", 85, 80, 80, 96, 87, 97], ["20220009602", "ميره محمد على نصيب البلوشي", "الصف الثاني", "G2 -3", 95, 95, 98, 95, 93, 96], ["20220000457", "نايف عوض عايض معيض العتيبي", "الصف الثاني", "G2 -3", 96, 96, 98, 100, 100, 98], ["20220004805", "افنان محمد على عبدالله الكشادى", "الصف الثاني", "G2 -4", 95, 94, 98, 97, 95, 100], ["20220005564", "امنه يوسف سليم محمد البلوشي", "الصف الثاني", "G2 -4", 87, 79, 96, 93, 90, 81], ["20220017381", "ترفه حسن على  محمد", "الصف الثاني", "G2 -4", 87, 83, 94, 93, 80, 77], ["20220021229", "حامد ضافر جابر  عضيمان", "الصف الثاني", "G2 -4", 76, 70, 85, 70, 70, 70], ["20220020567", "حصه على ظافر  هادى", "الصف الثاني", "G2 -4", 95, 94, 97, 90, 85, 95], ["20220010568", "حمدان محمد جمعه سعيد", "الصف الثاني", "G2 -4", 90, 80, 95, 75, 75, 72], ["20210009856", "حميد سالم خميس حمد العامري", "الصف الثاني", "G2 -4", 90, 72, 95, 80, 80, 89], ["20220012268", "دانه هادى محمد  صالح", "الصف الثاني", "G2 -4", 95, 94, 97, 100, 95, 98], ["20220010888", "راشد محمد صالح بن العمر", "الصف الثاني", "G2 -4", 70, 67, 79, 91, 80, 94], ["20220018301", "راشد هلال عبدالله  الشامسى", "الصف الثاني", "G2 -4", 80, 67, 88, 70, 70, 71], ["20220018998", "ريتاج على يسلم عوض", "الصف الثاني", "G2 -4", 70, 67, 90, 79, 70, 73], ["1135177", "ساره خالد سعيد محمد المهرى", "الصف الثاني", "G2 -4", 90, 86, 95, 94, 85, 96], ["20220001382", "سلطان محسن عبود  كرامه", "الصف الثاني", "G2 -4", 79, 76, 90, 73, 70, 75], ["20220016308", "سلطان ناصر مسفر عايض الأحبابي", "الصف الثاني", "G2 -4", 89, 85, 91, 75, 77, 81], ["20220000474", "شيخه محمد حمود  عبدالله", "الصف الثاني", "G2 -4", 94, 89, 95, 88, 88, 90], ["20220009579", "شيخه محمد سالم فيروز الرميثى", "الصف الثاني", "G2 -4", 85, 80, 88, 86, 80, 85], ["20220013541", "عبدالله مهدي سعيد سعيدان الأحبابي", "الصف الثاني", "G2 -4", 94, 91, 97, 96, 93, 98], ["20210014883", "على بدر محمد  غلام", "الصف الثاني", "G2 -4", 85, 72, 90, 81, 82, 81], ["1142564", "عمر جاسم رحيم محمد البلوشي", "الصف الثاني", "G2 -4", 90, 87, 88, 80, 81, 87], ["20220010397", "فاطمه عبدالله على  عبدالله", "الصف الثاني", "G2 -4", 95, 94, 97, 97, 98, 100], ["881716", "لطيفه عبدالله سلطان  محمد", "الصف الثاني", "G2 -4", 95, 94, 97, 99, 96, 100], ["20220021834", "مجهار بن على بن مجهار  العرجانى", "الصف الثاني", "G2 -4", 92, 92, 95, 86, 85, 80], ["20220016216", "محمد خلفان سلطان  راشد", "الصف الثاني", "G2 -4", 90, 88, 97, 87, 90, 87], ["20210023512", "محمد على سالم  مسعود", "الصف الثاني", "G2 -4", 90, 86, 96, 94, 95, 90], ["20210014710", "منصور سالم محمد  مقبل", "الصف الثاني", "G2 -4", 77, 75, 85, 75, 70, 70], ["20220015715", "هند سليمان على  محمد", "الصف الثاني", "G2 -4", 95, 94, 97, 90, 90, 95], ["1160250", "الريم عماد سعيد صفصوف النعيمى", "الصف الثاني", "G2 -5", 76, 75, 90, 86, 81, 80], ["20220017875", "حصه خميس على  خميس", "الصف الثاني", "G2 -5", 96, 96, 95, 90, 90, 85], ["20220003440", "حمدان بدر حسين  عيسى", "الصف الثاني", "G2 -5", 79, 78, 90, 70, 71, 75], ["20220003432", "خليفه سالم قادربخش لال البلوشى", "الصف الثاني", "G2 -5", 89, 88, 90, 100, 94, 100], ["20220013085", "خليفه سليمان سالم مسعود", "الصف الثاني", "G2 -5", 71, 70, 67, 80, 82, 79], ["20220016415", "ريم على راشد  سويد", "الصف الثاني", "G2 -5", 96, 96, 95, 90, 89, 96], ["20220016313", "زهره عامر عبدالله  خميس", "الصف الثاني", "G2 -5", 81, 80, 90, 84, 85, 91], ["20230009247", "ساره احمد حمد مسفر الأحبابي", "الصف الثاني", "G2 -5", 90, 89, 95, 84, 89, 74], ["1133248", "سالم خالد سالم سلطان الكعبى", "الصف الثاني", "G2 -5", 89, 87, 95, 90, 94, 81], ["20230012104", "سعود بن عبدالله بن على بن راشد الرشيدى", "الصف الثاني", "G2 -5", 71, 70, 86, 74, 81, 73], ["1019439", "سعيد جلال سالم  محسن", "الصف الثاني", "G2 -5", 91, 90, 97, 96, 93, 93], ["20220003436", "سلطان بدر حسين  عيسى", "الصف الثاني", "G2 -5", 72, 70, 95, 76, 80, 78], ["925969", "سيف محمد على  خلف", "الصف الثاني", "G2 -5", 82, 79, 95, 86, 92, 87], ["20220008869", "شيخه عمر على  عبدالله", "الصف الثاني", "G2 -5", 96, 96, 97, 100, 100, 96], ["20230016761", "عامر حسن حسين غلام حسين", "الصف الثاني", "G2 -5", 89, 89, 95, 86, 90, 88], ["20220008384", "عبدالرحمن عبدالله طالب  خلف", "الصف الثاني", "G2 -5", 82, 82, 90, 84, 81, 78], ["20220022550", "على صالح سالم عوض الصيعري", "الصف الثاني", "G2 -5", 72, 70, 92, 84, 90, 91], ["20220014359", "غلا مشعل هادى  حمد", "الصف الثاني", "G2 -5", 79, 79, 90, 76, 71, 73], ["20220015747", "فهد بن محمد بن حمد  الشمرى", "الصف الثاني", "G2 -5", 73, 73, 95, 74, 75, 80], ["20220016971", "لطيفه سعد هادى حمد الأحبابي", "الصف الثاني", "G2 -5", 75, 75, 75, 82, 81, 83], ["20230009248", "مريم احمد حمد مسفر الأحبابي", "الصف الثاني", "G2 -5", 90, 88, 95, 88, 87, 87], ["1162091", "مكتوم احمد   نصرتى", "الصف الثاني", "G2 -5", 88, 80, 92, 80, 83, 80], ["20220000182", "ملاك محمد جمعه  على", "الصف الثاني", "G2 -5", 98, 98, 97, 100, 100, 100], ["20220041499", "منصور احمد يعقوب ال مندوس البلوشي", "الصف الثاني", "G2 -5", 80, 78, 96, 88, 69, 69], ["1167380", "منصور سلطان ناصر حمد المنصوري", "الصف الثاني", "G2 -5", 96, 92, 95, 96, 91, 92], ["20220014430", "وضحا محمد مهدى هادى الأحبابي", "الصف الثاني", "G2 -5", 92, 90, 92, 100, 100, 96], ["20220026070", "اميره ناصر على جابر الاحبابى", "الصف الثاني", "G2 -6", 79, 77, 90, 77, 75, 88], ["20220014429", "جابر خالد جابر  محمد", "الصف الثاني", "G2 -6", 96, 96, 97, 100, 100, 100], ["20220018395", "حامد بن عبدالعزيز بن خليفه بن على اليحيائى", "الصف الثاني", "G2 -6", 70, 70, 87, 68, 67, 65], ["20220015724", "ريم سلطان راشد على الرشيدى", "الصف الثاني", "G2 -6", 88, 88, 96, 90, 91, 91], ["20220002607", "زايد على عبدالهادى  عوض", "الصف الثاني", "G2 -6", 90, 88, 85, 86, 86, 86], ["20200053158", "سعيد احمد سعيد  خويدم", "الصف الثاني", "G2 -6", 90, 87, 94, 86, 90, 90], ["20220018053", "شموخ محمد على  جابر", "الصف الثاني", "G2 -6", 90, 87, 95, 100, 100, 95], ["1159765", "شهاب بن خليفه بن عبدالله بن سالم الكعبى", "الصف الثاني", "G2 -6", 88, 80, 95, 90, 88, 90], ["20220003444", "طيف محمد صالح سالم", "الصف الثاني", "G2 -6", 90, 88, 88, 96, 90, 91], ["20220001705", "عجلان محمد عجيل  الشين", "الصف الثاني", "G2 -6", 88, 88, 96, 89, 90, 93], ["20220015710", "غنى سعود مسعود ثفال الأحبابي", "الصف الثاني", "G2 -6", 88, 81, 97, 96, 95, 92], ["20220001022", "غيث سعيد محمد  سالم", "الصف الثاني", "G2 -6", 96, 96, 97, 96, 100, 91], ["20250025135", "فاطمة بنت ماجد بن راشد بن سيف الشامسيه", "الصف الثاني", "G2 -6", 70, 70, 95, 81, 84, 73], ["20230008456", "كنده بنت سالم بن يسلم الصيعرى الصيعري", "الصف الثاني", "G2 -6", 81, 80, 95, 86, 87, 87], ["20220018393", "ماجد بن عبدالعزيز بن خليفه بن  على", "الصف الثاني", "G2 -6", 70, 70, 88, 68, 71, 66], ["1171330", "ماريه عبدالله احمد على المشجرى", "الصف الثاني", "G2 -6", 88, 80, 90, 88, 81, 87], ["20230019107", "مثايل حمد محسن على الأحبابي", "الصف الثاني", "G2 -6", 80, 70, 98, 92, 94, 90], ["20220008461", "محمد مزهود مسلم سالم السيابي", "الصف الثاني", "G2 -6", 78, 74, 88, 84, 80, 76], ["1131930", "مسعود هادى مسعود هادى الاحبابى", "الصف الثاني", "G2 -6", 89, 89, 94, 100, 100, 91], ["20210011317", "مها شايع عائل مسفر الأحبابي", "الصف الثاني", "G2 -6", 96, 96, 96, 96, 92, 93], ["20220003699", "مهره بنت فيصل بن حمد بن سيف الكعبيه", "الصف الثاني", "G2 -6", 90, 87, 88, 94, 92, 90], ["20210018190", "مياسه على صالح  هادى", "الصف الثاني", "G2 -6", 85, 80, 90, 90, 90, 89], ["20220003952", "نايف منصر صالح  شبثان", "الصف الثاني", "G2 -6", 98, 98, 98, 100, 100, 100], ["20220006475", "نهيان بن ناصر بن سعيد بن محمد العامرى", "الصف الثاني", "G2 -6", 90, 89, 95, 100, 100, 100], ["20220009574", "هلال محمد هلال  غريب", "الصف الثاني", "G2 -6", 70, 70, 90, 88, 80, 77], ["20210006197", "الجود محمود محمد احمد الحوقانى", "الصف الثالث", "G3 -1", 91, 91, 91, 85, 95, 93], ["1191117", "حامد بن محمد بن سيف بن محمد", "الصف الثالث", "G3 -1", 70, 70, 73, 75, 63, 86], ["20210003665", "حمود ناصر شايع حمود الهاجرى", "الصف الثالث", "G3 -1", 91, 84, 85, 68, 77, 77], ["1099211", "خالد الوليد محمد صالح", "الصف الثالث", "G3 -1", 91, 93, 97, 92, 96, 98], ["20210012078", "خالد ناصر حمد مبارك الكربى", "الصف الثالث", "G3 -1", 81, 77, 84, 92, 95, 98], ["20210001213", "خليفه عبدالله حمد  المربوعى", "الصف الثالث", "G3 -1", 96, 90, 84, 68, 98, 87], ["20200044385", "روضه سالم سعيد خلفان البادي", "الصف الثالث", "G3 -1", 95, 98, 99, 81, 100, 89], ["20230001606", "ساره بنت مسفر بن على الحبابى", "الصف الثالث", "G3 -1", 100, 97, 84, 77, 100, 88], ["20200052951", "ساره سامي رمضان عاشور الراشدي", "الصف الثالث", "G3 -1", 88, 84, 96, 72, 90, 80], ["20220015922", "سعيد محمد على  الغرينيق", "الصف الثالث", "G3 -1", 74, 66, 98, 66, 70, 75], ["20200040777", "سلامه سيف محمد ابراهيم الكعبي", "الصف الثالث", "G3 -1", 96, 89, 98, 73, 87, 88], ["20210006823", "سلطان ناصر هداف رضوان المنهالى", "الصف الثالث", "G3 -1", 87, 77, 73, 62, 87, 81], ["20210015865", "سهيل عمر صالح يسلم الكثيري", "الصف الثالث", "G3 -1", 90, 86, 97, 68, 99, 79], ["20210002558", "سيف ابراهيم عوض محمد اكبر", "الصف الثالث", "G3 -1", 86, 78, 83, 62, 76, 82], ["20210009582", "شماء بنت عامر بن مبخوت  الكربي", "الصف الثالث", "G3 -1", 80, 77, 88, 67, 90, 76], ["20220017412", "صالح مهدى عبدالله  خميس", "الصف الثالث", "G3 -1", 79, 86, 91, 64, 87, 82], ["20220021669", "عبدالعزيز حمد جابر على الأحبابي", "الصف الثالث", "G3 -1", 89, 79, 93, 70, 76, 78], ["20200044386", "مترف فيصل سيف علي الشامسي", "الصف الثالث", "G3 -1", 83, 77, 92, 74, 68, 78], ["20210004473", "محمد سالم منصور سالم الصيعرى", "الصف الثالث", "G3 -1", 89, 96, 98, 70, 99, 80], ["20220001376", "محمد سعيد البخيت  على", "الصف الثالث", "G3 -1", 75, 80, 94, 66, 88, 77], ["20210004472", "مريم عيسى على سعيد المعمرى", "الصف الثالث", "G3 -1", 91, 94, 98, 77, 89, 85], ["20210001173", "مهره سالم محمد كرامه العامري", "الصف الثالث", "G3 -1", 95, 93, 100, 85, 81, 81], ["20210018907", "ميثاء محمد على داهم الأحبابي", "الصف الثالث", "G3 -1", 95, 92, 99, 77, 95, 85], ["20210006421", "ميثه أحمد هلال حمدان الشامسي", "الصف الثالث", "G3 -1", 95, 96, 98, 70, 100, 86], ["20210014572", "ميرة بنت سلطان بن ناصر بن محمد الفارسية", "الصف الثالث", "G3 -1", 100, 98, 99, 92, 97, 100], ["20210006145", "ميره راشد سالم راشد المقرشى", "الصف الثالث", "G3 -1", 87, 83, 97, 74, 97, 84], ["20220010679", "هند عبدالعزيز داود محمد الفارسي", "الصف الثالث", "G3 -1", 95, 91, 97, 78, 77, 75], ["20210006415", "احمد عبدالله احمد سعيد المهري", "الصف الثالث", "G3 -2", 88, 78, 90, 76, 86, 82], ["20210012202", "اليازيه حمد حران خليفه النعيمي", "الصف الثالث", "G3 -2", 87, 92, 85, 95, 96, 84], ["20210006765", "خديجه حمدان محمد ناجى احمد", "الصف الثالث", "G3 -2", 72, 70, 79, 70, 80, 80], ["20210008001", "خميس عبدالله خميس محمد العثمنى", "الصف الثالث", "G3 -2", 88, 94, 91, 85, 99, 82], ["20200014447", "دانه علي محمد مسفر الاحبابي", "الصف الثالث", "G3 -2", 92, 95, 96, 94, 100, 84], ["1032263", "ذياب أحمد حسن علي البلوشي", "الصف الثالث", "G3 -2", 75, 70, 85, 72, 80, 77], ["20210007998", "روان محمد على  جابر", "الصف الثالث", "G3 -2", 95, 96, 96, 96, 100, 82], ["20220009453", "ريم جابر على جابر جابر", "الصف الثالث", "G3 -2", 90, 80, 90, 70, 88, 82], ["1170677", "زايد بن على بن سيف بن جمعه", "الصف الثالث", "G3 -2", 83, 82, 100, 86, 100, 87], ["20210006940", "زايد سعيد محمد سالم الساعدي", "الصف الثالث", "G3 -2", 85, 74, 80, 73, 72, 76], ["20210018751", "ساره عامر علي صالح بن حريز", "الصف الثالث", "G3 -2", 79, 77, 90, 85, 65, 75], ["20210015610", "ساره فهد عمر سالم المنهالى", "الصف الثالث", "G3 -2", 88, 78, 83, 87, 93, 83], ["20210003277", "سالم عوض رمضان عاشور الراشدي", "الصف الثالث", "G3 -2", 95, 85, 99, 90, 95, 84], ["20210013376", "سالم محسن احمد  محسن", "الصف الثالث", "G3 -2", 75, 80, 85, 72, 100, 84], ["20200035693", "سهيل عبدالله محمد صالح الكربي", "الصف الثالث", "G3 -2", 92, 94, 97, 77, 93, 72], ["20200008059", "سيف ذياب محمد عبدالله اليافعي", "الصف الثالث", "G3 -2", 92, 82, 72, 96, 94, 97], ["20210002068", "سيف محمد حميد سعيد البلوشي", "الصف الثالث", "G3 -2", 89, 78, 84, 80, 99, 82], ["20210002449", "سيف ناصر أحمد عمر البريكي", "الصف الثالث", "G3 -2", 91, 96, 88, 97, 98, 98], ["20210011442", "عفرا زايد عبدالله علي عوض", "الصف الثالث", "G3 -2", 84, 70, 86, 70, 60, 74], ["20220005972", "عليا عبدالعزيز مراد  على", "الصف الثالث", "G3 -2", 85, 90, 80, 84, 85, 85], ["20220016416", "محمد على راشد  سويد", "الصف الثالث", "G3 -2", 95, 79, 95, 77, 70, 78], ["20210013450", "منال حسين علي جابر الأحبابي", "الصف الثالث", "G3 -2", 96, 92, 95, 88, 92, 83], ["20200052439", "منصور عبدالله علي سيف المزيني", "الصف الثالث", "G3 -2", 79, 71, 66, 70, 65, 70], ["20230020207", "مهره حميد سعيد صالح الكعبيه", "الصف الثالث", "G3 -2", 100, 98, 99, 97, 100, 98], ["20210012375", "ميثه مبروك احمد  بالحنف", "الصف الثالث", "G3 -2", 95, 93, 97, 88, 99, 91], ["1163351", "ندى الفقير", "الصف الثالث", "G3 -2", 95, 96, 99, 95, 96, 91], ["20210014681", "نهيان ابراهيم حسن سورى البلوشى", "الصف الثالث", "G3 -2", 84, 88, 97, 80, 94, 80], ["20210006419", "اليازيه سلطان سرور خليفه الكعبي", "الصف الثالث", "G3 -3", 94, 96, 94, 90, 95, 89], ["20230019081", "حمد حميد سعيد صالح الكعبى", "الصف الثالث", "G3 -3", 80, 74, 74, 72, 75, 80], ["20210011983", "حمد على حمد محمد العويسى", "الصف الثالث", "G3 -3", 86, 78, 86, 78, 67, 77], ["20210003965", "حمدان راشد حمد عبدالله المرى", "الصف الثالث", "G3 -3", 96, 77, 73, 80, 83, 81], ["20220009609", "خالد سعيد محمد عبدالله", "الصف الثالث", "G3 -3", 91, 95, 94, 91, 93, 90], ["20210002542", "راشد محمد عبدالله سعيد الصيعري", "الصف الثالث", "G3 -3", 96, 85, 93, 77, 84, 82], ["20200044425", "راشد محمود محمد شكرهان البلوشى", "الصف الثالث", "G3 -3", 91, 88, 98, 92, 98, 90], ["20210014731", "سعد على محمد صالح الكربي", "الصف الثالث", "G3 -3", 83, 70, 71, 73, 81, 78], ["20210006815", "سعود راشد احمد خزام الشامسى", "الصف الثالث", "G3 -3", 96, 92, 98, 93, 98, 93], ["20210006422", "سلطان عبدالله سالم محمد العامري", "الصف الثالث", "G3 -3", 92, 90, 91, 76, 90, 83], ["20210000338", "عائشه ناصر حميد سعيد البلوشي", "الصف الثالث", "G3 -3", 88, 88, 96, 90, 94, 89], ["20210006346", "عفراء محمد سويدان سالم البلوشي", "الصف الثالث", "G3 -3", 100, 97, 100, 97, 99, 98], ["20210011926", "فارس جواد احمد عقلان السينا", "الصف الثالث", "G3 -3", 89, 76, 74, 72, 85, 78], ["20210013128", "ليلى سلطان ابراهيم عبدالرحمن الكعبى", "الصف الثالث", "G3 -3", 86, 73, 72, 73, 63, 80], ["20210014441", "محسن عبدالله صالح محسن الحارثي", "الصف الثالث", "G3 -3", 85, 72, 66, 72, 60, 78], ["20210011238", "مريم محمد راشد سالم الساعدي", "الصف الثالث", "G3 -3", 95, 93, 87, 97, 97, 98], ["20210003677", "منصور احمد حمدان سعيد العامري", "الصف الثالث", "G3 -3", 100, 86, 83, 81, 85, 84], ["20220014688", "منصور مفرح على  محمد", "الصف الثالث", "G3 -3", 79, 81, 85, 78, 66, 80], ["20210004651", "منى علي محمد حارب العزيزي", "الصف الثالث", "G3 -3", 95, 94, 88, 97, 95, 97], ["20200041847", "نبهان حمدان محمد ناجي احمد", "الصف الثالث", "G3 -3", 90, 91, 94, 90, 80, 84], ["20210002237", "نسايم سعيد خلفان مبارك العلوى", "الصف الثالث", "G3 -3", 95, 95, 94, 97, 99, 93], ["20210000627", "نوره احمد سالم محمد الكعبى", "الصف الثالث", "G3 -3", 100, 96, 99, 92, 100, 94], ["20210008287", "نوره سالم سعيد ظافر الاحبابى", "الصف الثالث", "G3 -3", 82, 74, 70, 72, 81, 80], ["20210011321", "نوره شايع عائل  مسفر", "الصف الثالث", "G3 -3", 80, 70, 71, 70, 75, 81], ["1266436", "هبه الكحيل", "الصف الثالث", "G3 -3", 91, 81, 83, 72, 84, 81], ["20220016472", "هلال طالب حسين على", "الصف الثالث", "G3 -3", 74, 71, 71, 88, 63, 83], ["1164100", "يحيى لمنور", "الصف الثالث", "G3 -3", 100, 98, 99, 96, 100, 88], ["20210007342", "اسماء سعيد صالح سعيد النهدى", "الصف الثالث", "G3 -4", 100, 96, 97, 95, 88, 89], ["20210013061", "حامد محمد حسين محمد الأحبابي", "الصف الثالث", "G3 -4", 72, 90, 82, 72, 87, 80], ["20220019187", "حسين هادى على  محمد", "الصف الثالث", "G3 -4", 81, 82, 91, 85, 73, 84], ["20210003274", "حمد سلطان سعيد عبدالله الكعبى", "الصف الثالث", "G3 -4", 93, 81, 97, 95, 89, 92], ["20220015172", "حمد ناصر جمعه  الخوار", "الصف الثالث", "G3 -4", 75, 80, 94, 84, 69, 75], ["20210013075", "حمدان محمد حسين محمد الأحبابي", "الصف الثالث", "G3 -4", 85, 95, 98, 78, 89, 82], ["20210002695", "حمده نايف محمد سالم العبد", "الصف الثالث", "G3 -4", 81, 81, 82, 86, 81, 88], ["20210013505", "زايد ناصر مسفر عايض الاحبابي", "الصف الثالث", "G3 -4", 75, 77, 80, 75, 66, 79], ["1266525", "زينب فحف", "الصف الثالث", "G3 -4", 100, 97, 100, 94, 92, 98], ["20200052847", "سالم مسفر محمد مسفر الاحبابي", "الصف الثالث", "G3 -4", 100, 95, 100, 97, 98, 95], ["20210019756", "سهيل راشد محمد علي المري", "الصف الثالث", "G3 -4", 83, 78, 93, 72, 69, 79], ["20210014864", "سهيل عبدالله على صالح المصعبي", "الصف الثالث", "G3 -4", 91, 76, 97, 76, 90, 81], ["20200050869", "سيف عبيد خالد النعيمي", "الصف الثالث", "G3 -4", 93, 90, 97, 84, 88, 96], ["20210003276", "شيخه خلفان على على الدرمكى", "الصف الثالث", "G3 -4", 90, 72, 75, 96, 93, 95], ["20230009369", "شيخه محمد حسين محمد الأحبابي", "الصف الثالث", "G3 -4", 88, 77, 75, 71, 69, 78], ["20210001823", "عبدالله جميل خميس درويش السعدي", "الصف الثالث", "G3 -4", 91, 83, 94, 75, 83, 76], ["20210010284", "على عوض هادى فلاح الأحبابي", "الصف الثالث", "G3 -4", 87, 85, 93, 85, 84, 81], ["20210018245", "عمار سمير عبدالله محمد خميس", "الصف الثالث", "G3 -4", 88, 78, 69, 75, 72, 82], ["20210005749", "عيسى بن عبدالله بن حمد بن على العلوى", "الصف الثالث", "G3 -4", 100, 98, 100, 96, 96, 91], ["1166946", "غزلان مسعود راشد مسعود السعيديه", "الصف الثالث", "G3 -4", 95, 93, 81, 90, 91, 91], ["20220015878", "فاطمه مسلم حمد  سعيد", "الصف الثالث", "G3 -4", 82, 76, 75, 72, 81, 81], ["20210005742", "فهد عبدالله شامبى عبدالرسول البلوشي", "الصف الثالث", "G3 -4", 95, 96, 100, 98, 91, 91], ["20210007209", "محمد مشعل هادى حمد الاحبابى", "الصف الثالث", "G3 -4", 79, 70, 74, 71, 75, 83], ["20210007694", "مروان محمد جمعه على البلوشى", "الصف الثالث", "G3 -4", 95, 93, 74, 94, 100, 86], ["20210015757", "مريم خميس علي خميس المرزوقي", "الصف الثالث", "G3 -4", 100, 96, 98, 95, 94, 95], ["20210012544", "منصور بن عبدالعزيز بن خليفة بن علي اليحيائي", "الصف الثالث", "G3 -4", 83, 71, 63, 71, 60, 83], ["20210015734", "احمد صالح ناصر  الحر", "الصف الثالث", "G3 -5", 70, 66, 84, 71, 69, 74], ["20210000021", "الجوهره سالم عمر عبدالله القطب", "الصف الثالث", "G3 -5", 91, 81, 90, 96, 81, 95], ["20200006327", "العنود سعود سالم محمد الكعبي", "الصف الثالث", "G3 -5", 80, 78, 88, 93, 83, 83], ["1267101", "ايمن شعكى", "الصف الثالث", "G3 -5", 100, 99, 100, 98, 100, 100], ["20210007821", "حمد سلطان حمد سيف العيسائي", "الصف الثالث", "G3 -5", 95, 96, 98, 96, 98, 95], ["1052137", "حمدان احمد سعيد صالح البلوشى", "الصف الثالث", "G3 -5", 70, 65, 60, 96, 74, 91], ["20210011959", "حمده محمد مسلم سالم الجحافيه", "الصف الثالث", "G3 -5", 88, 66, 74, 74, 64, 78], ["20210016969", "خالد صالح على صالح الفردى", "الصف الثالث", "G3 -5", 82, 82, 86, 76, 65, 79], ["20210002238", "ذيب عبدالله علي صالح المنصوري", "الصف الثالث", "G3 -5", 89, 76, 88, 88, 60, 80], ["20210003470", "راشد خالد سيف محمد الكعبى", "الصف الثالث", "G3 -5", 92, 84, 86, 90, 79, 86], ["20210011237", "ريم سعيد جابر سعيد الاحبابى", "الصف الثالث", "G3 -5", 100, 90, 94, 95, 85, 80], ["20250024745", "ساره بنت عبدالله بن سرحان سالم الكعبية", "الصف الثالث", "G3 -5", 83, 84, 89, 74, 60, 75], ["20210000337", "سعيد حمد عيسى سعيد المقبالى", "الصف الثالث", "G3 -5", 87, 81, 83, 95, 73, 93], ["20210003042", "سلامه عمر علي محمد الرشيدي", "الصف الثالث", "G3 -5", 91, 80, 88, 96, 90, 94], ["20210031673", "سلطان سعد مرزوق مهدى الأحبابي", "الصف الثالث", "G3 -5", 95, 84, 97, 97, 72, 83], ["20220006909", "شيخه فايل ثابت  سعيد", "الصف الثالث", "G3 -5", 70, 65, 76, 71, 60, 82], ["20210003675", "عائشه خالد محمد سالم الشامسى", "الصف الثالث", "G3 -5", 91, 73, 89, 76, 82, 80], ["20210001076", "عفراء سعيد أحمد سعيد المهري", "الصف الثالث", "G3 -5", 98, 93, 95, 88, 88, 85], ["20210003258", "فاطمه احمد توفيق ابراهيم الظاهري", "الصف الثالث", "G3 -5", 91, 79, 93, 95, 76, 84], ["20210016729", "مانع جمال عجيل الشين الجحافي", "الصف الثالث", "G3 -5", 74, 77, 76, 73, 60, 75], ["20210006420", "مبارك ناصر مهدى هادى الأحبابي", "الصف الثالث", "G3 -5", 95, 93, 100, 85, 85, 80], ["1054221", "محمود احمد سامى محمد حسن ابو العنين", "الصف الثالث", "G3 -5", 95, 97, 100, 90, 90, 92], ["20210012049", "مزون ناصر صالح محسن الحارثى", "الصف الثالث", "G3 -5", 95, 83, 100, 75, 74, 86], ["20210005956", "موزه صالح جاسم سعيد البلوشي", "الصف الثالث", "G3 -5", 96, 85, 97, 80, 73, 80], ["20210006141", "نوره فهد مرهون خميس الساعدى", "الصف الثالث", "G3 -5", 92, 94, 95, 90, 84, 94], ["20210011235", "نوره مطرف محمد محمد الاحبابى", "الصف الثالث", "G3 -5", 80, 76, 91, 88, 82, 80], ["20210005954", "هيا حسين جابر عضيمان الاحبابى", "الصف الثالث", "G3 -5", 87, 93, 96, 93, 90, 88], ["20230019629", "وديمه محمد على مسفر الأحبابي", "الصف الثالث", "G3 -5", 92, 85, 94, 88, 86, 88], ["20200015990", "احمد عبدالله علي سيف المزيني", "الصف الرابع", "G4  -2", 93, 90, 85, 82, 85, 93], ["20220020094", "جمعه مطر ضحى جمعه الظاهري", "الصف الرابع", "G4  -2", 79, 80, 73, 93, 82, 88], ["20200010214", "حسن صالح محمد عبدالله البريكي", "الصف الرابع", "G4  -2", 98, 96, 98, 90, 94, 96], ["20200024652", "حمدان محسن قادر بخش لال محمد احمد البلوشي", "الصف الرابع", "G4  -2", 88, 82, 85, 70, 79, 80], ["20200027400", "حميد حمد راشد محمد الكلباني", "الصف الرابع", "G4  -2", 88, 83, 89, 89, 83, 85], ["20210019753", "خالد هلال عبدالله بن محمد الشامسى", "الصف الرابع", "G4  -2", 81, 90, 74, 86, 85, 83], ["20210006764", "رحمه حمدان محمد ناجى احمد", "الصف الرابع", "G4  -2", 83, 82, 84, 73, 81, 85], ["20200007261", "روضة راضي مبخوت  عبدالله", "الصف الرابع", "G4  -2", 94, 96, 94, 86, 80, 97], ["20200009971", "زايد حمدان محمد عبدالله المهيري", "الصف الرابع", "G4  -2", 88, 90, 80, 97, 98, 97], ["20200013514", "سلامه محسن احمد محسن عبدالله", "الصف الرابع", "G4  -2", 84, 89, 92, 92, 66, 68], ["20200025375", "سيف جلال سالم البادي", "الصف الرابع", "G4  -2", 92, 89, 86, 70, 83, 78], ["20200009962", "سيف علي سعيد عمير الظاهري", "الصف الرابع", "G4  -2", 85, 84, 80, 70, 84, 73], ["958019", "صالح حمد صالح مبارك المشيعى", "الصف الرابع", "G4  -2", 81, 80, 82, 71, 82, 86], ["20200027090", "عايشه سالم علي سيف الخييلي", "الصف الرابع", "G4  -2", 92, 93, 94, 86, 88, 85], ["20200010169", "عبدالله على سالم مسعود الظاهري", "الصف الرابع", "G4  -2", 88, 90, 88, 90, 90, 98], ["20200011770", "علي محمد احمد حمدان العامري", "الصف الرابع", "G4  -2", 86, 84, 89, 85, 89, 94], ["20220013804", "لميس محمد   الامين", "الصف الرابع", "G4  -2", 96, 95, 91, 99, 87, 96], ["882399", "ماريا سعيد جمعه سعيد", "الصف الرابع", "G4  -2", 83, 84, 89, 85, 82, 91], ["20200010168", "مروه خالد سالم حميد الريسي", "الصف الرابع", "G4  -2", 95, 95, 98, 94, 94, 93], ["20200006495", "مريم يوسف عبدالكريم محمد البلوشي", "الصف الرابع", "G4  -2", 84, 93, 84, 87, 81, 95], ["20250026779", "مريم يوسف محمد يعقوب البلوشى", "الصف الرابع", "G4  -2", 87, 90, 92, 85, 88, 89], ["20200012085", "مهرة حسن محمد عبده عبدالاله", "الصف الرابع", "G4  -2", 96, 95, 91, 91, 87, 86], ["20200006580", "ميره صالح جاسم سعيد البلوشي", "الصف الرابع", "G4  -2", 96, 93, 90, 92, 88, 90], ["20200010164", "ناصر محمد احمد عادل ابراهيم رسلان", "الصف الرابع", "G4  -2", 93, 92, 86, 95, 93, 92], ["20200010172", "هيفاء مسفر ناصر سعود المنصوري", "الصف الرابع", "G4  -2", 80, 90, 81, 83, 81, 90], ["20200013154", "وديمه خليل هادى سعيد الأحبابي", "الصف الرابع", "G4  -2", 94, 96, 80, 92, 83, 89], ["20200010179", "حصه صالح سالم البرك العامري", "الصف الرابع", "G4  -3", 85, 88, 86, 92, 98, 86], ["20200027864", "حصه عوض يسلم عوض الصيعري", "الصف الرابع", "G4  -3", 92, 90, 89, 85, 82, 77], ["20200012889", "حمد ابراهيم على محمد المستكاء", "الصف الرابع", "G4  -3", 94, 93, 95, 91, 97, 97], ["20200030371", "حياة ناصر جمعه راشد الكعبي", "الصف الرابع", "G4  -3", 83, 85, 84, 82, 85, 89], ["20210011906", "خالد ياسر احمد حسان على", "الصف الرابع", "G4  -3", 93, 94, 92, 90, 82, 93], ["20210006766", "زايد حمدان محمد ناجى احمد", "الصف الرابع", "G4  -3", 85, 90, 87, 85, 90, 94], ["20200011743", "سالم سليمان على محمد الكربي", "الصف الرابع", "G4  -3", 92, 94, 88, 70, 88, 85], ["20200015989", "سعيد سالم عبدالله محمد الكعبي", "الصف الرابع", "G4  -3", 92, 90, 80, 94, 97, 94], ["20200011766", "سلطان بن صالح بن عبدالله بن احمد   البريكي", "الصف الرابع", "G4  -3", 94, 96, 100, 91, 96, 95], ["20200017836", "سلمان سالم احمد سالم المنصوري", "الصف الرابع", "G4  -3", 95, 95, 92, 96, 88, 89], ["1107232", "شمسه عمران محمد شيبان المهيري", "الصف الرابع", "G4  -3", 88, 90, 83, 98, 89, 92], ["20200015994", "شيخة هداف رضوان عيضة المنهالي", "الصف الرابع", "G4  -3", 86, 86, 80, 70, 87, 80], ["20200010175", "عبدالرحمن سعيد محمد سالم الساعدي", "الصف الرابع", "G4  -3", 85, 83, 83, 84, 89, 90], ["20200019800", "عبدالله بدر حسين  عيسى", "الصف الرابع", "G4  -3", 95, 95, 98, 92, 90, 92], ["20210014799", "عمر بن أحمد بن محمد بن مبروك الدهماني", "الصف الرابع", "G4  -3", 81, 78, 86, 74, 82, 83], ["20200018794", "فاطمه محمد سعيد سالم الشامسي", "الصف الرابع", "G4  -3", 96, 94, 92, 98, 90, 92], ["20190047405", "مثايل خالد ناصر راشد الساعدي", "الصف الرابع", "G4  -3", 82, 82, 84, 85, 85, 98], ["20200013915", "محمد صقر محمد بجير العامري", "الصف الرابع", "G4  -3", 84, 80, 85, 73, 80, 94], ["20200025429", "محمد عوض هادي فلاح الاحبابي", "الصف الرابع", "G4  -3", 94, 90, 89, 70, 93, 82], ["20200025424", "مفرح سعد مسفر عبدالرحمن الأحبابي", "الصف الرابع", "G4  -3", 85, 85, 85, 76, 92, 88], ["20200013832", "ميثاء حسين مراد على المازم", "الصف الرابع", "G4  -3", 88, 81, 86, 74, 85, 93], ["20200019180", "ميثه جمعه خميس راشد خميس", "الصف الرابع", "G4  -3", 87, 84, 85, 88, 91, 86], ["20200016051", "ناصر صالح سليمان مبارك العامري", "الصف الرابع", "G4  -3", 93, 93, 82, 70, 77, 83], ["20200007238", "وجدان محمد على عبدالله الكشادى", "الصف الرابع", "G4  -3", 96, 92, 81, 90, 84, 84], ["20200013914", "وديمه نادر سعيد مصبح الشامسى", "الصف الرابع", "G4  -3", 86, 83, 85, 90, 86, 81], ["20200014940", "يوسف حمد على نصر ال صلاح", "الصف الرابع", "G4  -3", 82, 81, 85, 76, 88, 92], ["20200010629", "بطي خالد خليفة عبدالله الريسي", "الصف الرابع", "G4  -4", 86, 90, 87, 95, 93, 99], ["20200015992", "حسين هادى حمد فرحان الأحبابي", "الصف الرابع", "G4  -4", 86, 87, 86, 70, 86, 80], ["20200011767", "حمد راشد حمد عبدالله المري", "الصف الرابع", "G4  -4", 83, 83, 85, 79, 80, 88], ["20200012654", "حمد عبدالله احمد سليمان الحارثى", "الصف الرابع", "G4  -4", 93, 94, 86, 90, 91, 92], ["20200015426", "حمد محمد على سالم الأحبابي", "الصف الرابع", "G4  -4", 88, 91, 95, 92, 81, 84], ["20200015495", "حور محمد خليفه مباارك الربيعي", "الصف الرابع", "G4  -4", 87, 87, 85, 99, 89, 96], ["20200011747", "خالد سعيد عبيد سعيد الظنحاني", "الصف الرابع", "G4  -4", 87, 93, 87, 80, 75, 76], ["20210007986", "خالد مشعل علي شتوي القحطاني", "الصف الرابع", "G4  -4", 83, 80, 80, 91, 85, 93], ["20200009914", "خميس جميل خميس درويش السعدي", "الصف الرابع", "G4  -4", 96, 95, 94, 90, 86, 91], ["20200014255", "دلال ظافر سعيد حسين الأحبابي", "الصف الرابع", "G4  -4", 83, 85, 85, 70, 85, 87], ["20200013695", "روضه سالم ناصر صابر البلوشي", "الصف الرابع", "G4  -4", 96, 96, 100, 98, 92, 96], ["20200007118", "زايد بن ناصر بن سعيد بن محمد العامري", "الصف الرابع", "G4  -4", 85, 85, 86, 89, 92, 83], ["20210011925", "سلامه عبدالله محمد عايض الأحبابي", "الصف الرابع", "G4  -4", 90, 95, 93, 80, 82, 83], ["20200023278", "سلمان محمد حسين محمد الأحبابي", "الصف الرابع", "G4  -4", 89, 84, 85, 72, 83, 80], ["20200026606", "شمه خالد جمعه محمد", "الصف الرابع", "G4  -4", 85, 80, 85, 70, 80, 89], ["20200038171", "عبدالله خليفه عبدالله  سالم", "الصف الرابع", "G4  -4", 80, 82, 80, 89, 90, 82], ["20200022533", "عبدالله عمر عبدالله مراد البلوشي", "الصف الرابع", "G4  -4", 96, 95, 99, 90, 95, 96], ["20200015993", "عوض سعيد مطر غميل النعيمي", "الصف الرابع", "G4  -4", 98, 98, 100, 95, 99, 93], ["20200011876", "غلا ايمن احمد سالمين الكثيري", "الصف الرابع", "G4  -4", 84, 85, 87, 83, 83, 91], ["20200014502", "فاطمه سالم علي جمعه الكعبي", "الصف الرابع", "G4  -4", 84, 83, 82, 81, 85, 93], ["20200010173", "فاطمه سلطان خميس سعيد المقبالي", "الصف الرابع", "G4  -4", 96, 95, 100, 95, 93, 100], ["20200006697", "محمد بدر محمد غلام محمد", "الصف الرابع", "G4  -4", 92, 90, 93, 80, 85, 83], ["20200013819", "مسلم سعيد سالم عيظه العامري", "الصف الرابع", "G4  -4", 82, 81, 85, 74, 85, 94], ["20200015988", "منصور سالم خميس سعيد الساعدي", "الصف الرابع", "G4  -4", 95, 92, 87, 90, 90, 78], ["1034375", "ميره بنت خالد بن بن", "الصف الرابع", "G4  -4", 84, 84, 85, 90, 85, 91], ["20200010170", "نايف يحيى سلطان سعيد الشامسي", "الصف الرابع", "G4  -4", 96, 95, 95, 94, 95, 96], ["20200015991", "وديمه نادر خميس علي الشامسي", "الصف الرابع", "G4  -4", 83, 82, 85, 82, 85, 93], ["20200010174", "أفراح محمد غازي عبده أحمد", "الصف الرابع", "G4  -5", 80, 69, 80, 80, 80, 88], ["20200010166", "حامد احمد سالم حميد الريسى", "الصف الرابع", "G4  -5", 96, 90, 88, 92, 94, 93], ["20200024671", "حامد يوسف مفتاح حمدان الزستاقي", "الصف الرابع", "G4  -5", 82, 73, 82, 83, 85, 91], ["928586", "حصه خالد حمد على الغفيلى", "الصف الرابع", "G4  -5", 96, 89, 99, 97, 92, 96], ["20200006639", "حمدان طلال ربيع عيد الريسي", "الصف الرابع", "G4  -5", 97, 90, 99, 92, 100, 92], ["20200027861", "حمدان محمد جمعه محمد البلوشى", "الصف الرابع", "G4  -5", 82, 78, 81, 70, 80, 83], ["20200009955", "حمود محمد حمود عبدالله الكعبي", "الصف الرابع", "G4  -5", 98, 90, 98, 92, 95, 96], ["20200027860", "خالد محمد جمعه محمد البلوشى", "الصف الرابع", "G4  -5", 83, 75, 84, 70, 85, 85], ["20200010178", "دانه هيثم سالم البرك العامري", "الصف الرابع", "G4  -5", 96, 87, 91, 90, 92, 94], ["20210017056", "راشد سعد عليان حمدان الشامسى", "الصف الرابع", "G4  -5", 86, 84, 83, 71, 80, 83], ["20200012384", "راشد عبدالعزيز مسعود زايد الحراصى", "الصف الرابع", "G4  -5", 83, 75, 80, 70, 85, 94], ["20200006897", "ساره زايد عبدالله  علي عوض", "الصف الرابع", "G4  -5", 83, 65, 80, 75, 85, 92], ["958241", "ساره وراث ولي محمد غلام محمد", "الصف الرابع", "G4  -5", 85, 84, 90, 90, 80, 83], ["20200021837", "سعود بن سالم بن علي بن سليمان الشامسي", "الصف الرابع", "G4  -5", 90, 93, 92, 77, 90, 80], ["906692", "سياف عبدالله صالح محسن الحارثي", "الصف الرابع", "G4  -5", 80, 69, 80, 70, 80, 83], ["20200008721", "شما محمد علي صالح الحارثي", "الصف الرابع", "G4  -5", 90, 86, 82, 90, 88, 85], ["20200014741", "شما محمد ناصر سعيد العامري", "الصف الرابع", "G4  -5", 90, 87, 82, 96, 98, 97], ["20200015493", "عبدالله سعيد عبدالله سالم الصيعري", "الصف الرابع", "G4  -5", 96, 94, 96, 90, 95, 92], ["20200009279", "عفراء سالم محمد مقبل محمد", "الصف الرابع", "G4  -5", 94, 78, 92, 90, 95, 88], ["20200006521", "علياء على خميس عبدالله الكعبي", "الصف الرابع", "G4  -5", 92, 83, 88, 90, 88, 96], ["20200011169", "غريبه سعيدان محمد مسفر الأحبابي", "الصف الرابع", "G4  -5", 82, 67, 80, 81, 85, 85], ["20200019808", "فاطمة عمر محمد العامري", "الصف الرابع", "G4  -5", 95, 86, 89, 96, 95, 95], ["20210007034", "مهره على ظافر هادى الاحبابى", "الصف الرابع", "G4  -5", 88, 74, 80, 90, 80, 77], ["20200009965", "مهره ناصر علي جابر الاحبابي", "الصف الرابع", "G4  -5", 84, 82, 87, 70, 88, 75], ["20200008610", "ميثاء ابوبكر صالح محمد الدابسى", "الصف الرابع", "G4  -5", 96, 91, 95, 86, 88, 84], ["20200016050", "ميره خالد عنتر سليم  النعيمي", "الصف الرابع", "G4  -5", 84, 81, 89, 93, 85, 95], ["20200006567", "نوره محمد صالح علي الكربي", "الصف الرابع", "G4  -5", 86, 80, 87, 70, 82, 83], ["20200007189", "احمد محمد احمد عوض المهيري", "الصف الرابع", "G4  -6", 93, 87, 93, 97, 95, 99], ["20200018723", "الدماني منصور عجيل الشين الجحافي", "الصف الرابع", "G4  -6", 95, 90, 86, 91, 92, 92], ["20220013024", "اميمه حسن حسين  غلام", "الصف الرابع", "G4  -6", 97, 99, 96, 96, 98, 98], ["1059807", "بسملة    خمليش", "الصف الرابع", "G4  -6", 96, 94, 96, 90, 88, 90], ["20200006610", "جود ابراهيم حاضر المجيحيم الشمري", "الصف الرابع", "G4  -6", 93, 87, 88, 90, 88, 86], ["20200014890", "حامد عايض مفرح علي الاحبابي", "الصف الرابع", "G4  -6", 84, 81, 85, 90, 85, 91], ["20200010148", "حصه بنت محمد بن راشد بن سليم الزرعية", "الصف الرابع", "G4  -6", 92, 85, 91, 79, 88, 91], ["20200010700", "حصه عوض عامر محمد الغيثي", "الصف الرابع", "G4  -6", 87, 94, 83, 88, 87, 94], ["20200008077", "حمد احمد محمد يوسف الحمادي", "الصف الرابع", "G4  -6", 92, 84, 90, 83, 85, 83], ["20200006604", "حمدان محمد سعيد سالمين بن اسحاق", "الصف الرابع", "G4  -6", 85, 86, 82, 96, 90, 89], ["20200006558", "حمدان نايف محمد سالم الكعبي", "الصف الرابع", "G4  -6", 88, 79, 87, 74, 85, 90], ["20200026180", "روضة علي يسلم عوض الصيعري", "الصف الرابع", "G4  -6", 83, 72, 82, 70, 85, 82], ["20200026011", "شمسه ناصر حميد سعيد البلوشي", "الصف الرابع", "G4  -6", 93, 78, 83, 93, 88, 82], ["20200007658", "شيخه حميد الرميلي سعيد الجنيبي", "الصف الرابع", "G4  -6", 85, 72, 87, 70, 85, 77], ["20200022532", "عائشه منصور محمد احمد الحضرمى", "الصف الرابع", "G4  -6", 90, 77, 83, 93, 98, 97], ["20210008045", "عبدالله نوح قاسم جان محمد البلوشى", "الصف الرابع", "G4  -6", 95, 85, 90, 89, 85, 97], ["20200013136", "غزيل سالم خميس حمد العامري", "الصف الرابع", "G4  -6", 83, 86, 87, 82, 85, 89], ["20200019887", "فاطمه ابراهيم حسن احمد البلوشي", "الصف الرابع", "G4  -6", 88, 85, 88, 98, 98, 96], ["896657", "لمى منصر صالح عبدالله شبثان", "الصف الرابع", "G4  -6", 85, 79, 80, 89, 85, 93], ["20200006699", "محمد خالد سالم سلطان الكعبى", "الصف الرابع", "G4  -6", 96, 91, 82, 90, 82, 85], ["20200007051", "محمد خميس راشد سعيد الظاهري", "الصف الرابع", "G4  -6", 82, 78, 82, 85, 85, 86], ["20200015062", "مزنه احمد اسماعيل علي البلوشي", "الصف الرابع", "G4  -6", 85, 75, 87, 90, 80, 83], ["20200019886", "ميره ابراهيم حسن احمد البلوشي", "الصف الرابع", "G4  -6", 88, 80, 85, 99, 96, 98], ["20200006048", "ميره محمد عبيد راشد الظاهري", "الصف الرابع", "G4  -6", 83, 85, 80, 92, 90, 89], ["20200015494", "هند عبيد جابر عظيمان الاحبابي", "الصف الرابع", "G4  -6", 93, 80, 91, 86, 92, 91], ["20200025376", "هند محمد عمر مبارك الصيعري", "الصف الرابع", "G4  -6", 85, 78, 80, 98, 91, 93], ["20200014022", "هند محمد يسلم عوض الصيعري", "الصف الرابع", "G4  -6", 86, 78, 78, 83, 85, 83], ["20200023277", "بيان عبدالله صالح مبارك المصعبي", "الصف الرابع", "G4 -1", 87, 85, 80, 85, 81, 85], ["20200008435", "جورى حمد احمد عبدالله البلوشي", "الصف الرابع", "G4 -1", 82, 85, 82, 78, 90, 93], ["20200007156", "حامد فارس محمد سيف الكعبي", "الصف الرابع", "G4 -1", 84, 84, 80, 90, 80, 88], ["20200021701", "حلا حمد مبارك بن شيخه المرى", "الصف الرابع", "G4 -1", 88, 92, 80, 84, 80, 75], ["955645", "حمد عبدالله سعيد سبيت الكعبي", "الصف الرابع", "G4 -1", 85, 80, 85, 94, 84, 88], ["20200021618", "حمدان عبدالله محمد وهيب احمد", "الصف الرابع", "G4 -1", 93, 88, 92, 75, 85, 80], ["20200010171", "خالد مسفر ناصر سعود المنصوري", "الصف الرابع", "G4 -1", 92, 95, 91, 85, 80, 86], ["20200015414", "دلال عوض عايض معيض العتيبي", "الصف الرابع", "G4 -1", 97, 96, 96, 97, 97, 97], ["20200027014", "راشد عوض ضاحى مبارك الحسانى", "الصف الرابع", "G4 -1", 94, 90, 85, 73, 87, 81], ["20200014048", "روضة خميس عبدالله سالم الشامسي", "الصف الرابع", "G4 -1", 92, 94, 92, 90, 80, 81], ["20200010219", "شما عيظة مبارك عيظة العامري", "الصف الرابع", "G4 -1", 98, 98, 98, 97, 94, 96], ["20210012278", "شماء جابر على  محمد", "الصف الرابع", "G4 -1", 93, 90, 90, 85, 85, 86], ["20200012321", "شيخه بنت سالم بن محمد بن على المقباليه", "الصف الرابع", "G4 -1", 96, 96, 99, 92, 86, 90], ["20200023324", "ظبيه سعيد خليفه محمد الرواحيه", "الصف الرابع", "G4 -1", 89, 87, 80, 81, 80, 87], ["20200030473", "عبدالله سالم عبدالله سويدان المقبالى", "الصف الرابع", "G4 -1", 93, 94, 92, 97, 90, 87], ["20200006987", "عبيد علي سعيد سالم الشامسي", "الصف الرابع", "G4 -1", 96, 96, 98, 95, 80, 86], ["20200014170", "عمر يس سليم محمد البلوشي", "الصف الرابع", "G4 -1", 95, 95, 90, 89, 80, 74], ["20200006497", "لطيفه مبارك عتيق مبارك البريكي", "الصف الرابع", "G4 -1", 87, 95, 83, 93, 93, 84], ["960479", "مبارك بن محمد بن جمعه بن مبارك الشرجى", "الصف الرابع", "G4 -1", 85, 84, 95, 63, 77, 83], ["20200011741", "محمد خالد سعيد محمد المهرى", "الصف الرابع", "G4 -1", 85, 85, 87, 86, 81, 83], ["20200007274", "محمد عبدالله محمد سيف الكعبي", "الصف الرابع", "G4 -1", 82, 83, 80, 94, 80, 80], ["20200014256", "مريم حمدان محمد صالح الكربي", "الصف الرابع", "G4 -1", 93, 86, 85, 84, 88, 81], ["20200014889", "مريم عقيل عمر سعيد البريكي", "الصف الرابع", "G4 -1", 95, 93, 93, 92, 81, 89], ["899687", "منصور سعيد خليفه حمدون الشامسي", "الصف الرابع", "G4 -1", 83, 81, 82, 80, 84, 85], ["892638", "منصور غيث مطر خايف الظاهري", "الصف الرابع", "G4 -1", 82, 80, 82, 89, 85, 96], ["20200012089", "مها اسحاق احمد عبدالله البلوشي", "الصف الرابع", "G4 -1", 80, 86, 81, 93, 88, 90], ["833617", "مهره جمعه سالم سعيد الكعبي", "الصف الرابع", "G4 -1", 89, 89, 84, 82, 85, 92], ["20200011769", "مهره سعيد عبيد محمد الكعبي", "الصف الرابع", "G4 -1", 93, 95, 95, 94, 93, 93], ["20200011768", "ميره سعيد عبيد محمد  الكعبي", "الصف الرابع", "G4 -1", 96, 96, 94, 90, 81, 85], ["899153", "اثير محمد عبدالكريم محمد يوسف", "الصف الخامس", "", 89, 81.83, 93, 69.83, 61.67, 67.67], ["20200035775", "احلام    الكابير", "الصف الخامس", "", 95, 91.83, 94, 84, 86.83, 82], ["900017", "اريام سالم سعيد برمان الخليفي", "الصف الخامس", "", 85, 77.17, 90, 78, 65.5, 80.5], ["895561", "الجورى حمد عيسى  سعيد", "الصف الخامس", "", 85, 66.33, 81, 64.5, 64.33, 68.5], ["902873", "الريم صالح احمد البريكي", "الصف الخامس", "", 92, 77.83, 91, 64.33, 65.83, 71.33], ["20200018850", "العنود حمد محسن  على", "الصف الخامس", "", 90, 68.17, 84, 71.66, 75.16, 62.83], ["901381", "العنود خالد محمد سالم الشامسي", "الصف الخامس", "", 91, 88, 94, 82.33, 80.33, 88.83], ["20200033947", "العنود صالح مصبح سالم المنهالي", "الصف الخامس", "", 91, 77.17, 88, 59.17, 67.83, 68.67], ["900286", "المزن مالك عجيل الشين الجحافى", "الصف الخامس", "", 90, 71.5, 87, 66.83, 69.83, 62.5], ["896300", "اليازيه بنت جمعه بن محمد بن سالمين النعيمية", "الصف الخامس", "", 93, 88.67, 92, 90, 85.5, 86.5], ["920170", "اليازيه عبدالله سعيد سبيت الكعبي", "الصف الخامس", "", 89, 60.17, 80, 88.83, 65.17, 78.67], ["895763", "امل صقر محمد بجير العامرى", "الصف الخامس", "", 91, 67.67, 88, 58.67, 63.5, 74.33], ["831662", "امنه خلفان على على الدرمكى", "الصف الخامس", "", 85, 60.17, 92, 75.17, 79.66, 68.16], ["900131", "امنه محمد سعيد محمد حمدان", "الصف الخامس", "", 93, 81.67, 89, 78.67, 71.5, 81], ["20200036156", "امنه موفق   بلبل", "الصف الخامس", "", 92, 81, 94, 77.17, 87.83, 77], ["899247", "بسمه خليفه مبارك سيف الربيعى", "الصف الخامس", "", 86, 62.83, 85, 58.5, 61, 58.67], ["844282", "جميله حمدان محمد ناجي احمد", "الصف الخامس", "", 91, 64.17, 83, 72.5, 70.33, 68.83], ["899169", "جنان سعيد خلفان مبارك العلوي", "الصف الخامس", "", 95, 90.5, 95, 88.33, 92.17, 85.67], ["902084", "جواهر مكتوم راشد خميس العلوي", "الصف الخامس", "", 94, 83.33, 90, 75.17, 72.67, 84.5], ["903087", "حمده حمد سليم سالم ضحى", "الصف الخامس", "", 90, 66.83, 88, 59.17, 73, 62.67], ["901724", "حمده صالح حسين حدير المصعبي", "الصف الخامس", "", 93, 88.67, 90, 83.33, 78.83, 77.67], ["905613", "خلود سلطان راشد على الرشيدى", "الصف الخامس", "", 90, 67.5, 85, 77.5, 67, 66.17], ["901558", "دانه عبدالله سالم الوبيرى الشمري", "الصف الخامس", "", 91, 63.5, 80, 65.83, 69.83, 55.83], ["905240", "دانه عبدالله عمر علي الظاهري", "الصف الخامس", "", 89, 62.5, 79, 74.33, 72.5, 67.33], ["898615", "رهف محمد بخيت احمد على", "الصف الخامس", "", 90, 60.17, 80, 58.67, 64.5, 62.17], ["895823", "روضة علي حسن عبدالله الهاشمي", "الصف الخامس", "", 92, 67, 88, 93, 77.17, 88.66], ["20210003426", "روضه عبدالله يوسف عبدالله البلوشي", "الصف الخامس", "", 86, 66.33, 92, 59.17, 64, 63.17], ["896782", "روضه هلال محمد تعيب الكعبي", "الصف الخامس", "", 86, 75.83, 90, 90, 71.33, 80.17], ["903020", "روقيه سالم عبدالله سيف الشامسي", "الصف الخامس", "", 91, 90.5, 96, 84.17, 79.67, 83.83], ["899765", "ريان حسن خليل  البيوك", "الصف الخامس", "", 91, 77.17, 89, 62.67, 62, 69.16], ["898652", "ريم خالد مسفر عايض الأحبابي", "الصف الخامس", "", 93, 63.67, 93, 65.33, 69.33, 67.33], ["20190023731", "ساره سمير عبدالله محمد الجنيبي", "الصف الخامس", "", 92, 76.5, 96, 73.17, 75.66, 79.83], ["896547", "ساره علي صالح هادي المنصوري", "الصف الخامس", "", 87, 76.5, 94, 84.83, 86.33, 86.83], ["900805", "ساره يسلم مبارك علي البريكي", "الصف الخامس", "", 94, 92.17, 93, 81, 85.5, 88], ["835731", "سلامه جمال عجيل الشين الجحافي", "الصف الخامس", "", 91, 64.83, 84, 74.5, 76.83, 76], ["895406", "سلامه سالم احمد سعيد البريكي", "الصف الخامس", "", 94, 91, 94, 77.17, 80.5, 83.67], ["897246", "سلامه محمد على  خلف", "الصف الخامس", "", 91, 67.5, 85, 72.67, 75.33, 74], ["900064", "سلامه وليد محمد غلام محمد", "الصف الخامس", "", 90, 80, 80, 75.33, 80, 79], ["892447", "شمسه خليفه خالد خميس العيسائي", "الصف الخامس", "", 94, 77.17, 85, 81.17, 67.33, 82.33], ["900607", "شمسه عبدالله مصبح محمد اليحيائي", "الصف الخامس", "", 90, 59.17, 83, 58.33, 59.33, 61.5], ["20210018859", "شمسه علي سيف جمعه الكعبية", "الصف الخامس", "", 95, 91.5, 96, 89.67, 86.17, 87], ["897137", "شمه سيف خميس  عبدالله", "الصف الخامس", "", 92, 86.17, 85, 75.5, 76.33, 87.5], ["897320", "شوق خالد جابر محمد البلوشي", "الصف الخامس", "", 93, 84.67, 92, 89, 87.17, 85], ["899433", "شيخه سالم على سالم الأحبابي", "الصف الخامس", "", 92, 80, 85, 81, 75, 85.33], ["896594", "شيخه ناجى عبدالله راشد الجنيبي", "الصف الخامس", "", 91, 82, 90, 66.67, 63.17, 79.17], ["837303", "عائشه على سعد على سعد", "الصف الخامس", "", 85, 60.17, 82, 65.83, 70.83, 58.67], ["900599", "عليا عمر علي عبدالله البلوشي", "الصف الخامس", "", 93, 90.67, 92, 86.33, 87, 88.17], ["20200018849", "عليا محمد كرامه شيخ العامري", "الصف الخامس", "", 87, 60.83, 80, 66, 64, 66.83], ["20200014002", "غاية سعيد أحمد سعيد المهري", "الصف الخامس", "", 92, 77.17, 91, 70, 64.17, 70.33], ["20190019578", "غزلان بنت محمد بن حمد  الشمري", "الصف الخامس", "", 86, 59.17, 83, 67.83, 73, 59.33], ["20190016932", "غلاء مفرح على محمد الاحبابي", "الصف الخامس", "", 92, 92.83, 93, 74.33, 81.67, 80], ["880503", "فاطمه بنت احمد بن سيف بن محمد الكعبيه", "الصف الخامس", "", 97, 91.5, 96, 84, 88.66, 85.17], ["899999", "فاطمه حمد مال الله رباحه الخميري", "الصف الخامس", "", 86, 72.17, 88, 66.17, 81.16, 67.5], ["895523", "فاطمه سالم محمد مقبل محمد", "الصف الخامس", "", 93, 73.17, 89, 71.5, 66.83, 78.33], ["899114", "فاطمه على محمد نور نظير", "الصف الخامس", "", 90, 63.5, 89, 66.33, 67.83, 71.83], ["898795", "فاطمه مبارك عتيق مبارك البريكي", "الصف الخامس", "", 93, 88.5, 91, 83.33, 75.5, 73.67], ["20210012951", "قندهار ضافر جابر عضيمان الأحبابي", "الصف الخامس", "", 87, 59.17, 79, 68.5, 75.33, 69.5], ["20190012729", "مريم احمد سعيد خويدم المخيني", "الصف الخامس", "", 97, 92.17, 97, 88.5, 85, 89.83], ["937844", "مريم جمعه احمد محمد", "الصف الخامس", "", 85, 60.17, 91, 62.17, 80.33, 71.33], ["20190026557", "مريم جميل خميس درويش السعدي", "الصف الخامس", "", 89, 77.17, 91, 71.67, 64.67, 73.17], ["901045", "مريم حمد محمد صالح الكربي", "الصف الخامس", "", 90, 63, 87, 58, 65.83, 62], ["900862", "مريم خالد عوض صالح الجابري", "الصف الخامس", "", 90, 78.5, 88, 66.17, 80.66, 72.16], ["20190028668", "مريم يوسف مفتاح حمدان الرستاقى", "الصف الخامس", "", 90, 64.17, 86, 72.33, 72.33, 56], ["907150", "ملاك عبدالعزيز محمد  بن راشدوه النقبي", "الصف الخامس", "", 88, 59.17, 82, 66, 68.5, 58.17], ["901172", "مها على خميس  سعيد", "الصف الخامس", "", 93, 84.67, 95, 77.5, 69.67, 79.83], ["20190019478", "مها علي حسن سوري البلوشي", "الصف الخامس", "", 87, 66.83, 83, 69.33, 72.83, 57.83], ["900135", "مهره ذياب محمد عبدالله اليافعي", "الصف الخامس", "", 93, 88.17, 95, 93.33, 87.33, 89.5], ["20190041818", "مهره علي سعيد عبد الله الكعبي", "الصف الخامس", "", 95, 90.5, 90, 76.16, 79.83, 86.5], ["921670", "مهره محمد حميد سعيد البلوشي", "الصف الخامس", "", 92, 75, 89, 73, 76.33, 82.67], ["895303", "مهره محمد عبيد  راشد", "الصف الخامس", "", 90, 82.67, 90, 78.5, 84.5, 81.5], ["898985", "موزه بنت عبدالله بن على بن راشد الرشيديه", "الصف الخامس", "", 90, 74.17, 87, 69.16, 71.83, 56], ["900282", "ميا سالم خميس حمد العامري", "الصف الخامس", "", 94, 72.33, 90, 63.67, 66.17, 71.17], ["895613", "ميثا زايد عبدالله علي عوض", "الصف الخامس", "", 90, 67.67, 90, 57.33, 60.5, 66.66], ["899424", "ميثاء عبدالله خلفان علي الدرمكي", "الصف الخامس", "", 92, 85.33, 90, 73.17, 70.33, 68.83], ["899126", "ميثه محمد فرج مبارك الكربي", "الصف الخامس", "", 95, 86, 95, 83.17, 76.33, 86.33], ["20200019807", "ميره خالد خميس سعيد الريسي", "الصف الخامس", "", 93, 76.5, 90, 62.17, 66, 78.67], ["897816", "ميره سلطان يعقوب سعيد  الوحشي", "الصف الخامس", "", 82, 70, 85, 59, 62, 58], ["901408", "ميره محمد سعيد عبيد الشامسي", "الصف الخامس", "", 92, 90.17, 88, 89.83, 77.17, 82.67], ["20190016851", "نداء محمد سعد سعيدان الأحبابي", "الصف الخامس", "", 93, 84.33, 90, 69.17, 69, 72.17], ["899049", "نعيمه بنت محمد بن عبيد بن محمد الجابرية", "الصف الخامس", "", 90, 70.17, 87, 65.67, 61.83, 80.17], ["900026", "نور صلاح صالح سالم باهيصمى", "الصف الخامس", "", 92, 88.5, 93, 77.83, 92.67, 86.33], ["830362", "نوره سعود مسعود ثفال الأحبابي", "الصف الخامس", "", 91, 74.83, 87, 74, 73, 67.33], ["898710", "نوره سعيد صالح سعيد مربش", "الصف الخامس", "", 91, 79.83, 95, 66.33, 65, 77.67], ["898910", "نوره صقر إبراهيم عبدالرحمن الكعبي", "الصف الخامس", "", 87, 71.5, 83, 83.33, 64, 84], ["896494", "هند حامد عبدالرحمن نواب البلوشي", "الصف الخامس", "", 94, 92.17, 96, 85.83, 88.5, 79.5], ["901126", "هند عبدالله محمد مبارك علي", "الصف الخامس", "", 94, 87.17, 95, 76.33, 76, 81.33], ["20190024409", "هند عضيمان جابر عضيمان الأحبابي", "الصف الخامس", "", 91, 69, 94, 77.17, 76, 79.33], ["932448", "هند محمد راشد محمد الكعبي", "الصف الخامس", "", 95, 90.5, 94, 86, 81.17, 85], ["895522", "هند محمد سعيد سيف الريسية", "الصف الخامس", "", 92, 74.5, 94, 58.5, 77, 74.83], ["881189", "هيا عبدالله علي محمد المنصوري", "الصف الخامس", "", 91, 82.5, 93, 80.5, 87.17, 84.33], ["891732", "وديمه محمد سعيد ثعيلب الخييلي", "الصف الخامس", "", 94, 87.17, 94, 72.33, 78.66, 86.17], ["20190019540", "وديمه محمد مطر على الكعبي", "الصف الخامس", "", 95, 79.67, 94, 79.5, 83, 84.83], ["20220015875", "وديمه مسلم حمد  سعيد", "الصف الخامس", "", 93, 77.83, 86, 63.17, 65.5, 86.33], ["896445", "وديمه هزاع ناصر محمد المنصوري", "الصف الخامس", "", 91, 73.83, 93, 80.67, 83.33, 84.5], ["896718", "وعد محمد خميس عبدالله الغيثي", "الصف الخامس", "", 93, 85.17, 93, 66.67, 75.33, 78.67], ["836739", "آيه حمدان محمد عبدالله المهيري", "الصف السادس", "", 94, 85.67, 95, 94, 93.5, 91.67], ["872132", "ارين كمال الدين حسن محمد احمد", "الصف السادس", "", 95, 85.17, 93, 79.83, 66.83, 79.67], ["840884", "اسماء صالح ناصر  الحر", "الصف السادس", "", 91, 82.33, 92, 61.5, 65, 66.83], ["839381", "الجود ضافر جابر عضيمان الاحبابي", "الصف السادس", "", 89, 67.17, 82, 61.5, 67, 69], ["833328", "الجوري عبدالعزيز مراد عبدالله البلوشي", "الصف السادس", "", 91, 76.33, 90, 61.5, 65.5, 66.33], ["838616", "الشموس سالم احمد سالم المنصوري", "الصف السادس", "", 93, 81.33, 94, 63.83, 71.33, 75.67], ["837228", "اليازيه سلطان سعيد عبيد الظاهري", "الصف السادس", "", 93, 86.67, 89, 80.17, 84.5, 84.5], ["20190032603", "اليازيه عبدالله محمد عايض الأحبابي", "الصف السادس", "", 91, 86.17, 93, 82.33, 80.5, 77], ["841228", "اليازيه محمد فرج مبارك الكربي", "الصف السادس", "", 96, 90, 97, 94, 90.33, 87.67], ["840874", "امينه عمر علي المر الكعبي", "الصف السادس", "", 92, 84, 90, 62.67, 68.17, 78.5], ["20190018238", "بيلسان بنت حسين بن مبارك بن خميس الهنائية", "الصف السادس", "", 94, 90.67, 95, 67.5, 66.83, 71.67], ["835675", "تواصيف بنت محمد بن مسلم بن سالم الجحافية", "الصف السادس", "", 88, 76, 88, 62.17, 67.33, 68.17], ["788795", "ثمنى سعيد سالم عيظه العامري", "الصف السادس", "", 90, 74.17, 79, 61.5, 66.67, 64.17], ["839361", "جنه محمد خليفه مبارك الربيعى", "الصف السادس", "", 91, 75, 91, 80.5, 74, 81.67], ["20190023427", "حليمه شاجع أحمد صالح أحمد", "الصف السادس", "", 90, 70.5, 86, 61.5, 65, 63.67], ["837883", "حمده عتيق بوزيد سعيد النعيمي", "الصف السادس", "", 89, 72.67, 87, 62.17, 66.83, 63.5], ["833496", "خوله صالح أحمد سعيد حسن", "الصف السادس", "", 94, 85.5, 92, 83.83, 81.67, 83.33], ["832466", "دانه على محمد سالم الكربي", "الصف السادس", "", 92, 77.17, 93, 69.17, 74.33, 73.83], ["831148", "دانه فهد عمر سالم المنهالي", "الصف السادس", "", 90, 76.5, 85, 61.5, 71.5, 69.67], ["867720", "دانه مصطفى جابر محمد البلوشي", "الصف السادس", "", 95, 87.67, 95, 87, 88, 80.67], ["844241", "رحمه عبدالله خميس العثمني النقبي", "الصف السادس", "", 91, 77.33, 92, 74.33, 75.83, 71], ["933143", "رفيعه مبارك محمد  على", "الصف السادس", "", 92, 85.33, 90, 66.5, 65, 69.67], ["830928", "رهف ابوبكر صالح  الدابسى", "الصف السادس", "", 92, 92.67, 96, 74.33, 68.5, 82], ["832379", "روان تركي سالم عبيد الكعبى", "الصف السادس", "", 92, 84.5, 91, 63, 69.33, 70], ["831090", "روضه حمد راشد محمد الكلبانى", "الصف السادس", "", 85, 84.83, 94, 70.17, 76.5, 70.5], ["903744", "روضه عايظ محمد عون الاحبابي", "الصف السادس", "", 94, 93.33, 94, 90.83, 86.83, 87.5], ["833480", "روضه عبدالله محمد حسن الكربى", "الصف السادس", "", 91, 81.5, 92, 66.5, 67.33, 69.17], ["830974", "ريم راشد حمد عبدالله المري", "الصف السادس", "", 95, 76, 90, 81.5, 68.17, 72.33], ["20200026182", "ساره بنت سلطان بن ناصر بن محمد الفارسيه", "الصف السادس", "", 94, 85.83, 95, 80, 77.17, 81.83], ["20200038263", "ساره محمد عمر بن", "الصف السادس", "", 95, 88.67, 89, 89, 85, 85.17], ["839989", "سلامه عبدالله احمد سليمان الحارثى", "الصف السادس", "", 92, 81.33, 88, 62, 73, 74.67], ["20200009908", "سلامه محمد حمود عبدالله الكعبي", "الصف السادس", "", 90, 87.33, 95, 62, 65.33, 71.17], ["833107", "سلمى سالم أحمد صالح الكثيري", "الصف السادس", "", 91, 77.83, 89, 61.5, 66, 70.33], ["838297", "شما علي صالح عون الصيعري", "الصف السادس", "", 87, 74.67, 88, 61.5, 65, 63.83], ["788193", "شما ناصر حمد مبارك الكربى", "الصف السادس", "", 84, 75.67, 87, 90.83, 67.33, 83.67], ["835994", "شماء بنت علي بن حمد بن محمد العويسية", "الصف السادس", "", 90, 77.67, 85, 62.83, 68.5, 64.17], ["836709", "شهد صالح عبدالله سعيد الصيعري", "الصف السادس", "", 94, 92.67, 97, 92.33, 94.33, 89], ["867105", "شوق عبدالله حمد سالم اليحيائي", "الصف السادس", "", 87, 63.83, 77, 61.5, 64.83, 61.83], ["839897", "شيخه راشد سالم المطوع الساعدي", "الصف السادس", "", 93, 89.33, 88, 64.33, 81.33, 82], ["734058", "شيخه عتيق بخيت جربوع الأحبابي", "الصف السادس", "", 87, 75.83, 85, 60.83, 64.83, 63.17], ["841448", "شيمه سلطان سرور خليفه الكعبي", "الصف السادس", "", 90, 88.67, 90, 71.17, 69.17, 76], ["844411", "صالحه خميس علي خميس المرزوقى", "الصف السادس", "", 91, 85.33, 90, 62, 64.83, 73], ["841598", "طيف احمد سعيد صالح البلوشى", "الصف السادس", "", 91, 72, 86, 76.33, 73, 73.67], ["836157", "عائشه على عبدالله سالم الكعبي", "الصف السادس", "", 93, 86, 97, 92.17, 89.17, 89.67], ["784007", "عائشه محمد غازى عبده احمد", "الصف السادس", "", 90, 78.67, 90, 62.5, 65.33, 70.17], ["20250026777", "عائشه يوسف محمد البلوشى", "الصف السادس", "", 93, 81.83, 90, 82, 70.33, 81.17], ["844246", "عفراء بنت عبدالله بن حسن بن سبيل البلوشية", "الصف السادس", "", 95, 87.17, 94, 86.33, 83.83, 87], ["834906", "علياء احمد علي عبدالله الكعبي", "الصف السادس", "", 88, 66, 78, 61.5, 65, 63], ["833226", "عهود سالم علي محمد الكربي", "الصف السادس", "", 92, 80.5, 86, 62, 68.17, 66.5], ["20200027035", "غايه منصور مبارك  الصيعرى", "الصف السادس", "", 92, 87, 96, 74.5, 68.67, 69.17], ["786656", "غزيل محمد على سالم الأحبابي", "الصف السادس", "", 95, 87.33, 93, 80.17, 87.67, 79.67], ["902771", "فاطمه حمد عويظه علي الأحبابي", "الصف السادس", "", 85, 63.83, 80, 82.33, 64.83, 70.17], ["867111", "فاطمه عبدالله شامبى عبدالرسول البلوشي", "الصف السادس", "", 93, 83.33, 92, 62.67, 71.5, 67.17], ["855082", "فاطمه محمد مبارك المطهري المصعبي", "الصف السادس", "", 87, 69.5, 82, 61.5, 68, 67], ["838009", "ليان علي محمد مسفر الأحبابي", "الصف السادس", "", 94, 86.5, 92, 82.67, 80.17, 80.33], ["832084", "ماريا عبدالعزيز محمد  بن راشدوه النقبي", "الصف السادس", "", 86, 63.83, 83, 86.16, 64.83, 76.67], ["960316", "مريم فحف", "الصف السادس", "", 94, 90, 96, 75.33, 86, 85], ["834079", "مريم مهدى احمد عبدالله البلوشي", "الصف السادس", "", 92, 83.67, 95, 85.16, 87.33, 86.33], ["834653", "مهره بنت احمد بن عبدالله بن محمد الصايغ", "الصف السادس", "", 93, 85.17, 95, 62.5, 68.17, 68.83], ["832242", "مهره حمد عون محمد الكثيري", "الصف السادس", "", 90, 83.17, 84, 66.33, 71.67, 75.17], ["842038", "مهره حمد هزاع سلطان الدرمكي", "الصف السادس", "", 87, 90.33, 72, 62, 82.5, 83.83], ["838315", "مهره شايع عائل مسفر الأحبابي", "الصف السادس", "", 93, 88.33, 90, 61.83, 66.83, 66.17], ["20190023610", "مهره عبيد جابر عضيمان الأحبابي", "الصف السادس", "", 94, 89.33, 92, 77.33, 74.5, 79.5], ["833538", "مهره علي مرزوق الظهري النعيمي", "الصف السادس", "", 95, 80.83, 94, 76.17, 68.83, 84], ["833875", "ميثاء أحمد توفيق إبراهيم الظاهري", "الصف السادس", "", 89, 79.67, 90, 67.17, 71.33, 76], ["831634", "ميثاء خليفه عبدالله الغداني الغفلي", "الصف السادس", "", 94, 88.67, 95, 88.16, 80.83, 88.33], ["20200023286", "ميثه صالح جاسم سعيد البلوشي", "الصف السادس", "", 93, 88.83, 91, 62.67, 76.5, 74], ["833049", "ميره سلطان محمد عبيد الكعبي", "الصف السادس", "", 94, 82.5, 93, 82.83, 79.33, 73], ["831226", "نجلاء حمد حسين هادي الحبابي", "الصف السادس", "", 85, 75.83, 85, 62, 65.5, 62.67], ["836784", "نوف مسعود سالم مسعود الظاهري", "الصف السادس", "", 92, 83.67, 90, 63.33, 69.17, 73.83], ["832556", "نوف يحيى سلطان سعيد الشامسي", "الصف السادس", "", 95, 87.33, 95, 78.17, 80.67, 86.33], ["833295", "هند مهدى عبدالله خميس الصيعري", "الصف السادس", "", 91, 86.5, 89, 60.67, 64.83, 64.17], ["832365", "وديمه سيف خميس عبدالله الغيثي", "الصف السادس", "", 95, 88, 97, 85.5, 79.83, 80], ["837486", "وضحى عضيمان جابر عضيمان الأحبابى", "الصف السادس", "", 91, 76.67, 90, 63.83, 69.83, 76.17], ["787924", "اسماء شاجع احمد صالح احمد", "الصف السابع", "", 80, 76.33, 80, 63.33, 66.17, 66.17], ["783331", "الريم طارق عمير مبارك", "الصف السابع", "", 94, 91.33, 98, 81.33, 76.5, 78.17], ["787879", "الريم عايض مفرح علي الأحبابي", "الصف السابع", "", 100, 78, 90, 83.67, 77.67, 90.33], ["787482", "الريم عيظه مبارك عيظه العامري", "الصف السابع", "", 97, 80.33, 92, 86.33, 79.83, 83.67], ["790252", "الهنوف ابراهيم على محمد بنى هامور", "الصف السابع", "", 76, 86.33, 90, 64.17, 67, 71.33], ["835284", "الهنوف خالد محمد سالم الشامسي", "الصف السابع", "", 97, 90.83, 96, 79.5, 77.17, 80.17], ["20220013339", "امنه صالح احمد  موسى", "الصف السابع", "", 73, 69.33, 90, 81, 66.17, 70.83], ["732205", "امنه يحيى سليم جزابي البلوشي", "الصف السابع", "", 90, 84.33, 88, 63.17, 65.5, 72.67], ["786206", "اميره خالد مسفر عايض الاحبابي", "الصف السابع", "", 83, 73.33, 88, 66.17, 65.83, 70.83], ["787859", "امينه حسين مراد على المازم", "الصف السابع", "", 97, 75.5, 87, 79.67, 65, 72.17], ["20190023571", "ثريا علي صالح  السقاف", "الصف السابع", "", 83, 71, 90, 83, 68.17, 77], ["790954", "جورى احمد مبارك سيف الصالحى", "الصف السابع", "", 92, 79.5, 90, 87, 87.83, 86.17], ["783061", "حصه جمال عجيل الشين الجحافي", "الصف السابع", "", 87, 67.83, 82, 62.17, 65.33, 66.67], ["786944", "حصه سيف سعيد سالم الشامسى", "الصف السابع", "", 100, 86.17, 100, 87.83, 90, 87.5], ["20220020789", "حميده مسلم حمد سعيد الجنيبي", "الصف السابع", "", 80, 82, 88, 62, 64.83, 72], ["20240028538", "حور سالم عبيد احمد الكعبي", "الصف السابع", "", 62, 73.33, 80, 91.17, 73.17, 81.67], ["791218", "خلود محمد فرج مبارك الكربي", "الصف السابع", "", 96, 89.33, 92, 83.17, 86.67, 80], ["838477", "دانه مزهود مسلم سالم السيابى", "الصف السابع", "", 60, 73.83, 88, 64.83, 65.67, 67.33], ["790914", "رفيعه محمد سعيد ثعيلب الخييلي", "الصف السابع", "", 91, 84.17, 92, 85.17, 77.17, 79.83], ["781870", "رهف ابراهيم حاضر عبيد المجيحيم الشمري", "الصف السابع", "", 90, 89.17, 82, 66.83, 93.33, 79.33], ["790216", "رهف عبود كرامه شيخ العامري", "الصف السابع", "", 100, 90.83, 100, 92.17, 93.33, 85.67], ["788830", "روز ردفان طاهر محمد الحجاجى", "الصف السابع", "", 71, 75.83, 90, 60.83, 65.67, 71.33], ["791164", "ريم حمد محسن على الأحبابي", "الصف السابع", "", 80, 82.5, 90, 81.67, 72.33, 73.33], ["785197", "ريم عادل على خميس السعدي", "الصف السابع", "", 92, 83.17, 80, 68.83, 77.17, 76.67], ["930471", "ريم عبدالله محمد  علوي", "الصف السابع", "", 100, 85.33, 94, 82.83, 80.5, 82.17], ["816066", "ساره عامر مسلم على العامري", "الصف السابع", "", 87, 85.33, 90, 75.5, 73.17, 69.33], ["786249", "سالمه نجيب محفوظ يوسف الجنيبي", "الصف السابع", "", 92, 73.33, 92, 75.67, 64.83, 69.83], ["783522", "سلامه حمدان محمد صالح  الكربي", "الصف السابع", "", 91, 78.67, 90, 72.5, 73.33, 71.17], ["20200019806", "سلامه خالد خميس سعيد الريسي", "الصف السابع", "", 100, 86, 92, 77.83, 74.5, 72.83], ["783090", "سلامه خلفان سعيد سالم الكتبي", "الصف السابع", "", 72, 85.17, 86, 65.83, 64.83, 67.33], ["20190023374", "شريفه احمد اسماعيل محمد البلوشي", "الصف السابع", "", 100, 87.67, 92, 82.17, 80.33, 78.83], ["735145", "شما عامر عبدالله خميس عون الصيعري", "الصف السابع", "", 80, 66.83, 80, 65.83, 65.33, 62.17], ["787463", "شمسه خالد سيف محمد الكعبي", "الصف السابع", "", 84, 77.67, 90, 79.5, 70, 75], ["787746", "شمه حمد سعيد خميس العيسائي", "الصف السابع", "", 70, 74, 82, 62.67, 65.17, 63.5], ["735253", "شهد علي عبدالهادي عوض الأحبابي", "الصف السابع", "", 78, 75.17, 92, 66, 65.5, 68], ["785930", "شيخه احمد سعيد خميس المهري", "الصف السابع", "", 82, 72.17, 85, 68.5, 66.17, 72], ["737361", "شيخه حمدان محمد ناجي أحمد", "الصف السابع", "", 60, 81.83, 90, 60.83, 65.33, 62.17], ["787711", "شيخه راشد حمد عبد الله المري", "الصف السابع", "", 84, 79.67, 98, 90, 80.33, 90.83], ["792566", "شيخه راشد محمد على المري", "الصف السابع", "", 84, 76, 86, 62, 66, 66.67], ["786482", "شيخه سعيد راشد محمد الظاهري", "الصف السابع", "", 92, 72.5, 88, 69.67, 64.83, 68.83], ["782233", "شيخه سليمان علي محمد الكربي", "الصف السابع", "", 73, 81, 88, 63.5, 64.83, 66.17], ["784693", "شيخه محمد مبخوت عيضه عوض", "الصف السابع", "", 94, 78.67, 84, 66.5, 66.67, 66.83], ["786505", "شيخه ناصر فرج مبارك", "الصف السابع", "", 86, 75.17, 86, 70.83, 67.5, 68.5], ["788229", "ظبيه فيصل سيف علي الشامسي", "الصف السابع", "", 81, 75.17, 88, 83.33, 68.17, 78.33], ["878921", "عائشه عادل سهيل احمد نوريه", "الصف السابع", "", 79, 69, 80, 65, 65.83, 76.17], ["20190020313", "عاليه ناصر خميس جمعه الكعبي", "الصف السابع", "", 78, 66.83, 77, 78.5, 65.83, 67.33], ["792371", "عفراء على حسن سورى البلوشى", "الصف السابع", "", 64, 69.67, 77, 61, 65.67, 66], ["790393", "عفراء مبارك علي خميس المنصوري", "الصف السابع", "", 94, 81.5, 90, 63.83, 67.33, 71.17], ["783447", "عليا سيف عبدالعزيز محمد المرزوقي", "الصف السابع", "", 100, 87.17, 90, 86.17, 80.83, 76], ["782808", "علياء محمد نورمحمد الملا البلوشي", "الصف السابع", "", 63, 68.5, 76, 63.83, 66, 68], ["791515", "فاطمه خالد سعيد نهيم العامري", "الصف السابع", "", 95, 88.83, 92, 73.5, 72.67, 69.33], ["786906", "فاطمه سعيد البخيت علي العامري", "الصف السابع", "", 70, 77.17, 82, 62.67, 67.5, 71.83], ["783699", "فاطمه سلطان محمد نور البلوشي", "الصف السابع", "", 63, 78.17, 72, 86.33, 69, 82.33], ["784456", "فاطمه عبدالله خميس العثمني النقبي", "الصف السابع", "", 92, 88.67, 86, 62.5, 66.83, 80.67], ["783924", "لطيفه سالم عبيد سيف الكعبي", "الصف السابع", "", 68, 71.33, 80, 70.33, 64.83, 68.83], ["904757", "مريم حسن علي محمد الأحبابي", "الصف السابع", "", 91, 88.5, 92, 82.33, 86.67, 76.33], ["787917", "مريم شاجع احمد صالح احمد", "الصف السابع", "", 98, 75.83, 80, 70.33, 66.17, 67.67], ["794691", "مريم علي حسن سوري البلوشي", "الصف السابع", "", 65, 81.5, 88, 62, 65, 64.5], ["790834", "مريم ناصر احمد على عبدالله", "الصف السابع", "", 68, 79, 80, 87.66, 74.5, 85.17], ["786245", "منى وليد محمد سيف الكعبي", "الصف السابع", "", 83, 88, 92, 69.33, 70, 71.5], ["785654", "مها مسفر ناصر سعود المنصوري", "الصف السابع", "", 97, 78, 82, 75, 65.17, 68], ["784596", "مهره بنت ناصر بن سعيد بن محمد العامرية", "الصف السابع", "", 84, 81, 90, 65.17, 70, 77.17], ["900932", "مهره حافظ سعيد خلفان النعيميه", "الصف السابع", "", 62, 68.5, 88, 57.67, 64.67, 65.5], ["818717", "مهره سلطان مبارك جهجير البلوشي", "الصف السابع", "", 77, 80.33, 92, 69.67, 67.67, 66.67], ["786574", "مهره عبدالعزيز مراد علي البلوشي", "الصف السابع", "", 80, 83.17, 80, 65.33, 70.5, 75.33], ["784416", "مهره عبدالله على خصيف الحساني", "الصف السابع", "", 82, 84.5, 92, 85.5, 72.83, 73.17], ["794457", "مهره محمد علي هداد العرياني", "الصف السابع", "", 87, 76.33, 96, 88.33, 77.17, 80.83], ["20210006983", "ميثاء حسن محمد عبده عبدالاله", "الصف السابع", "", 99, 91.83, 98, 83.67, 93.33, 79.5], ["789274", "ميرا على سعيد عبدالله الكعبي", "الصف السابع", "", 84, 73.5, 100, 72.17, 73, 70.83], ["814510", "ميره حمد عبدالله محمد البلوشي", "الصف السابع", "", 91, 82, 94, 81.67, 70.17, 73.83], ["783023", "ميره ذياب محمد عبدالله اليافعي", "الصف السابع", "", 100, 87.5, 100, 89.67, 94, 88.5], ["781811", "ميره صلاح عبدالله احمد النعيمي", "الصف السابع", "", 74, 83.17, 90, 64.33, 68.5, 77.5], ["784946", "ميره نادر سعيد مصبح الشامسى", "الصف السابع", "", 95, 77.17, 90, 86.83, 65.33, 81.33], ["817831", "نوره على عائل مسفر الأحبابي", "الصف السابع", "", 61, 71.83, 90, 62.83, 68.5, 66.67], ["785549", "نوف صالح مبارك  الكربي", "الصف السابع", "", 70, 70.17, 80, 74.33, 65, 70.17], ["732382", "نوف فيصل فارس ناصر العامري", "الصف السابع", "", 67, 69.5, 88, 68.33, 65.5, 66.67], ["927129", "هاجر محمد الامين الامين  المسومي", "الصف السابع", "", 96, 73, 90, 89.83, 70.83, 80.17], ["786816", "هنادى عبدالله حمد سالم اليحيائي", "الصف السابع", "", 70, 67.5, 89, 69, 67, 61.67], ["20230019625", "هند محمد على مسفر الأحبابي", "الصف السابع", "", 92, 86.67, 94, 77.67, 73.17, 77.33], ["807322", "هيا ناصر حميد سعيد البلوشى", "الصف السابع", "", 87, 84.83, 92, 84.83, 70.83, 72], ["819061", "هيلا على صالح المطهرى", "الصف السابع", "", 83, 84.33, 96, 71.5, 70.67, 74.67], ["782861", "وضحى سعيد سالم محمد الكعبي", "الصف السابع", "", 75, 76.17, 80, 68.67, 64.83, 64.83], ["733086", "أمامه عبدالله سالم سالمين المري", "الصف الثامن", "", 100, 91.17, 90, 87.67, 94.83, 90.17], ["834555", "اريام هادي علي محمد الأحبابي", "الصف الثامن", "", 82, 86, 90, 81, 75.17, 84.33], ["740229", "اسماء محمد سالم عبدالله المهري", "الصف الثامن", "", 95, 72.33, 90, 75.67, 64.83, 66.83], ["733500", "الجوري عبدالله علي صالح المصعبي", "الصف الثامن", "", 91, 85, 90, 75.33, 65, 86.5], ["737078", "الريم حسن خليل  البيوك", "الصف الثامن", "", 81, 72, 92, 67.5, 67.83, 61.83], ["738218", "امل محمد جمعه سعيد الشامسى", "الصف الثامن", "", 85, 77.67, 92, 66.17, 67.67, 73.17], ["773492", "امل يسلم مبارك علي البريكي", "الصف الثامن", "", 100, 82.33, 98, 78.33, 71.17, 74.5], ["767698", "امنه عمران محمد شيبان المهيري", "الصف الثامن", "", 88, 75.67, 90, 70.33, 67.33, 70.17], ["768710", "ترفه عبيد جابر عضيمان الأحبابي", "الصف الثامن", "", 64, 70.83, 88, 70.5, 68.67, 70.33], ["734809", "حصه احمد يوسف ابراهيم البلوشي", "الصف الثامن", "", 92, 89.33, 98, 84.33, 72.33, 83], ["733477", "حصه ضبيان محمد ضبيان اليحيائي", "الصف الثامن", "", 100, 81, 96, 85, 80.33, 90.33], ["834743", "حمده سعد أحمد العفاري", "الصف الثامن", "", 80, 72.33, 92, 73, 65.67, 73], ["735707", "دانه محمد عبد الكريم محمد البلوشي", "الصف الثامن", "", 65, 69.17, 86, 68.83, 60.5, 64.83], ["767399", "روضه علي صالح هادي المنصوري", "الصف الثامن", "", 88, 79.33, 88, 74.33, 74, 81.5], ["732659", "روضه هزاع ناصر محمد المنصوري", "الصف الثامن", "", 73, 74.67, 86, 76.67, 68, 72.67], ["732213", "ريم اكرم محمد  جعشان", "الصف الثامن", "", 90, 81, 94, 87.67, 70.67, 85.33], ["733973", "ساره خالد مبارك عبدالله العلوي", "الصف الثامن", "", 63, 65.17, 88, 79, 65, 70.33], ["732284", "سميه جمعه عبد الرحمن رجب الشامسى", "الصف الثامن", "", 92, 75.33, 98, 67, 65.67, 64.17], ["875581", "شروق ناصر حميد محمد الحوسني", "الصف الثامن", "", 84, 81, 80, 66.17, 78.67, 75.5], ["767876", "شرينه سلطان سرور خليفه الكعبي", "الصف الثامن", "", 92, 89.33, 90, 87.67, 74.5, 85.83], ["740047", "شما جمعه سالم سعيد الكعبي", "الصف الثامن", "", 83, 86.17, 82, 70.33, 68.67, 67.17], ["20210020592", "شما سلطان علي جمعه مسعود", "الصف الثامن", "", 61, 69.17, 86, 67.5, 75.83, 60.83], ["766088", "شهد عماد سعيد صفصوف النعيمي", "الصف الثامن", "", 58, 66.5, 80, 66.17, 65, 62.33], ["737706", "شهد مهدى عبدالله خميس الصيعرى", "الصف الثامن", "", 86, 72, 90, 73, 63.5, 66.83], ["734118", "شيخه حمد حسن علي البلوشي", "الصف الثامن", "", 100, 93.17, 100, 87.17, 85.67, 89.67], ["738323", "شيخه طارق جابر محمد البلوشى", "الصف الثامن", "", 93, 92.67, 100, 83.67, 77.17, 87], ["766896", "شيخه محمد سعيد على عمير الشامسى", "الصف الثامن", "", 73, 74.83, 90, 72.33, 76, 69.67], ["731750", "ظبيه محمد سعيد مصبح العزيزى", "الصف الثامن", "", 96, 89.83, 92, 75, 67.5, 69.5], ["735398", "عائشه على حمد  محمد", "الصف الثامن", "", 84, 77.67, 90, 71.67, 71.5, 70.67], ["870002", "عفراء بنت سالم بن علي بن سليمان الشامسية", "الصف الثامن", "", 100, 92.5, 100, 78.33, 86.83, 89], ["735619", "عفراء محمد على الغرينيق المري", "الصف الثامن", "", 80, 83.67, 86, 71, 74.17, 73.83], ["681028", "عليا علي حسن سوري البلوشي", "الصف الثامن", "", 82, 70.83, 90, 62.83, 63.83, 59.83], ["739946", "غبيشه سلطان مبارك محمد البلوشي", "الصف الثامن", "", 87, 78.17, 94, 71.67, 65.33, 70.5], ["734421", "فاطمة عمر صالح عبدالله الصيعري", "الصف الثامن", "", 77, 86.67, 80, 74, 64.83, 70], ["20210006982", "قصايد حسن محمد عبده عبدالاله", "الصف الثامن", "", 86, 92.5, 90, 80.33, 77.83, 91], ["732189", "لطيفه احمد حمدان سعيد", "الصف الثامن", "", 96, 84.33, 88, 69.5, 66.5, 72.17], ["20190026796", "مريم خالد سالم  سلطان", "الصف الثامن", "", 89, 67.83, 84, 83.33, 78, 78.5], ["738548", "مريم عبدالله محمد سعيد درويش", "الصف الثامن", "", 84, 67.83, 92, 74, 63.83, 81], ["20220021403", "مريم نوح محمد راشد الخروصي", "الصف الثامن", "", 92, 92.67, 90, 91.83, 91.17, 89.17], ["733686", "مها عبود احمد عبدالله الجابري", "الصف الثامن", "", 71, 71.67, 84, 82, 76.83, 78.5], ["737326", "مها هادى مبارك هادى اليعقوبي", "الصف الثامن", "", 99, 82, 86, 73.67, 70.17, 68.5], ["759916", "مهره خميس على خميس المرزوقي", "الصف الثامن", "", 86, 83.67, 80, 64.83, 70.5, 66], ["735811", "مهره سالم سعيد برمان الخليفي", "الصف الثامن", "", 100, 92.5, 100, 87.67, 86.33, 89.5], ["739936", "مهره طارق عبدالحق عبدالله البلوشي", "الصف الثامن", "", 86, 92, 92, 87.67, 68.5, 83.83], ["682163", "مهره عبدالله محمد صالح الكربي", "الصف الثامن", "", 81, 70.17, 86, 64.83, 67.83, 69.17], ["736885", "موزه احمد جمعه سالم النيادي", "الصف الثامن", "", 80, 78, 88, 72.67, 74.67, 64.17], ["732929", "موزه سعيد سالم سلطان الشامسي", "الصف الثامن", "", 81, 81.17, 80, 70.33, 69.83, 80.66], ["733301", "موزه سلطان سعيد عبيد الظاهري", "الصف الثامن", "", 100, 93.17, 100, 89, 93, 88.33], ["731782", "موزه يوسف راشد سالم المسكري", "الصف الثامن", "", 97, 92.5, 96, 87, 85, 88.33], ["736228", "ميره سالم عبدالله سيف الشامسي", "الصف الثامن", "", 100, 93.17, 100, 75.83, 80.83, 75.17], ["734792", "ميره عامر على صالح بن حريز", "الصف الثامن", "", 94, 92.67, 96, 77.17, 76.83, 85.83], ["732632", "ميره عوض عامر محمد الغيثى", "الصف الثامن", "", 78, 73.83, 90, 71.17, 65, 77.17], ["820274", "نجمه صالح مصبح سالم المنهالي", "الصف الثامن", "", 91, 77.67, 82, 67.67, 63, 65.67], ["771876", "نوال مسفر ناصر سعود المنصوري", "الصف الثامن", "", 99, 79.83, 90, 68.83, 67.67, 66.33], ["785763", "نوره ضافر جابر عضيمان الاحبابي", "الصف الثامن", "", 66, 70.83, 88, 66.33, 64.83, 68.83], ["736441", "نوره علي محمد مسفر الاحبابي", "الصف الثامن", "", 100, 83, 90, 78.33, 70.33, 80.5], ["792254", "نوف محمد حسين محمد الاحبابي", "الصف الثامن", "", 66, 83.33, 86, 69, 65.5, 64.83], ["731878", "هند على سعد على سعد", "الصف الثامن", "", 81, 81, 88, 73, 64, 68.67], ["732397", "وديمه سالم احمد سعيد البريكي", "الصف الثامن", "", 92, 90.83, 90, 82.33, 75.83, 84.33], ["739632", "وديمه عوض رمضان عاشور الراشدي", "الصف الثامن", "", 93, 84.5, 96, 81.83, 83.17, 85.17], ["740180", "وديمه محمد سعيد سالمين بن اسحاق", "الصف الثامن", "", 84, 70.17, 90, 82.67, 76.83, 81.5]];
+
+function parseEmbeddedData() {
+  return EMBEDDED_DATA.map(r => {
+    const scores = {};
+    SUBJECTS.forEach((s, idx) => { scores[s] = parseFloat(r[4 + idx]) || 0; });
+    const avg = SUBJECTS.reduce((sum, s) => sum + scores[s], 0) / SUBJECTS.length;
+    return {
+      id: r[0] || '', name: (r[1] || '').trim(), grade: (r[2] || '').trim(),
+      section: (r[3] || '').trim(), ...scores, avg: Math.round(avg * 100) / 100,
+      rating: getRating(avg)
+    };
+  });
+}
+
+// ========== DATA FETCHING ==========
+async function fetchData() {
+  try {
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${SHEET_GID}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const csv = await resp.text();
+    const parsed = Papa.parse(csv, { skipEmptyLines: true });
+    const rows = parsed.data;
+    const students = [];
+    for (let i = 3; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r || !r[1] || !r[1].trim()) continue;
+      const scores = {};
+      SUBJECTS.forEach((s, idx) => { scores[s] = parseFloat(r[4 + idx]) || 0; });
+      const avg = SUBJECTS.reduce((sum, s) => sum + scores[s], 0) / SUBJECTS.length;
+      students.push({
+        id: r[0] || '', name: (r[1] || '').trim(), grade: (r[2] || '').trim(),
+        section: (r[3] || '').trim(), ...scores, avg: Math.round(avg * 100) / 100,
+        rating: getRating(avg)
+      });
+    }
+    if (students.length > 0) return students;
+    throw new Error('No students parsed from live data');
+  } catch (e) {
+    console.log('Live fetch failed, using embedded data:', e.message);
+    return parseEmbeddedData();
+  }
+}
+
+function setStatus(type, text) {
+  const badge = document.getElementById('statusBadge');
+  const txt = document.getElementById('statusText');
+  badge.className = 'status-badge status-' + type;
+  txt.textContent = text;
+}
+
+async function refreshData() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ جاري التحديث...';
+  setStatus('loading', 'جاري الاتصال...');
+  try {
+    allStudents = await fetchData();
+    // Check if we got live or embedded data
+    const isLive = allStudents.length > 0 && !allStudents._embedded;
+    setStatus('connected', allStudents.length > 0 ? 'متصل ✓' : 'غير متصل');
+    document.getElementById('lastRefresh').textContent = 'آخر تحديث: ' + new Date().toLocaleString('ar-AE');
+    populateFilters();
+    applyFilters();
+    updateKPIs();
+    updateCharts();
+    document.getElementById('mainContent').style.display = '';
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  } catch (e) {
+    console.error(e);
+    setStatus('disconnected', 'بيانات محلية');
+    document.getElementById('mainContent').style.display = '';
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  }
+  btn.disabled = false;
+  btn.textContent = '🔄 تحديث';
+}
+
+function showError() {
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="error-box" style="grid-column:1/-1;">
+      <h3>⚠️ تعذر تحميل البيانات</h3>
+      <p>تأكد من نشر جدول البيانات:<br>
+      1. افتح الجدول في Google Sheets<br>
+      2. اذهب إلى <strong>ملف → نشر على الويب</strong><br>
+      3. اختر <strong>المستند بأكمله</strong> ثم اضغط <strong>نشر</strong><br>
+      4. اضغط زر <strong>تحديث</strong> أعلاه</p>
+    </div>`;
+}
+
+// ========== FILTERS ==========
+function populateFilters() {
+  const grades = [...new Set(allStudents.map(s => s.grade))].sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b));
+  const gSel = document.getElementById('filterGrade');
+  gSel.innerHTML = '<option value="">الكل</option>' + grades.map(g => `<option value="${g}">${g}</option>`).join('');
+
+  updateSectionFilter();
+}
+function updateSectionFilter() {
+  const grade = document.getElementById('filterGrade').value;
+  const pool = grade ? allStudents.filter(s => s.grade === grade) : allStudents;
+  const sections = [...new Set(pool.map(s => s.section))].sort();
+  const sSel = document.getElementById('filterSection');
+  sSel.innerHTML = '<option value="">الكل</option>' + sections.map(s => `<option value="${s}">${s}</option>`).join('');
+}
+function applyFilters() {
+  updateSectionFilter();
+  const grade = document.getElementById('filterGrade').value;
+  const section = document.getElementById('filterSection').value;
+  const rating = document.getElementById('filterRating').value;
+  const name = document.getElementById('filterName').value.trim().toLowerCase();
+
+  filteredStudents = allStudents.filter(s => {
+    if (grade && s.grade !== grade) return false;
+    if (section && s.section !== section) return false;
+    if (rating && s.rating.text !== rating) return false;
+    if (name && !s.name.toLowerCase().includes(name)) return false;
+    return true;
+  });
+  currentPage = 1;
+  renderTable();
+  updateChartsFiltered();
+}
+function resetFilters() {
+  document.getElementById('filterGrade').value = '';
+  document.getElementById('filterSection').value = '';
+  document.getElementById('filterRating').value = '';
+  document.getElementById('filterName').value = '';
+  applyFilters();
+}
+
+// ========== KPIs ==========
+function updateKPIs() {
+  const n = allStudents.length;
+  document.getElementById('kpiStudents').textContent = n;
+  const overallAvg = n ? (allStudents.reduce((s, st) => s + st.avg, 0) / n).toFixed(1) : '-';
+  document.getElementById('kpiAverage').textContent = overallAvg;
+  const passRate = n ? ((allStudents.filter(s => s.avg >= 60).length / n) * 100).toFixed(1) + '%' : '-';
+  document.getElementById('kpiPass').textContent = passRate;
+  const excRate = n ? ((allStudents.filter(s => s.avg >= 90).length / n) * 100).toFixed(1) + '%' : '-';
+  document.getElementById('kpiExcellence').textContent = excRate;
+
+  // Weakest subject
+  let weakest = { name: '-', avg: Infinity };
+  SUBJECTS.forEach(sub => {
+    const avg = n ? allStudents.reduce((s, st) => s + st[sub], 0) / n : 0;
+    if (avg < weakest.avg) weakest = { name: SUBJECT_NAMES[sub], avg: avg.toFixed(1) };
+  });
+  document.getElementById('kpiWeakest').textContent = weakest.name;
+  document.getElementById('kpiWeakest').title = 'المتوسط: ' + weakest.avg;
+}
+
+// ========== TABLE ==========
+function renderTable() {
+  const tbody = document.getElementById('tableBody');
+  const total = filteredStudents.length;
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  const start = (currentPage - 1) * PER_PAGE;
+  const page = filteredStudents.slice(start, start + PER_PAGE);
+
+  tbody.innerHTML = page.map(s => {
+    const scoreCells = SUBJECTS.map(sub =>
+      `<td><span class="score-cell" style="color:${scoreColor(s[sub])};background:${scoreColor(s[sub])}18">${s[sub]}</span></td>`
+    ).join('');
+    return `<tr>
+      <td>${s.id}</td><td style="font-weight:600">${s.name}</td><td>${s.grade}</td><td>${s.section}</td>
+      ${scoreCells}
+      <td><span class="score-cell" style="color:${scoreColor(s.avg)};background:${scoreColor(s.avg)}18;font-size:0.95rem">${s.avg.toFixed(1)}</span></td>
+      <td><span class="badge ${s.rating.cls}">${s.rating.text}</span></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('rowCount').textContent = `(${total} طالب)`;
+  document.getElementById('paginationInfo').textContent = total ? `عرض ${start+1}-${Math.min(start+PER_PAGE, total)} من ${total}` : 'لا توجد نتائج';
+
+  // Pagination buttons
+  const btns = document.getElementById('paginationBtns');
+  let html = '';
+  html += `<button onclick="goPage(${currentPage-1})" ${currentPage<=1?'disabled':''}>»</button>`;
+  const maxBtns = 7;
+  let startP = Math.max(1, currentPage - 3);
+  let endP = Math.min(totalPages, startP + maxBtns - 1);
+  if (endP - startP < maxBtns - 1) startP = Math.max(1, endP - maxBtns + 1);
+  for (let i = startP; i <= endP; i++) {
+    html += `<button onclick="goPage(${i})" class="${i===currentPage?'active':''}">${i}</button>`;
+  }
+  html += `<button onclick="goPage(${currentPage+1})" ${currentPage>=totalPages?'disabled':''}>«</button>`;
+  btns.innerHTML = html;
+}
+function goPage(p) { currentPage = p; renderTable(); }
+
+// ========== SORTING ==========
+function sortTable(col) {
+  if (sortCol === col) sortAsc = !sortAsc;
+  else { sortCol = col; sortAsc = true; }
+  document.querySelectorAll('thead th').forEach(th => th.classList.remove('sorted'));
+  const th = document.querySelector(`th[data-col="${col}"]`);
+  if (th) th.classList.add('sorted');
+
+  filteredStudents.sort((a, b) => {
+    let va = a[col], vb = b[col];
+    if (col === 'rating') { va = a.avg; vb = b.avg; }
+    if (typeof va === 'number') return sortAsc ? va - vb : vb - va;
+    return sortAsc ? String(va).localeCompare(String(vb), 'ar') : String(vb).localeCompare(String(va), 'ar');
+  });
+  currentPage = 1;
+  renderTable();
+}
+
+// ========== CHARTS ==========
+const chartColors = ['#0d9488','#14b8a6','#2dd4bf','#5eead4','#99f6e4','#0f766e','#115e59','#134e4a'];
+const chartOpts = {
+  responsive: true,
+  maintainAspectRatio: true,
+  plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'Tajawal' } } } },
+  scales: {}
+};
+
+function makeBarScales(horizontal) {
+  const axis = { ticks: { color: '#94a3b8', font: { family: 'Tajawal' } }, grid: { color: '#334155' } };
+  return horizontal ? { x: { ...axis, beginAtZero: true, max: 100 }, y: axis } : { x: axis, y: { ...axis, beginAtZero: true, max: 100 } };
+}
+
+function updateCharts() {
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
+  updateChartsFiltered();
+}
+
+function updateChartsFiltered() {
+  const data = filteredStudents.length ? filteredStudents : allStudents;
+  if (!data.length) return;
+
+  // Grade average bar chart
+  const gradeMap = {};
+  GRADE_ORDER.forEach(g => gradeMap[g] = []);
+  data.forEach(s => { if (gradeMap[s.grade]) gradeMap[s.grade].push(s.avg); });
+  const gradeLabels = GRADE_ORDER.filter(g => gradeMap[g].length);
+  const gradeAvgs = gradeLabels.map(g => (gradeMap[g].reduce((a,b)=>a+b,0)/gradeMap[g].length).toFixed(1));
+
+  if (charts.gradeAvg) charts.gradeAvg.destroy();
+  charts.gradeAvg = new Chart(document.getElementById('chartGradeAvg'), {
+    type: 'bar',
+    data: {
+      labels: gradeLabels.map(g => g.replace('الصف ','')),
+      datasets: [{ label: 'المعدل', data: gradeAvgs, backgroundColor: chartColors.slice(0, gradeLabels.length), borderRadius: 8, maxBarThickness: 50 }]
+    },
+    options: { ...chartOpts, scales: makeBarScales(false), plugins: { ...chartOpts.plugins, legend: { display: false } } }
+  });
+
+  // Radar chart
+  const subAvgs = SUBJECTS.map(s => (data.reduce((sum, st) => sum + st[s], 0) / data.length).toFixed(1));
+  if (charts.radar) charts.radar.destroy();
+  charts.radar = new Chart(document.getElementById('chartRadar'), {
+    type: 'radar',
+    data: {
+      labels: SUBJECTS.map(s => SUBJECT_NAMES[s]),
+      datasets: [{ label: 'المتوسط', data: subAvgs, backgroundColor: 'rgba(13,148,136,0.2)', borderColor: '#14b8a6', pointBackgroundColor: '#14b8a6', pointRadius: 5 }]
+    },
+    options: { ...chartOpts, scales: { r: { beginAtZero: true, max: 100, ticks: { color: '#94a3b8', backdropColor: 'transparent' }, grid: { color: '#334155' }, pointLabels: { color: '#94a3b8', font: { family: 'Tajawal', size: 12 } } } } }
+  });
+
+  // Doughnut chart
+  const ratingCounts = { 'ممتاز': 0, 'جيد جداً': 0, 'جيد': 0, 'مقبول': 0, 'ضعيف': 0 };
+  data.forEach(s => ratingCounts[s.rating.text]++);
+  if (charts.doughnut) charts.doughnut.destroy();
+  charts.doughnut = new Chart(document.getElementById('chartDoughnut'), {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(ratingCounts),
+      datasets: [{ data: Object.values(ratingCounts), backgroundColor: ['#10b981','#3b82f6','#f59e0b','#f97316','#ef4444'], borderWidth: 0, hoverOffset: 10 }]
+    },
+    options: { ...chartOpts, cutout: '55%' }
+  });
+
+  // Pass rate horizontal bar
+  const passMap = {};
+  GRADE_ORDER.forEach(g => passMap[g] = { total: 0, pass: 0 });
+  data.forEach(s => { if (passMap[s.grade]) { passMap[s.grade].total++; if (s.avg >= 60) passMap[s.grade].pass++; } });
+  const passLabels = GRADE_ORDER.filter(g => passMap[g].total > 0);
+  const passRates = passLabels.map(g => ((passMap[g].pass / passMap[g].total) * 100).toFixed(1));
+  if (charts.passRate) charts.passRate.destroy();
+  charts.passRate = new Chart(document.getElementById('chartPassRate'), {
+    type: 'bar',
+    data: {
+      labels: passLabels.map(g => g.replace('الصف ','')),
+      datasets: [{ label: 'نسبة النجاح %', data: passRates, backgroundColor: passRates.map(v => v >= 80 ? '#10b981' : v >= 60 ? '#f59e0b' : '#ef4444'), borderRadius: 8, maxBarThickness: 28 }]
+    },
+    options: { indexAxis: 'y', ...chartOpts, scales: makeBarScales(true), plugins: { ...chartOpts.plugins, legend: { display: false } } }
+  });
+}
+
+// ========== THEME ==========
+function toggleTheme() {
+  document.body.classList.toggle('light-mode');
+  const isLight = document.body.classList.contains('light-mode');
+  document.getElementById('themeToggle').textContent = isLight ? '☀️' : '🌙';
+  // Re-render charts for color updates
+  updateCharts();
+}
+
+// ========== EXPORT CSV ==========
+function exportCSV() {
+  const header = ['الرقم','الاسم','الصف','الشعبة','التربية الإسلامية','اللغة العربية','الدراسات الاجتماعية','اللغة الإنجليزية','الرياضيات','العلوم','المعدل','التقدير'];
+  const rows = filteredStudents.map(s => [s.id, s.name, s.grade, s.section, s.islamic, s.arabic, s.social, s.english, s.math, s.science, s.avg.toFixed(1), s.rating.text]);
+  const bom = '\uFEFF';
+  const csv = bom + [header, ...rows].map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'مسبار_الأمل_درجات.csv';
+  a.click();
+}
+
+// ========== INIT ==========
+refreshData();
+</script>
+</body>
+</html>
