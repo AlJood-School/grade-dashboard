@@ -420,6 +420,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
       <button class="login-tab" onclick="setRole('admin_staff')"><i class="fas fa-user-tie"></i> إداري</button>
       <button class="login-tab" onclick="setRole('parent')"><i class="fas fa-heart"></i> ولي الأمر</button>
     </div>
+    <input type="text" class="login-input" id="loginUsername" placeholder="اسمك / Your Name" onkeypress="if(event.key==='Enter')doLogin()" style="margin-bottom:10px;">
     <input type="password" class="login-input" id="loginPass" placeholder="كلمة المرور / Password" onkeypress="if(event.key==='Enter')doLogin()">
     <button class="login-btn" onclick="doLogin()"><i class="fas fa-sign-in-alt"></i> &nbsp; دخول</button>
     <div class="login-error" id="loginError">❌ كلمة المرور غير صحيحة</div>
@@ -1444,6 +1445,7 @@ buildPasswordsMap();
 
 let currentRole = 'admin';
 let loginRole = 'admin';
+let currentUsername = '';
 
 // ─── Session Timeout (10 minutes of inactivity) ───
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
@@ -1473,9 +1475,10 @@ function restoreSession() {
   if (savedPass && savedRole && PASSWORDS[savedPass] && elapsed < SESSION_TIMEOUT_MS) {
     const user = PASSWORDS[savedPass];
     currentRole = savedRole;
+    currentUsername = localStorage.getItem('aljood_session_username') || user.name;
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
-    document.getElementById('userNameDisplay').textContent = user.name;
+    document.getElementById('userNameDisplay').textContent = currentUsername;
     document.getElementById('userRoleDisplay').textContent = user.roleLabel;
     if (user.role === 'admin' || user.role === 'principal') document.getElementById('adminMenu').style.display = 'block';
     renderNav();
@@ -1500,15 +1503,19 @@ function setRole(r) {
 
 function doLogin() {
   const pass = document.getElementById('loginPass').value;
+  const enteredUsername = (document.getElementById('loginUsername')?.value || '').trim();
   const user = PASSWORDS[pass];
   if (user) {
+    const uname = enteredUsername || user.name;
+    currentUsername = uname;
     localStorage.setItem('aljood_session_role', user.role);
     localStorage.setItem('aljood_session_pass', pass);
+    localStorage.setItem('aljood_session_username', uname);
     localStorage.setItem('aljood_last_active', Date.now());
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     currentRole = user.role;
-    document.getElementById('userNameDisplay').textContent = user.name;
+    document.getElementById('userNameDisplay').textContent = uname;
     document.getElementById('userRoleDisplay').textContent = user.roleLabel;
     if (user.role === 'admin' || user.role === 'principal') document.getElementById('adminMenu').style.display = 'block';
     renderNav();
@@ -1525,6 +1532,8 @@ function doLogin() {
 function logout() {
   localStorage.removeItem('aljood_session_role');
   localStorage.removeItem('aljood_session_pass');
+  localStorage.removeItem('aljood_session_username');
+  currentUsername = '';
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
   document.getElementById('loginPass').value = '';
@@ -2661,7 +2670,7 @@ function saveForm() {
       titleEn: document.getElementById('fbTitleEn').value.trim(),
       description: document.getElementById('fbDesc').value.trim(),
       fields,
-      createdBy: currentRole,
+      createdBy: currentUsername || currentRole,
       createdAt: new Date().toISOString(),
       active: true
     });
@@ -2674,10 +2683,14 @@ function saveForm() {
 function renderFormsList() {
   const container = document.getElementById('formsList');
   if (!container) return;
-  const forms = getForms();
+  const allForms = getForms();
+  // Admin sees all forms; everyone else sees only their own forms
+  const forms = currentRole === 'admin'
+    ? allForms
+    : allForms.filter(f => f.createdBy === (currentUsername || currentRole));
   const canEdit = currentRole === 'admin' || currentRole === 'staff';
   const canFill = currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'staff' || currentRole === 'principal';
-  const canView = currentRole === 'admin' || currentRole === 'staff' || currentRole === 'principal' || currentRole === 'teacher';
+  const canView = true; // each user sees dashboards for their own forms
 
   if (forms.length === 0) {
     container.innerHTML = `<div class="card" style="text-align:center;padding:40px;color:#999;">
