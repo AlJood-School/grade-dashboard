@@ -1428,11 +1428,32 @@ buildPasswordsMap();
 let currentRole = 'admin';
 let loginRole = 'admin';
 
+// ─── Session Timeout (10 minutes of inactivity) ───
+const SESSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+let sessionTimer = null;
+
+function resetSessionTimer() {
+  if (!localStorage.getItem('aljood_session_pass')) return;
+  clearTimeout(sessionTimer);
+  localStorage.setItem('aljood_last_active', Date.now());
+  sessionTimer = setTimeout(() => {
+    alert('انتهت جلستك بسبب عدم النشاط لمدة 10 دقائق.\nYour session expired due to 10 minutes of inactivity.');
+    logout();
+  }, SESSION_TIMEOUT_MS);
+}
+
+['mousemove','keydown','click','scroll','touchstart'].forEach(evt =>
+  document.addEventListener(evt, resetSessionTimer, { passive: true })
+);
+
 // ─── Restore session on page refresh ───
 (function restoreSession() {
   const savedPass = localStorage.getItem('aljood_session_pass');
   const savedRole = localStorage.getItem('aljood_session_role');
-  if (savedPass && savedRole && PASSWORDS[savedPass]) {
+  const lastActive = parseInt(localStorage.getItem('aljood_last_active') || '0');
+  const elapsed = Date.now() - lastActive;
+
+  if (savedPass && savedRole && PASSWORDS[savedPass] && elapsed < SESSION_TIMEOUT_MS) {
     currentRole = savedRole;
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
@@ -1447,6 +1468,12 @@ let loginRole = 'admin';
     if (el) el.textContent = nameMap[savedRole] || savedRole;
     if (typeof buildNav === 'function') buildNav();
     if (typeof navigateTo === 'function') navigateTo('section-home');
+    resetSessionTimer();
+  } else if (savedPass) {
+    // Session expired while away
+    localStorage.removeItem('aljood_session_role');
+    localStorage.removeItem('aljood_session_pass');
+    localStorage.removeItem('aljood_last_active');
   }
 })();
 
@@ -1461,6 +1488,7 @@ function doLogin() {
   if (user) {
     localStorage.setItem('aljood_session_role', user.role);
     localStorage.setItem('aljood_session_pass', pass);
+    localStorage.setItem('aljood_last_active', Date.now());
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     currentRole = user.role;
@@ -1471,6 +1499,7 @@ function doLogin() {
     setTimeout(() => renderAllSections(), 100);
     initCharts();
     updateDate();
+    resetSessionTimer();
   } else {
     document.getElementById('loginError').style.display = 'block';
     setTimeout(() => document.getElementById('loginError').style.display = 'none', 3000);
