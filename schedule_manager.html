@@ -730,14 +730,111 @@ function clearCell(){
   delete SCHED[editCell.cls][editCell.day][editCell.pid];
   closeModal();renderClassSchedule();
 }
-function saveCell(){
-  if(!editCell)return;
-  var tid=document.getElementById("modal-teacher-sel").value;
+/* ─── Validation helpers ─── */
+function checkConflict(tid, day, pid, skipCls){
+  // Returns list of classes where this teacher already has this period on this day
+  var conflicts=[];
+  for(var cls in SCHED){
+    if(cls===skipCls)continue;
+    if(SCHED[cls][day]&&SCHED[cls][day][pid]===tid) conflicts.push(cls);
+  }
+  return conflicts;
+}
+
+function checkConsecutive(tid, cls, day, pid){
+  // Build the period order for this class after the proposed change
+  var periods=getPeriods(cls);
+  var allPids=periods.map(function(p){return p.id;});
+  // Simulate what the schedule will look like
+  var simDay={};
+  if(SCHED[cls]&&SCHED[cls][day]) Object.assign(simDay, SCHED[cls][day]);
+  simDay[pid]=tid; // add proposed period
+  // Count consecutive periods for this teacher
+  var maxConsec=0, cur=0;
+  for(var i=0;i<allPids.length;i++){
+    if(simDay[allPids[i]]===tid){cur++; if(cur>maxConsec)maxConsec=cur;}
+    else cur=0;
+  }
+  return maxConsec;
+}
+
+function showValidationAlert(msg, onConfirm, blockOnly){
+  // Remove old alert if exists
+  var old=document.getElementById("val-alert");
+  if(old)old.remove();
+
+  var div=document.createElement("div");
+  div.id="val-alert";
+  div.style.cssText="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;";
+
+  var box=document.createElement("div");
+  box.style.cssText="background:#fff;border-radius:14px;padding:28px 32px;max-width:460px;width:92%;box-shadow:0 8px 40px rgba(0,0,0,.3);text-align:center;direction:rtl;";
+
+  var icon=blockOnly?"❌":"⚠️";
+  var color=blockOnly?"#c0392b":"#e67e22";
+
+  box.innerHTML="<div style='font-size:2.2rem;margin-bottom:10px;'>"+icon+"</div>"+
+    "<h3 style='color:"+color+";margin:0 0 12px;font-size:1.1rem;'>"+
+    (blockOnly?"تعارض في الجدول — لا يمكن الحفظ":"تحذير — يُرجى المراجعة")+"</h3>"+
+    "<p style='color:#333;font-size:.95rem;line-height:1.7;margin:0 0 20px;'>"+msg+"</p>"+
+    (blockOnly
+      ? "<button onclick='document.getElementById(\"val-alert\").remove()' style='background:#c0392b;color:#fff;border:none;border-radius:8px;padding:10px 28px;font-size:.95rem;cursor:pointer;font-family:inherit;'>حسناً</button>"
+      : "<button onclick='document.getElementById(\"val-alert\").remove();("+onConfirm.toString()+")()' style='background:#e67e22;color:#fff;border:none;border-radius:8px;padding:10px 24px;font-size:.95rem;cursor:pointer;font-family:inherit;margin-left:10px;'>نعم، أنا متأكدة</button>"+
+        "<button onclick='document.getElementById(\"val-alert\").remove()' style='background:#95a5a6;color:#fff;border:none;border-radius:8px;padding:10px 24px;font-size:.95rem;cursor:pointer;font-family:inherit;'>إلغاء</button>"
+    );
+
+  div.appendChild(box);
+  document.body.appendChild(div);
+}
+
+function applySave(tid){
   if(!SCHED[editCell.cls])SCHED[editCell.cls]={};
   if(!SCHED[editCell.cls][editCell.day])SCHED[editCell.cls][editCell.day]={};
   if(tid)SCHED[editCell.cls][editCell.day][editCell.pid]=tid;
   else delete SCHED[editCell.cls][editCell.day][editCell.pid];
   closeModal();renderClassSchedule();
+}
+
+function saveCell(){
+  if(!editCell)return;
+  var tid=document.getElementById("modal-teacher-sel").value;
+  var cls=editCell.cls, day=editCell.day, pid=editCell.pid;
+
+  if(!tid){
+    // Clearing a cell — always allowed
+    applySave(tid);
+    return;
+  }
+
+  var t=findTeacher(tid);
+  var tName=t?t.name:tid;
+
+  // 1. HARD CHECK: teacher conflict (same period, same day, another class)
+  var conflicts=checkConflict(tid,day,pid,cls);
+  if(conflicts.length>0){
+    var conflictList=conflicts.map(function(c){return "الصف "+c;}).join("، ");
+    showValidationAlert(
+      "المعلمة <strong>"+tName+"</strong> لديها حصة في نفس اليوم ونفس الوقت (<strong>"+pid+"</strong>) في: "+conflictList+".<br><br>لا يمكن أن تكون معلمة واحدة في صفَّين في وقت واحد.",
+      null, true
+    );
+    return;
+  }
+
+  // 2. SOFT CHECK: more than 3 consecutive periods
+  var consec=checkConsecutive(tid,cls,day,pid);
+  if(consec>3){
+    var snapshot=JSON.stringify(editCell);
+    var tidSnapshot=tid;
+    showValidationAlert(
+      "المعلمة <strong>"+tName+"</strong> ستحصل على <strong>"+consec+" حصص متتالية</strong> في هذا اليوم.<br><br>الحد الموصى به هو ٣ حصص متتالية فقط لتجنب الإرهاق.<br>هل أنتِ متأكدة من إجراء هذا التغيير؟",
+      function(){ applySave(tidSnapshot); },
+      false
+    );
+    return;
+  }
+
+  // All checks passed
+  applySave(tid);
 }
 function saveAllSchedule(){saveScheduleLS(SCHED);showToast("تم حفظ الجدول");}
 
