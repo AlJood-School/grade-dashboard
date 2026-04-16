@@ -120,12 +120,22 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;color:var(--text
 
 <div id="auth-overlay" class="auth-overlay" style="display:none">
   <div class="auth-box">
-    <img src="https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/assets/logo_aljood_school.png" alt="الجود">
+    <img src="https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/assets/logo_aljood_school.png" alt="الجود" style="width:80px;height:80px;border-radius:50%;margin-bottom:10px">
     <h2>منظومة الجدول المدرسي</h2>
-    <p>يرجى تسجيل الدخول من الموقع الرئيسي للوصول إلى هذه الصفحة</p>
-    <button class="btn btn-primary" style="width:100%;padding:12px;font-size:1rem" onclick="window.location.href='https://aljood-school.github.io/grade-dashboard/'">
-      الذهاب إلى الموقع الرئيسي
-    </button>
+    <p style="color:#666;margin-bottom:16px">سجّلي الدخول للمتابعة</p>
+    <div style="margin-bottom:12px;text-align:right">
+      <label style="font-size:.9rem;color:#333;display:block;margin-bottom:4px">اسمك / Your Name</label>
+      <input id="login-name" type="text" placeholder="اسمك الكامل" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-family:inherit;font-size:.95rem;box-sizing:border-box">
+    </div>
+    <div style="margin-bottom:16px;text-align:right">
+      <label style="font-size:.9rem;color:#333;display:block;margin-bottom:4px">كلمة المرور</label>
+      <input id="login-pass" type="password" placeholder="كلمة المرور" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-family:inherit;font-size:.95rem;box-sizing:border-box" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div id="login-err" style="color:#c0392b;font-size:.85rem;margin-bottom:10px;display:none">كلمة المرور غير صحيحة</div>
+    <button class="btn btn-primary" style="width:100%;padding:12px;font-size:1rem" onclick="doLogin()">دخول</button>
+    <div style="margin-top:12px;font-size:.8rem;color:#999">
+      <a href="https://aljood-school.github.io/grade-dashboard/" style="color:#C9A84C">العودة للموقع الرئيسي</a>
+    </div>
   </div>
 </div>
 
@@ -365,8 +375,55 @@ var ROLE = localStorage.getItem('aljood_session_role') || null;
 var CURRENT_USER = localStorage.getItem('aljood_session_username') || '';
 var ACTIVE_SCHED_KEY = 'aljood_active_sched'; // which schedule is shown
 
+// Login function (direct access without main portal)
+function doLogin(){
+  var name = (document.getElementById('login-name').value||'').trim();
+  var pass = document.getElementById('login-pass').value;
+  var err = document.getElementById('login-err');
+  
+  var creds = {
+    'AlJood@2026':   {role:'admin',     label:'مدير الموقع'},
+    'Principal2026': {role:'principal', label:'مديرة المدرسة'},
+    'Parent2026':    {role:'parent',    label:'ولي الأمر'}
+  };
+  
+  if(creds[pass]){
+    var r = creds[pass];
+    localStorage.setItem('aljood_session_role', r.role);
+    localStorage.setItem('aljood_session_username', name || r.label);
+    err.style.display='none';
+    document.getElementById('auth-overlay').style.display='none';
+    ROLE = r.role;
+    CURRENT_USER = name || r.label;
+    setupRoleUI();
+    loadSavedConstraints();
+    return;
+  }
+  
+  // Check staff passwords from main portal storage
+  var staffList = JSON.parse(localStorage.getItem('aljood_staff_list')||'[]');
+  var found = staffList.find(function(s){ return s.password === pass; });
+  if(found){
+    var role = found.role || 'teacher';
+    var uname = name || found.nameAr || found.name || role;
+    localStorage.setItem('aljood_session_role', role);
+    localStorage.setItem('aljood_session_username', uname);
+    err.style.display='none';
+    document.getElementById('auth-overlay').style.display='none';
+    ROLE = role;
+    CURRENT_USER = uname;
+    setupRoleUI();
+    loadSavedConstraints();
+    return;
+  }
+  
+  err.style.display='block';
+}
+
 // Check auth
 document.addEventListener('DOMContentLoaded', function(){
+  ROLE = localStorage.getItem('aljood_session_role') || null;
+  CURRENT_USER = localStorage.getItem('aljood_session_username') || '';
   if(!ROLE){
     document.getElementById('auth-overlay').style.display='flex';
     return;
