@@ -732,15 +732,17 @@ function renderMultiSchedList(){
     '</div></div>';
   scheds.forEach(function(s,i){
     var typeLabels={ramadan:'رمضان',distance:'تعلم عن بعد',custom:'مخصص'};
-    html+='<div class="multisched-card'+(active===s.id?' active-sched':'')+'">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between">'+
-      '<div><h4>'+s.name+' <span style="font-size:.78rem;color:#888;background:#f0f0f0;padding:2px 8px;border-radius:8px">'+( typeLabels[s.type]||s.type)+'</span></h4>'+
-      '<p style="font-size:.82rem;color:#666">'+( s.notes||'')+'&nbsp; &nbsp;أُنشئ: '+(s.created||'')+'</p></div>'+
-      '<div style="display:flex;gap:6px">'+
-      (active!==s.id?'<button class="btn btn-gold btn-sm" onclick="setActiveSched(\''+s.id+'\')">تفعيل</button>':
-        '<span class="badge badge-c2">✓ نشط</span>')+
-      '<button class="btn btn-danger btn-sm" onclick="deleteMultiSched(\''+s.id+'\')">حذف</button>'+
-      '</div></div></div>';
+    var sid = s.id;
+    var activateBtn = (active!==sid)
+      ? '<button class="btn btn-gold btn-sm" onclick="setActiveSched(\'' + sid + '\')">تفعيل</button>'
+      : '<span class="badge badge-c2">&#10003; نشط</span>';
+    var deleteBtn = '<button class="btn btn-danger btn-sm" onclick="confirmDeleteSched(\'' + sid + '\')">حذف</button>';
+    html += '<div class="multisched-card' + (active===sid?' active-sched':'') + '">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between">' +
+      '<div><h4>' + s.name + ' <span style="font-size:.78rem;color:#888;background:#f0f0f0;padding:2px 8px;border-radius:8px">' + (typeLabels[s.type]||s.type) + '</span></h4>' +
+      '<p style="font-size:.82rem;color:#666">' + (s.notes||'') + '&nbsp;&nbsp;أُنشئ: ' + (s.created||'') + '</p></div>' +
+      '<div style="display:flex;gap:6px">' + activateBtn + deleteBtn + '</div>' +
+      '</div></div>';
   });
   list.innerHTML=html;
 }
@@ -751,8 +753,27 @@ function setActiveSched(id){
   showToast('تم تفعيل الجدول المحدد');
 }
 
+function confirmDeleteSched(id){
+  // Use a custom modal instead of confirm() which may be blocked in iframes
+  var overlay = document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML='<div style="background:#fff;border-radius:12px;padding:28px 32px;max-width:360px;width:90%;text-align:center;direction:rtl">'+
+    '<p style="font-size:1.05rem;font-weight:600;margin-bottom:20px">هل أنتِ متأكدة من حذف هذا الجدول؟</p>'+
+    '<div style="display:flex;gap:10px;justify-content:center">'+
+    '<button id="del-yes" style="background:#c0392b;color:#fff;border:none;padding:9px 24px;border-radius:8px;cursor:pointer;font-size:.95rem">حذف</button>'+
+    '<button id="del-no" style="background:#eee;border:none;padding:9px 24px;border-radius:8px;cursor:pointer;font-size:.95rem">إلغاء</button>'+
+    '</div></div>';
+  document.body.appendChild(overlay);
+  overlay.querySelector('#del-yes').onclick=function(){
+    document.body.removeChild(overlay);
+    deleteMultiSched(id);
+  };
+  overlay.querySelector('#del-no').onclick=function(){
+    document.body.removeChild(overlay);
+  };
+}
+
 function deleteMultiSched(id){
-  if(!confirm('هل أنتِ متأكدة من حذف هذا الجدول؟')) return;
   var scheds = getMultiScheds().filter(s=>s.id!==id);
   saveMultiScheds(scheds);
   if(localStorage.getItem(ACTIVE_SCHED_KEY)===id) localStorage.setItem(ACTIVE_SCHED_KEY,'original');
