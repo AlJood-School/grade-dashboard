@@ -784,21 +784,49 @@ function deleteMultiSched(id){
 function openNewSchedModal(){ document.getElementById('new-sched-modal').classList.add('open'); }
 function closeNewSchedModal(){ document.getElementById('new-sched-modal').classList.remove('open'); }
 
+function toggleFillMethod(){
+  var source = document.getElementById('new-sched-source').value;
+  document.getElementById('fill-method-group').style.display = source==='empty' ? 'block' : 'none';
+}
+
 function createNewSched(){
   var name = document.getElementById('new-sched-name').value.trim();
   if(!name){ showToast('يرجى إدخال اسم للجدول'); return; }
   var type = document.getElementById('new-sched-type').value;
   var notes = document.getElementById('new-sched-notes').value.trim();
   var source = document.getElementById('new-sched-source').value;
+  var fillMethod = 'manual';
+  if(source==='empty'){
+    var radioEl = document.querySelector('input[name="fill-method"]:checked');
+    fillMethod = radioEl ? radioEl.value : 'manual';
+  }
   var id = 'sched_'+Date.now();
   var created = new Date().toLocaleDateString('ar-AE');
   var scheds = getMultiScheds();
   var schedData = source==='original' ? JSON.parse(localStorage.getItem('aljood_sched_data')||'{}') : {};
   scheds.push({id,name,type,notes,created,data:schedData});
   saveMultiScheds(scheds);
+  // set new sched as active
+  localStorage.setItem(ACTIVE_SCHED_KEY, id);
   closeNewSchedModal();
   renderMultiSchedList();
-  showToast('تم إنشاء الجدول: '+name);
+  if(fillMethod==='auto'){
+    showToast('تم إنشاء الجدول — سيتم فتح منشئ الجدول الذكي');
+    setTimeout(function(){
+      // Switch to smart builder tab
+      document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+      document.querySelectorAll('.tab-content').forEach(function(t){ t.classList.remove('active'); });
+      var builderBtn = document.querySelector('.tab-btn[data-tab="tab-generate"]');
+      var builderTab = document.getElementById('tab-generate');
+      if(builderBtn && builderTab){
+        builderBtn.classList.add('active');
+        builderTab.classList.add('active');
+        builderTab.scrollIntoView({behavior:'smooth'});
+      }
+    }, 700);
+  } else {
+    showToast('تم إنشاء الجدول: '+name+' — يمكنك تعبئته يدوياً');
+  }
 }
 
 // ============================================================
@@ -1785,7 +1813,7 @@ window.onload = function(){
     <h4>إعدادات الحصص والأوقات</h4>
     <div style="overflow:auto">
     <table class="constraints-table">
-      <thead><tr><th>الإعداد</th><th>الدورة الأولى (ص١–٤)</th><th>الدورة الثانية (ص٥–٨)</th></tr></thead>
+      <thead><tr><th>الإعداد</th><th>الحلقة الأولى (ص١–٤)</th><th>الحلقة الثانية (ص٥–٨)</th></tr></thead>
       <tbody>
         <tr><td><b>مدة الحصة (دقيقة)</b></td>
           <td><input type="number" id="dur-c1" value="45" min="30" max="60"></td>
@@ -1850,10 +1878,21 @@ window.onload = function(){
     </div>
     <div class="form-group">
       <label>المصدر</label>
-      <select id="new-sched-source">
+      <select id="new-sched-source" onchange="toggleFillMethod()">
         <option value="original">نسخ من الجدول الأصلي</option>
         <option value="empty">جدول فارغ</option>
       </select>
+    </div>
+    <div class="form-group" id="fill-method-group" style="display:none;background:#f9f5e7;border-radius:10px;padding:14px;border:1.5px solid #C9A84C">
+      <label style="font-weight:700;color:#1A2A4A;display:block;margin-bottom:10px">كيف تريدين تعبئة الجدول؟</label>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer">
+        <input type="radio" name="fill-method" value="manual" checked> 
+        <span><strong>يدوياً</strong> — أُعبّأ الخلايا بنفسي</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="radio" name="fill-method" value="auto">
+        <span><strong>تلقائياً</strong> — ينقلني لمنشئ الجدول الذكي</span>
+      </label>
     </div>
     <div class="form-group">
       <label>ملاحظات (اختياري)</label>
