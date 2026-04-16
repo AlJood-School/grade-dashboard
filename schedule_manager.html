@@ -730,6 +730,22 @@ function clearCell(){
   delete SCHED[editCell.cls][editCell.day][editCell.pid];
   closeModal();renderClassSchedule();
 }
+/* ─── Subjects that officially allow double/consecutive periods in the same class ─── */
+var DOUBLE_ALLOWED = [
+  "Art", "Physical Education", "PE", "Music",
+  "Computer", "CCDI", "ICT", "Lab", "Science Lab",
+  "Drama", "Design", "Technology"
+];
+
+function subjectAllowsDouble(subject){
+  if(!subject) return false;
+  var s = subject.toLowerCase();
+  for(var i=0;i<DOUBLE_ALLOWED.length;i++){
+    if(s.indexOf(DOUBLE_ALLOWED[i].toLowerCase())!==-1) return true;
+  }
+  return false;
+}
+
 /* ─── Validation helpers ─── */
 function checkConflict(tid, day, pid, skipCls){
   // Returns list of classes where this teacher already has this period on this day
@@ -739,6 +755,31 @@ function checkConflict(tid, day, pid, skipCls){
     if(SCHED[cls][day]&&SCHED[cls][day][pid]===tid) conflicts.push(cls);
   }
   return conflicts;
+}
+
+function checkSameClassDouble(tid, cls, day, pid){
+  // Check if placing this teacher creates adjacent periods in the SAME class on the SAME day
+  var periods = getPeriods(cls);
+  var allPids = periods.map(function(p){return p.id;});
+  var newIdx = allPids.indexOf(pid);
+  if(newIdx === -1) return false;
+
+  // Simulate proposed assignment
+  var simDay = {};
+  if(SCHED[cls] && SCHED[cls][day]) Object.assign(simDay, SCHED[cls][day]);
+  simDay[pid] = tid;
+
+  // Check adjacent slots (before and after), skipping break periods
+  var breakPids = ["C1","C2"]; // break/recess slots
+  var adj = [];
+  for(var d=-1;d<=1;d+=2){
+    var ni = newIdx + d;
+    if(ni<0 || ni>=allPids.length) continue;
+    var adjPid = allPids[ni];
+    if(breakPids.indexOf(adjPid) !== -1) continue; // skip if break between them
+    if(simDay[adjPid] === tid) adj.push(adjPid);
+  }
+  return adj.length > 0;
 }
 
 function checkConsecutive(tid, cls, day, pid){
@@ -820,7 +861,23 @@ function saveCell(){
     return;
   }
 
-  // 2. SOFT CHECK: more than 3 consecutive periods
+  // 2. HARD CHECK: two consecutive periods for the same class (unless subject allows it)
+  var hasDouble = checkSameClassDouble(tid, cls, day, pid);
+  if(hasDouble){
+    var t2=findTeacher(tid);
+    var subj2=t2?t2.subject:"";
+    if(!subjectAllowsDouble(subj2)){
+      showValidationAlert(
+        "المعلمة <strong>"+tName+"</strong> لديها بالفعل حصة في الصف <strong>"+cls+"</strong> في الحصة المجاورة مباشرةً في نفس اليوم.<br><br>"+
+        "لا يُسمح بحصتين متتاليتين لنفس المعلمة في نفس الشعبة إلا إذا كانت المادة تستوجب ذلك رسمياً (كالفن أو التربية البدنية أو الحاسوب).<br><br>"+
+        "مادة <strong>"+subj2+"</strong> لا تشترط الحصص المزدوجة.",
+        null, true
+      );
+      return;
+    }
+  }
+
+  // 3. SOFT CHECK: more than 3 consecutive periods
   var consec=checkConsecutive(tid,cls,day,pid);
   if(consec>3){
     var snapshot=JSON.stringify(editCell);
