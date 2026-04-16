@@ -1674,6 +1674,9 @@ function showSection(name) {
   if (name === 'forms') renderFormsList();
   if (name === 'staff_directory') renderStaffDirectory();
   if (name === 'my_profile') renderMyProfile();
+  if (name === 'school_schedule') setTimeout(renderScheduleSection, 50);
+  if (name === 'leaves') setTimeout(renderLeavesSection, 50);
+  if (name === 'meetings') setTimeout(renderMeetingsSection, 50);
 }
 
 // ===== DATE =====
@@ -2108,13 +2111,16 @@ const ALL_SECTIONS = [
   { id: 'templates',     label: 'القوالب الرسمية',          icon: 'fa-file-alt' },
   { id: 'staff_directory', label: 'دليل الموظفين',             icon: 'fa-users' },
   { id: 'my_profile',      label: 'ملفي الشخصي',              icon: 'fa-id-card' },
+  { id: 'school_schedule', label: 'الجدول المدرسي',        icon: 'fa-calendar-week' },
+  { id: 'leaves',          label: 'الإجازات والغياب',       icon: 'fa-user-clock' },
+  { id: 'meetings',        label: 'الاجتماعات',              icon: 'fa-handshake' },
 ];
 
 const DEFAULT_ACCESS = {
-  admin:         ['home','analysis','teachers','students','admin_section','distance','resources','projects','events','upcoming','achievements','documents','parents','forms','staff_directory'],
-  principal:     ['home','analysis','teachers','students','admin_section','distance','resources','projects','events','upcoming','achievements','documents','parents','forms','staff_directory'],
-  teacher:       ['home','analysis','students','distance','resources','projects','events','upcoming','achievements','forms','staff_directory','my_profile'],
-  staff:         ['home','analysis','events','upcoming','achievements','documents','forms','staff_directory','my_profile'],
+  admin:         ['home','analysis','teachers','students','admin_section','distance','resources','projects','events','upcoming','achievements','documents','parents','forms','staff_directory','school_schedule','leaves','meetings'],
+  principal:     ['home','analysis','teachers','students','admin_section','distance','resources','projects','events','upcoming','achievements','documents','parents','forms','staff_directory','school_schedule','leaves','meetings'],
+  teacher:       ['home','analysis','students','distance','resources','projects','events','upcoming','achievements','forms','staff_directory','my_profile','school_schedule','meetings'],
+  staff:         ['home','analysis','events','upcoming','achievements','documents','forms','staff_directory','my_profile','school_schedule','meetings'],
   parent:        ['parents']
 };
 
@@ -2155,6 +2161,9 @@ const NAV_DEFAULT_CONFIG = [
   { id:'templates',    label:'القوالب الرسمية',           labelEn:'Official Templates',  icon:'fa-file-alt',           badge:'',     badgeColor:'', group:'content',    visibleTo:['admin','principal','teacher','staff'] },
   { id:'staff_directory', label:'دليل الموظفين', labelEn:'Staff Directory', icon:'fa-users', badge:'', badgeColor:'', group:'sections', visibleTo:['admin','principal','teacher','admin_staff','tech_staff','staff'] },
   { id:'my_profile', label:'ملفي الشخصي', labelEn:'My Profile', icon:'fa-id-card', badge:'', badgeColor:'', group:'main', visibleTo:['teacher','admin_staff','tech_staff'] },
+  { id:'school_schedule', label:'الجدول المدرسي',           labelEn:'School Schedule',     icon:'fa-calendar-week',      badge:'',     badgeColor:'', group:'sections',   visibleTo:['admin','principal','teacher','staff'] },
+  { id:'leaves',          label:'الإجازات والغياب',         labelEn:'Leaves & Absence',    icon:'fa-user-clock',          badge:'',     badgeColor:'', group:'sections',   visibleTo:['admin','principal'] },
+  { id:'meetings',        label:'الاجتماعات',                labelEn:'Meetings',            icon:'fa-handshake',           badge:'',     badgeColor:'', group:'sections',   visibleTo:['admin','principal','teacher','staff'] },
   { id:'analysis',      label:'تحليل درجات الفصل الثاني', labelEn:'Grade Analysis',      icon:'fa-chart-bar',          badge:'',     badgeColor:'', group:'main',       visibleTo:['admin','principal','teacher','staff'] },
 ];
 
@@ -4153,6 +4162,8 @@ function openEditStaffModal(empId) {
         <input id="edit_email" value="${emp.email||''}" dir="ltr" style="width:100%;padding:10px 14px;border:2px solid #e5e7eb;border-radius:10px;font-family:Cairo,sans-serif;box-sizing:border-box;"></div>
       <div><label style="font-size:0.85rem;color:#666;display:block;margin-bottom:4px;">كلمة المرور الجديدة (اتركها فارغة للإبقاء)</label>
         <input id="edit_password" placeholder="اتركها فارغة للإبقاء على الحالية" dir="ltr" style="width:100%;padding:10px 14px;border:2px solid #e5e7eb;border-radius:10px;font-family:Cairo,sans-serif;box-sizing:border-box;"></div>
+      <div><label style="font-size:0.85rem;color:#666;display:block;margin-bottom:4px;"><i class="fas fa-id-card" style="color:#f59e0b;"></i> تاريخ انتهاء الهوية الوطنية</label>
+        <input id="edit_idExpiry" type="date" value="${emp.idExpiry||''}" dir="ltr" style="width:100%;padding:10px 14px;border:2px solid #e5e7eb;border-radius:10px;font-family:Cairo,sans-serif;box-sizing:border-box;"></div>
     </div>
     <div style="display:flex;gap:12px;margin-top:24px;">
       <button onclick="saveStaffEdit('${emp.id}')" style="flex:1;padding:12px;background:var(--accent);color:white;border:none;border-radius:12px;font-family:Cairo,sans-serif;font-size:1rem;font-weight:700;cursor:pointer;"><i class="fas fa-save"></i> حفظ التعديلات</button>
@@ -4179,6 +4190,7 @@ function saveStaffEdit(empId) {
     subjects: document.getElementById('edit_subjects').value.split(/[،,]/).map(s=>s.trim()).filter(Boolean),
     email: document.getElementById('edit_email').value.trim(),
     password: newPwd || staff[idx].password,
+    idExpiry: document.getElementById('edit_idExpiry')?.value || staff[idx].idExpiry || '',
   };
   saveStaffData(staff);
   document.getElementById('editStaffModal').remove();
@@ -4251,5 +4263,1031 @@ function renderMyProfile() {
   </div>
 </div>
 
+
+<!-- ====== SCHOOL SCHEDULE SECTION ====== -->
+<div class="section" id="section-school_schedule">
+  <h2 style="color:var(--accent);margin-bottom:20px;font-size:1.4rem;"><i class="fas fa-calendar-week"></i> الجدول المدرسي</h2>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+    <button class="sched-grade-btn" data-grade="all" onclick="filterScheduleGrade('all')"
+      style="padding:8px 16px;background:var(--accent);color:#1a1a2e;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-family:inherit;">الكل</button>
+    <button class="sched-grade-btn" data-grade="روضة" onclick="filterScheduleGrade('روضة')"
+      style="padding:8px 16px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:8px;cursor:pointer;font-family:inherit;">روضة (KG)</button>
+    <button class="sched-grade-btn" data-grade="حلقة أولى" onclick="filterScheduleGrade('حلقة أولى')"
+      style="padding:8px 16px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:8px;cursor:pointer;font-family:inherit;">حلقة أولى</button>
+    <button class="sched-grade-btn" data-grade="حلقة ثانية" onclick="filterScheduleGrade('حلقة ثانية')"
+      style="padding:8px 16px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:8px;cursor:pointer;font-family:inherit;">حلقة ثانية</button>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+    <button class="sched-view-btn" data-view="class" onclick="switchSchedView('class')"
+      style="padding:6px 14px;background:var(--accent);color:#1a1a2e;border:none;border-radius:6px;cursor:pointer;font-size:0.85rem;font-weight:700;font-family:inherit;"><i class="fas fa-chalkboard"></i> حسب الصف</button>
+    <button class="sched-view-btn" data-view="teacher" onclick="switchSchedView('teacher')"
+      style="padding:6px 14px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:6px;cursor:pointer;font-size:0.85rem;font-family:inherit;"><i class="fas fa-user-tie"></i> حسب المعلم</button>
+  </div>
+  <div id="sched-class-panel">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
+      <label style="color:var(--accent);font-weight:700;">اختر الصف:</label>
+      <select id="classSelect" onchange="renderClassSched()" style="background:#1e2d4a;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:8px 16px;font-family:inherit;"></select>
+      <span id="addClassBtnWrap"></span>
+    </div>
+    <div id="class-sched-container"></div>
+  </div>
+  <div id="sched-teacher-panel" style="display:none">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
+      <label style="color:var(--accent);font-weight:700;">اختر المعلم:</label>
+      <select id="teacherSchedSelect" onchange="renderTeacherSched()" style="background:#1e2d4a;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:8px 16px;font-family:inherit;"></select>
+    </div>
+    <div id="teacher-sched-container"></div>
+  </div>
+  <div id="schedEditModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#1e2d4a;border-radius:12px;padding:24px;width:420px;max-width:95vw;border:1px solid rgba(201,168,39,0.3);">
+      <h3 style="color:var(--accent);margin-bottom:16px;" id="schedEditTitle">تعديل الحصة</h3>
+      <input type="hidden" id="schedEditClass"><input type="hidden" id="schedEditDay"><input type="hidden" id="schedEditPeriod">
+      <label style="color:rgba(255,255,255,0.7);font-size:0.85rem;">المادة</label>
+      <input type="text" id="schedEditSubject" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:10px;margin-bottom:10px;font-family:inherit;">
+      <label style="color:rgba(255,255,255,0.7);font-size:0.85rem;">المعلمة</label>
+      <select id="schedEditTeacher" style="width:100%;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:10px;margin-bottom:16px;font-family:inherit;"></select>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button onclick="document.getElementById('schedEditModal').style.display='none'" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:white;border:none;border-radius:6px;cursor:pointer;font-family:inherit;">إلغاء</button>
+        <button onclick="saveSchedEdit()" style="padding:8px 16px;background:var(--accent);color:#1a1a2e;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit;">حفظ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== LEAVES SECTION ====== -->
+<div class="section" id="section-leaves">
+  <h2 style="color:var(--accent);margin-bottom:20px;font-size:1.4rem;"><i class="fas fa-user-clock"></i> الإجازات والغياب</h2>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+    <button class="leave-tab" data-lt="all" onclick="filterLeaveTab('all')" style="padding:8px 16px;background:var(--accent);color:#1a1a2e;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-family:inherit;">الكل</button>
+    <button class="leave-tab" data-lt="long_sick" onclick="filterLeaveTab('long_sick')" style="padding:8px 16px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);border-radius:8px;cursor:pointer;font-family:inherit;"><i class="fas fa-hospital"></i> مرضية طويلة</button>
+    <button class="leave-tab" data-lt="maternity" onclick="filterLeaveTab('maternity')" style="padding:8px 16px;background:rgba(167,139,250,0.15);color:#a78bfa;border:1px solid rgba(167,139,250,0.3);border-radius:8px;cursor:pointer;font-family:inherit;"><i class="fas fa-baby"></i> إجازة وضع</button>
+    <button class="leave-tab" data-lt="sick_3" onclick="filterLeaveTab('sick_3')" style="padding:8px 16px;background:rgba(251,191,36,0.15);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);border-radius:8px;cursor:pointer;font-family:inherit;"><i class="fas fa-thermometer-half"></i> مرضية +3 أيام</button>
+  </div>
+  <div id="leaves-add-btn" style="margin-bottom:16px;"></div>
+  <div id="leaves-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;"></div>
+  <div id="leaveModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#1e2d4a;border-radius:12px;padding:24px;width:480px;max-width:95vw;border:1px solid rgba(201,168,39,0.3);max-height:90vh;overflow-y:auto;">
+      <h3 style="color:var(--accent);margin-bottom:16px;" id="leaveModalTitle">إضافة إجازة</h3>
+      <input type="hidden" id="leaveEditId">
+      <label style="color:rgba(255,255,255,0.7);font-size:0.85rem;display:block;margin-bottom:4px;">الموظفة</label>
+      <select id="leaveEmpSel" style="width:100%;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:10px;margin-bottom:10px;font-family:inherit;"></select>
+      <label style="color:rgba(255,255,255,0.7);font-size:0.85rem;display:block;margin-bottom:4px;">نوع الإجازة</label>
+      <select id="leaveTypeSel" onchange="onLeaveTypeChange()" style="width:100%;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:10px;margin-bottom:10px;font-family:inherit;">
+        <option value="long_sick">مرضية طويلة</option>
+        <option value="maternity">إجازة وضع (90 يوم)</option>
+        <option value="sick_3">مرضية أكثر من 3 أيام متواصلة</option>
+      </select>
+      <label style="color:rgba(255,255,255,0.7);font-size:0.85rem;display:block;margin-bottom:4px;">تاريخ بدء الإجازة</label>
+      <input type="date" id="leaveStartDt" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:10px;margin-bottom:10px;font-family:inherit;" onchange="autoCalcLeaveEnd()">
+      <div id="leaveEndSection">
+        <label style="color:rgba(255,255,255,0.7);font-size:0.85rem;display:block;margin-bottom:4px;">تاريخ الانتهاء / المباشرة</label>
+        <input type="date" id="leaveEndDt" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:10px;margin-bottom:10px;font-family:inherit;">
+        <div id="leaveDaysCalc" style="color:var(--accent);font-size:0.85rem;margin-bottom:10px;"></div>
+      </div>
+      <label style="color:rgba(255,255,255,0.7);font-size:0.85rem;display:block;margin-bottom:4px;">ملاحظات</label>
+      <textarea id="leaveNotesTx" rows="2" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:10px;margin-bottom:16px;font-family:inherit;resize:vertical;"></textarea>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button onclick="closeLeaveModal()" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:white;border:none;border-radius:6px;cursor:pointer;font-family:inherit;">إلغاء</button>
+        <button onclick="saveLeaveRecord()" style="padding:8px 16px;background:var(--accent);color:#1a1a2e;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit;">حفظ الإجازة</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MEETINGS SECTION ====== -->
+<div class="section" id="section-meetings">
+  <h2 style="color:var(--accent);margin-bottom:20px;font-size:1.4rem;"><i class="fas fa-handshake"></i> الاجتماعات</h2>
+  <div id="meetings-toolbar" style="margin-bottom:16px;"></div>
+  <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
+    <button class="meet-tab" data-mt="upcoming" onclick="switchMeetTab('upcoming')" style="padding:8px 16px;background:var(--accent);color:#1a1a2e;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-family:inherit;"><i class="fas fa-clock"></i> القادمة</button>
+    <button class="meet-tab" data-mt="past" onclick="switchMeetTab('past')" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:8px;cursor:pointer;font-family:inherit;"><i class="fas fa-history"></i> السابقة</button>
+    <button class="meet-tab" data-mt="mine" onclick="switchMeetTab('mine')" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:8px;cursor:pointer;font-family:inherit;"><i class="fas fa-user"></i> اجتماعاتي</button>
+  </div>
+  <div id="meetings-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;"></div>
+  <!-- Meeting Form Modal -->
+  <div id="meetModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#1e2d4a;border-radius:12px;padding:24px;width:580px;max-width:95vw;border:1px solid rgba(201,168,39,0.3);max-height:90vh;overflow-y:auto;">
+      <h3 style="color:var(--accent);margin-bottom:16px;" id="meetModalTitle"><i class="fas fa-calendar-plus"></i> جدولة اجتماع</h3>
+      <input type="hidden" id="meetEditId">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:4px;">عنوان الاجتماع *</label>
+          <input type="text" id="meetTitle" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px;font-family:inherit;">
+        </div>
+        <div>
+          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:4px;">المكان *</label>
+          <input type="text" id="meetLocation" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px;font-family:inherit;">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:4px;">التاريخ *</label>
+          <input type="date" id="meetDate" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px;font-family:inherit;">
+        </div>
+        <div>
+          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:4px;">الوقت *</label>
+          <input type="time" id="meetTime" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px;font-family:inherit;">
+        </div>
+        <div>
+          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:4px;">المدة (دقيقة)</label>
+          <input type="number" id="meetDuration" value="60" min="15" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px;font-family:inherit;">
+        </div>
+      </div>
+      <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:6px;">المعنيون بالاجتماع</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+        <button type="button" onclick="addMeetFilter('job')" style="padding:5px 10px;background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:5px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-briefcase"></i> حسب الوظيفة</button>
+        <button type="button" onclick="addMeetFilter('subject')" style="padding:5px 10px;background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:5px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-book"></i> حسب المادة</button>
+        <button type="button" onclick="addMeetFilter('grade')" style="padding:5px 10px;background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:5px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-layer-group"></i> حسب المرحلة</button>
+        <button type="button" onclick="addMeetFilter('all_teachers')" style="padding:5px 10px;background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:5px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-users"></i> جميع المعلمين</button>
+        <button type="button" onclick="addMeetFilter('all_admin')" style="padding:5px 10px;background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:5px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-user-shield"></i> جميع الإداريين</button>
+      </div>
+      <div id="meetFilters" style="margin-bottom:10px;display:flex;flex-direction:column;gap:6px;"></div>
+      <div id="meetAttendeesPreview" style="background:#16213e;border-radius:8px;padding:10px;margin-bottom:10px;font-size:0.82rem;color:rgba(255,255,255,0.7);min-height:38px;"></div>
+      <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:4px;">جدول الأعمال / ملاحظات</label>
+      <textarea id="meetAgenda" rows="3" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px;margin-bottom:16px;font-family:inherit;resize:vertical;"></textarea>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button onclick="closeMeetModal()" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:white;border:none;border-radius:6px;cursor:pointer;font-family:inherit;">إلغاء</button>
+        <button onclick="saveMeetingRecord()" style="padding:8px 16px;background:var(--accent);color:#1a1a2e;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit;">حفظ الاجتماع</button>
+      </div>
+    </div>
+  </div>
+  <!-- Minutes Modal -->
+  <div id="minutesModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#1e2d4a;border-radius:12px;padding:24px;width:560px;max-width:95vw;border:1px solid rgba(201,168,39,0.3);max-height:90vh;overflow-y:auto;">
+      <h3 style="color:var(--accent);margin-bottom:16px;"><i class="fas fa-file-alt"></i> محضر الاجتماع</h3>
+      <input type="hidden" id="minutesMeetId">
+      <div id="minutesMeetInfo" style="background:#16213e;border-radius:8px;padding:10px;margin-bottom:12px;font-size:0.88rem;color:rgba(255,255,255,0.8);"></div>
+      <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:4px;">محضر الاجتماع والقرارات</label>
+      <textarea id="minutesContent" rows="8" placeholder="اكتب محضر الاجتماع والقرارات والتوصيات..." style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:10px;margin-bottom:16px;font-family:inherit;resize:vertical;"></textarea>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button onclick="document.getElementById('minutesModal').style.display='none'" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:white;border:none;border-radius:6px;cursor:pointer;font-family:inherit;">إغلاق</button>
+        <button onclick="saveMinutesRecord()" style="padding:8px 16px;background:var(--accent);color:#1a1a2e;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit;">حفظ المحضر</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+
+// ============================================================
+//  NEW FEATURES: SCHEDULE + LEAVES + MEETINGS + NOTIFICATIONS
+// ============================================================
+
+// --------------- SCHEDULE DATA & HELPERS ---------------
+const DAYS = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس'];
+const PERIODS = ['الحصة 1','الحصة 2','الحصة 3','الحصة 4','الحصة 5','الحصة 6','الحصة 7'];
+
+function getSchedules() {
+  return JSON.parse(localStorage.getItem('schedules') || '{}');
+}
+function saveSchedules(d) {
+  localStorage.setItem('schedules', JSON.stringify(d));
+}
+function getClasses() {
+  return JSON.parse(localStorage.getItem('classes') || '[]');
+}
+function saveClasses(arr) {
+  localStorage.setItem('classes', JSON.stringify(arr));
+}
+
+let currentSchedGrade = 'all';
+let currentSchedView = 'class';
+
+function renderScheduleSection() {
+  const classes = getClasses();
+  // Populate class select
+  const classSelect = document.getElementById('classSelect');
+  if (classSelect) {
+    const filtered = currentSchedGrade === 'all' ? classes : classes.filter(c => c.grade === currentSchedGrade);
+    classSelect.innerHTML = '<option value="">— اختر الصف —</option>' + filtered.map(c => `<option value="${c.id}">${c.name} (${c.grade})</option>`).join('');
+    classSelect.onchange = renderClassSched;
+  }
+  // Populate teacher select
+  const teacherSelect = document.getElementById('teacherSchedSelect');
+  if (teacherSelect) {
+    const emps = getEmployeesData();
+    const teachers = emps.filter(e => e.category === 'teacher' || e.category === 'kg_teacher');
+    teacherSelect.innerHTML = '<option value="">— اختر المعلم —</option>' + teachers.map(t => `<option value="${t.id}">${t.name_ar}</option>`).join('');
+    teacherSelect.onchange = renderTeacherSched;
+  }
+  // Add class button (admin only)
+  const addBtnWrap = document.getElementById('addClassBtnWrap');
+  if (addBtnWrap) {
+    addBtnWrap.innerHTML = (currentRole === 'admin') 
+      ? `<button onclick="showAddClassModal()" style="padding:6px 14px;background:var(--accent);color:#1a1a2e;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.85rem;font-family:inherit;"><i class="fas fa-plus"></i> إضافة صف</button>`
+      : '';
+  }
+  renderClassSched();
+}
+
+function filterScheduleGrade(grade) {
+  currentSchedGrade = grade;
+  document.querySelectorAll('.sched-grade-btn').forEach(b => {
+    b.style.background = b.dataset.grade === grade ? 'var(--accent)' : 'rgba(255,255,255,0.1)';
+    b.style.color = b.dataset.grade === grade ? '#1a1a2e' : 'white';
+    b.style.border = b.dataset.grade === grade ? 'none' : '1px solid rgba(255,255,255,0.2)';
+  });
+  renderScheduleSection();
+}
+
+function switchSchedView(view) {
+  currentSchedView = view;
+  document.querySelectorAll('.sched-view-btn').forEach(b => {
+    b.style.background = b.dataset.view === view ? 'var(--accent)' : 'rgba(255,255,255,0.1)';
+    b.style.color = b.dataset.view === view ? '#1a1a2e' : 'white';
+    b.style.border = b.dataset.view === view ? 'none' : '1px solid rgba(255,255,255,0.2)';
+  });
+  document.getElementById('sched-class-panel').style.display = view === 'class' ? '' : 'none';
+  document.getElementById('sched-teacher-panel').style.display = view === 'teacher' ? '' : 'none';
+  if (view === 'teacher') renderTeacherSched();
+  else renderClassSched();
+}
+
+function renderClassSched() {
+  const classId = document.getElementById('classSelect')?.value;
+  const container = document.getElementById('class-sched-container');
+  if (!container) return;
+  if (!classId) { container.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">اختر صفاً لعرض الجدول</p>'; return; }
+  const classes = getClasses();
+  const cls = classes.find(c => c.id == classId);
+  if (!cls) return;
+  const schedules = getSchedules();
+  const clsSched = schedules[classId] || {};
+  const isAdmin = currentRole === 'admin';
+  let html = `<h3 style="color:white;margin-bottom:12px;">${cls.name} — ${cls.grade}</h3>`;
+  html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.85rem;">`;
+  html += `<thead><tr><th style="background:#16213e;padding:10px;text-align:center;color:var(--accent);border:1px solid rgba(255,255,255,0.1);">الحصة</th>`;
+  DAYS.forEach(d => { html += `<th style="background:#16213e;padding:10px;text-align:center;color:var(--accent);border:1px solid rgba(255,255,255,0.1);">${d}</th>`; });
+  html += `</tr></thead><tbody>`;
+  PERIODS.forEach((p, pi) => {
+    html += `<tr>`;
+    html += `<td style="background:#1e2d4a;padding:8px;text-align:center;color:rgba(255,255,255,0.6);border:1px solid rgba(255,255,255,0.08);font-size:0.8rem;">${p}</td>`;
+    DAYS.forEach((d, di) => {
+      const cell = clsSched[`${di}_${pi}`] || {};
+      const editBtn = isAdmin ? `<button onclick="openSchedEdit('${classId}',${di},${pi})" style="margin-top:4px;padding:2px 8px;background:transparent;color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:4px;cursor:pointer;font-size:0.72rem;font-family:inherit;"><i class='fas fa-pencil-alt'></i></button>` : '';
+      html += `<td style="background:#172030;padding:8px;text-align:center;border:1px solid rgba(255,255,255,0.06);min-width:90px;">
+        <div style="color:white;font-size:0.82rem;font-weight:600;">${cell.subject || '<span style="color:#555;">—</span>'}</div>
+        <div style="color:rgba(255,255,255,0.45);font-size:0.72rem;">${cell.teacher || ''}</div>
+        ${editBtn}
+      </td>`;
+    });
+    html += `</tr>`;
+  });
+  html += `</tbody></table></div>`;
+  if (isAdmin) {
+    html += `<button onclick="deleteClass('${classId}')" style="margin-top:12px;padding:6px 14px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);border-radius:6px;cursor:pointer;font-size:0.82rem;font-family:inherit;"><i class="fas fa-trash"></i> حذف هذا الصف</button>`;
+  }
+  container.innerHTML = html;
+}
+
+function renderTeacherSched() {
+  const empId = document.getElementById('teacherSchedSelect')?.value;
+  const container = document.getElementById('teacher-sched-container');
+  if (!container) return;
+  if (!empId) { container.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">اختر معلماً لعرض جدوله</p>'; return; }
+  const emps = getEmployeesData();
+  const teacher = emps.find(e => e.id == empId);
+  if (!teacher) return;
+  const schedules = getSchedules();
+  const classes = getClasses();
+  // Find all cells for this teacher
+  let teacherCells = [];
+  Object.entries(schedules).forEach(([classId, clsSched]) => {
+    const cls = classes.find(c => c.id == classId);
+    if (!cls) return;
+    Object.entries(clsSched).forEach(([key, cell]) => {
+      if (cell.teacherId == empId || (cell.teacher && teacher.name_ar && cell.teacher.includes(teacher.name_ar.split(' ')[0]))) {
+        const [di, pi] = key.split('_').map(Number);
+        teacherCells.push({ class: cls.name, grade: cls.grade, day: DAYS[di], period: PERIODS[pi], subject: cell.subject, di, pi });
+      }
+    });
+  });
+  if (teacherCells.length === 0) {
+    container.innerHTML = `<div style="background:#16213e;border-radius:10px;padding:24px;text-align:center;color:#888;"><i class="fas fa-calendar-times" style="font-size:2rem;margin-bottom:12px;color:#444;"></i><br>لا يوجد جدول مسجّل لهذه المعلمة</div>`;
+    return;
+  }
+  // Build table
+  let html = `<h3 style="color:white;margin-bottom:12px;">${teacher.name_ar} — ${teacher.primary_job}</h3>`;
+  html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.85rem;">`;
+  html += `<thead><tr>
+    <th style="background:#16213e;padding:10px;color:var(--accent);border:1px solid rgba(255,255,255,0.1);">الحصة</th>
+    <th style="background:#16213e;padding:10px;color:var(--accent);border:1px solid rgba(255,255,255,0.1);">اليوم</th>
+    <th style="background:#16213e;padding:10px;color:var(--accent);border:1px solid rgba(255,255,255,0.1);">الصف</th>
+    <th style="background:#16213e;padding:10px;color:var(--accent);border:1px solid rgba(255,255,255,0.1);">المادة</th>
+  </tr></thead><tbody>`;
+  teacherCells.sort((a,b) => a.di - b.di || a.pi - b.pi).forEach(c => {
+    html += `<tr>
+      <td style="background:#172030;padding:8px;border:1px solid rgba(255,255,255,0.06);color:white;">${c.period}</td>
+      <td style="background:#172030;padding:8px;border:1px solid rgba(255,255,255,0.06);color:white;">${c.day}</td>
+      <td style="background:#172030;padding:8px;border:1px solid rgba(255,255,255,0.06);color:white;">${c.class} (${c.grade})</td>
+      <td style="background:#172030;padding:8px;border:1px solid rgba(255,255,255,0.06);color:var(--accent);font-weight:600;">${c.subject}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+  container.innerHTML = html;
+}
+
+function openSchedEdit(classId, di, pi) {
+  const schedules = getSchedules();
+  const cell = (schedules[classId] || {})[`${di}_${pi}`] || {};
+  document.getElementById('schedEditClass').value = classId;
+  document.getElementById('schedEditDay').value = di;
+  document.getElementById('schedEditPeriod').value = pi;
+  document.getElementById('schedEditSubject').value = cell.subject || '';
+  document.getElementById('schedEditTitle').textContent = `تعديل: ${DAYS[di]} — ${PERIODS[pi]}`;
+  // Populate teacher dropdown
+  const sel = document.getElementById('schedEditTeacher');
+  const emps = getEmployeesData();
+  const teachers = emps.filter(e => e.category === 'teacher' || e.category === 'kg_teacher');
+  sel.innerHTML = '<option value="">— بدون تحديد —</option>' + teachers.map(t => `<option value="${t.id}" ${cell.teacherId == t.id ? 'selected' : ''}>${t.name_ar}</option>`).join('');
+  document.getElementById('schedEditModal').style.display = 'flex';
+}
+
+function saveSchedEdit() {
+  const classId = document.getElementById('schedEditClass').value;
+  const di = document.getElementById('schedEditDay').value;
+  const pi = document.getElementById('schedEditPeriod').value;
+  const subject = document.getElementById('schedEditSubject').value.trim();
+  const sel = document.getElementById('schedEditTeacher');
+  const teacherId = sel.value;
+  const teacherName = sel.options[sel.selectedIndex]?.text || '';
+  const schedules = getSchedules();
+  if (!schedules[classId]) schedules[classId] = {};
+  schedules[classId][`${di}_${pi}`] = { subject, teacherId, teacher: teacherName === '— بدون تحديد —' ? '' : teacherName };
+  saveSchedules(schedules);
+  document.getElementById('schedEditModal').style.display = 'none';
+  renderClassSched();
+}
+
+function showAddClassModal() {
+  document.getElementById('schedEditModal') && (document.getElementById('schedEditModal').style.display = 'none');
+  const name = prompt('اسم الصف (مثال: 3أ، KG1-B):');
+  if (!name) return;
+  const grades = ['روضة','حلقة أولى','حلقة ثانية'];
+  const grade = prompt('المرحلة:\n1) روضة\n2) حلقة أولى\n3) حلقة ثانية\n\nاكتب الرقم:');
+  const gradeVal = grades[(parseInt(grade) || 1) - 1] || 'حلقة أولى';
+  const classes = getClasses();
+  classes.push({ id: Date.now().toString(), name: name.trim(), grade: gradeVal });
+  saveClasses(classes);
+  renderScheduleSection();
+}
+
+function deleteClass(classId) {
+  if (!confirm('هل تريد حذف هذا الصف وجدوله؟')) return;
+  const classes = getClasses().filter(c => c.id != classId);
+  saveClasses(classes);
+  const schedules = getSchedules();
+  delete schedules[classId];
+  saveSchedules(schedules);
+  renderScheduleSection();
+}
+
+// Render teacher's own schedule in my_profile
+function renderMySchedule(empId) {
+  const schedules = getSchedules();
+  const classes = getClasses();
+  let teacherCells = [];
+  Object.entries(schedules).forEach(([classId, clsSched]) => {
+    const cls = classes.find(c => c.id == classId);
+    if (!cls) return;
+    Object.entries(clsSched).forEach(([key, cell]) => {
+      if (cell.teacherId == empId) {
+        const [di, pi] = key.split('_').map(Number);
+        teacherCells.push({ class: cls.name, grade: cls.grade, day: DAYS[di], period: PERIODS[pi], subject: cell.subject, di, pi });
+      }
+    });
+  });
+  if (teacherCells.length === 0) return '<p style="color:#888;font-size:0.9rem;padding:8px 0;">لا يوجد جدول مسجّل حتى الآن</p>';
+  let html = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.83rem;">';
+  html += `<thead><tr>
+    <th style="background:#16213e;padding:8px;color:var(--accent);border:1px solid rgba(255,255,255,0.1);">الحصة</th>
+    <th style="background:#16213e;padding:8px;color:var(--accent);border:1px solid rgba(255,255,255,0.1);">اليوم</th>
+    <th style="background:#16213e;padding:8px;color:var(--accent);border:1px solid rgba(255,255,255,0.1);">الصف</th>
+    <th style="background:#16213e;padding:8px;color:var(--accent);border:1px solid rgba(255,255,255,0.1);">المادة</th>
+  </tr></thead><tbody>`;
+  teacherCells.sort((a,b) => a.di - b.di || a.pi - b.pi).forEach(c => {
+    html += `<tr>
+      <td style="background:#172030;padding:7px;border:1px solid rgba(255,255,255,0.06);color:white;font-size:0.8rem;">${c.period}</td>
+      <td style="background:#172030;padding:7px;border:1px solid rgba(255,255,255,0.06);color:white;">${c.day}</td>
+      <td style="background:#172030;padding:7px;border:1px solid rgba(255,255,255,0.06);color:white;">${c.class}</td>
+      <td style="background:#172030;padding:7px;border:1px solid rgba(255,255,255,0.06);color:var(--accent);font-weight:600;">${c.subject}</td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
+// --------------- LEAVES DATA & HELPERS ---------------
+function getLeaves() { return JSON.parse(localStorage.getItem('leavesData') || '[]'); }
+function saveLeaves(d) { localStorage.setItem('leavesData', JSON.stringify(d)); }
+
+let currentLeaveTab = 'all';
+
+const LEAVE_TYPES = {
+  long_sick: { label: 'مرضية طويلة', color: '#f87171', bg: 'rgba(239,68,68,0.12)', icon: 'fa-hospital' },
+  maternity:  { label: 'إجازة وضع (90 يوم)', color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', icon: 'fa-baby' },
+  sick_3:     { label: 'مرضية +3 أيام', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)', icon: 'fa-thermometer-half' }
+};
+
+function renderLeavesSection() {
+  const isPriv = currentRole === 'admin' || currentRole === 'principal';
+  const addBtn = document.getElementById('leaves-add-btn');
+  if (addBtn) {
+    addBtn.innerHTML = isPriv 
+      ? `<button onclick="openLeaveModal()" style="padding:8px 18px;background:var(--accent);color:#1a1a2e;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-family:inherit;"><i class="fas fa-plus"></i> إضافة إجازة</button>`
+      : '';
+  }
+  filterLeaveTab(currentLeaveTab);
+}
+
+function filterLeaveTab(type) {
+  currentLeaveTab = type;
+  document.querySelectorAll('.leave-tab').forEach(b => {
+    if (b.dataset.lt === type) {
+      b.style.background = 'var(--accent)'; b.style.color = '#1a1a2e'; b.style.border = 'none';
+    } else {
+      const lt = LEAVE_TYPES[b.dataset.lt];
+      b.style.background = lt ? lt.bg : 'rgba(255,255,255,0.1)';
+      b.style.color = lt ? lt.color : 'white';
+      b.style.border = lt ? `1px solid ${lt.color}44` : '1px solid rgba(255,255,255,0.2)';
+    }
+  });
+  const leaves = getLeaves();
+  const filtered = type === 'all' ? leaves : leaves.filter(l => l.type === type);
+  const emps = getEmployeesData();
+  const grid = document.getElementById('leaves-grid');
+  if (!grid) return;
+  if (filtered.length === 0) {
+    grid.innerHTML = '<p style="color:#888;text-align:center;padding:24px;grid-column:1/-1;">لا توجد إجازات مسجّلة</p>';
+    return;
+  }
+  const today = new Date(); today.setHours(0,0,0,0);
+  grid.innerHTML = filtered.map(leave => {
+    const lt = LEAVE_TYPES[leave.type] || LEAVE_TYPES.sick_3;
+    const emp = emps.find(e => e.id === leave.empId) || {};
+    const start = new Date(leave.startDate);
+    const end = leave.endDate ? new Date(leave.endDate) : null;
+    const daysLeft = end ? Math.ceil((end - today) / 86400000) : null;
+    const isActive = !end || end >= today;
+    const statusBadge = isActive 
+      ? `<span style="background:rgba(34,197,94,0.15);color:#4ade80;padding:2px 10px;border-radius:20px;font-size:0.75rem;">جارية</span>`
+      : `<span style="background:rgba(107,114,128,0.2);color:#9ca3af;padding:2px 10px;border-radius:20px;font-size:0.75rem;">منتهية</span>`;
+    const isPriv = currentRole === 'admin' || currentRole === 'principal';
+    const editBtns = isPriv ? `
+      <div style="display:flex;gap:6px;margin-top:12px;">
+        <button onclick="openLeaveModal('${leave.id}')" style="flex:1;padding:6px;background:rgba(201,168,39,0.1);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:6px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-edit"></i> تعديل</button>
+        <button onclick="deleteLeave('${leave.id}')" style="padding:6px 10px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.3);border-radius:6px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-trash"></i></button>
+      </div>` : '';
+    return `<div style="background:#1e2d4a;border-radius:12px;padding:16px;border:1px solid ${lt.color}33;position:relative;">
+      <div style="display:flex;align-items:start;gap:12px;margin-bottom:10px;">
+        <div style="width:42px;height:42px;background:${lt.bg};border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i class="fas ${lt.icon}" style="color:${lt.color};font-size:1.1rem;"></i>
+        </div>
+        <div style="flex:1;">
+          <div style="color:white;font-weight:700;font-size:0.95rem;">${emp.name_ar || 'موظفة غير معروفة'}</div>
+          <div style="color:rgba(255,255,255,0.55);font-size:0.78rem;">${emp.primary_job || ''}</div>
+        </div>
+        ${statusBadge}
+      </div>
+      <div style="background:#16213e;border-radius:8px;padding:10px;font-size:0.82rem;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+          <span style="color:rgba(255,255,255,0.6);">نوع الإجازة:</span>
+          <span style="color:${lt.color};font-weight:600;">${lt.label}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+          <span style="color:rgba(255,255,255,0.6);">تاريخ البدء:</span>
+          <span style="color:white;">${start.toLocaleDateString('ar-AE')}</span>
+        </div>
+        ${end ? `<div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+          <span style="color:rgba(255,255,255,0.6);">تاريخ المباشرة:</span>
+          <span style="color:white;">${end.toLocaleDateString('ar-AE')}</span>
+        </div>` : ''}
+        ${daysLeft !== null && isActive ? `<div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+          <span style="color:rgba(255,255,255,0.6);">المتبقي:</span>
+          <span style="color:${daysLeft <= 7 ? '#f87171' : '#4ade80'};font-weight:700;">${daysLeft > 0 ? daysLeft + ' يوم' : 'اليوم آخر يوم'}</span>
+        </div>` : ''}
+        ${leave.notes ? `<div style="margin-top:5px;color:rgba(255,255,255,0.5);font-size:0.78rem;border-top:1px solid rgba(255,255,255,0.06);padding-top:5px;">${leave.notes}</div>` : ''}
+      </div>
+      ${editBtns}
+    </div>`;
+  }).join('');
+}
+
+function onLeaveTypeChange() {
+  const t = document.getElementById('leaveTypeSel')?.value;
+  if (t === 'maternity') {
+    autoCalcLeaveEnd();
+  }
+}
+function autoCalcLeaveEnd() {
+  const t = document.getElementById('leaveTypeSel')?.value;
+  const start = document.getElementById('leaveStartDt')?.value;
+  if (t === 'maternity' && start) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + 90);
+    document.getElementById('leaveEndDt').value = d.toISOString().slice(0,10);
+  }
+  const startV = document.getElementById('leaveStartDt')?.value;
+  const endV = document.getElementById('leaveEndDt')?.value;
+  if (startV && endV) {
+    const days = Math.ceil((new Date(endV) - new Date(startV)) / 86400000);
+    const calc = document.getElementById('leaveDaysCalc');
+    if (calc) calc.textContent = days > 0 ? `المدة: ${days} يوم` : '';
+  }
+}
+function openLeaveModal(editId) {
+  const modal = document.getElementById('leaveModal');
+  const emps = getEmployeesData();
+  const sel = document.getElementById('leaveEmpSel');
+  sel.innerHTML = '<option value="">— اختر الموظفة —</option>' + emps.map(e => `<option value="${e.id}">${e.name_ar}</option>`).join('');
+  if (editId) {
+    const leave = getLeaves().find(l => l.id === editId);
+    if (!leave) return;
+    document.getElementById('leaveModalTitle').textContent = 'تعديل إجازة';
+    document.getElementById('leaveEditId').value = editId;
+    sel.value = leave.empId;
+    document.getElementById('leaveTypeSel').value = leave.type;
+    document.getElementById('leaveStartDt').value = leave.startDate;
+    document.getElementById('leaveEndDt').value = leave.endDate || '';
+    document.getElementById('leaveNotesTx').value = leave.notes || '';
+  } else {
+    document.getElementById('leaveModalTitle').textContent = 'إضافة إجازة';
+    document.getElementById('leaveEditId').value = '';
+    sel.value = '';
+    document.getElementById('leaveTypeSel').value = 'long_sick';
+    document.getElementById('leaveStartDt').value = '';
+    document.getElementById('leaveEndDt').value = '';
+    document.getElementById('leaveNotesTx').value = '';
+  }
+  modal.style.display = 'flex';
+}
+function closeLeaveModal() { document.getElementById('leaveModal').style.display = 'none'; }
+function saveLeaveRecord() {
+  const editId = document.getElementById('leaveEditId').value;
+  const empId = document.getElementById('leaveEmpSel').value;
+  const type = document.getElementById('leaveTypeSel').value;
+  const startDate = document.getElementById('leaveStartDt').value;
+  const endDate = document.getElementById('leaveEndDt').value;
+  const notes = document.getElementById('leaveNotesTx').value.trim();
+  if (!empId || !startDate) { alert('يرجى اختيار الموظفة وتاريخ البدء'); return; }
+  const leaves = getLeaves();
+  if (editId) {
+    const idx = leaves.findIndex(l => l.id === editId);
+    if (idx >= 0) leaves[idx] = { ...leaves[idx], empId, type, startDate, endDate, notes };
+  } else {
+    leaves.push({ id: Date.now().toString(), empId, type, startDate, endDate, notes });
+  }
+  saveLeaves(leaves);
+  closeLeaveModal();
+  renderLeavesSection();
+}
+function deleteLeave(id) {
+  if (!confirm('حذف هذا السجل؟')) return;
+  saveLeaves(getLeaves().filter(l => l.id !== id));
+  renderLeavesSection();
+}
+
+// --------------- ID EXPIRY NOTIFICATIONS ---------------
+function checkIdExpiry() {
+  const emps = getEmployeesData();
+  const today = new Date(); today.setHours(0,0,0,0);
+  const alerts = [];
+  emps.forEach(e => {
+    if (!e.idExpiry) return;
+    const exp = new Date(e.idExpiry);
+    const daysLeft = Math.ceil((exp - today) / 86400000);
+    if (daysLeft <= 60) {
+      alerts.push({ emp: e, daysLeft, expired: daysLeft < 0 });
+    }
+  });
+  return alerts;
+}
+
+function renderExpiryAlerts(container) {
+  if (!container) return;
+  const alerts = checkIdExpiry();
+  if (alerts.length === 0) { container.innerHTML = ''; return; }
+  container.innerHTML = alerts.map(a => {
+    const color = a.expired ? '#f87171' : (a.daysLeft <= 14 ? '#fbbf24' : '#60a5fa');
+    const msg = a.expired ? `انتهت منذ ${Math.abs(a.daysLeft)} يوم!` : `تنتهي خلال ${a.daysLeft} يوم`;
+    return `<div style="background:${color}18;border:1px solid ${color}44;border-radius:8px;padding:10px 14px;display:flex;gap:10px;align-items:center;">
+      <i class="fas fa-id-card" style="color:${color};"></i>
+      <div>
+        <span style="color:${color};font-weight:700;">${a.emp.name_ar}</span>
+        <span style="color:rgba(255,255,255,0.6);font-size:0.82rem;margin-right:8px;">— هوية وطنية: ${msg}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// --------------- MEETINGS DATA & HELPERS ---------------
+function getMeetings() { return JSON.parse(localStorage.getItem('meetingsData') || '[]'); }
+function saveMeetings(d) { localStorage.setItem('meetingsData', JSON.stringify(d)); }
+
+let currentMeetTab = 'upcoming';
+let meetFilterRows = [];
+
+function renderMeetingsSection() {
+  const isPriv = currentRole === 'admin' || currentRole === 'principal';
+  const toolbar = document.getElementById('meetings-toolbar');
+  if (toolbar) {
+    toolbar.innerHTML = isPriv
+      ? `<button onclick="openMeetModal()" style="padding:8px 18px;background:var(--accent);color:#1a1a2e;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-family:inherit;"><i class="fas fa-calendar-plus"></i> جدولة اجتماع جديد</button>`
+      : '';
+  }
+  switchMeetTab(currentMeetTab);
+  // Check meeting notifications for current user
+  renderMeetingNotifications();
+}
+
+function switchMeetTab(tab) {
+  currentMeetTab = tab;
+  document.querySelectorAll('.meet-tab').forEach(b => {
+    const active = b.dataset.mt === tab;
+    b.style.background = active ? 'var(--accent)' : 'rgba(255,255,255,0.1)';
+    b.style.color = active ? '#1a1a2e' : 'white';
+    b.style.border = active ? 'none' : '1px solid rgba(255,255,255,0.2)';
+  });
+  const meetings = getMeetings();
+  const today = new Date(); today.setHours(0,0,0,0);
+  let filtered;
+  if (tab === 'upcoming') {
+    filtered = meetings.filter(m => new Date(m.date) >= today).sort((a,b) => new Date(a.date) - new Date(b.date));
+  } else if (tab === 'past') {
+    filtered = meetings.filter(m => new Date(m.date) < today).sort((a,b) => new Date(b.date) - new Date(a.date));
+  } else { // mine
+    const name = currentUsername || '';
+    filtered = meetings.filter(m => {
+      return m.attendees && m.attendees.some(a => a === name || a === currentRole);
+    }).sort((a,b) => new Date(b.date) - new Date(a.date));
+  }
+  renderMeetingsGrid(filtered, tab);
+}
+
+function renderMeetingsGrid(meetings, tab) {
+  const grid = document.getElementById('meetings-grid');
+  if (!grid) return;
+  if (meetings.length === 0) {
+    grid.innerHTML = `<p style="color:#888;text-align:center;padding:24px;grid-column:1/-1;"><i class="fas fa-calendar-times" style="font-size:2rem;margin-bottom:8px;color:#444;display:block;"></i>لا توجد اجتماعات</p>`;
+    return;
+  }
+  const isPriv = currentRole === 'admin' || currentRole === 'principal';
+  grid.innerHTML = meetings.map(m => {
+    const date = new Date(m.date);
+    const isPast = date < new Date();
+    const dayName = date.toLocaleDateString('ar-AE', { weekday:'long' });
+    const dateStr = date.toLocaleDateString('ar-AE', { year:'numeric', month:'long', day:'numeric' });
+    const editBtns = isPriv ? `
+      <div style="display:flex;gap:6px;margin-top:10px;">
+        <button onclick="openMeetModal('${m.id}')" style="flex:1;padding:6px;background:rgba(201,168,39,0.1);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:6px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-edit"></i> تعديل</button>
+        <button onclick="openMinutesModal('${m.id}')" style="flex:1;padding:6px;background:rgba(96,165,250,0.1);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);border-radius:6px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-file-alt"></i> ${m.minutes ? 'عرض المحضر' : 'إضافة محضر'}</button>
+        <button onclick="deleteMeeting('${m.id}')" style="padding:6px 10px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.3);border-radius:6px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-trash"></i></button>
+      </div>` : m.minutes ? `<button onclick="openMinutesModal('${m.id}')" style="width:100%;margin-top:10px;padding:6px;background:rgba(96,165,250,0.1);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);border-radius:6px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-file-alt"></i> عرض المحضر</button>` : '';
+    return `<div style="background:#1e2d4a;border-radius:12px;padding:16px;border:1px solid ${isPast ? 'rgba(107,114,128,0.3)' : 'rgba(201,168,39,0.25)'};">
+      <div style="display:flex;gap:12px;margin-bottom:12px;">
+        <div style="width:50px;height:50px;background:${isPast ? 'rgba(107,114,128,0.2)' : 'rgba(201,168,39,0.15)'};border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;">
+          <span style="color:${isPast ? '#9ca3af' : 'var(--accent)'};font-size:1.1rem;font-weight:800;">${date.getDate()}</span>
+          <span style="color:${isPast ? '#6b7280' : 'rgba(201,168,39,0.7)'};font-size:0.65rem;">${date.toLocaleDateString('ar-AE',{month:'short'})}</span>
+        </div>
+        <div style="flex:1;">
+          <div style="color:white;font-weight:700;font-size:1rem;margin-bottom:3px;">${m.title}</div>
+          <div style="color:rgba(255,255,255,0.5);font-size:0.78rem;">${dayName} ${dateStr} — ${m.time}</div>
+        </div>
+        ${m.minutes ? '<span style="background:rgba(34,197,94,0.15);color:#4ade80;padding:2px 8px;border-radius:12px;font-size:0.72rem;white-space:nowrap;">محضر</span>' : ''}
+      </div>
+      <div style="background:#16213e;border-radius:8px;padding:10px;font-size:0.82rem;margin-bottom:8px;">
+        <div style="display:flex;gap:8px;margin-bottom:4px;">
+          <i class="fas fa-map-marker-alt" style="color:var(--accent);width:14px;text-align:center;"></i>
+          <span style="color:rgba(255,255,255,0.7);">${m.location}</span>
+        </div>
+        ${m.duration ? `<div style="display:flex;gap:8px;margin-bottom:4px;">
+          <i class="fas fa-clock" style="color:var(--accent);width:14px;text-align:center;"></i>
+          <span style="color:rgba(255,255,255,0.7);">${m.duration} دقيقة</span>
+        </div>` : ''}
+        ${m.agenda ? `<div style="display:flex;gap:8px;margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.06);">
+          <i class="fas fa-list-ul" style="color:var(--accent);width:14px;text-align:center;margin-top:2px;"></i>
+          <span style="color:rgba(255,255,255,0.6);font-size:0.78rem;">${m.agenda}</span>
+        </div>` : ''}
+      </div>
+      ${m.attendeesSummary ? `<div style="font-size:0.78rem;color:rgba(255,255,255,0.45);margin-bottom:4px;"><i class="fas fa-users" style="margin-left:4px;"></i>${m.attendeesSummary}</div>` : ''}
+      ${editBtns}
+    </div>`;
+  }).join('');
+}
+
+function openMeetModal(editId) {
+  meetFilterRows = [];
+  const modal = document.getElementById('meetModal');
+  document.getElementById('meetFilters').innerHTML = '';
+  document.getElementById('meetAttendeesPreview').innerHTML = '';
+  if (editId) {
+    const m = getMeetings().find(x => x.id === editId);
+    if (!m) return;
+    document.getElementById('meetModalTitle').textContent = 'تعديل الاجتماع';
+    document.getElementById('meetEditId').value = editId;
+    document.getElementById('meetTitle').value = m.title;
+    document.getElementById('meetLocation').value = m.location;
+    document.getElementById('meetDate').value = m.date;
+    document.getElementById('meetTime').value = m.time;
+    document.getElementById('meetDuration').value = m.duration || 60;
+    document.getElementById('meetAgenda').value = m.agenda || '';
+    if (m.filterRows) { meetFilterRows = m.filterRows; renderMeetFilters(); }
+  } else {
+    document.getElementById('meetModalTitle').textContent = 'جدولة اجتماع جديد';
+    document.getElementById('meetEditId').value = '';
+    ['meetTitle','meetLocation','meetAgenda'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('meetDuration').value = 60;
+    document.getElementById('meetDate').value = '';
+    document.getElementById('meetTime').value = '';
+  }
+  modal.style.display = 'flex';
+}
+function closeMeetModal() { document.getElementById('meetModal').style.display = 'none'; }
+
+function addMeetFilter(type) {
+  const emps = getEmployeesData();
+  let options = [];
+  if (type === 'job') {
+    options = [...new Set(emps.map(e => e.primary_job).filter(Boolean))].sort();
+  } else if (type === 'subject') {
+    options = [...new Set(emps.flatMap(e => e.subjects || []).filter(Boolean))].sort();
+  } else if (type === 'grade') {
+    options = ['روضة','حلقة أولى','حلقة ثانية'];
+  } else if (type === 'all_teachers') {
+    meetFilterRows.push({ type: 'all_teachers', value: 'all_teachers' });
+    renderMeetFilters(); updateAttendeesPreview(); return;
+  } else if (type === 'all_admin') {
+    meetFilterRows.push({ type: 'all_admin', value: 'all_admin' });
+    renderMeetFilters(); updateAttendeesPreview(); return;
+  }
+  const id = Date.now().toString();
+  meetFilterRows.push({ id, type, value: options[0] || '' });
+  renderMeetFilters();
+  updateAttendeesPreview();
+}
+
+function renderMeetFilters() {
+  const container = document.getElementById('meetFilters');
+  if (!container) return;
+  const emps = getEmployeesData();
+  container.innerHTML = meetFilterRows.map((row, i) => {
+    if (row.type === 'all_teachers') return `<div style="display:flex;align-items:center;gap:8px;background:#16213e;padding:8px;border-radius:6px;">
+      <i class="fas fa-users" style="color:var(--accent);"></i><span style="color:white;flex:1;">جميع المعلمين</span>
+      <button onclick="removeMeetFilter(${i})" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:0.85rem;"><i class="fas fa-times"></i></button></div>`;
+    if (row.type === 'all_admin') return `<div style="display:flex;align-items:center;gap:8px;background:#16213e;padding:8px;border-radius:6px;">
+      <i class="fas fa-user-shield" style="color:var(--accent);"></i><span style="color:white;flex:1;">جميع الإداريين والفنيين</span>
+      <button onclick="removeMeetFilter(${i})" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:0.85rem;"><i class="fas fa-times"></i></button></div>`;
+    let opts = [];
+    if (row.type === 'job') opts = [...new Set(emps.map(e => e.primary_job).filter(Boolean))].sort();
+    else if (row.type === 'subject') opts = [...new Set(emps.flatMap(e => e.subjects || []).filter(Boolean))].sort();
+    else if (row.type === 'grade') opts = ['روضة','حلقة أولى','حلقة ثانية'];
+    const labels = { job: 'الوظيفة', subject: 'المادة', grade: 'المرحلة' };
+    return `<div style="display:flex;align-items:center;gap:8px;background:#16213e;padding:8px;border-radius:6px;">
+      <span style="color:var(--accent);font-size:0.8rem;white-space:nowrap;">${labels[row.type]}:</span>
+      <select onchange="updateMeetFilter(${i},this.value)" style="flex:1;background:#0f172a;color:white;border:1px solid rgba(201,168,39,0.3);border-radius:5px;padding:5px;font-family:inherit;font-size:0.82rem;">
+        ${opts.map(o => `<option value="${o}" ${o === row.value ? 'selected' : ''}>${o}</option>`).join('')}
+      </select>
+      <button onclick="removeMeetFilter(${i})" style="background:transparent;border:none;color:#f87171;cursor:pointer;"><i class="fas fa-times"></i></button>
+    </div>`;
+  }).join('');
+  updateAttendeesPreview();
+}
+function updateMeetFilter(i, val) {
+  if (meetFilterRows[i]) meetFilterRows[i].value = val;
+  updateAttendeesPreview();
+}
+function removeMeetFilter(i) {
+  meetFilterRows.splice(i, 1);
+  renderMeetFilters();
+  updateAttendeesPreview();
+}
+function getAttendeesFromFilters() {
+  const emps = getEmployeesData();
+  const matched = new Set();
+  meetFilterRows.forEach(row => {
+    let subset = [];
+    if (row.type === 'job') subset = emps.filter(e => e.primary_job === row.value);
+    else if (row.type === 'subject') subset = emps.filter(e => e.subjects && e.subjects.includes(row.value));
+    else if (row.type === 'grade') subset = emps.filter(e => e.grade_levels && e.grade_levels.includes(row.value));
+    else if (row.type === 'all_teachers') subset = emps.filter(e => e.category === 'teacher' || e.category === 'kg_teacher');
+    else if (row.type === 'all_admin') subset = emps.filter(e => e.category === 'admin' || e.category === 'admin_staff' || e.category === 'tech_staff');
+    subset.forEach(e => matched.add(e.id));
+  });
+  return [...matched].map(id => emps.find(e => e.id === id)).filter(Boolean);
+}
+function updateAttendeesPreview() {
+  const preview = document.getElementById('meetAttendeesPreview');
+  if (!preview) return;
+  const attendees = getAttendeesFromFilters();
+  if (attendees.length === 0) { preview.innerHTML = '<span style="color:#555;">لم يتم اختيار معنيين بعد</span>'; return; }
+  preview.innerHTML = `<span style="color:var(--accent);font-weight:700;margin-left:8px;">${attendees.length} شخص:</span>` + attendees.slice(0,8).map(e => `<span style="background:rgba(201,168,39,0.1);color:rgba(255,255,255,0.7);padding:2px 8px;border-radius:12px;font-size:0.75rem;margin:2px;">${e.name_ar.split(' ').slice(0,2).join(' ')}</span>`).join('') + (attendees.length > 8 ? `<span style="color:#888;font-size:0.78rem;"> +${attendees.length - 8} آخرين</span>` : '');
+}
+
+function saveMeetingRecord() {
+  const editId = document.getElementById('meetEditId').value;
+  const title = document.getElementById('meetTitle').value.trim();
+  const location = document.getElementById('meetLocation').value.trim();
+  const date = document.getElementById('meetDate').value;
+  const time = document.getElementById('meetTime').value;
+  const duration = document.getElementById('meetDuration').value;
+  const agenda = document.getElementById('meetAgenda').value.trim();
+  if (!title || !date || !time) { alert('يرجى إدخال العنوان والتاريخ والوقت'); return; }
+  const attendees = getAttendeesFromFilters();
+  const attendeeIds = attendees.map(e => e.id);
+  const attendeeNames = attendees.map(e => e.name_ar);
+  const attendeesSummary = attendees.length ? `${attendees.length} معنياً (${attendees.slice(0,3).map(e=>e.name_ar.split(' ')[0]).join('، ')}${attendees.length>3?' وآخرون':''})` : '';
+  const meetings = getMeetings();
+  const record = { title, location, date, time, duration: parseInt(duration), agenda, filterRows: [...meetFilterRows], attendees: attendeeIds, attendeeNames, attendeesSummary, createdBy: currentUsername };
+  if (editId) {
+    const idx = meetings.findIndex(m => m.id === editId);
+    if (idx >= 0) meetings[idx] = { ...meetings[idx], ...record };
+  } else {
+    meetings.push({ id: Date.now().toString(), ...record, minutes: '' });
+  }
+  saveMeetings(meetings);
+  closeMeetModal();
+  renderMeetingsSection();
+}
+
+function deleteMeeting(id) {
+  if (!confirm('حذف هذا الاجتماع؟')) return;
+  saveMeetings(getMeetings().filter(m => m.id !== id));
+  renderMeetingsSection();
+}
+
+function openMinutesModal(meetId) {
+  const m = getMeetings().find(x => x.id === meetId);
+  if (!m) return;
+  document.getElementById('minutesMeetId').value = meetId;
+  document.getElementById('minutesMeetInfo').innerHTML = `
+    <strong style="color:var(--accent);">${m.title}</strong><br>
+    <span style="color:rgba(255,255,255,0.6);font-size:0.82rem;">${new Date(m.date).toLocaleDateString('ar-AE',{weekday:'long',year:'numeric',month:'long',day:'numeric'})} — ${m.time} — ${m.location}</span>`;
+  document.getElementById('minutesContent').value = m.minutes || '';
+  const isPriv = currentRole === 'admin' || currentRole === 'principal';
+  document.getElementById('minutesContent').readOnly = !isPriv;
+  document.getElementById('minutesModal').style.display = 'flex';
+}
+function saveMinutesRecord() {
+  const meetId = document.getElementById('minutesMeetId').value;
+  const content = document.getElementById('minutesContent').value.trim();
+  const meetings = getMeetings();
+  const idx = meetings.findIndex(m => m.id === meetId);
+  if (idx >= 0) meetings[idx].minutes = content;
+  saveMeetings(meetings);
+  document.getElementById('minutesModal').style.display = 'none';
+  renderMeetingsSection();
+}
+
+// --------------- MEETING NOTIFICATIONS ---------------
+function renderMeetingNotifications() {
+  const notifContainer = document.getElementById('meeting-notif-banner');
+  if (!notifContainer) return;
+  const meetings = getMeetings();
+  const today = new Date(); today.setHours(0,0,0,0);
+  const name = currentUsername || '';
+  const empId = (getEmployeesData().find(e => e.name_ar === name) || {}).id;
+  const upcoming = meetings.filter(m => {
+    const mDate = new Date(m.date); mDate.setHours(0,0,0,0);
+    const daysLeft = Math.ceil((mDate - today) / 86400000);
+    if (daysLeft < 0 || daysLeft > 3) return false;
+    if (currentRole === 'admin' || currentRole === 'principal') return true;
+    return m.attendees && empId && m.attendees.includes(empId);
+  });
+  if (upcoming.length === 0) { notifContainer.innerHTML = ''; return; }
+  notifContainer.innerHTML = `<div style="background:rgba(201,168,39,0.12);border:1px solid rgba(201,168,39,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;">
+    <div style="color:var(--accent);font-weight:700;margin-bottom:6px;"><i class="fas fa-bell"></i> تذكير: اجتماعات قادمة</div>
+    ${upcoming.map(m => {
+      const mDate = new Date(m.date);
+      const days = Math.ceil((mDate - today) / 86400000);
+      return `<div style="display:flex;gap:10px;align-items:center;padding:6px 0;border-top:1px solid rgba(255,255,255,0.06);">
+        <i class="fas fa-calendar-check" style="color:var(--accent);"></i>
+        <div>
+          <span style="color:white;font-weight:600;">${m.title}</span>
+          <span style="color:rgba(255,255,255,0.5);font-size:0.8rem;margin-right:8px;">${days === 0 ? 'اليوم!' : days === 1 ? 'غداً' : `خلال ${days} أيام`} — ${m.time} — ${m.location}</span>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// --------------- showSection PATCHES ---------------
+const _origShowSection = window.showSection;
+window.showSection = function(name) {
+  if (_origShowSection) _origShowSection(name);
+  if (name === 'school_schedule') { setTimeout(renderScheduleSection, 50); }
+  if (name === 'leaves') { setTimeout(renderLeavesSection, 50); }
+  if (name === 'meetings') { setTimeout(renderMeetingsSection, 50); }
+};
+
+// Patch renderMyProfile to include schedule and ID expiry alert
+const _origRenderMyProfile = window.renderMyProfile;
+window.renderMyProfile = function() {
+  if (_origRenderMyProfile) _origRenderMyProfile();
+  setTimeout(() => {
+    const container = document.getElementById('my-profile-content');
+    if (!container) return;
+    const emps = getEmployeesData();
+    const emp = emps.find(e => e.name_ar === currentUsername);
+    if (!emp) return;
+    // Add ID expiry alert
+    const today = new Date(); today.setHours(0,0,0,0);
+    if (emp.idExpiry) {
+      const exp = new Date(emp.idExpiry);
+      const daysLeft = Math.ceil((exp - today) / 86400000);
+      if (daysLeft <= 60) {
+        const alert = document.createElement('div');
+        const color = daysLeft < 0 ? '#f87171' : daysLeft <= 14 ? '#fbbf24' : '#60a5fa';
+        const msg = daysLeft < 0 ? `انتهت منذ ${Math.abs(daysLeft)} يوم! — يرجى تحديث الهوية فوراً` : `تنتهي خلال ${daysLeft} يوم — يرجى التحديث في أقرب وقت`;
+        alert.innerHTML = `<div style="background:${color}18;border:1px solid ${color}44;border-radius:8px;padding:12px;margin-bottom:12px;display:flex;gap:10px;align-items:center;">
+          <i class="fas fa-id-card" style="color:${color};font-size:1.2rem;"></i>
+          <div><span style="color:${color};font-weight:700;">تنبيه: الهوية الوطنية</span><br><span style="color:rgba(255,255,255,0.7);font-size:0.85rem;">${msg}</span></div>
+        </div>`;
+        container.insertBefore(alert, container.firstChild);
+      }
+    }
+    // Add schedule section
+    const schedHtml = renderMySchedule(emp.id);
+    const schedDiv = document.createElement('div');
+    schedDiv.innerHTML = `<div style="margin-top:20px;"><h3 style="color:var(--accent);margin-bottom:12px;"><i class="fas fa-calendar-week"></i> جدولي الدراسي</h3>${schedHtml}</div>`;
+    container.appendChild(schedDiv);
+    // Render meeting notifications
+    const notifDiv = document.createElement('div');
+    notifDiv.id = 'meeting-notif-banner';
+    container.insertBefore(notifDiv, container.firstChild);
+    renderMeetingNotifications();
+  }, 150);
+};
+
+// Add meeting notification banner to home section
+const _origRenderHome = window.renderHome || function(){};
+window.renderHome = function() {
+  if (_origRenderHome && typeof _origRenderHome === 'function') _origRenderHome();
+  setTimeout(() => {
+    const home = document.getElementById('section-home');
+    if (!home) return;
+    let notifDiv = document.getElementById('home-meeting-notif');
+    if (!notifDiv) {
+      notifDiv = document.createElement('div');
+      notifDiv.id = 'home-meeting-notif';
+      home.insertBefore(notifDiv, home.firstChild);
+    }
+    const meetings = getMeetings();
+    const today = new Date(); today.setHours(0,0,0,0);
+    const emps = getEmployeesData();
+    const empId = (emps.find(e => e.name_ar === currentUsername) || {}).id;
+    const upcoming = meetings.filter(m => {
+      const mDate = new Date(m.date); mDate.setHours(0,0,0,0);
+      const daysLeft = Math.ceil((mDate - today) / 86400000);
+      if (daysLeft < 0 || daysLeft > 7) return false;
+      if (currentRole === 'admin' || currentRole === 'principal') return true;
+      return m.attendees && empId && m.attendees.includes(empId);
+    });
+    if (upcoming.length === 0) { notifDiv.innerHTML = ''; return; }
+    notifDiv.innerHTML = `<div style="background:rgba(201,168,39,0.12);border:1px solid rgba(201,168,39,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;">
+      <div style="color:var(--accent);font-weight:700;margin-bottom:6px;"><i class="fas fa-bell"></i> اجتماعات قريبة (خلال 7 أيام)</div>
+      ${upcoming.map(m => {
+        const mDate = new Date(m.date); mDate.setHours(0,0,0,0);
+        const days = Math.ceil((mDate - today) / 86400000);
+        return `<div style="padding:6px 0;border-top:1px solid rgba(255,255,255,0.06);color:rgba(255,255,255,0.8);font-size:0.85rem;">
+          <i class="fas fa-calendar" style="color:var(--accent);margin-left:6px;"></i>
+          <strong>${m.title}</strong> — ${days === 0 ? 'اليوم!' : days === 1 ? 'غداً' : `${days} أيام`} — ${m.time} (${m.location})
+        </div>`;
+      }).join('')}
+    </div>`;
+  }, 200);
+};
+
+// Helper to get employees (with localStorage overrides)
+function getEmployeesData() {
+  // Use getStaffData if available (includes edits), else fall back to EMPLOYEES
+  if (typeof getStaffData === 'function') return getStaffData();
+  const overrides = JSON.parse(localStorage.getItem('empOverrides') || '{}');
+  return EMPLOYEES.map(e => ({ ...e, ...(overrides[e.id] || {}) }));
+}
+
+// Add idExpiry field to staff edit modal
+(function patchStaffEdit() {
+  const origEdit = window.editEmployee;
+  window.editEmployee = function(empId) {
+    if (origEdit) origEdit(empId);
+    setTimeout(() => {
+      const form = document.getElementById('editEmpForm') || document.querySelector('#staffEditModal form');
+      if (!form) return;
+      if (document.getElementById('editIdExpiry')) return;
+      const emps = getEmployeesData();
+      const emp = emps.find(e => e.id == empId);
+      const row = document.createElement('div');
+      row.style.cssText = 'margin-bottom:10px;';
+      row.innerHTML = `<label style="color:rgba(255,255,255,0.7);font-size:0.85rem;display:block;margin-bottom:4px;">تاريخ انتهاء الهوية الوطنية</label>
+        <input type="date" id="editIdExpiry" value="${emp && emp.idExpiry ? emp.idExpiry : ''}" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px;font-family:inherit;">`;
+      form.appendChild(row);
+    }, 100);
+  };
+})();
+
+console.log('[AlJood] New features loaded: Schedule, Leaves, Meetings, ID Expiry');
+
+</script>
 </body>
 </html>
