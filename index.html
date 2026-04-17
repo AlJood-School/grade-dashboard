@@ -1667,7 +1667,10 @@ function showSection(name) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('section-' + name).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  event.currentTarget.classList.add('active');
+  try { event && event.currentTarget && event.currentTarget.classList.add('active'); } catch(e) {}
+  // Also mark the correct nav item active by data-section attribute
+  const activeNavEl = document.querySelector('#dynamicNav .nav-item[data-section="'+name+'"]');
+  if (activeNavEl) activeNavEl.classList.add('active');
   document.getElementById('topbarTitle').textContent = sectionTitles[name] || name;
   window.scrollTo(0,0);
   if (name === 'admin_panel') { renderPwTable(); renderWebsiteManager(); }
@@ -2177,7 +2180,13 @@ const GROUP_LABELS = { main:'القائمة الرئيسية', sections:'الأ�
 function getNavConfig() {
   try {
     const saved = JSON.parse(localStorage.getItem('aljood_nav_config') || 'null');
-    if (saved && Array.isArray(saved) && saved.length > 0) return saved;
+    if (saved && Array.isArray(saved) && saved.length > 0) {
+      // Merge with NAV_DEFAULT_CONFIG to fill missing properties (e.g. visibleTo from old cache)
+      return saved.map(item => {
+        const def = NAV_DEFAULT_CONFIG.find(d => d.id === item.id);
+        return def ? Object.assign({}, def, item) : item;
+      });
+    }
   } catch(e) {}
   return JSON.parse(JSON.stringify(NAV_DEFAULT_CONFIG));
 }
@@ -2195,7 +2204,7 @@ function renderNav() {
   const groups = {};
   const groupOrder = [];
   config.forEach(item => {
-    if (!item.visibleTo.includes(currentRole) && currentRole !== 'admin') return;
+    if (!(item.visibleTo || []).includes(currentRole) && currentRole !== 'admin') return;
     if (!access.includes(item.id)) return;
     const g = item.group || 'content';
     if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
