@@ -495,6 +495,15 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     .op-phase{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:10px;margin-bottom:14px;overflow:hidden;}
     .op-phase-hd{padding:12px 16px;display:flex;align-items:center;gap:10px;cursor:pointer;}
     .op-phase-body{padding:0 16px 14px;}
+
+    /* Dark-themed operational sections */
+    #section-school_schedule,
+    #section-schedule_builder,
+    #section-leaves,
+    #section-meetings {
+      background: linear-gradient(135deg, #0a1628 0%, #1a2d4a 60%, #0d2137 100%);
+      min-height: calc(100vh - 70px);
+    }
     #section-digital_safety{padding:0!important;}
 </style>
 </head>
@@ -4633,76 +4642,208 @@ function renderMyProfile() {
 
 <!-- ====== MEETINGS SECTION ====== -->
 <div class="section" id="section-meetings">
-  <h2 style="color:var(--accent);margin-bottom:20px;font-size:1.4rem;"><i class="fas fa-handshake"></i> الاجتماعات</h2>
-  <div id="meetings-toolbar" style="margin-bottom:16px;"></div>
-  <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
-    <button class="meet-tab" data-mt="upcoming" onclick="switchMeetTab('upcoming')" style="padding:8px 16px;background:var(--accent);color:#1a1a2e;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-family:inherit;"><i class="fas fa-clock"></i> القادمة</button>
-    <button class="meet-tab" data-mt="past" onclick="switchMeetTab('past')" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:8px;cursor:pointer;font-family:inherit;"><i class="fas fa-history"></i> السابقة</button>
-    <button class="meet-tab" data-mt="mine" onclick="switchMeetTab('mine')" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:8px;cursor:pointer;font-family:inherit;"><i class="fas fa-user"></i> اجتماعاتي</button>
+  <div id="meeting-notif-banner"></div>
+
+  <!-- Header -->
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+    <div>
+      <h2 style="color:var(--accent);font-size:1.4rem;margin:0;"><i class="fas fa-handshake"></i> الاجتماعات المدرسية</h2>
+      <p style="color:rgba(255,255,255,0.5);font-size:0.82rem;margin:4px 0 0;">إدارة الاجتماعات والمحاضر والتوصيات</p>
+    </div>
+    <div id="meetings-toolbar" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
   </div>
-  <div id="meetings-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;"></div>
-  <!-- Meeting Form Modal -->
-  <div id="meetModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;">
-    <div style="background:#1e2d4a;border-radius:12px;padding:24px;width:580px;max-width:95vw;border:1px solid rgba(201,168,39,0.3);max-height:90vh;overflow-y:auto;">
-      <h3 style="color:var(--accent);margin-bottom:16px;" id="meetModalTitle"><i class="fas fa-calendar-plus"></i> جدولة اجتماع</h3>
+
+  <!-- Stats Bar -->
+  <div id="meetings-stats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px;"></div>
+
+  <!-- Tabs -->
+  <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;border-bottom:1px solid rgba(201,168,76,0.2);padding-bottom:12px;">
+    <button class="meet-tab" data-mt="upcoming" onclick="switchMeetTab('upcoming')"
+      style="padding:8px 18px;background:var(--accent);color:#1a1a2e;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-family:inherit;font-size:0.88rem;">
+      <i class="fas fa-calendar-alt"></i> القادمة
+    </button>
+    <button class="meet-tab" data-mt="past" onclick="switchMeetTab('past')"
+      style="padding:8px 18px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.88rem;">
+      <i class="fas fa-history"></i> السابقة
+    </button>
+    <button class="meet-tab" data-mt="mine" onclick="switchMeetTab('mine')"
+      style="padding:8px 18px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.88rem;">
+      <i class="fas fa-user-check"></i> اجتماعاتي
+    </button>
+    <button class="meet-tab" data-mt="all" onclick="switchMeetTab('all')"
+      style="padding:8px 18px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.88rem;">
+      <i class="fas fa-list"></i> الكل
+    </button>
+  </div>
+
+  <!-- Search & Filter Bar -->
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+    <input id="meetSearchInput" type="text" placeholder="ابحث في الاجتماعات..." oninput="renderMeetingsGrid()"
+      style="flex:1;min-width:200px;padding:8px 14px;background:rgba(255,255,255,0.08);color:white;border:1px solid rgba(201,168,76,0.3);border-radius:8px;font-family:inherit;font-size:0.88rem;outline:none;">
+    <select id="meetTypeFilter" onchange="renderMeetingsGrid()"
+      style="padding:8px 12px;background:rgba(255,255,255,0.08);color:white;border:1px solid rgba(201,168,76,0.3);border-radius:8px;font-family:inherit;font-size:0.85rem;outline:none;">
+      <option value="">كل الأنواع</option>
+      <option value="admin">إداري</option>
+      <option value="dev">تطوير مهني</option>
+      <option value="committee">لجنة</option>
+      <option value="parent">تواصل أولياء</option>
+      <option value="eval">تقييم وجودة</option>
+      <option value="urgent">طارئ</option>
+      <option value="other">أخرى</option>
+    </select>
+  </div>
+
+  <!-- Meetings Grid -->
+  <div id="meetings-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px;"></div>
+
+  <!-- ===== ADD/EDIT MEETING MODAL ===== -->
+  <div id="meetModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:9999;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;">
+    <div style="background:#1e2d4a;border-radius:16px;padding:28px;width:680px;max-width:98vw;border:1px solid rgba(201,168,39,0.3);margin:auto;">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <h3 style="color:var(--accent);margin:0;" id="meetModalTitle"><i class="fas fa-calendar-plus"></i> جدولة اجتماع</h3>
+        <button onclick="closeMeetModal()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:1.3rem;cursor:pointer;">&times;</button>
+      </div>
+
       <input type="hidden" id="meetEditId">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+
+      <!-- Row 1: Title + Type -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
         <div>
-          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:4px;">عنوان الاجتماع *</label>
-          <input type="text" id="meetTitle" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px;font-family:inherit;">
+          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:5px;">عنوان الاجتماع *</label>
+          <input type="text" id="meetTitle" placeholder="اجتماع الكادر التعليمي..." style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px 12px;font-family:inherit;font-size:0.88rem;outline:none;">
         </div>
         <div>
-          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:4px;">المكان *</label>
-          <input type="text" id="meetLocation" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px;font-family:inherit;">
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
-        <div>
-          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:4px;">التاريخ *</label>
-          <input type="date" id="meetDate" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px;font-family:inherit;">
-        </div>
-        <div>
-          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:4px;">الوقت *</label>
-          <input type="time" id="meetTime" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px;font-family:inherit;">
-        </div>
-        <div>
-          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:4px;">المدة (دقيقة)</label>
-          <input type="number" id="meetDuration" value="60" min="15" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px;font-family:inherit;">
+          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:5px;">نوع الاجتماع</label>
+          <select id="meetType" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px 12px;font-family:inherit;font-size:0.88rem;outline:none;">
+            <option value="admin">اجتماع إداري</option>
+            <option value="dev">تطوير مهني</option>
+            <option value="committee">اجتماع لجنة</option>
+            <option value="parent">تواصل مع أولياء الأمور</option>
+            <option value="eval">تقييم وجودة</option>
+            <option value="urgent">اجتماع طارئ</option>
+            <option value="other">أخرى</option>
+          </select>
         </div>
       </div>
-      <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:6px;">المعنيون بالاجتماع</label>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
-        <button type="button" onclick="addMeetFilter('job')" style="padding:5px 10px;background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:5px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-briefcase"></i> حسب الوظيفة</button>
-        <button type="button" onclick="addMeetFilter('subject')" style="padding:5px 10px;background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:5px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-book"></i> حسب المادة</button>
-        <button type="button" onclick="addMeetFilter('grade')" style="padding:5px 10px;background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:5px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-layer-group"></i> حسب المرحلة</button>
-        <button type="button" onclick="addMeetFilter('all_teachers')" style="padding:5px 10px;background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:5px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-users"></i> جميع المعلمين</button>
-        <button type="button" onclick="addMeetFilter('all_admin')" style="padding:5px 10px;background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:5px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-user-shield"></i> جميع الإداريين</button>
+
+      <!-- Row 2: Date + Time + Duration + Location -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;">
+        <div>
+          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:5px;">التاريخ *</label>
+          <input type="date" id="meetDate" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px 12px;font-family:inherit;font-size:0.88rem;outline:none;">
+        </div>
+        <div>
+          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:5px;">الوقت *</label>
+          <input type="time" id="meetTime" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px 12px;font-family:inherit;font-size:0.88rem;outline:none;">
+        </div>
+        <div>
+          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:5px;">المدة (دقيقة)</label>
+          <input type="number" id="meetDuration" value="60" min="15" step="15" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px 12px;font-family:inherit;font-size:0.88rem;outline:none;">
+        </div>
       </div>
-      <div id="meetFilters" style="margin-bottom:10px;display:flex;flex-direction:column;gap:6px;"></div>
-      <div id="meetAttendeesPreview" style="background:#16213e;border-radius:8px;padding:10px;margin-bottom:10px;font-size:0.82rem;color:rgba(255,255,255,0.7);min-height:38px;"></div>
-      <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:4px;">جدول الأعمال / ملاحظات</label>
-      <textarea id="meetAgenda" rows="3" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px;margin-bottom:16px;font-family:inherit;resize:vertical;"></textarea>
-      <div style="display:flex;gap:8px;justify-content:flex-end;">
-        <button onclick="closeMeetModal()" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:white;border:none;border-radius:6px;cursor:pointer;font-family:inherit;">إلغاء</button>
-        <button onclick="saveMeetingRecord()" style="padding:8px 16px;background:var(--accent);color:#1a1a2e;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit;">حفظ الاجتماع</button>
+
+      <!-- Row 3: Location + Status -->
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:14px;">
+        <div>
+          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:5px;">المكان *</label>
+          <input type="text" id="meetLocation" placeholder="قاعة الاجتماعات / غرفة المديرة..." style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px 12px;font-family:inherit;font-size:0.88rem;outline:none;">
+        </div>
+        <div>
+          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:5px;">الحالة</label>
+          <select id="meetStatus" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px 12px;font-family:inherit;font-size:0.88rem;outline:none;">
+            <option value="upcoming">قادم</option>
+            <option value="completed">مكتمل</option>
+            <option value="cancelled">ملغي</option>
+            <option value="postponed">مؤجل</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Attendees Section -->
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(201,168,76,0.2);border-radius:10px;padding:14px;margin-bottom:14px;">
+        <label style="color:var(--accent);font-size:0.9rem;font-weight:700;display:block;margin-bottom:10px;"><i class="fas fa-users"></i> الحضور المدعوون</label>
+
+        <!-- Quick add buttons -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+          <button type="button" onclick="meetAddGroup('all_teachers')" style="padding:5px 10px;background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.78rem;">+ كل المعلمات</button>
+          <button type="button" onclick="meetAddGroup('all_admin')" style="padding:5px 10px;background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.78rem;">+ كل الإداريين</button>
+          <button type="button" onclick="meetAddGroup('kg')" style="padding:5px 10px;background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.78rem;">+ معلمات KG</button>
+          <button type="button" onclick="meetAddGroup('cycle1')" style="padding:5px 10px;background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.78rem;">+ الحلقة الأولى</button>
+          <button type="button" onclick="meetAddGroup('cycle2')" style="padding:5px 10px;background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.78rem;">+ الحلقة الثانية</button>
+          <button type="button" onclick="clearMeetAttendees()" style="padding:5px 10px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.78rem;">مسح الكل</button>
+        </div>
+
+        <!-- Individual search -->
+        <div style="position:relative;margin-bottom:10px;">
+          <input type="text" id="meetAttendeeSearch" placeholder="ابحث باسم الموظف للإضافة الفردية..." oninput="meetSearchAttendee()"
+            style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:8px 12px;font-family:inherit;font-size:0.85rem;outline:none;">
+          <div id="meetAttendeeDropdown" style="display:none;position:absolute;top:100%;right:0;left:0;background:#1e2d4a;border:1px solid rgba(201,168,76,0.3);border-radius:8px;z-index:100;max-height:200px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.4);"></div>
+        </div>
+
+        <!-- Selected attendees chips -->
+        <div id="meetAttendeesChips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px;background:rgba(0,0,0,0.2);border-radius:8px;padding:8px;"></div>
+        <div style="color:rgba(255,255,255,0.4);font-size:0.75rem;margin-top:6px;" id="meetAttendeesCount">0 مدعو</div>
+      </div>
+
+      <!-- Agenda / Content -->
+      <div style="margin-bottom:14px;">
+        <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:5px;"><i class="fas fa-list-ul"></i> جدول الأعمال / محتوى الاجتماع</label>
+        <textarea id="meetAgenda" rows="3" placeholder="بنود الاجتماع والمحاور الرئيسية..."
+          style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px 12px;font-family:inherit;font-size:0.85rem;resize:vertical;outline:none;"></textarea>
+      </div>
+
+      <!-- Suggestions -->
+      <div style="margin-bottom:14px;">
+        <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:5px;"><i class="fas fa-lightbulb" style="color:#4ade80;"></i> المقترحات</label>
+        <textarea id="meetSuggestions" rows="2" placeholder="المقترحات المطروحة في الاجتماع..."
+          style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px 12px;font-family:inherit;font-size:0.85rem;resize:vertical;outline:none;"></textarea>
+      </div>
+
+      <!-- Recommendations -->
+      <div style="margin-bottom:14px;">
+        <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:5px;"><i class="fas fa-star" style="color:#f59e0b;"></i> التوصيات</label>
+        <textarea id="meetRecommendations" rows="2" placeholder="التوصيات والقرارات المتخذة..."
+          style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px 12px;font-family:inherit;font-size:0.85rem;resize:vertical;outline:none;"></textarea>
+      </div>
+
+      <!-- Tasks -->
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;"><i class="fas fa-tasks" style="color:#60a5fa;"></i> المهام والتكليفات</label>
+          <button type="button" onclick="meetAddTask()" style="padding:4px 10px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.78rem;">+ إضافة مهمة</button>
+        </div>
+        <div id="meetTasksList" style="display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+
+      <!-- Notes -->
+      <div style="margin-bottom:20px;">
+        <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:5px;"><i class="fas fa-sticky-note"></i> ملاحظات إضافية</label>
+        <textarea id="meetNotes" rows="2" placeholder="أي ملاحظات إضافية..."
+          style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:9px 12px;font-family:inherit;font-size:0.85rem;resize:vertical;outline:none;"></textarea>
+      </div>
+
+      <!-- Actions -->
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+        <button onclick="closeMeetModal()" style="padding:10px 20px;background:rgba(255,255,255,0.1);color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;">إلغاء</button>
+        <button onclick="saveMeetingRecord()" style="padding:10px 24px;background:var(--accent);color:#1a1a2e;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-family:inherit;"><i class="fas fa-save"></i> حفظ الاجتماع</button>
       </div>
     </div>
   </div>
-  <!-- Minutes Modal -->
-  <div id="minutesModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;">
-    <div style="background:#1e2d4a;border-radius:12px;padding:24px;width:560px;max-width:95vw;border:1px solid rgba(201,168,39,0.3);max-height:90vh;overflow-y:auto;">
-      <h3 style="color:var(--accent);margin-bottom:16px;"><i class="fas fa-file-alt"></i> محضر الاجتماع</h3>
-      <input type="hidden" id="minutesMeetId">
-      <div id="minutesMeetInfo" style="background:#16213e;border-radius:8px;padding:10px;margin-bottom:12px;font-size:0.88rem;color:rgba(255,255,255,0.8);"></div>
-      <label style="color:rgba(255,255,255,0.7);font-size:0.8rem;display:block;margin-bottom:4px;">محضر الاجتماع والقرارات</label>
-      <textarea id="minutesContent" rows="8" placeholder="اكتب محضر الاجتماع والقرارات والتوصيات..." style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:10px;margin-bottom:16px;font-family:inherit;resize:vertical;"></textarea>
-      <div style="display:flex;gap:8px;justify-content:flex-end;">
-        <button onclick="document.getElementById('minutesModal').style.display='none'" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:white;border:none;border-radius:6px;cursor:pointer;font-family:inherit;">إغلاق</button>
-        <button onclick="saveMinutesRecord()" style="padding:8px 16px;background:var(--accent);color:#1a1a2e;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit;">حفظ المحضر</button>
+
+  <!-- ===== VIEW MEETING MODAL ===== -->
+  <div id="meetViewModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:9999;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;">
+    <div style="background:#1e2d4a;border-radius:16px;padding:28px;width:660px;max-width:98vw;border:1px solid rgba(201,168,39,0.3);margin:auto;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <h3 style="color:var(--accent);margin:0;"><i class="fas fa-eye"></i> تفاصيل الاجتماع</h3>
+        <button onclick="document.getElementById('meetViewModal').style.display='none'" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:1.3rem;cursor:pointer;">&times;</button>
       </div>
+      <div id="meetViewContent"></div>
     </div>
   </div>
+
 </div>
+
 
 
 <script>
@@ -5159,23 +5300,70 @@ function renderExpiryAlerts(container) {
 }
 
 // --------------- MEETINGS DATA & HELPERS ---------------
-function getMeetings() { return JSON.parse(localStorage.getItem('meetingsData') || '[]'); }
-function saveMeetings(d) { localStorage.setItem('meetingsData', JSON.stringify(d)); }
+
+const MEET_TYPES = {
+  admin: { label: 'إداري', color: '#3b82f6', bg: 'rgba(59,130,246,0.15)' },
+  dev:   { label: 'تطوير مهني', color: '#10b981', bg: 'rgba(16,185,129,0.15)' },
+  committee: { label: 'لجنة', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)' },
+  parent: { label: 'أولياء أمور', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' },
+  eval:  { label: 'تقييم', color: '#ec4899', bg: 'rgba(236,72,153,0.15)' },
+  urgent:{ label: 'طارئ', color: '#ef4444', bg: 'rgba(239,68,68,0.15)' },
+  other: { label: 'أخرى', color: '#94a3b8', bg: 'rgba(148,163,184,0.15)' }
+};
+const MEET_STATUS = {
+  upcoming:  { label: 'قادم',   color: '#4ade80', bg: 'rgba(74,222,128,0.15)' },
+  completed: { label: 'مكتمل', color: '#60a5fa', bg: 'rgba(96,165,250,0.15)' },
+  cancelled: { label: 'ملغي',  color: '#f87171', bg: 'rgba(248,113,113,0.15)' },
+  postponed: { label: 'مؤجل', color: '#fbbf24', bg: 'rgba(251,191,36,0.15)' }
+};
 
 let currentMeetTab = 'upcoming';
-let meetFilterRows = [];
+let _meetSelectedAttendees = []; // array of employee IDs
+let _meetTasks = []; // array of {task, assignee, deadline}
+
+function getMeetings() {
+  try { return JSON.parse(localStorage.getItem('aljood_meetings') || '[]'); } catch(e){ return []; }
+}
+function saveMeetings(arr) {
+  localStorage.setItem('aljood_meetings', JSON.stringify(arr));
+}
 
 function renderMeetingsSection() {
-  const isPriv = currentRole === 'admin' || currentRole === 'principal';
+  const isPriv = currentRole === 'admin';
   const toolbar = document.getElementById('meetings-toolbar');
   if (toolbar) {
     toolbar.innerHTML = isPriv
-      ? `<button onclick="openMeetModal()" style="padding:8px 18px;background:var(--accent);color:#1a1a2e;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-family:inherit;"><i class="fas fa-calendar-plus"></i> جدولة اجتماع جديد</button>`
+      ? `<button onclick="openMeetModal()" style="padding:8px 18px;background:var(--accent);color:#1a1a2e;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-family:inherit;font-size:0.88rem;"><i class="fas fa-plus"></i> اجتماع جديد</button>`
       : '';
   }
+  renderMeetingStats();
   switchMeetTab(currentMeetTab);
-  // Check meeting notifications for current user
   renderMeetingNotifications();
+}
+
+function renderMeetingStats() {
+  const el = document.getElementById('meetings-stats');
+  if (!el) return;
+  const all = getMeetings();
+  const today = new Date(); today.setHours(0,0,0,0);
+  const upcoming = all.filter(m => { const d=new Date(m.date); d.setHours(0,0,0,0); return d >= today && m.status !== 'cancelled'; }).length;
+  const past = all.filter(m => { const d=new Date(m.date); d.setHours(0,0,0,0); return d < today; }).length;
+  const completed = all.filter(m => m.status === 'completed').length;
+  const thisMonth = all.filter(m => {
+    const d = new Date(m.date);
+    const t = new Date();
+    return d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear();
+  }).length;
+  el.innerHTML = [
+    {n: all.length, label: 'إجمالي الاجتماعات', color:'#c9a84c'},
+    {n: upcoming, label: 'القادمة', color:'#4ade80'},
+    {n: past, label: 'السابقة', color:'#60a5fa'},
+    {n: completed, label: 'المكتملة', color:'#a78bfa'},
+    {n: thisMonth, label: 'هذا الشهر', color:'#f59e0b'}
+  ].map(s => `<div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:14px;text-align:center;">
+    <div style="font-size:1.8rem;font-weight:800;color:${s.color};">${s.n}</div>
+    <div style="color:rgba(255,255,255,0.6);font-size:0.78rem;margin-top:2px;">${s.label}</div>
+  </div>`).join('');
 }
 
 function switchMeetTab(tab) {
@@ -5185,202 +5373,292 @@ function switchMeetTab(tab) {
     b.style.background = active ? 'var(--accent)' : 'rgba(255,255,255,0.1)';
     b.style.color = active ? '#1a1a2e' : 'white';
     b.style.border = active ? 'none' : '1px solid rgba(255,255,255,0.2)';
+    b.style.fontWeight = active ? '700' : '400';
   });
-  const meetings = getMeetings();
-  const today = new Date(); today.setHours(0,0,0,0);
-  let filtered;
-  if (tab === 'upcoming') {
-    filtered = meetings.filter(m => new Date(m.date) >= today).sort((a,b) => new Date(a.date) - new Date(b.date));
-  } else if (tab === 'past') {
-    filtered = meetings.filter(m => new Date(m.date) < today).sort((a,b) => new Date(b.date) - new Date(a.date));
-  } else { // mine
-    const name = currentUsername || '';
-    filtered = meetings.filter(m => {
-      return m.attendees && m.attendees.some(a => a === name || a === currentRole);
-    }).sort((a,b) => new Date(b.date) - new Date(a.date));
-  }
-  renderMeetingsGrid(filtered, tab);
+  renderMeetingsGrid();
 }
 
-function renderMeetingsGrid(meetings, tab) {
+function renderMeetingsGrid() {
   const grid = document.getElementById('meetings-grid');
   if (!grid) return;
+  const all = getMeetings();
+  const today = new Date(); today.setHours(0,0,0,0);
+  const searchQ = (document.getElementById('meetSearchInput') || {}).value?.toLowerCase() || '';
+  const typeF = (document.getElementById('meetTypeFilter') || {}).value || '';
+  const empId = (getEmployeesData().find(e => e.name_ar === currentUsername) || {}).id;
+
+  let meetings = all.filter(m => {
+    const d = new Date(m.date); d.setHours(0,0,0,0);
+    if (currentMeetTab === 'upcoming') return d >= today && m.status !== 'cancelled' && m.status !== 'completed';
+    if (currentMeetTab === 'past') return d < today || m.status === 'completed' || m.status === 'cancelled';
+    if (currentMeetTab === 'mine') {
+      if (currentRole === 'admin' || currentRole === 'principal') return true;
+      return m.attendees && empId && m.attendees.includes(empId);
+    }
+    return true; // 'all'
+  });
+
+  if (searchQ) meetings = meetings.filter(m => 
+    m.title.toLowerCase().includes(searchQ) || 
+    (m.location||'').toLowerCase().includes(searchQ) ||
+    (m.agenda||'').toLowerCase().includes(searchQ)
+  );
+  if (typeF) meetings = meetings.filter(m => m.type === typeF);
+
+  // Sort: upcoming by date asc, others desc
+  meetings.sort((a,b) => {
+    const da = new Date(a.date + 'T' + (a.time||'00:00'));
+    const db = new Date(b.date + 'T' + (b.time||'00:00'));
+    return currentMeetTab === 'upcoming' ? da - db : db - da;
+  });
+
   if (meetings.length === 0) {
-    grid.innerHTML = `<p style="color:#888;text-align:center;padding:24px;grid-column:1/-1;"><i class="fas fa-calendar-times" style="font-size:2rem;margin-bottom:8px;color:#444;display:block;"></i>لا توجد اجتماعات</p>`;
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:rgba(255,255,255,0.4);">
+      <i class="fas fa-calendar-times" style="font-size:3rem;margin-bottom:12px;display:block;"></i>
+      لا توجد اجتماعات في هذا التصنيف
+    </div>`;
     return;
   }
-  const isPriv = currentRole === 'admin' || currentRole === 'principal';
-  grid.innerHTML = meetings.map(m => {
-    const date = new Date(m.date);
-    const isPast = date < new Date();
-    const dayName = date.toLocaleDateString('ar-AE', { weekday:'long' });
-    const dateStr = date.toLocaleDateString('ar-AE', { year:'numeric', month:'long', day:'numeric' });
-    const editBtns = isPriv ? `
-      <div style="display:flex;gap:6px;margin-top:10px;">
-        <button onclick="openMeetModal('${m.id}')" style="flex:1;padding:6px;background:rgba(201,168,39,0.1);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:6px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-edit"></i> تعديل</button>
-        <button onclick="openMinutesModal('${m.id}')" style="flex:1;padding:6px;background:rgba(96,165,250,0.1);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);border-radius:6px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-file-alt"></i> ${m.minutes ? 'عرض المحضر' : 'إضافة محضر'}</button>
-        <button onclick="deleteMeeting('${m.id}')" style="padding:6px 10px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.3);border-radius:6px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-trash"></i></button>
-      </div>` : m.minutes ? `<button onclick="openMinutesModal('${m.id}')" style="width:100%;margin-top:10px;padding:6px;background:rgba(96,165,250,0.1);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);border-radius:6px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-file-alt"></i> عرض المحضر</button>` : '';
-    return `<div style="background:#1e2d4a;border-radius:12px;padding:16px;border:1px solid ${isPast ? 'rgba(107,114,128,0.3)' : 'rgba(201,168,39,0.25)'};">
-      <div style="display:flex;gap:12px;margin-bottom:12px;">
-        <div style="width:50px;height:50px;background:${isPast ? 'rgba(107,114,128,0.2)' : 'rgba(201,168,39,0.15)'};border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;">
-          <span style="color:${isPast ? '#9ca3af' : 'var(--accent)'};font-size:1.1rem;font-weight:800;">${date.getDate()}</span>
-          <span style="color:${isPast ? '#6b7280' : 'rgba(201,168,39,0.7)'};font-size:0.65rem;">${date.toLocaleDateString('ar-AE',{month:'short'})}</span>
+
+  grid.innerHTML = meetings.map(m => renderMeetingCard(m)).join('');
+}
+
+function renderMeetingCard(m) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const mDate = new Date(m.date); mDate.setHours(0,0,0,0);
+  const daysLeft = Math.ceil((mDate - today) / 86400000);
+  const dateStr = mDate.toLocaleDateString('ar-AE', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+  const mt = MEET_TYPES[m.type] || MEET_TYPES.other;
+  const ms = MEET_STATUS[m.status] || MEET_STATUS.upcoming;
+  const attendeeCount = (m.attendees||[]).length;
+  const isAdmin = currentRole === 'admin';
+  const taskCount = (m.tasks||[]).length;
+  const hasMinutes = !!(m.minutes || m.decisions || m.suggestions || m.recommendations);
+
+  let urgencyBadge = '';
+  if (m.status === 'upcoming') {
+    if (daysLeft === 0) urgencyBadge = '<span style="background:rgba(239,68,68,0.2);color:#f87171;padding:2px 8px;border-radius:10px;font-size:0.72rem;font-weight:700;">اليوم!</span>';
+    else if (daysLeft === 1) urgencyBadge = '<span style="background:rgba(245,158,11,0.2);color:#fbbf24;padding:2px 8px;border-radius:10px;font-size:0.72rem;font-weight:700;">غداً</span>';
+    else if (daysLeft <= 3) urgencyBadge = `<span style="background:rgba(96,165,250,0.2);color:#60a5fa;padding:2px 8px;border-radius:10px;font-size:0.72rem;">بعد ${daysLeft} أيام</span>`;
+  }
+
+  return `<div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:18px;transition:transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
+    <!-- Card Header -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;gap:8px;">
+      <div style="flex:1;">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+          <span style="background:${mt.bg};color:${mt.color};padding:2px 8px;border-radius:10px;font-size:0.75rem;font-weight:600;">${mt.label}</span>
+          <span style="background:${ms.bg};color:${ms.color};padding:2px 8px;border-radius:10px;font-size:0.75rem;">${ms.label}</span>
+          ${urgencyBadge}
         </div>
-        <div style="flex:1;">
-          <div style="color:white;font-weight:700;font-size:1rem;margin-bottom:3px;">${m.title}</div>
-          <div style="color:rgba(255,255,255,0.5);font-size:0.78rem;">${dayName} ${dateStr} — ${m.time}</div>
-        </div>
-        ${m.minutes ? '<span style="background:rgba(34,197,94,0.15);color:#4ade80;padding:2px 8px;border-radius:12px;font-size:0.72rem;white-space:nowrap;">محضر</span>' : ''}
+        <h3 style="color:white;margin:0;font-size:1rem;line-height:1.4;">${m.title}</h3>
       </div>
-      <div style="background:#16213e;border-radius:8px;padding:10px;font-size:0.82rem;margin-bottom:8px;">
-        <div style="display:flex;gap:8px;margin-bottom:4px;">
-          <i class="fas fa-map-marker-alt" style="color:var(--accent);width:14px;text-align:center;"></i>
-          <span style="color:rgba(255,255,255,0.7);">${m.location}</span>
-        </div>
-        ${m.duration ? `<div style="display:flex;gap:8px;margin-bottom:4px;">
-          <i class="fas fa-clock" style="color:var(--accent);width:14px;text-align:center;"></i>
-          <span style="color:rgba(255,255,255,0.7);">${m.duration} دقيقة</span>
-        </div>` : ''}
-        ${m.agenda ? `<div style="display:flex;gap:8px;margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.06);">
-          <i class="fas fa-list-ul" style="color:var(--accent);width:14px;text-align:center;margin-top:2px;"></i>
-          <span style="color:rgba(255,255,255,0.6);font-size:0.78rem;">${m.agenda}</span>
-        </div>` : ''}
-      </div>
-      ${m.attendeesSummary ? `<div style="font-size:0.78rem;color:rgba(255,255,255,0.45);margin-bottom:4px;"><i class="fas fa-users" style="margin-left:4px;"></i>${m.attendeesSummary}</div>` : ''}
-      ${editBtns}
-    </div>`;
-  }).join('');
+    </div>
+
+    <!-- Details -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;">
+      <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;"><i class="fas fa-calendar" style="color:var(--accent);margin-left:5px;width:14px;"></i>${dateStr}</div>
+      <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;"><i class="fas fa-clock" style="color:var(--accent);margin-left:5px;width:14px;"></i>${m.time||'--:--'} (${m.duration||60} د)</div>
+      <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;"><i class="fas fa-map-marker-alt" style="color:var(--accent);margin-left:5px;width:14px;"></i>${m.location||'—'}</div>
+      <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;"><i class="fas fa-users" style="color:var(--accent);margin-left:5px;width:14px;"></i>${attendeeCount} مدعو</div>
+    </div>
+
+    ${m.agenda ? `<div style="color:rgba(255,255,255,0.5);font-size:0.8rem;background:rgba(0,0,0,0.2);border-radius:8px;padding:8px 10px;margin-bottom:12px;border-right:3px solid var(--accent);">${m.agenda.slice(0,120)}${m.agenda.length>120?'...':''}</div>` : ''}
+
+    <!-- Tasks/Recommendations summary -->
+    ${taskCount > 0 ? `<div style="color:rgba(96,165,250,0.8);font-size:0.78rem;margin-bottom:8px;"><i class="fas fa-tasks" style="margin-left:4px;"></i>${taskCount} مهام مسندة</div>` : ''}
+    ${hasMinutes ? `<div style="color:rgba(74,222,128,0.8);font-size:0.78rem;margin-bottom:8px;"><i class="fas fa-file-alt" style="margin-left:4px;"></i>يوجد محضر ومقررات</div>` : ''}
+
+    <!-- Action Buttons -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);">
+      <button onclick="viewMeeting('${m.id}')" style="flex:1;padding:7px 10px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);border-radius:7px;cursor:pointer;font-family:inherit;font-size:0.8rem;"><i class="fas fa-eye"></i> عرض</button>
+      ${isAdmin ? `<button onclick="openMeetModal('${m.id}')" style="flex:1;padding:7px 10px;background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:7px;cursor:pointer;font-family:inherit;font-size:0.8rem;"><i class="fas fa-edit"></i> تعديل</button>` : ''}
+      <button onclick="openMinutesModal('${m.id}')" style="flex:1;padding:7px 10px;background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);border-radius:7px;cursor:pointer;font-family:inherit;font-size:0.8rem;"><i class="fas fa-file-alt"></i> محضر</button>
+      ${isAdmin ? `<button onclick="deleteMeeting('${m.id}')" style="flex:1;padding:7px 10px;background:rgba(239,68,68,0.12);color:#f87171;border:1px solid rgba(239,68,68,0.25);border-radius:7px;cursor:pointer;font-family:inherit;font-size:0.8rem;"><i class="fas fa-trash"></i> حذف</button>` : ''}
+    </div>
+  </div>`;
 }
 
 function openMeetModal(editId) {
-  meetFilterRows = [];
+  _meetSelectedAttendees = [];
+  _meetTasks = [];
   const modal = document.getElementById('meetModal');
-  document.getElementById('meetFilters').innerHTML = '';
-  document.getElementById('meetAttendeesPreview').innerHTML = '';
+  modal.style.display = 'flex';
+  document.getElementById('meetModalTitle').innerHTML = editId
+    ? '<i class="fas fa-edit"></i> تعديل الاجتماع'
+    : '<i class="fas fa-calendar-plus"></i> جدولة اجتماع';
+  document.getElementById('meetEditId').value = editId || '';
+
+  // Reset form
+  ['meetTitle','meetLocation','meetAgenda','meetSuggestions','meetRecommendations','meetNotes'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  document.getElementById('meetDuration').value = 60;
+  document.getElementById('meetDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('meetTime').value = '08:00';
+  document.getElementById('meetType').value = 'admin';
+  document.getElementById('meetStatus').value = 'upcoming';
+  document.getElementById('meetTasksList').innerHTML = '';
+
   if (editId) {
     const m = getMeetings().find(x => x.id === editId);
-    if (!m) return;
-    document.getElementById('meetModalTitle').textContent = 'تعديل الاجتماع';
-    document.getElementById('meetEditId').value = editId;
-    document.getElementById('meetTitle').value = m.title;
-    document.getElementById('meetLocation').value = m.location;
-    document.getElementById('meetDate').value = m.date;
-    document.getElementById('meetTime').value = m.time;
-    document.getElementById('meetDuration').value = m.duration || 60;
-    document.getElementById('meetAgenda').value = m.agenda || '';
-    if (m.filterRows) { meetFilterRows = m.filterRows; renderMeetFilters(); }
-  } else {
-    document.getElementById('meetModalTitle').textContent = 'جدولة اجتماع جديد';
-    document.getElementById('meetEditId').value = '';
-    ['meetTitle','meetLocation','meetAgenda'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('meetDuration').value = 60;
-    document.getElementById('meetDate').value = '';
-    document.getElementById('meetTime').value = '';
+    if (m) {
+      document.getElementById('meetTitle').value = m.title || '';
+      document.getElementById('meetType').value = m.type || 'admin';
+      document.getElementById('meetDate').value = m.date || '';
+      document.getElementById('meetTime').value = m.time || '';
+      document.getElementById('meetDuration').value = m.duration || 60;
+      document.getElementById('meetLocation').value = m.location || '';
+      document.getElementById('meetStatus').value = m.status || 'upcoming';
+      document.getElementById('meetAgenda').value = m.agenda || '';
+      document.getElementById('meetSuggestions').value = m.suggestions || '';
+      document.getElementById('meetRecommendations').value = m.recommendations || '';
+      document.getElementById('meetNotes').value = m.notes || '';
+      _meetSelectedAttendees = m.attendees ? [...m.attendees] : [];
+      _meetTasks = m.tasks ? JSON.parse(JSON.stringify(m.tasks)) : [];
+    }
   }
-  modal.style.display = 'flex';
-}
-function closeMeetModal() { document.getElementById('meetModal').style.display = 'none'; }
-
-function addMeetFilter(type) {
-  const emps = getEmployeesData();
-  let options = [];
-  if (type === 'job') {
-    options = [...new Set(emps.map(e => e.primary_job).filter(Boolean))].sort();
-  } else if (type === 'subject') {
-    options = [...new Set(emps.flatMap(e => e.subjects || []).filter(Boolean))].sort();
-  } else if (type === 'grade') {
-    options = ['روضة','حلقة أولى','حلقة ثانية'];
-  } else if (type === 'all_teachers') {
-    meetFilterRows.push({ type: 'all_teachers', value: 'all_teachers' });
-    renderMeetFilters(); updateAttendeesPreview(); return;
-  } else if (type === 'all_admin') {
-    meetFilterRows.push({ type: 'all_admin', value: 'all_admin' });
-    renderMeetFilters(); updateAttendeesPreview(); return;
-  }
-  const id = Date.now().toString();
-  meetFilterRows.push({ id, type, value: options[0] || '' });
-  renderMeetFilters();
-  updateAttendeesPreview();
+  meetUpdateChips();
+  meetRenderTasksList();
 }
 
-function renderMeetFilters() {
-  const container = document.getElementById('meetFilters');
-  if (!container) return;
+function closeMeetModal() {
+  document.getElementById('meetModal').style.display = 'none';
+}
+
+// ===== Attendee Management =====
+function meetAddGroup(type) {
   const emps = getEmployeesData();
-  container.innerHTML = meetFilterRows.map((row, i) => {
-    if (row.type === 'all_teachers') return `<div style="display:flex;align-items:center;gap:8px;background:#16213e;padding:8px;border-radius:6px;">
-      <i class="fas fa-users" style="color:var(--accent);"></i><span style="color:white;flex:1;">جميع المعلمين</span>
-      <button onclick="removeMeetFilter(${i})" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:0.85rem;"><i class="fas fa-times"></i></button></div>`;
-    if (row.type === 'all_admin') return `<div style="display:flex;align-items:center;gap:8px;background:#16213e;padding:8px;border-radius:6px;">
-      <i class="fas fa-user-shield" style="color:var(--accent);"></i><span style="color:white;flex:1;">جميع الإداريين والفنيين</span>
-      <button onclick="removeMeetFilter(${i})" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:0.85rem;"><i class="fas fa-times"></i></button></div>`;
-    let opts = [];
-    if (row.type === 'job') opts = [...new Set(emps.map(e => e.primary_job).filter(Boolean))].sort();
-    else if (row.type === 'subject') opts = [...new Set(emps.flatMap(e => e.subjects || []).filter(Boolean))].sort();
-    else if (row.type === 'grade') opts = ['روضة','حلقة أولى','حلقة ثانية'];
-    const labels = { job: 'الوظيفة', subject: 'المادة', grade: 'المرحلة' };
-    return `<div style="display:flex;align-items:center;gap:8px;background:#16213e;padding:8px;border-radius:6px;">
-      <span style="color:var(--accent);font-size:0.8rem;white-space:nowrap;">${labels[row.type]}:</span>
-      <select onchange="updateMeetFilter(${i},this.value)" style="flex:1;background:#0f172a;color:white;border:1px solid rgba(201,168,39,0.3);border-radius:5px;padding:5px;font-family:inherit;font-size:0.82rem;">
-        ${opts.map(o => `<option value="${o}" ${o === row.value ? 'selected' : ''}>${o}</option>`).join('')}
-      </select>
-      <button onclick="removeMeetFilter(${i})" style="background:transparent;border:none;color:#f87171;cursor:pointer;"><i class="fas fa-times"></i></button>
+  let toAdd = [];
+  if (type === 'all_teachers') toAdd = emps.filter(e => e.category === 'teacher' || e.category === 'kg_teacher').map(e => e.id);
+  else if (type === 'all_admin') toAdd = emps.filter(e => e.category === 'admin' || e.category === 'management').map(e => e.id);
+  else if (type === 'kg') toAdd = emps.filter(e => e.category === 'kg_teacher').map(e => e.id);
+  else if (type === 'cycle1') toAdd = emps.filter(e => e.stage === 'حلقة أولى' || e.cycle === '1').map(e => e.id);
+  else if (type === 'cycle2') toAdd = emps.filter(e => e.stage === 'حلقة ثانية' || e.cycle === '2').map(e => e.id);
+  toAdd.forEach(id => { if (!_meetSelectedAttendees.includes(id)) _meetSelectedAttendees.push(id); });
+  meetUpdateChips();
+}
+
+function clearMeetAttendees() {
+  _meetSelectedAttendees = [];
+  meetUpdateChips();
+}
+
+function meetSearchAttendee() {
+  const q = document.getElementById('meetAttendeeSearch').value.toLowerCase().trim();
+  const dd = document.getElementById('meetAttendeeDropdown');
+  if (q.length < 2) { dd.style.display = 'none'; return; }
+  const emps = getEmployeesData();
+  const results = emps.filter(e => e.name_ar && e.name_ar.toLowerCase().includes(q)).slice(0, 12);
+  if (results.length === 0) { dd.style.display = 'none'; return; }
+  dd.style.display = 'block';
+  dd.innerHTML = results.map(e => {
+    const selected = _meetSelectedAttendees.includes(e.id);
+    return `<div onclick="meetToggleAttendee('${e.id}')" style="padding:9px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid rgba(255,255,255,0.06);" onmouseover="this.style.background='rgba(201,168,76,0.1)'" onmouseout="this.style.background=''">
+      <span style="color:${selected?'#4ade80':'rgba(255,255,255,0.5)'};font-size:0.9rem;">${selected?'&#10003;':' '}</span>
+      <span style="color:white;font-size:0.85rem;">${e.name_ar}</span>
+      <span style="color:rgba(255,255,255,0.4);font-size:0.75rem;margin-right:auto;">${e.job_title_ar||e.category||''}</span>
     </div>`;
   }).join('');
-  updateAttendeesPreview();
 }
-function updateMeetFilter(i, val) {
-  if (meetFilterRows[i]) meetFilterRows[i].value = val;
-  updateAttendeesPreview();
+
+function meetToggleAttendee(id) {
+  const idx = _meetSelectedAttendees.indexOf(id);
+  if (idx === -1) _meetSelectedAttendees.push(id);
+  else _meetSelectedAttendees.splice(idx, 1);
+  meetUpdateChips();
+  meetSearchAttendee(); // refresh dropdown
 }
-function removeMeetFilter(i) {
-  meetFilterRows.splice(i, 1);
-  renderMeetFilters();
-  updateAttendeesPreview();
-}
-function getAttendeesFromFilters() {
+
+function meetUpdateChips() {
   const emps = getEmployeesData();
-  const matched = new Set();
-  meetFilterRows.forEach(row => {
-    let subset = [];
-    if (row.type === 'job') subset = emps.filter(e => e.primary_job === row.value);
-    else if (row.type === 'subject') subset = emps.filter(e => e.subjects && e.subjects.includes(row.value));
-    else if (row.type === 'grade') subset = emps.filter(e => e.grade_levels && e.grade_levels.includes(row.value));
-    else if (row.type === 'all_teachers') subset = emps.filter(e => e.category === 'teacher' || e.category === 'kg_teacher');
-    else if (row.type === 'all_admin') subset = emps.filter(e => e.category === 'admin' || e.category === 'admin_staff' || e.category === 'tech_staff');
-    subset.forEach(e => matched.add(e.id));
-  });
-  return [...matched].map(id => emps.find(e => e.id === id)).filter(Boolean);
+  const chips = document.getElementById('meetAttendeesChips');
+  const count = document.getElementById('meetAttendeesCount');
+  if (!chips) return;
+  chips.innerHTML = _meetSelectedAttendees.map(id => {
+    const e = emps.find(x => x.id === id);
+    const name = e ? e.name_ar : id;
+    return `<span style="background:rgba(201,168,39,0.15);color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:20px;padding:3px 10px;font-size:0.78rem;display:flex;align-items:center;gap:6px;">
+      ${name}
+      <span onclick="meetToggleAttendee('${id}')" style="cursor:pointer;color:rgba(255,255,255,0.4);font-size:0.9rem;" title="إزالة">&times;</span>
+    </span>`;
+  }).join('');
+  if (count) count.textContent = `${_meetSelectedAttendees.length} مدعو`;
 }
-function updateAttendeesPreview() {
-  const preview = document.getElementById('meetAttendeesPreview');
-  if (!preview) return;
-  const attendees = getAttendeesFromFilters();
-  if (attendees.length === 0) { preview.innerHTML = '<span style="color:#555;">لم يتم اختيار معنيين بعد</span>'; return; }
-  preview.innerHTML = `<span style="color:var(--accent);font-weight:700;margin-left:8px;">${attendees.length} شخص:</span>` + attendees.slice(0,8).map(e => `<span style="background:rgba(201,168,39,0.1);color:rgba(255,255,255,0.7);padding:2px 8px;border-radius:12px;font-size:0.75rem;margin:2px;">${e.name_ar.split(' ').slice(0,2).join(' ')}</span>`).join('') + (attendees.length > 8 ? `<span style="color:#888;font-size:0.78rem;"> +${attendees.length - 8} آخرين</span>` : '');
+
+// ===== Tasks Management =====
+function meetAddTask() {
+  _meetTasks.push({ task: '', assignee: '', deadline: '' });
+  meetRenderTasksList();
+}
+
+function meetRenderTasksList() {
+  const container = document.getElementById('meetTasksList');
+  if (!container) return;
+  if (_meetTasks.length === 0) {
+    container.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.82rem;text-align:center;padding:8px;">لا توجد مهام — اضغط "+ إضافة مهمة"</div>';
+    return;
+  }
+  const emps = getEmployeesData();
+  container.innerHTML = _meetTasks.map((t,i) => `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;align-items:center;">
+      <input type="text" value="${t.task||''}" placeholder="وصف المهمة..." onchange="_meetTasks[${i}].task=this.value"
+        style="background:#16213e;color:white;border:1px solid rgba(201,168,39,0.3);border-radius:6px;padding:6px 10px;font-family:inherit;font-size:0.8rem;outline:none;">
+      <select onchange="_meetTasks[${i}].assignee=this.value" style="background:#16213e;color:white;border:1px solid rgba(201,168,39,0.3);border-radius:6px;padding:6px 8px;font-family:inherit;font-size:0.8rem;outline:none;">
+        <option value="">المسؤول</option>
+        ${emps.map(e => `<option value="${e.id}" ${t.assignee===e.id?'selected':''}>${e.name_ar}</option>`).join('')}
+      </select>
+      <input type="date" value="${t.deadline||''}" onchange="_meetTasks[${i}].deadline=this.value"
+        style="background:#16213e;color:white;border:1px solid rgba(201,168,39,0.3);border-radius:6px;padding:6px 8px;font-family:inherit;font-size:0.8rem;outline:none;">
+      <button onclick="_meetTasks.splice(${i},1);meetRenderTasksList()" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:6px 10px;cursor:pointer;font-family:inherit;">&times;</button>
+    </div>
+  `).join('');
 }
 
 function saveMeetingRecord() {
-  const editId = document.getElementById('meetEditId').value;
   const title = document.getElementById('meetTitle').value.trim();
+  const date  = document.getElementById('meetDate').value;
+  const time  = document.getElementById('meetTime').value;
   const location = document.getElementById('meetLocation').value.trim();
-  const date = document.getElementById('meetDate').value;
-  const time = document.getElementById('meetTime').value;
-  const duration = document.getElementById('meetDuration').value;
-  const agenda = document.getElementById('meetAgenda').value.trim();
-  if (!title || !date || !time) { alert('يرجى إدخال العنوان والتاريخ والوقت'); return; }
-  const attendees = getAttendeesFromFilters();
-  const attendeeIds = attendees.map(e => e.id);
-  const attendeeNames = attendees.map(e => e.name_ar);
-  const attendeesSummary = attendees.length ? `${attendees.length} معنياً (${attendees.slice(0,3).map(e=>e.name_ar.split(' ')[0]).join('، ')}${attendees.length>3?' وآخرون':''})` : '';
+  if (!title || !date || !location) {
+    alert('يرجى تعبئة الحقول المطلوبة: العنوان، التاريخ، المكان');
+    return;
+  }
+  const editId = document.getElementById('meetEditId').value;
   const meetings = getMeetings();
-  const record = { title, location, date, time, duration: parseInt(duration), agenda, filterRows: [...meetFilterRows], attendees: attendeeIds, attendeeNames, attendeesSummary, createdBy: currentUsername };
+  const record = {
+    id: editId || 'M_' + Date.now(),
+    title,
+    type: document.getElementById('meetType').value,
+    date,
+    time,
+    duration: parseInt(document.getElementById('meetDuration').value) || 60,
+    location,
+    status: document.getElementById('meetStatus').value,
+    agenda: document.getElementById('meetAgenda').value.trim(),
+    suggestions: document.getElementById('meetSuggestions').value.trim(),
+    recommendations: document.getElementById('meetRecommendations').value.trim(),
+    notes: document.getElementById('meetNotes').value.trim(),
+    attendees: [..._meetSelectedAttendees],
+    tasks: JSON.parse(JSON.stringify(_meetTasks)),
+    createdBy: currentUsername,
+    createdAt: editId ? (meetings.find(m=>m.id===editId)||{}).createdAt : new Date().toISOString()
+  };
+  // Preserve existing minutes/decisions
+  if (editId) {
+    const old = meetings.find(m => m.id === editId);
+    if (old) {
+      record.minutes = old.minutes;
+      record.decisions = old.decisions;
+    }
+  }
+
   if (editId) {
     const idx = meetings.findIndex(m => m.id === editId);
-    if (idx >= 0) meetings[idx] = { ...meetings[idx], ...record };
+    if (idx !== -1) meetings[idx] = record;
+    else meetings.push(record);
   } else {
-    meetings.push({ id: Date.now().toString(), ...record, minutes: '' });
+    meetings.push(record);
   }
   saveMeetings(meetings);
   closeMeetModal();
@@ -5388,35 +5666,85 @@ function saveMeetingRecord() {
 }
 
 function deleteMeeting(id) {
-  if (!confirm('حذف هذا الاجتماع؟')) return;
+  if (!confirm('هل أنت متأكدة من حذف هذا الاجتماع؟')) return;
   saveMeetings(getMeetings().filter(m => m.id !== id));
   renderMeetingsSection();
+}
+
+function viewMeeting(id) {
+  const m = getMeetings().find(x => x.id === id);
+  if (!m) return;
+  const emps = getEmployeesData();
+  const mt = MEET_TYPES[m.type] || MEET_TYPES.other;
+  const ms = MEET_STATUS[m.status] || MEET_STATUS.upcoming;
+  const attendeeNames = (m.attendees||[]).map(id => (emps.find(e=>e.id===id)||{}).name_ar || id);
+  const dateStr = new Date(m.date).toLocaleDateString('ar-AE', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+
+  const content = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+      <span style="background:${mt.bg};color:${mt.color};padding:3px 10px;border-radius:10px;font-size:0.82rem;">${mt.label}</span>
+      <span style="background:${ms.bg};color:${ms.color};padding:3px 10px;border-radius:10px;font-size:0.82rem;">${ms.label}</span>
+    </div>
+    <h2 style="color:white;margin:0 0 16px;">${m.title}</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:10px;">
+        <div style="color:rgba(255,255,255,0.5);font-size:0.75rem;margin-bottom:3px;">التاريخ والوقت</div>
+        <div style="color:white;font-size:0.9rem;">${dateStr} — ${m.time||'—'}</div>
+      </div>
+      <div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:10px;">
+        <div style="color:rgba(255,255,255,0.5);font-size:0.75rem;margin-bottom:3px;">المكان والمدة</div>
+        <div style="color:white;font-size:0.9rem;">${m.location||'—'} | ${m.duration||60} دقيقة</div>
+      </div>
+    </div>
+    ${m.agenda ? `<div style="margin-bottom:14px;"><div style="color:var(--accent);font-size:0.85rem;font-weight:700;margin-bottom:6px;"><i class="fas fa-list-ul"></i> جدول الأعمال</div><div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:10px;color:rgba(255,255,255,0.8);font-size:0.88rem;white-space:pre-wrap;">${m.agenda}</div></div>` : ''}
+    ${attendeeNames.length > 0 ? `<div style="margin-bottom:14px;"><div style="color:var(--accent);font-size:0.85rem;font-weight:700;margin-bottom:8px;"><i class="fas fa-users"></i> الحضور (${attendeeNames.length})</div><div style="display:flex;flex-wrap:wrap;gap:6px;">${attendeeNames.map(n=>`<span style="background:rgba(201,168,39,0.12);color:var(--accent);border:1px solid rgba(201,168,39,0.25);border-radius:16px;padding:3px 10px;font-size:0.78rem;">${n}</span>`).join('')}</div></div>` : ''}
+    ${(m.tasks||[]).length > 0 ? `<div style="margin-bottom:14px;"><div style="color:#60a5fa;font-size:0.85rem;font-weight:700;margin-bottom:8px;"><i class="fas fa-tasks"></i> المهام (${m.tasks.length})</div>${m.tasks.map(t=>{const assignee=(emps.find(e=>e.id===t.assignee)||{}).name_ar||t.assignee||'—';return `<div style="background:rgba(96,165,250,0.08);border-radius:8px;padding:8px 12px;margin-bottom:6px;display:flex;gap:10px;align-items:center;"><i class="fas fa-check-circle" style="color:#60a5fa;"></i><span style="flex:1;color:white;font-size:0.85rem;">${t.task}</span><span style="color:rgba(255,255,255,0.5);font-size:0.78rem;">${assignee}</span>${t.deadline?`<span style="color:rgba(255,255,255,0.4);font-size:0.75rem;">${t.deadline}</span>`:''}</div>`}).join('')}</div>` : ''}
+    ${m.suggestions ? `<div style="margin-bottom:14px;"><div style="color:#4ade80;font-size:0.85rem;font-weight:700;margin-bottom:6px;"><i class="fas fa-lightbulb"></i> المقترحات</div><div style="background:rgba(74,222,128,0.06);border-radius:8px;padding:10px;color:rgba(255,255,255,0.8);font-size:0.88rem;white-space:pre-wrap;">${m.suggestions}</div></div>` : ''}
+    ${m.recommendations ? `<div style="margin-bottom:14px;"><div style="color:#f59e0b;font-size:0.85rem;font-weight:700;margin-bottom:6px;"><i class="fas fa-star"></i> التوصيات</div><div style="background:rgba(245,158,11,0.06);border-radius:8px;padding:10px;color:rgba(255,255,255,0.8);font-size:0.88rem;white-space:pre-wrap;">${m.recommendations}</div></div>` : ''}
+    ${m.minutes ? `<div style="margin-bottom:14px;"><div style="color:#a78bfa;font-size:0.85rem;font-weight:700;margin-bottom:6px;"><i class="fas fa-file-alt"></i> محضر الاجتماع</div><div style="background:rgba(139,92,246,0.06);border-radius:8px;padding:10px;color:rgba(255,255,255,0.8);font-size:0.88rem;white-space:pre-wrap;">${m.minutes}</div></div>` : ''}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button onclick="openMinutesModal('${m.id}')" style="padding:9px 18px;background:rgba(139,92,246,0.2);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.88rem;"><i class="fas fa-file-alt"></i> تحرير المحضر</button>
+      <button onclick="document.getElementById('meetViewModal').style.display='none'" style="padding:9px 18px;background:rgba(255,255,255,0.1);color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;">إغلاق</button>
+    </div>`;
+
+  document.getElementById('meetViewContent').innerHTML = content;
+  document.getElementById('meetViewModal').style.display = 'flex';
 }
 
 function openMinutesModal(meetId) {
   const m = getMeetings().find(x => x.id === meetId);
   if (!m) return;
+  // Use existing modal or inline editing through viewMeeting
+  const modal = document.getElementById('minutesModal');
+  if (!modal) return;
   document.getElementById('minutesMeetId').value = meetId;
-  document.getElementById('minutesMeetInfo').innerHTML = `
-    <strong style="color:var(--accent);">${m.title}</strong><br>
-    <span style="color:rgba(255,255,255,0.6);font-size:0.82rem;">${new Date(m.date).toLocaleDateString('ar-AE',{weekday:'long',year:'numeric',month:'long',day:'numeric'})} — ${m.time} — ${m.location}</span>`;
-  document.getElementById('minutesContent').value = m.minutes || '';
-  const isPriv = currentRole === 'admin' || currentRole === 'principal';
-  document.getElementById('minutesContent').readOnly = !isPriv;
-  document.getElementById('minutesModal').style.display = 'flex';
-}
-function saveMinutesRecord() {
-  const meetId = document.getElementById('minutesMeetId').value;
-  const content = document.getElementById('minutesContent').value.trim();
-  const meetings = getMeetings();
-  const idx = meetings.findIndex(m => m.id === meetId);
-  if (idx >= 0) meetings[idx].minutes = content;
-  saveMeetings(meetings);
-  document.getElementById('minutesModal').style.display = 'none';
-  renderMeetingsSection();
+  const info = document.getElementById('minutesMeetInfo');
+  if (info) info.innerHTML = `<span style="color:var(--accent);font-weight:700;">${m.title}</span> — ${m.date} ${m.time||''}`;
+  const mc = document.getElementById('minutesContent');
+  if (mc) mc.value = m.minutes || '';
+  // Populate additional fields if they exist
+  const md = document.getElementById('minutesDecisions');
+  if (md) md.value = m.decisions || '';
+  modal.style.display = 'flex';
 }
 
-// --------------- MEETING NOTIFICATIONS ---------------
+function saveMinutesRecord() {
+  const meetId = document.getElementById('minutesMeetId').value;
+  const content = document.getElementById('minutesContent').value;
+  const meetings = getMeetings();
+  const idx = meetings.findIndex(m => m.id === meetId);
+  if (idx !== -1) {
+    meetings[idx].minutes = content;
+    const mc = document.getElementById('minutesDecisions');
+    if (mc) meetings[idx].decisions = mc.value;
+    meetings[idx].status = 'completed';
+    saveMeetings(meetings);
+    document.getElementById('minutesModal').style.display = 'none';
+    renderMeetingsSection();
+    alert('تم حفظ المحضر بنجاح');
+  }
+}
+
 function renderMeetingNotifications() {
   const notifContainer = document.getElementById('meeting-notif-banner');
   if (!notifContainer) return;
@@ -5428,25 +5756,36 @@ function renderMeetingNotifications() {
     const mDate = new Date(m.date); mDate.setHours(0,0,0,0);
     const daysLeft = Math.ceil((mDate - today) / 86400000);
     if (daysLeft < 0 || daysLeft > 3) return false;
+    if (m.status === 'cancelled') return false;
     if (currentRole === 'admin' || currentRole === 'principal') return true;
     return m.attendees && empId && m.attendees.includes(empId);
   });
   if (upcoming.length === 0) { notifContainer.innerHTML = ''; return; }
   notifContainer.innerHTML = `<div style="background:rgba(201,168,39,0.12);border:1px solid rgba(201,168,39,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;">
-    <div style="color:var(--accent);font-weight:700;margin-bottom:6px;"><i class="fas fa-bell"></i> تذكير: اجتماعات قادمة</div>
+    <div style="color:var(--accent);font-weight:700;margin-bottom:6px;"><i class="fas fa-bell"></i> تذكير: اجتماعات قادمة خلال 3 أيام</div>
     ${upcoming.map(m => {
       const mDate = new Date(m.date);
       const days = Math.ceil((mDate - today) / 86400000);
-      return `<div style="display:flex;gap:10px;align-items:center;padding:6px 0;border-top:1px solid rgba(255,255,255,0.06);">
+      return `<div style="display:flex;gap:10px;align-items:center;padding:6px 0;border-top:1px solid rgba(255,255,255,0.07);">
         <i class="fas fa-calendar-check" style="color:var(--accent);"></i>
         <div>
           <span style="color:white;font-weight:600;">${m.title}</span>
-          <span style="color:rgba(255,255,255,0.5);font-size:0.8rem;margin-right:8px;">${days === 0 ? 'اليوم!' : days === 1 ? 'غداً' : `خلال ${days} أيام`} — ${m.time} — ${m.location}</span>
+          <span style="color:rgba(255,255,255,0.5);font-size:0.8rem;margin-right:8px;">${days === 0 ? 'اليوم!' : days === 1 ? 'غداً' : 'بعد '+days+' أيام'}</span>
+          <span style="color:rgba(255,255,255,0.4);font-size:0.78rem;">${m.time||''} — ${m.location||''}</span>
         </div>
       </div>`;
     }).join('')}
   </div>`;
 }
+
+// Close attendee dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  const dd = document.getElementById('meetAttendeeDropdown');
+  const inp = document.getElementById('meetAttendeeSearch');
+  if (dd && inp && !dd.contains(e.target) && e.target !== inp) {
+    dd.style.display = 'none';
+  }
+});
 
 // --------------- showSection PATCHES ---------------
 const _origShowSection = window.showSection;
