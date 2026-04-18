@@ -1890,19 +1890,43 @@ function doLogin() {
 }
 
 function logout() {
-  stopMsgPolling();
+  // Clear session timer first
+  if (typeof sessionTimer !== 'undefined') clearTimeout(sessionTimer);
+  // Stop messaging safely (function may be in another script block)
+  try { if (typeof stopMsgPolling === 'function') stopMsgPolling(); } catch(e) {}
+  try {
+    if (window._msgPollInterval) { clearInterval(window._msgPollInterval); window._msgPollInterval = null; }
+    if (window._aljoodBC) { try { window._aljoodBC.close(); } catch(e2) {} window._aljoodBC = null; }
+  } catch(e) {}
+  // Clear all session data
   localStorage.removeItem('aljood_session_role');
   localStorage.removeItem('aljood_session_pass');
   localStorage.removeItem('aljood_session_username');
   localStorage.removeItem('aljood_session_staff_id');
+  localStorage.removeItem('aljood_last_active');
   currentStaff = null;
+  currentRole = '';
   currentUsername = '';
-  document.getElementById('loginScreen').style.display = 'flex';
-  document.getElementById('app').classList.remove('visible'); document.getElementById('app').style.display = '';
-  document.getElementById('loginPass').value = '';
-  document.getElementById('adminMenu').style.display = 'none';
-  document.getElementById('dynamicNav').innerHTML = '';
-  hideChatBtn();
+  // Show login screen, hide app
+  var ls = document.getElementById('loginScreen');
+  var ap = document.getElementById('app');
+  if (ls) ls.style.display = 'flex';
+  if (ap) { ap.classList.remove('visible'); ap.style.display = 'none'; }
+  // Clear form fields
+  var lp = document.getElementById('loginPass');
+  if (lp) lp.value = '';
+  var lu = document.getElementById('loginUsername');
+  if (lu) lu.value = '';
+  // Reset nav/UI
+  var am = document.getElementById('adminMenu');
+  if (am) am.style.display = 'none';
+  var dn = document.getElementById('dynamicNav');
+  if (dn) dn.innerHTML = '';
+  // Hide chat button safely
+  try { if (typeof hideChatBtn === 'function') hideChatBtn(); } catch(e) {
+    var cb = document.getElementById('chatBtn');
+    if (cb) cb.style.display = 'none';
+  }
 }
 
 // ===== NAVIGATION =====
@@ -8293,7 +8317,7 @@ function buildMsgRecipientList(query) {
       const name = e.name_ar || '';
       const initials = name.split(/\s+/).map(w => w[0] || '').join('').substring(0, 2);
       const role = e.role || e.category || '';
-      h += '<div class="msg-recipient-item" data-name="' + name + '" onclick="selectMsgRecipient(this,'' + name.replace(/'/g, "\'") + '')">';
+      h += '<div class="msg-recipient-item" data-name="' + name.replace(/"/g, '&quot;') + '" onclick="selectMsgRecipient(this, this.dataset.name)">';
       h += '<div class="msg-recipient-avatar">' + initials + '</div>';
       h += '<div><div class="msg-recipient-name">' + name + '</div><div class="msg-recipient-role">' + role + '</div></div>';
       h += '</div>';
