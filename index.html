@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>بوابة مدرسة الجود | Al Jood School Portal</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
 function toggleWebsiteManager() {
   const content = document.getElementById('websiteManagerContent');
   const icon = document.getElementById('wmToggleIcon');
@@ -14,7 +15,6 @@ function toggleWebsiteManager() {
   if (icon) icon.textContent = visible ? '▶' : '▼';
   if (!visible) renderWebsiteManager();
 }
-
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -114,12 +114,13 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 }
 #mainContent {
   flex:1; overflow-y:auto; overflow-x:hidden; padding:0; scroll-behavior:smooth;
+  background: var(--light);
 }
 
 /* Top Bar */
 .topbar {
   background:white; padding:15px 30px; display:flex; align-items:center; justify-content:space-between;
-  box-shadow:0 2px 10px rgba(0,0,0,0.05); position:sticky; top:0; z-index:50;
+  box-shadow:0 2px 10px rgba(0,0,0,0.05); z-index:50; flex-shrink:0;
   border-bottom:3px solid var(--accent);
 }
 .topbar-title { font-size:1.2rem; font-weight:700; color:var(--primary); }
@@ -573,13 +574,11 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 
   <!-- Main Content -->
   <div id="mainArea">
+  <div class="topbar">
+    <div class="topbar-title" id="topbarTitle">🏠 الصفحة الرئيسية</div>
+    <div class="topbar-date" id="topbarDate"></div>
+  </div>
   <div id="mainContent">
-    
-    <!-- Topbar -->
-    <div class="topbar">
-      <div class="topbar-title" id="topbarTitle">🏠 الصفحة الرئيسية</div>
-      <div class="topbar-date" id="topbarDate"></div>
-    </div>
 
     <!-- ===== HOME SECTION ===== -->
     <div class="section active" id="section-home">
@@ -1750,7 +1749,7 @@ function restoreSession() {
     updateDate();
     resetSessionTimer();
     showChatBtn();
-    setTimeout(() => checkPendingMessages(currentUsername), 800);
+    setTimeout(function(){ checkPendingMessages(currentUsername); startMsgPolling(currentUsername); }, 800);
   } else if (savedPass) {
     // Session expired while away
     localStorage.removeItem('aljood_session_role');
@@ -1795,7 +1794,7 @@ function doLogin() {
     resetSessionTimer();
     showWelcomeToast(currentUsername);
     showChatBtn();
-    setTimeout(() => checkPendingMessages(currentUsername), 800);
+    setTimeout(function(){ checkPendingMessages(currentUsername); startMsgPolling(currentUsername); }, 800);
     return;
   }
 
@@ -1824,7 +1823,7 @@ function doLogin() {
     resetSessionTimer();
     showWelcomeToast(currentUsername);
     showChatBtn();
-    setTimeout(() => checkPendingMessages(currentUsername), 800);
+    setTimeout(function(){ checkPendingMessages(currentUsername); startMsgPolling(currentUsername); }, 800);
   } else {
     document.getElementById('loginError').style.display = 'block';
     setTimeout(() => document.getElementById('loginError').style.display = 'none', 3000);
@@ -1832,6 +1831,7 @@ function doLogin() {
 }
 
 function logout() {
+  stopMsgPolling();
   localStorage.removeItem('aljood_session_role');
   localStorage.removeItem('aljood_session_pass');
   localStorage.removeItem('aljood_session_username');
@@ -7872,21 +7872,55 @@ function saveMsgInbox(username, msgs) {
 }
 function sendMsg(to, text) {
     if (!to.trim() || !text.trim()) return false;
-    var inbox = getMsgInbox(to.trim());
-    inbox.push({
+    var msgObj = {
         id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2,5),
         from: (typeof currentUsername !== 'undefined') ? currentUsername : '?',
         fromRole: (typeof currentRole !== 'undefined') ? currentRole : '',
         to: to.trim(), text: text.trim(), timestamp: Date.now()
-    });
+    };
+    var inbox = getMsgInbox(to.trim());
+    inbox.push(msgObj);
     saveMsgInbox(to.trim(), inbox);
+    // Broadcast for real-time delivery on same device (cross-tab)
+    try {
+        var bc = new BroadcastChannel('aljood_messages');
+        bc.postMessage(msgObj);
+        setTimeout(function(){ bc.close(); }, 200);
+    } catch(e) {}
     return true;
 }
 function checkPendingMessages(username) {
     var msgs = getMsgInbox(username);
-    if (!msgs.length) return;
+    if (!msgs.length) { updateChatBadge(0); return; }
     renderMsgBubbles(msgs, username);
     updateChatBadge(msgs.length);
+}
+// Start periodic polling for new messages (every 8 seconds)
+function startMsgPolling(username) {
+    if (window._msgPollInterval) clearInterval(window._msgPollInterval);
+    window._msgPollInterval = setInterval(function() {
+        if (typeof currentUsername === 'undefined' || !currentUsername) return;
+        checkPendingMessages(currentUsername);
+    }, 8000);
+    // Also use BroadcastChannel for real-time same-device delivery
+    try {
+        if (window._aljoodBC) { try { window._aljoodBC.close(); } catch(e){} }
+        window._aljoodBC = new BroadcastChannel('aljood_messages');
+        window._aljoodBC.onmessage = function(event) {
+            var msg = event.data;
+            if (msg && msg.to && msg.to === (typeof currentUsername !== 'undefined' ? currentUsername : '')) {
+                // Add to inbox then render
+                var inbox = getMsgInbox(currentUsername);
+                inbox.push(msg);
+                saveMsgInbox(currentUsername, inbox);
+                checkPendingMessages(currentUsername);
+            }
+        };
+    } catch(e) {}
+}
+function stopMsgPolling() {
+    if (window._msgPollInterval) { clearInterval(window._msgPollInterval); window._msgPollInterval = null; }
+    if (window._aljoodBC) { try { window._aljoodBC.close(); } catch(e){} window._aljoodBC = null; }
 }
 function updateChatBadge(count) {
     var badge = document.querySelector('#chatBtn .chat-badge');
