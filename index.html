@@ -66,7 +66,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 .login-error { color:#ff6b6b; font-size:0.85rem; margin-top:10px; display:none; }
 
 /* ===== MAIN LAYOUT ===== */
-#app { display:none; }
+#app { display:none; height:100vh; overflow:hidden; }
 
 /* Sidebar */
 #sidebar {
@@ -109,7 +109,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 
 /* Main Content */
 #mainContent {
-  margin-right:var(--sidebar-width); min-height:100vh; padding:0;
+  margin-right:var(--sidebar-width); height:100vh; overflow-y:auto; padding:0; scroll-behavior:smooth;
 }
 
 /* Top Bar */
@@ -268,7 +268,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 /* Responsive */
 @media(max-width:768px) {
   #sidebar { transform:translateX(100%); }
-  #mainContent { margin-right:0; }
+  #mainContent { margin-right:0; height:100vh; overflow-y:auto; }
   .charts-grid { grid-template-columns:1fr; }
   .stats-grid { grid-template-columns:1fr 1fr; }
 }
@@ -1271,7 +1271,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     color: #C9A84C; margin: 0 0 15px; font-size: 0.95rem;
     display: flex; align-items: center; justify-content: space-between;
 }
-#composeModal input, #composeModal textarea {
+#composeModal input, #composeModal textarea, #composeModal select {
     width: 100%; background: rgba(255,255,255,0.07);
     border: 1px solid rgba(201,168,76,0.22); border-radius: 9px;
     color: white; font-size: 0.85rem; padding: 9px 13px;
@@ -1876,7 +1876,7 @@ function showSection(name) {
   const activeNavEl = document.querySelector('#dynamicNav .nav-item[data-section="'+name+'"]');
   if (activeNavEl) activeNavEl.classList.add('active');
   document.getElementById('topbarTitle').textContent = sectionTitles[name] || name;
-  window.scrollTo(0,0);
+  try { document.getElementById('mainContent').scrollTo({top:0,behavior:'instant'}); } catch(e) { window.scrollTo(0,0); }
   if (name === 'admin_panel') { renderPwTable(); renderWebsiteManager(); }
   if (name === 'forms') renderFormsList();
   if (name === 'staff_directory') renderStaffDirectory();
@@ -7818,7 +7818,9 @@ function sbDeleteSaved(id) {
         <span><i class="fas fa-paper-plane" style="margin-left:7px;"></i>رسالة فورية</span>
         <button class="compose-close" onclick="toggleCompose()">&#10005;</button>
     </h4>
-    <input id="compose-to" type="text" placeholder="اسم المستلم (كما يُسجِّل دخوله)" autocomplete="off" />
+    <select id="compose-to" style="width:100%;padding:10px 12px;border:1px solid rgba(201,168,76,0.5);border-radius:8px;background:#16213e;color:white;font-family:inherit;font-size:0.9rem;margin-bottom:0;">
+      <option value="">— اختر المستلم —</option>
+    </select>
     <textarea id="compose-text" placeholder="اكتبي رسالتك هنا... (Ctrl+Enter للإرسال)"></textarea>
     <button id="composeSendBtn" onclick="sendComposeMsg()">
         <i class="fas fa-paper-plane"></i> إرسال الرسالة
@@ -7957,8 +7959,34 @@ function toggleCompose() {
     if (!modal) return;
     modal.style.display = (modal.style.display === 'block') ? 'none' : 'block';
     if (modal.style.display === 'block') {
-        var inp = document.getElementById('compose-to');
-        if (inp) inp.focus();
+        // Populate recipient dropdown
+        var sel = document.getElementById('compose-to');
+        if (sel && sel.tagName === 'SELECT') {
+            var emps = (typeof getEmployeesData === 'function') ? getEmployeesData() : [];
+            var opts = '<option value="">— اختر المستلم —</option>';
+            // Add fixed roles
+            var fixed = [
+                {name:'Noor', label:'مديرة النظام (Noor)'},
+                {name:'المديرة', label:'مديرة المدرسة'}
+            ];
+            // Skip current user in fixed list
+            fixed.forEach(function(f) {
+                if (f.name !== (typeof currentUsername !== 'undefined' ? currentUsername : ''))
+                    opts += '<option value="' + f.name + '">' + f.label + '</option>';
+            });
+            // Add staff from data
+            if (emps.length > 0) {
+                opts += '<optgroup label="المعلمون والموظفون">';
+                emps.forEach(function(e) {
+                    if (e.name && e.name !== (typeof currentUsername !== 'undefined' ? currentUsername : ''))
+                        opts += '<option value="' + e.name + '">' + e.name + (e.subject ? ' — ' + e.subject : '') + '</option>';
+                });
+                opts += '</optgroup>';
+            }
+            sel.innerHTML = opts;
+        }
+        var txt = document.getElementById('compose-text');
+        if (txt) txt.focus();
     }
 }
 function sendComposeMsg() {
@@ -7993,12 +8021,25 @@ document.addEventListener('click', function(e) {
         modal.style.display = 'none';
     }
 });
-// Allow Enter in compose-to to jump to textarea
-document.addEventListener('DOMContentLoaded', function(){
-    var toEl = document.getElementById('compose-to');
-    if (toEl) { toEl.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); var ta=document.getElementById('compose-text'); if(ta) ta.focus(); } }); }
+// When recipient is selected from dropdown, jump to textarea
+// and Ctrl+Enter to send
+document.addEventListener('DOMContentLoaded', function() {
+    var composeToEl = document.getElementById('compose-to');
+    if (composeToEl) {
+        composeToEl.addEventListener('change', function() {
+            var txt = document.getElementById('compose-text');
+            if (txt) txt.focus();
+        });
+    }
     var ta = document.getElementById('compose-text');
-    if (ta) { ta.addEventListener('keydown', function(e){ if(e.key==='Enter' && (e.ctrlKey||e.metaKey)){ e.preventDefault(); sendComposeMsg(); } }); }
+    if (ta) {
+        ta.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                sendComposeMsg();
+            }
+        });
+    }
 });
 </script>
 
