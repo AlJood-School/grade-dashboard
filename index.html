@@ -8027,19 +8027,34 @@ function toggleCompose() {
                 {name:'المديرة', label:'مديرة المدرسة'}
             ];
             // Skip current user in fixed list
+            var _curName = (typeof currentUsername !== 'undefined' ? currentUsername : '');
+            var _curRole = (typeof currentRole !== 'undefined' ? currentRole : '');
             fixed.forEach(function(f) {
-                if (f.name !== (typeof currentUsername !== 'undefined' ? currentUsername : ''))
+                // Exclude if name matches OR if admin role and f.name is 'Noor'
+                var isMe = (f.name === _curName) || (_curRole === 'admin' && f.name === 'Noor');
+                if (!isMe)
                     opts += '<option value="' + f.name + '">' + f.label + '</option>';
             });
-            // Add staff from data
-            if (emps.length > 0) {
-                opts += '<optgroup label="المعلمون والموظفون">';
-                emps.forEach(function(e) {
-                    if (e.name && e.name !== (typeof currentUsername !== 'undefined' ? currentUsername : ''))
-                        opts += '<option value="' + e.name + '">' + e.name + (e.subject ? ' — ' + e.subject : '') + '</option>';
+            // Add staff from data - split by category
+            var admins = emps.filter(function(e){ return e.category === 'إداري'; });
+            var teachers = emps.filter(function(e){ return e.category !== 'إداري'; });
+            var curName = (typeof currentUsername !== 'undefined' ? currentUsername : '');
+            function addGroup(label, arr) {
+                var filtered = arr.filter(function(e){ 
+                    var n = e.name_ar || e.name || '';
+                    return n && n !== curName; 
+                });
+                if (!filtered.length) return;
+                opts += '<optgroup label="' + label + '">';
+                filtered.forEach(function(e) {
+                    var n = e.name_ar || e.name || '';
+                    var subj = (e.subjects && e.subjects.length) ? e.subjects[0] : (e.subject || '');
+                    opts += '<option value="' + n + '">' + n + (subj ? ' — ' + subj : '') + '</option>';
                 });
                 opts += '</optgroup>';
             }
+            addGroup('الإداريون', admins);
+            addGroup('المعلمون', teachers);
             sel.innerHTML = opts;
         }
         var txt = document.getElementById('compose-text');
