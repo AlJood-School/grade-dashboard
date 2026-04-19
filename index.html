@@ -2145,9 +2145,9 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
         <i class="fas fa-crown page-header-icon"></i>
       </div>
       <div class="stats-grid">
-        <div class="stat-card"><div class="stat-icon gold"><i class="fas fa-users"></i></div><div><div class="stat-value">920</div><div class="stat-label">إجمالي الطلاب</div></div></div>
-        <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-chalkboard-teacher"></i></div><div><div class="stat-value">8+</div><div class="stat-label">أعضاء الكادر التعليمي</div></div></div>
-        <div class="stat-card"><div class="stat-icon green"><i class="fas fa-door-open"></i></div><div><div class="stat-value">3</div><div class="stat-label">أنواع الوصول</div></div></div>
+        <div class="stat-card"><div class="stat-icon gold"><i class="fas fa-users"></i></div><div><div class="stat-value">1048</div><div class="stat-label">إجمالي الطلاب (KG+ح1+ح2)</div></div></div>
+        <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-chalkboard-teacher"></i></div><div><div class="stat-value">102</div><div class="stat-label">إجمالي الموظفين (74 معلمة + 18 إداري)</div></div></div>
+        <div class="stat-card"><div class="stat-icon green"><i class="fas fa-door-open"></i></div><div><div class="stat-value">42</div><div class="stat-label">شعبة دراسية (KG–8)</div></div></div>
         <div class="stat-card"><div class="stat-icon orange"><i class="fas fa-shield-alt"></i></div><div><div class="stat-value">آمن</div><div class="stat-label">حالة الأمان</div></div></div>
       </div>
       <!-- Password + Access Level Edit Modal -->
@@ -2387,7 +2387,22 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 </div>
 
 <div class="section" id="section-school_schedule">
-  <h2 style="color:var(--accent);margin-bottom:20px;font-size:1.4rem;"><i class="fas fa-calendar-week"></i> الجدول المدرسي</h2>
+  <h2 style="color:var(--accent);margin-bottom:12px;font-size:1.4rem;"><i class="fas fa-calendar-week"></i> الجدول المدرسي</h2>
+  <!-- Return to In-Person Attendance Banner -->
+  <div id="attendance-banner" style="background:linear-gradient(135deg,#1A2A4A,#0d1b30);border:2px solid #C9A84C;border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:14px;position:relative;">
+    <div style="background:#C9A84C;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <i class="fas fa-school" style="color:#1A2A4A;font-size:1.2rem;"></i>
+    </div>
+    <div style="flex:1;">
+      <div style="color:#C9A84C;font-weight:800;font-size:1rem;margin-bottom:2px;">
+        <i class="fas fa-bell" style="margin-left:6px;"></i>الدوام الحضوري الكامل يبدأ الاثنين 20 ابريل 2026
+      </div>
+      <div style="color:rgba(255,255,255,0.8);font-size:0.85rem;">
+        In-person attendance resumes Monday 20 April 2026 — الجدول الاعتيادي هو الجدول النشط
+      </div>
+    </div>
+    <button onclick="document.getElementById('attendance-banner').style.display='none'" style="background:none;border:none;color:rgba(255,255,255,0.4);cursor:pointer;font-size:1.4rem;padding:4px;line-height:1;">&times;</button>
+  </div>
   <!-- Schedule Mode Selector -->
   <div id="sched-mode-selector" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center;padding:10px 14px;background:rgba(201,168,76,0.07);border-radius:10px;border:1px solid rgba(201,168,76,0.25);">
     <span style="color:var(--accent);font-weight:700;font-size:0.88rem;"><i class="fas fa-calendar-alt"></i> نوع الجدول:</span>
@@ -6888,21 +6903,30 @@ function renderScheduleSection() {
     classSelect.innerHTML = '<option value="">— اختر الصف —</option>' + filtered.map(c => `<option value="${c.id}">${c.name} (${c.grade})</option>`).join('');
     classSelect.onchange = renderClassSched;
   }
-  // Populate teacher select (filtered by selected cycle)
+  // Populate teacher select — AI-inferred from schedule data directly
   const teacherSelect = document.getElementById('teacherSchedSelect');
   if (teacherSelect) {
-    const emps = getEmployeesData();
-    // Map cycle button value to DB grade field
-    const gradeMap = {'روضة':'رياض الأطفال','حلقة أولى':'الحلقة الأولى','حلقة ثانية':'الحلقة الثانية'};
-    const selectedGrade = gradeMap[currentSchedGrade];
-    const teachers = emps.filter(e => {
-      if (e.category !== 'معلم') return false;
-      if (!selectedGrade) return true; // 'all'
-      return e.grade === selectedGrade;
+    const savedSchedules = getSchedules();
+    // Build teacher index from actual schedule cells {teacherId: {name, cycles}}
+    const teacherMap = {};
+    Object.entries(savedSchedules).forEach(([classId, clsSched]) => {
+      if (classId.startsWith('__mode_')) return;
+      const gradeNum = parseInt(classId.replace(/[A-Za-z]/g,'')) || 0;
+      const cycle = gradeNum === 0 ? 'روضة' : (gradeNum <= 4 ? 'حلقة أولى' : 'حلقة ثانية');
+      Object.values(clsSched).forEach(cell => {
+        if (cell && cell.teacherId && cell.teacher) {
+          if (!teacherMap[cell.teacherId]) teacherMap[cell.teacherId] = {name: cell.teacher, cycles: new Set()};
+          teacherMap[cell.teacherId].cycles.add(cycle);
+        }
+      });
     });
-    // Sort alphabetically
-    teachers.sort((a,b) => (a.name_ar||'').localeCompare(b.name_ar||'', 'ar'));
-    teacherSelect.innerHTML = '<option value="">— اختر المعلمة (' + teachers.length + ') —</option>' + teachers.map(t => `<option value="${t.id}">${t.name_ar}</option>`).join('');
+    let teacherList = Object.entries(teacherMap);
+    if (currentSchedGrade && currentSchedGrade !== 'all') {
+      teacherList = teacherList.filter(([id, info]) => info.cycles.has(currentSchedGrade));
+    }
+    teacherList.sort((a,b) => a[1].name.localeCompare(b[1].name));
+    teacherSelect.innerHTML = '<option value="">— اختر المعلمة (' + teacherList.length + ') —</option>' +
+      teacherList.map(([id, info]) => `<option value="${id}">${info.name}</option>`).join('');
     teacherSelect.onchange = renderTeacherSched;
   }
   // Add class button (admin only)
@@ -7201,33 +7225,39 @@ function renderClassSched() {
 }
 
 function renderTeacherSched() {
-  const empId = document.getElementById('teacherSchedSelect')?.value;
+  const tId = document.getElementById('teacherSchedSelect')?.value;
   const container = document.getElementById('teacher-sched-container');
   if (!container) return;
-  if (!empId) { container.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">اختر معلماً لعرض جدوله</p>'; return; }
-  const emps = getEmployeesData();
-  const teacher = emps.find(e => e.id == empId);
-  if (!teacher) return;
+  if (!tId) { container.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">اختر معلماً لعرض جدوله</p>'; return; }
   const schedules = getSchedules();
   const classes = getClasses();
-  // Find all cells for this teacher
+  let teacherName = tId;
   let teacherCells = [];
   Object.entries(schedules).forEach(([classId, clsSched]) => {
+    if (classId.startsWith('__mode_')) return;
     const cls = classes.find(c => c.id == classId);
     if (!cls) return;
     Object.entries(clsSched).forEach(([key, cell]) => {
-      if (cell.teacherId == empId || (cell.teacher && teacher.name_ar && cell.teacher.includes(teacher.name_ar.split(' ')[0]))) {
+      if (cell && cell.teacherId === tId) {
+        teacherName = cell.teacher || tId;
         const [di, pi] = key.split('_').map(Number);
-        teacherCells.push({ class: cls.name, grade: cls.grade, day: DAYS[di], period: PERIODS[pi], subject: cell.subject, di, pi });
+        teacherCells.push({ class: cls.name || classId, grade: cls.grade || '', day: DAYS[di], period: PERIODS[pi], subject: cell.subject, di, pi });
       }
     });
   });
   if (teacherCells.length === 0) {
-    container.innerHTML = `<div style="background:#16213e;border-radius:10px;padding:24px;text-align:center;color:#888;"><i class="fas fa-calendar-times" style="font-size:2rem;margin-bottom:12px;color:#444;"></i><br>لا يوجد جدول مسجّل لهذه المعلمة</div>`;
+    container.innerHTML = `<div style="background:#16213e;border-radius:10px;padding:24px;text-align:center;color:#888;"><i class="fas fa-calendar-times" style="font-size:2rem;margin-bottom:12px;color:#444;"></i><br>لا يوجد جدول مسجّل لهذه المعلمة في الجدول الحالي</div>`;
     return;
   }
-  // Build table
-  let html = `<h3 style="color:white;margin-bottom:12px;">${teacher.name_ar} — ${teacher.primary_job}</h3>`;
+  const totalPeriods = teacherCells.length;
+  const uniqueClasses = [...new Set(teacherCells.map(c => c.class))].length;
+  const uniqueSubjects = [...new Set(teacherCells.map(c => c.subject))];
+  let html = `<h3 style="color:white;margin-bottom:8px;font-size:1.1rem;">${teacherName}</h3>`;
+  html += `<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+    <span style="background:rgba(201,168,76,0.15);color:#C9A84C;padding:4px 12px;border-radius:6px;font-size:0.82rem;">الحصص: <b>${totalPeriods}</b></span>
+    <span style="background:rgba(201,168,76,0.15);color:#C9A84C;padding:4px 12px;border-radius:6px;font-size:0.82rem;">الصفوف: <b>${uniqueClasses}</b></span>
+    <span style="background:rgba(201,168,76,0.15);color:#C9A84C;padding:4px 12px;border-radius:6px;font-size:0.82rem;">المواد: <b>${uniqueSubjects.join('، ')}</b></span>
+  </div>`;
   html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.85rem;">`;
   html += `<thead><tr>
     <th style="background:#16213e;padding:10px;color:var(--accent);border:1px solid rgba(255,255,255,0.1);">الحصة</th>
@@ -7239,7 +7269,7 @@ function renderTeacherSched() {
     html += `<tr>
       <td style="background:#172030;padding:8px;border:1px solid rgba(255,255,255,0.06);color:white;">${c.period}</td>
       <td style="background:#172030;padding:8px;border:1px solid rgba(255,255,255,0.06);color:white;">${c.day}</td>
-      <td style="background:#172030;padding:8px;border:1px solid rgba(255,255,255,0.06);color:white;">${c.class} (${c.grade})</td>
+      <td style="background:#172030;padding:8px;border:1px solid rgba(255,255,255,0.06);color:white;">${c.class}${c.grade ? ' ('+c.grade+')' : ''}</td>
       <td style="background:#172030;padding:8px;border:1px solid rgba(255,255,255,0.06);color:var(--accent);font-weight:600;">${c.subject}</td>
     </tr>`;
   });
