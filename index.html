@@ -490,6 +490,33 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     #section-digital_safety .ds-badge-gold{background:rgba(201,168,39,0.2);color:var(--accent);}
     #section-digital_safety .ds-badge-red{background:rgba(239,68,68,0.2);color:#f87171;}
     #section-digital_safety .ds-badge-grey{background:rgba(148,163,184,0.2);color:#94a3b8;}
+
+    /* ─── Incident Reporting Styles ─── */
+    #section-digital_safety .ds-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    #section-digital_safety .ds-form-grid.full{grid-template-columns:1fr;}
+    #section-digital_safety .ds-field label{color:rgba(255,255,255,0.75);font-size:0.8rem;display:block;margin-bottom:5px;}
+    #section-digital_safety .ds-field input,
+    #section-digital_safety .ds-field select,
+    #section-digital_safety .ds-field textarea{width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,76,0.35);border-radius:8px;padding:9px 11px;font-family:inherit;font-size:0.88rem;direction:rtl;}
+    #section-digital_safety .ds-field select option{background:#1A2A4A;color:white;}
+    #section-digital_safety .ds-field textarea{resize:vertical;}
+    #section-digital_safety .ds-sev-badge{display:inline-block;padding:3px 12px;border-radius:20px;font-size:0.75rem;font-weight:700;}
+    #section-digital_safety .sev-low{background:rgba(34,197,94,0.2);color:#4ade80;}
+    #section-digital_safety .sev-med{background:rgba(251,191,36,0.2);color:#fbbf24;}
+    #section-digital_safety .sev-high{background:rgba(249,115,22,0.2);color:#fb923c;}
+    #section-digital_safety .sev-crit{background:rgba(239,68,68,0.25);color:#f87171;}
+    #section-digital_safety .st-new{background:rgba(59,130,246,0.2);color:#60a5fa;}
+    #section-digital_safety .st-prog{background:rgba(251,191,36,0.2);color:#fbbf24;}
+    #section-digital_safety .st-done{background:rgba(34,197,94,0.2);color:#4ade80;}
+    #section-digital_safety .st-closed{background:rgba(148,163,184,0.2);color:#94a3b8;}
+    #section-digital_safety .img-thumb{width:72px;height:72px;object-fit:cover;border-radius:8px;border:2px solid rgba(201,168,76,0.4);cursor:pointer;transition:.2s;}
+    #section-digital_safety .img-thumb:hover{border-color:var(--accent);}
+    #section-digital_safety .inc-card{background:rgba(255,255,255,0.04);border:1px solid rgba(201,168,76,0.18);border-radius:12px;padding:16px;margin-bottom:12px;}
+    #section-digital_safety .inc-stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;}
+    @media(max-width:600px){
+      #section-digital_safety .ds-form-grid{grid-template-columns:1fr;}
+      #section-digital_safety .inc-stats-grid{grid-template-columns:repeat(2,1fr);}
+    }
     #section-digital_safety .progress-bar{background:rgba(255,255,255,0.1);border-radius:20px;height:8px;overflow:hidden;margin:6px 0;}
     #section-digital_safety .progress-fill{height:100%;border-radius:20px;background:linear-gradient(90deg,#C9A84C,#e8c96d);}
     #section-digital_safety .ds-table{width:100%;border-collapse:collapse;font-size:0.85rem;}
@@ -1452,7 +1479,8 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-          setTimeout(anInitT2C1Charts, 500);
+          // Charts initialized when analysis section is shown via showSection
+          // setTimeout(anInitT2C1Charts, 500); // removed: canvas hidden at this point
         });
         // ===== END GRADE ANALYSIS FUNCTIONS =====
       </script>
@@ -2996,6 +3024,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     <button class="ds-tab" onclick="dsTab('minutes')"><i class="fas fa-file-alt" style="margin-left:5px;"></i>محاضر الاجتماعات</button>
     <button class="ds-tab" onclick="dsTab('aqdar')"><i class="fas fa-clipboard-check" style="margin-left:5px;"></i>متطلبات أقدر</button>
     <button class="ds-tab" onclick="dsTab('materials')"><i class="fas fa-folder-open" style="margin-left:5px;"></i>المواد التعليمية</button>
+    <button class="ds-tab" onclick="dsTab('incidents')"><i class="fas fa-exclamation-triangle" style="margin-left:5px;"></i>بلاغات المخالفات</button>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════
@@ -3584,6 +3613,180 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     </div>
   </div>
 
+
+  <!-- ══════════════════════════════════════
+       INCIDENTS PANE
+       ══════════════════════════════════════ -->
+  <div class="ds-pane" id="ds-pane-incidents">
+
+    <!-- Stats Row -->
+    <div class="inc-stats-grid" id="incStatsGrid"></div>
+
+    <!-- Toolbar -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px;">
+      <button onclick="openIncidentModal()" id="btnNewIncident" style="padding:9px 18px;background:var(--accent);color:#1A2A4A;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:0.88rem;font-weight:700;display:flex;align-items:center;gap:6px;">
+        <i class="fas fa-plus"></i> بلاغ جديد
+      </button>
+      <select id="incFilterStatus" onchange="renderIncidents()" style="background:#16213e;color:white;border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:8px 12px;font-family:inherit;font-size:0.85rem;">
+        <option value="">كل الحالات</option>
+        <option value="جديد">جديد</option>
+        <option value="قيد المعالجة">قيد المعالجة</option>
+        <option value="تم الحل">تم الحل</option>
+        <option value="مغلق">مغلق</option>
+      </select>
+      <select id="incFilterSev" onchange="renderIncidents()" style="background:#16213e;color:white;border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:8px 12px;font-family:inherit;font-size:0.85rem;">
+        <option value="">كل درجات الخطورة</option>
+        <option value="منخفضة">منخفضة</option>
+        <option value="متوسطة">متوسطة</option>
+        <option value="عالية">عالية</option>
+        <option value="حرجة">حرجة</option>
+      </select>
+      <button onclick="exportIncidentsCSV()" style="padding:9px 14px;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.15);border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.82rem;margin-right:auto;">
+        <i class="fas fa-download" style="margin-left:5px;"></i>تصدير Excel
+      </button>
+    </div>
+
+    <!-- Incidents List -->
+    <div id="incidentsList"></div>
+  </div>
+
+  <!-- ══ INCIDENT MODAL ══ -->
+  <div id="incidentModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:10000;overflow-y:auto;padding:20px;box-sizing:border-box;">
+    <div style="background:#1e2d4a;border-radius:16px;padding:28px;max-width:750px;margin:0 auto;border:1px solid rgba(201,168,76,0.3);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <h3 style="color:var(--accent);margin:0;font-size:1.1rem;"><i class="fas fa-exclamation-triangle" style="margin-left:8px;"></i>تسجيل بلاغ — السلامة الرقمية</h3>
+        <button onclick="closeIncidentModal()" style="background:rgba(255,255,255,0.1);color:white;border:none;border-radius:8px;width:34px;height:34px;cursor:pointer;font-size:1.1rem;">&times;</button>
+      </div>
+
+      <input type="hidden" id="incEditId">
+
+      <!-- Row 1: Student info -->
+      <div class="ds-form-grid" style="margin-bottom:12px;">
+        <div class="ds-field">
+          <label><i class="fas fa-user-graduate" style="margin-left:4px;"></i>اسم الطالب/ة *</label>
+          <input type="text" id="incStudent" placeholder="الاسم الكامل للطالب/ة">
+        </div>
+        <div class="ds-field">
+          <label><i class="fas fa-school" style="margin-left:4px;"></i>الصف والشعبة *</label>
+          <input type="text" id="incClass" placeholder="مثال: 6A">
+        </div>
+      </div>
+
+      <!-- Row 2: Violation details -->
+      <div class="ds-form-grid" style="margin-bottom:12px;">
+        <div class="ds-field">
+          <label><i class="fas fa-tag" style="margin-left:4px;"></i>نوع المخالفة *</label>
+          <select id="incType">
+            <option value="">-- اختر --</option>
+            <option>تنمر إلكتروني</option>
+            <option>محتوى غير لائق</option>
+            <option>انتهاك الخصوصية</option>
+            <option>استخدام غير مصرح</option>
+            <option>مشاركة بيانات شخصية</option>
+            <option>ابتزاز إلكتروني</option>
+            <option>احتيال وتصيد</option>
+            <option>إدمان رقمي</option>
+            <option>أخرى</option>
+          </select>
+        </div>
+        <div class="ds-field">
+          <label><i class="fas fa-mobile-alt" style="margin-left:4px;"></i>الجهاز المستخدم</label>
+          <select id="incDevice">
+            <option value="">-- اختر --</option>
+            <option>لابتوب وزاري</option>
+            <option>لابتوب شخصي</option>
+            <option>جوال</option>
+            <option>تابلت</option>
+            <option>حاسوب المختبر</option>
+            <option>أخرى</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="ds-form-grid" style="margin-bottom:12px;">
+        <div class="ds-field">
+          <label><i class="fas fa-globe" style="margin-left:4px;"></i>المنصة/التطبيق</label>
+          <input type="text" id="incPlatform" placeholder="مثال: واتساب، تيك توك، إنستغرام">
+        </div>
+        <div class="ds-field">
+          <label><i class="fas fa-exclamation-circle" style="margin-left:4px;"></i>درجة الخطورة *</label>
+          <select id="incSeverity">
+            <option value="">-- اختر --</option>
+            <option>منخفضة</option>
+            <option>متوسطة</option>
+            <option>عالية</option>
+            <option>حرجة</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Description -->
+      <div class="ds-field ds-form-grid full" style="margin-bottom:12px;">
+        <div>
+          <label><i class="fas fa-align-right" style="margin-left:4px;"></i>وصف المخالفة *</label>
+          <textarea id="incDesc" rows="3" placeholder="صفي المخالفة بالتفصيل..."></textarea>
+        </div>
+      </div>
+
+      <!-- Image Upload -->
+      <div style="margin-bottom:16px;">
+        <label style="color:rgba(255,255,255,0.75);font-size:0.8rem;display:block;margin-bottom:8px;"><i class="fas fa-camera" style="margin-left:4px;"></i>الأدلة الصور الداعمة (حتى 3 صور)</label>
+        <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+          <label style="cursor:pointer;padding:10px 16px;background:rgba(255,255,255,0.07);border:2px dashed rgba(201,168,76,0.4);border-radius:10px;color:rgba(255,255,255,0.7);font-size:0.82rem;display:flex;align-items:center;gap:6px;transition:.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='rgba(201,168,76,0.4)'">
+            <i class="fas fa-upload"></i> رفع صورة
+            <input type="file" id="incImgInput" multiple accept="image/*" style="display:none;" onchange="handleIncImages(event)">
+          </label>
+          <div id="incImgPreview" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+        </div>
+      </div>
+
+      <!-- Action & Status -->
+      <div class="ds-form-grid" style="margin-bottom:12px;">
+        <div class="ds-field">
+          <label><i class="fas fa-check-square" style="margin-left:4px;"></i>الإجراء المتخذ</label>
+          <textarea id="incAction" rows="2" placeholder="الإجراءات التي تم اتخاذها..."></textarea>
+        </div>
+        <div class="ds-field">
+          <label><i class="fas fa-user-tie" style="margin-left:4px;"></i>المسؤول عن الإجراء</label>
+          <input type="text" id="incResponsible" placeholder="اسم المسؤول">
+        </div>
+      </div>
+
+      <div class="ds-form-grid" style="margin-bottom:12px;">
+        <div class="ds-field">
+          <label><i class="fas fa-traffic-light" style="margin-left:4px;"></i>حالة البلاغ</label>
+          <select id="incStatus">
+            <option>جديد</option>
+            <option>قيد المعالجة</option>
+            <option>تم الحل</option>
+            <option>مغلق</option>
+          </select>
+        </div>
+        <div class="ds-field">
+          <label><i class="fas fa-calendar-check" style="margin-left:4px;"></i>تاريخ الحل (إن وجد)</label>
+          <input type="date" id="incResDate">
+        </div>
+      </div>
+
+      <div class="ds-field ds-form-grid full" style="margin-bottom:20px;">
+        <div>
+          <label><i class="fas fa-sticky-note" style="margin-left:4px;"></i>ملاحظات إضافية</label>
+          <textarea id="incNotes" rows="2" placeholder="أي ملاحظات أخرى..."></textarea>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button onclick="closeIncidentModal()" style="padding:10px 20px;background:rgba(255,255,255,0.1);color:white;border:none;border-radius:9px;cursor:pointer;font-family:inherit;">إلغاء</button>
+        <button onclick="saveIncident()" style="padding:10px 24px;background:var(--accent);color:#1A2A4A;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-weight:700;"><i class="fas fa-save" style="margin-left:6px;"></i>حفظ البلاغ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Image Lightbox -->
+  <div id="incLightbox" onclick="document.getElementById('incLightbox').style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:20000;align-items:center;justify-content:center;">
+    <img id="incLightboxImg" style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 0 40px rgba(201,168,76,0.4);">
+  </div>
+
   <!-- Meeting Modal -->
   <div id="dsMinModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:9999;align-items:center;justify-content:center;">
     <div style="background:#1e2d4a;border-radius:12px;padding:24px;width:600px;max-width:95vw;border:1px solid rgba(201,168,39,0.3);max-height:90vh;overflow-y:auto;">
@@ -3636,7 +3839,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
   // ═══ DS MODULE ════════════════════════════════════════════════════════════
   function dsTab(name) {
     document.querySelectorAll('.ds-tab').forEach((t,i) => {
-      const panes = ['overview','team','roadmap','opplan','minutes','aqdar','materials'];
+      const panes = ['overview','team','roadmap','opplan','minutes','aqdar','materials','incidents'];
       t.classList.toggle('active', panes[i] === name);
     });
     document.querySelectorAll('.ds-pane').forEach(p => p.classList.remove('active'));
@@ -4391,6 +4594,7 @@ function showSection(name) {
   if (name === 'home') { renderHomeDashboard(); }
   if (name === 'reports') renderReportsSection();
   if (name === 'parent_requests') renderParentRequestsSection();
+  if (name === 'analysis') { setTimeout(function(){ anChartInited={}; anInitT2C1Charts(); }, 200); }
 }
 
 // ===== DATE =====
