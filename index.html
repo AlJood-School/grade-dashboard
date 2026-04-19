@@ -9105,8 +9105,10 @@ function renderParentRequestsSection() {
     '<textarea class="pr-textarea" id="prDetails" placeholder="أضف أي تفاصيل إضافية..."></textarea></div>' +
     '<div class="pr-field"><label class="pr-label">موعد مقترح للاجتماع</label>' +
     '<div class="pr-date-row"><input type="date" class="pr-input" id="prMeetDate"><input type="time" class="pr-input" id="prMeetTime"></div></div>' +
+    '<div class="pr-field"><label class="pr-label">&#128241; رقم هاتف ولي الأمر (للإرسال SMS)</label><input type="tel" class="pr-input" id="prParentPhone" placeholder="+971XXXXXXXXX" style="direction:ltr;"></div>' +
     '<button class="pr-btn pr-btn-primary" onclick="prSendRequest()">&#128228; إرسال الطلب</button>' +
     '<div id="prSuccessMsg" style="display:none;margin-top:12px;color:#34d399;font-weight:700;">&#10003; تم إرسال الطلب بنجاح</div>' +
+    '<div id="prSmsNote" style="display:none;margin-top:6px;color:#60a5fa;font-size:0.85rem;font-weight:600;"></div>' +
     '</div>' +
     '<div class="pr-panel">' +
     '<div class="pr-panel-title">&#128203; الطلبات الأخيرة</div>' +
@@ -9201,11 +9203,13 @@ function prSendRequest() {
   const details = (document.getElementById('prDetails') || {}).value || '';
   const meetDate = (document.getElementById('prMeetDate') || {}).value || '';
   const meetTime = (document.getElementById('prMeetTime') || {}).value || '';
+  const parentPhone = (document.getElementById('prParentPhone') || {}).value || '';
   const req = {
     id: Date.now(),
     students: _prSelectedStudents.map(s => s.name),
     studentClasses: _prSelectedStudents.map(s => s.cls),
     reason: reason, details: details, meetDate: meetDate, meetTime: meetTime,
+    parentPhone: parentPhone,
     createdBy: window.currentUsername || '',
     createdAt: new Date().toISOString(),
     status: 'pending'
@@ -9213,15 +9217,40 @@ function prSendRequest() {
   const reqs = JSON.parse(localStorage.getItem('aljood_parent_requests') || '[]');
   reqs.unshift(req);
   localStorage.setItem('aljood_parent_requests', JSON.stringify(reqs));
-  const msg = 'استدعاء من المدرسة: '+reason+' - الطالب: '+_prSelectedStudents.map(s=>s.name).join('، ')+' - موعد مقترح: '+meetDate+' '+meetTime;
+  const msg = 'استدعاء من المدرسة: '+reason+' - الطالب: '+_prSelectedStudents.map(s=>s.name).join('\u060c ')+' - موعد مقترح: '+meetDate+' '+meetTime;
   _prSelectedStudents.forEach(s => {
     const inboxKey = 'aljood_inbox_parent_'+s.name.replace(/\s/g,'_');
     const inbox = JSON.parse(localStorage.getItem(inboxKey) || '[]');
     inbox.unshift({msg: msg, from: req.createdBy, date: req.createdAt});
     localStorage.setItem(inboxKey, JSON.stringify(inbox));
   });
+  // Send real SMS via webhook if phone provided
+  if (parentPhone && parentPhone.startsWith('+')) {
+    const webhookPayload = {
+      studentName: req.students.join(', '),
+      grade: (req.studentClasses || []).join(', '),
+      reason: req.reason,
+      reasonAr: req.reason,
+      date: meetDate + ' ' + meetTime,
+      phone: parentPhone,
+      teacherName: window.currentUsername || '',
+      notes: details
+    };
+    fetch('https://webhooks.tasklet.ai/v1/public/webhook?token=1f75fe6c88269f5e877ee2633934e304', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(webhookPayload)
+    }).then(function(r) {
+      const smsNote = document.getElementById('prSmsNote');
+      if (smsNote) { smsNote.style.display='block'; smsNote.textContent='\u2709\ufe0f تم إرسال SMS للرقم: '+parentPhone; }
+    }).catch(function(e) {
+      console.warn('SMS webhook error:', e);
+    });
+  }
   const suc = document.getElementById('prSuccessMsg');
   if (suc) { suc.style.display='block'; setTimeout(function(){ suc.style.display='none'; }, 3000); }
+  const phoneInput = document.getElementById('prParentPhone');
+  if (phoneInput) phoneInput.value = '';
   _prSelectedStudents = [];
   prRenderSelectedBadges();
   prRenderRequests();
