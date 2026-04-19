@@ -636,6 +636,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     </div>
 
     <button class="logout-btn" id="exportDataBtn" onclick="exportPortalData()" style="background:rgba(201,168,76,0.15);border-color:rgba(201,168,76,0.4);color:var(--accent);margin-bottom:8px"><i class="fas fa-download"></i> تصدير البيانات</button>
+    <button class="logout-btn" id="credentialsBtn" onclick="downloadCredentials()" style="background:rgba(40,167,69,0.15);border-color:rgba(40,167,69,0.4);color:#5cb85c;margin-bottom:8px;display:none;"><i class="fas fa-key"></i> تحميل كلمات المرور</button>
     <button class="logout-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> تسجيل الخروج</button>
   </div>
 
@@ -1720,6 +1721,15 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 
 <div class="section" id="section-school_schedule">
   <h2 style="color:var(--accent);margin-bottom:20px;font-size:1.4rem;"><i class="fas fa-calendar-week"></i> الجدول المدرسي</h2>
+  <!-- Schedule Mode Selector -->
+  <div id="sched-mode-selector" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center;padding:10px 14px;background:rgba(201,168,76,0.07);border-radius:10px;border:1px solid rgba(201,168,76,0.25);">
+    <span style="color:var(--accent);font-weight:700;font-size:0.88rem;"><i class="fas fa-calendar-alt"></i> نوع الجدول:</span>
+    <button class="sched-mode-btn" data-mode="normal" onclick="switchSchedMode('normal')" style="padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.82rem;font-family:inherit;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:white;"><i class="fas fa-table"></i> اعتيادي</button>
+    <button class="sched-mode-btn" data-mode="ramadan" onclick="switchSchedMode('ramadan')" style="padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.82rem;font-family:inherit;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:white;"><i class="fas fa-moon"></i> رمضان</button>
+    <button class="sched-mode-btn" data-mode="distance" onclick="switchSchedMode('distance')" style="padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.82rem;font-family:inherit;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:white;"><i class="fas fa-laptop-house"></i> تعلم عن بعد</button>
+    <span id="sched-mode-badge" style="font-size:0.78rem;color:rgba(255,255,255,0.55);padding:3px 8px;background:rgba(255,255,255,0.07);border-radius:4px;"></span>
+    <button id="sched-activate-btn" onclick="activateSchedMode()" style="display:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.82rem;font-family:inherit;border:none;background:#28a745;color:white;margin-right:auto;"><i class="fas fa-check-circle"></i> تفعيل كجدول نشط</button>
+  </div>
   <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
     <button class="sched-grade-btn" data-grade="all" onclick="filterScheduleGrade('all')"
       style="padding:8px 16px;background:var(--accent);color:#1a1a2e;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-family:inherit;">الكل</button>
@@ -3253,6 +3263,8 @@ function restoreSession() {
     document.getElementById('userNameDisplay').textContent = currentUsername;
     document.getElementById('userRoleDisplay').textContent = user.roleLabel;
     if (user.role === 'admin' || user.role === 'principal') document.getElementById('adminMenu').style.display = 'block';
+    const credBtnR = document.getElementById('credentialsBtn');
+    if (credBtnR) credBtnR.style.display = user.role === 'admin' ? '' : 'none';
     renderNav();
     showSection('home');
     setTimeout(() => { renderAllSections(); renderStaffDirectory(); if (currentStaff) renderMyProfile(); }, 100);
@@ -3326,6 +3338,8 @@ function doLogin() {
     document.getElementById('userNameDisplay').textContent = uname;
     document.getElementById('userRoleDisplay').textContent = user.roleLabel;
     if (user.role === 'admin' || user.role === 'principal') document.getElementById('adminMenu').style.display = 'block';
+    const credBtn = document.getElementById('credentialsBtn');
+    if (credBtn) credBtn.style.display = user.role === 'admin' ? '' : 'none';
     renderNav();
     showSection('home');
     setTimeout(() => { renderAllSections(); renderStaffDirectory(); }, 100);
@@ -3339,6 +3353,56 @@ function doLogin() {
     document.getElementById('loginError').style.display = 'block';
     setTimeout(() => document.getElementById('loginError').style.display = 'none', 3000);
   }
+}
+
+function downloadCredentials() {
+  const emps = getEmployeesData();
+  const rows = emps.map(e => {
+    const cat = e.category === 'معلم' ? 'معلمة' : (e.category === 'إداري' ? 'إداري' : e.category || '');
+    const abbr = (e.name_ar||'').trim().split(/\s+/).map(w=>w[0]||'').join('').toUpperCase().slice(0,4);
+    return { name: e.name_ar||'', job: e.primary_job||'', cat, grade: e.grade||'', username: abbr + e.id, password: e.password||'' };
+  });
+
+  const now = new Date().toLocaleDateString('ar-AE');
+  let html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8">
+  <title>بيانات اعتماد موظفي مدرسة الجود</title>
+  <style>
+    body{font-family:Arial,sans-serif;direction:rtl;margin:20px;background:#fff;color:#000;}
+    h2{color:#1A2A4A;border-bottom:3px solid #C9A84C;padding-bottom:8px;}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-top:16px;}
+    th{background:#1A2A4A;color:white;padding:8px 10px;text-align:right;}
+    td{padding:7px 10px;border-bottom:1px solid #ddd;}
+    tr:nth-child(even){background:#f9f9f9;}
+    .admin-row{background:#fff8e6!important;}
+    .note{font-size:11px;color:#888;margin-top:12px;}
+    @media print{body{margin:0;}.no-print{display:none;}}
+  </style></head><body>
+  <button class="no-print" onclick="window.print()" style="background:#1A2A4A;color:white;padding:8px 20px;border:none;border-radius:6px;cursor:pointer;margin-bottom:16px;">
+    &#128438; طباعة
+  </button>
+  <h2>&#128274; بيانات اعتماد موظفي مدرسة الجود</h2>
+  <p style="color:#666;font-size:13px;">تاريخ الإصدار: ${now} — سري للغاية — للمدير فقط</p>
+  <table>
+    <thead><tr><th>#</th><th>الاسم الكامل</th><th>المسمى الوظيفي</th><th>الفئة</th><th>اليوزرنيم</th><th>كلمة المرور</th></tr></thead>
+    <tbody>
+      ${rows.map((r,i) => `<tr class="${r.cat==='إداري'?'admin-row':''}">
+        <td>${i+1}</td><td>${r.name}</td><td>${r.job}</td><td>${r.cat}</td>
+        <td style="font-family:monospace;font-size:12px;direction:ltr;">${r.username}</td>
+        <td style="font-family:monospace;font-size:12px;direction:ltr;">${r.password}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+  <p class="note">ملاحظة: اليوزرنيم = الأحرف الأولى من الاسم + رقم الموظف. يمكن استخدام الاسم الكامل أيضاً عند الدخول.</p>
+  <p class="note">الحسابات الخاصة: مدير النظام (Noor / AlJood@2026) | مديرة المدرسة (Principal2026) | أولياء الأمور (Parent2026 — قريباً)</p>
+  </body></html>`;
+
+  const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'aljood_credentials_' + new Date().toISOString().slice(0,10) + '.html';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function exportPortalData() {
@@ -5853,8 +5917,11 @@ function saveClasses(arr) {
 
 let currentSchedGrade = 'all';
 let currentSchedView = 'class';
+let currentSchedMode = localStorage.getItem('activeSchedMode') || 'normal';
 
 function renderScheduleSection() {
+  // Initialize schedule mode buttons
+  setTimeout(initSchedModeBtns, 50);
   const classes = getClasses();
   // Populate class select
   const classSelect = document.getElementById('classSelect');
@@ -5863,12 +5930,21 @@ function renderScheduleSection() {
     classSelect.innerHTML = '<option value="">— اختر الصف —</option>' + filtered.map(c => `<option value="${c.id}">${c.name} (${c.grade})</option>`).join('');
     classSelect.onchange = renderClassSched;
   }
-  // Populate teacher select
+  // Populate teacher select (filtered by selected cycle)
   const teacherSelect = document.getElementById('teacherSchedSelect');
   if (teacherSelect) {
     const emps = getEmployeesData();
-    const teachers = emps.filter(e => e.category === 'teacher' || e.category === 'kg_teacher');
-    teacherSelect.innerHTML = '<option value="">— اختر المعلم —</option>' + teachers.map(t => `<option value="${t.id}">${t.name_ar}</option>`).join('');
+    // Map cycle button value to DB grade field
+    const gradeMap = {'روضة':'رياض الأطفال','حلقة أولى':'الحلقة الأولى','حلقة ثانية':'الحلقة الثانية'};
+    const selectedGrade = gradeMap[currentSchedGrade];
+    const teachers = emps.filter(e => {
+      if (e.category !== 'معلم') return false;
+      if (!selectedGrade) return true; // 'all'
+      return e.grade === selectedGrade;
+    });
+    // Sort alphabetically
+    teachers.sort((a,b) => (a.name_ar||'').localeCompare(b.name_ar||'', 'ar'));
+    teacherSelect.innerHTML = '<option value="">— اختر المعلمة (' + teachers.length + ') —</option>' + teachers.map(t => `<option value="${t.id}">${t.name_ar}</option>`).join('');
     teacherSelect.onchange = renderTeacherSched;
   }
   // Add class button (admin only)
@@ -5879,6 +5955,66 @@ function renderScheduleSection() {
       : '';
   }
   renderClassSched();
+}
+
+function switchSchedMode(mode) {
+  currentSchedMode = mode;
+  const modeNames = {normal:'الجدول الاعتيادي', ramadan:'جدول رمضان', distance:'التعلم عن بعد'};
+  const modeIcons = {normal:'fa-table', ramadan:'fa-moon', distance:'fa-laptop-house'};
+  document.querySelectorAll('.sched-mode-btn').forEach(b => {
+    const active = b.dataset.mode === mode;
+    b.style.background = active ? 'var(--accent)' : 'rgba(255,255,255,0.1)';
+    b.style.color = active ? '#1a1a2e' : 'white';
+    b.style.border = active ? 'none' : '1px solid rgba(255,255,255,0.2)';
+    b.style.fontWeight = active ? '800' : '700';
+  });
+  const badge = document.getElementById('sched-mode-badge');
+  const activeBtn = document.getElementById('sched-activate-btn');
+  const activeMode = localStorage.getItem('activeSchedMode') || 'normal';
+  const savedSchedules = JSON.parse(localStorage.getItem('schedules')||'{}');
+  const hasData = mode === 'normal' ? Object.keys(savedSchedules).length > 0 : (savedSchedules['__mode_'+mode] && Object.keys(savedSchedules['__mode_'+mode]).length > 0);
+  if (badge) {
+    const isActive = activeMode === mode;
+    badge.textContent = modeNames[mode] + (isActive ? ' — الجدول النشط ✓' : (hasData ? ' — محفوظ (غير نشط)' : ' — لا توجد بيانات محفوظة'));
+    badge.style.background = isActive ? 'rgba(201,168,76,0.2)' : 'rgba(255,255,255,0.07)';
+    badge.style.color = isActive ? '#C9A84C' : 'rgba(255,255,255,0.5)';
+    if (activeBtn) {
+      activeBtn.style.display = (isActive || !hasData) ? 'none' : '';
+      activeBtn.textContent = '\u2713 تفعيل "' + modeNames[mode] + '" كجدول نشط';
+    }
+  }
+  renderScheduleSection();
+}
+
+function activateSchedMode() {
+  const modeNames = {normal:'الجدول الاعتيادي', ramadan:'جدول رمضان', distance:'التعلم عن بعد'};
+  const name = modeNames[currentSchedMode] || currentSchedMode;
+  if (typeof showCustomConfirm === 'function') {
+    showCustomConfirm('هل تريدين تفعيل "' + name + '" كالجدول النشط لجميع المستخدمين؟', function() {
+      localStorage.setItem('activeSchedMode', currentSchedMode);
+      switchSchedMode(currentSchedMode);
+    });
+  } else {
+    localStorage.setItem('activeSchedMode', currentSchedMode);
+    switchSchedMode(currentSchedMode);
+  }
+}
+
+function initSchedModeBtns() {
+  const mode = currentSchedMode;
+  const modeNames = {normal:'الجدول الاعتيادي', ramadan:'جدول رمضان', distance:'التعلم عن بعد'};
+  document.querySelectorAll('.sched-mode-btn').forEach(b => {
+    const active = b.dataset.mode === mode;
+    b.style.background = active ? 'var(--accent)' : 'rgba(255,255,255,0.1)';
+    b.style.color = active ? '#1a1a2e' : 'white';
+    b.style.border = active ? 'none' : '1px solid rgba(255,255,255,0.2)';
+  });
+  const badge = document.getElementById('sched-mode-badge');
+  if (badge) {
+    badge.textContent = modeNames[mode] + ' — الجدول النشط';
+    badge.style.color = '#C9A84C';
+    badge.style.background = 'rgba(201,168,76,0.2)';
+  }
 }
 
 function filterScheduleGrade(grade) {
@@ -8059,20 +8195,36 @@ function renderMsgBubbles(msgs, username) {
         var isAdmin = (msg.fromRole === 'admin');
         var adminBadge = isAdmin ? '<span style="background:#C9A84C;color:#1A2A4A;border-radius:4px;padding:1px 5px;font-size:0.68rem;">مدير</span>' : '';
         bubble.innerHTML =
-            '<div class="bubble-from"><i class="fas fa-comment-dots"></i>' + escapeHtmlMsg(msg.from) + adminBadge + '</div>' +
-            '<div class="bubble-text">' + escapeHtmlMsg(msg.text) + '</div>' +
-            '<div class="bubble-time">' + timeStr + '</div>' +
-            '<div class="bubble-actions">' +
-                '<button class="bubble-reply-btn" data-action="reply"><i class="fas fa-reply"></i> رد</button>' +
-                '<button class="bubble-dismiss-btn" data-action="dismiss">تجاهل</button>' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">' +
+                '<div class="bubble-from" style="margin-bottom:0;"><i class="fas fa-comment-dots"></i>' + escapeHtmlMsg(msg.from) + adminBadge + '</div>' +
+                '<div style="display:flex;gap:4px;">' +
+                    '<button data-action="minimize" title="تصغير" style="background:rgba(255,255,255,0.12);border:none;color:white;border-radius:4px;width:22px;height:22px;cursor:pointer;font-size:1rem;line-height:1;padding:0;">&#8722;</button>' +
+                    '<button data-action="close-bubble" title="إغلاق" style="background:rgba(220,53,69,0.4);border:none;color:white;border-radius:4px;width:22px;height:22px;cursor:pointer;font-size:0.85rem;line-height:1;padding:0;">&#215;</button>' +
+                '</div>' +
             '</div>' +
-            '<div class="bubble-reply-area" id="reply-area-' + msg.id + '" style="display:none;">' +
-                '<textarea placeholder="اكتبي ردك هنا..."></textarea>' +
-                '<button class="bubble-send-reply" data-action="send-reply">إرسال <i class="fas fa-paper-plane"></i></button>' +
+            '<div class="bubble-body">' +
+                '<div class="bubble-text">' + escapeHtmlMsg(msg.text) + '</div>' +
+                '<div class="bubble-time">' + timeStr + '</div>' +
+                '<div class="bubble-actions">' +
+                    '<button class="bubble-reply-btn" data-action="reply"><i class="fas fa-reply"></i> رد</button>' +
+                    '<button class="bubble-dismiss-btn" data-action="dismiss">تجاهل وحذف</button>' +
+                '</div>' +
+                '<div class="bubble-reply-area" id="reply-area-' + msg.id + '" style="display:none;">' +
+                    '<textarea placeholder="اكتبي ردك هنا..."></textarea>' +
+                    '<button class="bubble-send-reply" data-action="send-reply">إرسال <i class="fas fa-paper-plane"></i></button>' +
+                '</div>' +
             '</div>';
         bubble.querySelector('[data-action="reply"]').addEventListener('click', (function(id){ return function(){ toggleBubbleReply(id); }; })(msg.id));
         bubble.querySelector('[data-action="dismiss"]').addEventListener('click', (function(id, u){ return function(){ dismissBubble(id, u); }; })(msg.id, username));
         bubble.querySelector('[data-action="send-reply"]').addEventListener('click', (function(id, fr, u){ return function(){ sendBubbleReply(id, fr, u); }; })(msg.id, msg.from, username));
+        bubble.querySelector('[data-action="minimize"]').addEventListener('click', function() {
+            var body = bubble.querySelector('.bubble-body');
+            var isMin = body.style.display === 'none';
+            body.style.display = isMin ? '' : 'none';
+            this.innerHTML = isMin ? '&#8722;' : '&#43;';
+            this.title = isMin ? 'تصغير' : 'توسيع الرسالة';
+        });
+        bubble.querySelector('[data-action="close-bubble"]').addEventListener('click', (function(id, u){ return function(){ dismissBubble(id, u); }; })(msg.id, username));
         area.appendChild(bubble);
     });
 }
