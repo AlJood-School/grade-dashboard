@@ -5175,8 +5175,40 @@ ${isAdmin ? '<button class="btn" onclick="showSection(\'meetings\')" style="padd
     +'<div style="padding:10px;background:#f8f9fa;border-radius:8px;border-right:3px solid var(--gold);"><strong>برنامج اللابتوب</strong><br><span style="color:#666;">الحلقة الثانية — نظام الف</span></div>'
     +'<div style="padding:10px;background:#e8f5e9;border-radius:8px;border-right:3px solid #4caf50;"><strong style="color:#2e7d32;">السلامة الرقمية</strong><br><span style="color:#666;">برنامج اقدر للمدارس الآمنة</span></div>'
     +'</div></div></div>'
+    +((isAdmin || isPrincipal || role === 'staff') ? (function(){
+      var homeroomData = {};
+      try { homeroomData = JSON.parse(localStorage.getItem('aljood_homeroom') || '{}'); } catch(e) {}
+      var allClasses = ['KG1','KG2','1A','1B','1C','2A','2B','2C','3A','3B','3C','4A','4B','4C','5A','5B','5C','6A','6B','6C','7A','7B','7C','8A','8B','8C'];
+      var assignedCount = allClasses.filter(function(c){ return homeroomData[c] && homeroomData[c].teacherName; }).length;
+      var rows = allClasses.map(function(cls){
+        var info = homeroomData[cls];
+        var teacherName = (info && info.teacherName) ? info.teacherName : '';
+        var badge = teacherName
+          ? '<span style="background:#e8f5e9;color:#2e7d32;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;">مُعيَّن</span>'
+          : '<span style="background:#fff3e0;color:#e65100;padding:2px 10px;border-radius:20px;font-size:11px;">غير مُعيَّن</span>';
+        return '<tr><td style="padding:7px 10px;font-weight:700;color:var(--primary);">' + cls + '</td>'
+          + '<td style="padding:7px 10px;">' + (teacherName || '<span style=\'color:#bbb;\'>—</span>') + '</td>'
+          + '<td style="padding:7px 10px;text-align:center;">' + badge + '</td></tr>';
+      }).join('');
+      return '<div class=\"card\" style=\"margin-top:20px;\">'
+        + '<div class=\"card-title\"><i class=\"fas fa-chalkboard-teacher\"></i> مربو الفصل — ملخص الصفوف'
+        + '<span style=\"float:left;font-size:0.8rem;background:rgba(201,168,76,0.15);color:var(--accent);padding:3px 12px;border-radius:20px;margin-top:2px;\">' + assignedCount + ' / ' + allClasses.length + ' مُعيَّن</span></div>'
+        + '<div style=\"display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0;overflow:hidden;border:1px solid #e0e0e0;border-radius:10px;\">'
+        + '<table style=\"width:100%;border-collapse:collapse;grid-column:1/-1;\">'
+        + '<thead><tr style=\"background:#1A2A4A;color:#C9A84C;\">'
+        + '<th style=\"padding:9px 10px;text-align:right;font-weight:600;\">الصف</th>'
+        + '<th style=\"padding:9px 10px;text-align:right;font-weight:600;\">مربي/مربية الفصل</th>'
+        + '<th style=\"padding:9px 10px;text-align:center;font-weight:600;\">الحالة</th>'
+        + '</tr></thead>'
+        + '<tbody>' + rows + '</tbody></table>'
+        + '</div>'
+        + '<div style=\"margin-top:10px;font-size:0.82rem;color:#888;padding:6px 4px;\">'
+        + '<i class=\"fas fa-info-circle\" style=\"margin-left:5px;\"></i>'
+        + 'يمكن تعيين مربي الفصل من قسم <strong>المسار الأسبوعي</strong> ← زر <strong>مربي الفصل</strong></div>'
+        + '</div>';
+    })() : '')
     +adminActions
-    +'<div style="margin-top:20px;border-radius:18px;overflow:hidden;box-shadow:0 8px 32px rgba(26,42,74,0.22);">'
+    +'<div style="margin-top:20px;border-radius:18px;overflow:hidden;box-shadow:0 8px 32px rgba(26,42,74,0.22);">
     +'<div style="background:linear-gradient(135deg,#1A2A4A 0%,#243a70 50%,#1A2A4A 100%);padding:32px 28px;text-align:center;position:relative;">'
     +'<div style="position:relative;z-index:1;">'
     +'<div style="display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;background:linear-gradient(135deg,#C9A84C,#e8c96a);border-radius:50%;margin-bottom:16px;box-shadow:0 4px 16px rgba(201,168,76,0.4);">'
@@ -6721,6 +6753,7 @@ document.getElementById('fillFormModal').addEventListener('click', function(e) {
             <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">الصف والشعبة</label>
             <select id="wpClass" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;font-size:0.95rem;">
               <option value="">اختر الصف</option>
+            <option value="__all__" id="wp-all-option" style="font-weight:700;background:#f8f9fa;">📋 جميع الصفوف</option>
               <option value="KG1">KG1</option>
               <option value="KG2">KG2</option>
               <option value="1A">1A</option><option value="1B">1B</option><option value="1C">1C</option>
@@ -12518,19 +12551,69 @@ function renderCombinedView() {
   const weekVal = document.getElementById('wp-admin-week') ? document.getElementById('wp-admin-week').value : '';
   const container = document.getElementById('wp-combined-view');
   if (!container) return;
-  if (!classVal || !weekVal) { showToast('يرجى اختيار الصف والأسبوع', 'warning'); return; }
+  if (!weekVal) { showToast('يرجى اختيار الأسبوع أولاً', 'warning'); return; }
+  if (!classVal) { showToast('يرجى اختيار الصف أو "جميع الصفوف"', 'warning'); return; }
   try {
     const plans = JSON.parse(localStorage.getItem('weeklyPlans') || '[]');
-    const filtered = plans.filter(p => p.classSection === classVal && p.weekStart === weekVal);
+    const isAll = classVal === '__all__';
+    const filtered = isAll
+      ? plans.filter(p => p.weekStart === weekVal)
+      : plans.filter(p => p.classSection === classVal && p.weekStart === weekVal);
     if (!filtered.length) {
       container.innerHTML = `<div style="background:white;border-radius:16px;padding:40px;text-align:center;box-shadow:0 2px 15px rgba(0,0,0,0.08);">
         <i class="fas fa-folder-open" style="font-size:2.5rem;color:#ccc;display:block;margin-bottom:12px;"></i>
-        <div style="color:#888;">لا توجد مسارات مدخلة لهذا الصف في هذا الأسبوع</div>
+        <div style="color:#888;">لا توجد مسارات مدخلة ${isAll ? 'لهذا الأسبوع' : 'لهذا الصف في هذا الأسبوع'}</div>
       </div>`;
       return;
     }
-    let html = `<div id="wp-print-area" style="background:white;border-radius:16px;padding:24px;box-shadow:0 2px 15px rgba(0,0,0,0.08);">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;border-bottom:2px solid var(--accent);padding-bottom:12px;">
+    let html = `<div id="wp-print-area" style="background:white;border-radius:16px;padding:24px;box-shadow:0 2px 15px rgba(0,0,0,0.08);">`;
+    if (isAll) {
+      // Group by class
+      const byClass = {};
+      filtered.forEach(p => {
+        if (!byClass[p.classSection]) byClass[p.classSection] = [];
+        byClass[p.classSection].push(p);
+      });
+      const classes = Object.keys(byClass).sort();
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;border-bottom:2px solid var(--accent);padding-bottom:12px;">
+        <h3 style="color:var(--primary);margin:0;"><i class="fas fa-layer-group" style="margin-left:8px;color:var(--accent);"></i>جميع المسارات الأسبوعية — ${weekVal}</h3>
+        <span style="font-size:0.85rem;color:#888;">${classes.length} صف · ${filtered.length} مادة</span>
+      </div>`;
+      classes.forEach(cls => {
+        const clsPlans = byClass[cls];
+        const homerooms = JSON.parse(localStorage.getItem('aljood_homeroom') || '{}');
+        const hrInfo = homerooms[cls] ? ` — مربي الفصل: ${homerooms[cls].teacherName}` : '';
+        html += `<div style="margin-bottom:24px;">
+          <div style="background:linear-gradient(135deg,#1A2A4A,#243a70);color:#C9A84C;padding:10px 16px;border-radius:10px 10px 0 0;font-weight:700;font-size:1rem;">
+            <i class="fas fa-chalkboard" style="margin-left:8px;"></i>الصف ${cls}${hrInfo}
+            <span style="float:left;font-size:0.8rem;opacity:0.8;">${clsPlans.length} مادة</span>
+          </div>
+          <div style="overflow-x:auto;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 10px 10px;">
+          <table style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr style="background:#f5f7fa;color:#1A2A4A;font-size:0.9rem;">
+                <th style="padding:8px;border-bottom:2px solid #e0e0e0;text-align:right;">المادة</th>
+                <th style="padding:8px;border-bottom:2px solid #e0e0e0;">مقرر الأسبوع</th>
+                <th style="padding:8px;border-bottom:2px solid #e0e0e0;">الواجبات</th>
+                <th style="padding:8px;border-bottom:2px solid #e0e0e0;">الحالة</th>
+              </tr>
+            </thead>
+            <tbody>`;
+        clsPlans.forEach(p => {
+          const statusLabel = p.status === 'completed'
+            ? '<span class="wp-status-done"><i class="fas fa-check-circle"></i> مكتمل</span>'
+            : '<span class="wp-status-draft"><i class="fas fa-clock"></i> مسودة</span>';
+          html += `<tr>
+            <td style="border-bottom:1px solid #f0f0f0;padding:8px;font-weight:700;color:var(--primary);">${p.subject}</td>
+            <td style="border-bottom:1px solid #f0f0f0;padding:8px;font-size:0.88rem;">${(p.details&&p.details.curriculum)||'—'}</td>
+            <td style="border-bottom:1px solid #f0f0f0;padding:8px;font-size:0.88rem;">${(p.details&&p.details.homework)||'—'}</td>
+            <td style="border-bottom:1px solid #f0f0f0;padding:8px;text-align:center;">${statusLabel}</td>
+          </tr>`;
+        });
+        html += `</tbody></table></div></div>`;
+      });
+    } else {
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;border-bottom:2px solid var(--accent);padding-bottom:12px;">
         <h3 style="color:var(--primary);margin:0;">المسار الأسبوعي — ${classVal} — ${weekVal}</h3>
         <span style="font-size:0.85rem;color:#888;">${filtered.length} مادة مدخلة</span>
       </div>
@@ -12547,20 +12630,22 @@ function renderCombinedView() {
           </tr>
         </thead>
         <tbody>`;
-    filtered.forEach(p => {
-      const statusLabel = p.status === 'completed'
-        ? '<span class="wp-status-done"><i class="fas fa-check-circle"></i> مكتمل</span>'
-        : '<span class="wp-status-draft"><i class="fas fa-clock"></i> مسودة</span>';
-      html += `<tr>
-        <td style="border:1px solid #e0e0e0;padding:8px;font-weight:700;color:var(--primary);">${p.subject}</td>
-        <td style="border:1px solid #e0e0e0;padding:8px;text-align:center;">${p.classSection}</td>
-        <td style="border:1px solid #e0e0e0;padding:8px;">${(p.details&&p.details.curriculum)||''}</td>
-        <td style="border:1px solid #e0e0e0;padding:8px;">${(p.details&&p.details.homework)||''}</td>
-        <td style="border:1px solid #e0e0e0;padding:8px;">${(p.details&&p.details.vocabulary)||''}</td>
-        <td style="border:1px solid #e0e0e0;padding:8px;text-align:center;">${statusLabel}</td>
-      </tr>`;
-    });
-    html += `</tbody></table></div></div>`;
+      filtered.forEach(p => {
+        const statusLabel = p.status === 'completed'
+          ? '<span class="wp-status-done"><i class="fas fa-check-circle"></i> مكتمل</span>'
+          : '<span class="wp-status-draft"><i class="fas fa-clock"></i> مسودة</span>';
+        html += `<tr>
+          <td style="border:1px solid #e0e0e0;padding:8px;font-weight:700;color:var(--primary);">${p.subject}</td>
+          <td style="border:1px solid #e0e0e0;padding:8px;text-align:center;">${p.classSection}</td>
+          <td style="border:1px solid #e0e0e0;padding:8px;">${(p.details&&p.details.curriculum)||''}</td>
+          <td style="border:1px solid #e0e0e0;padding:8px;">${(p.details&&p.details.homework)||''}</td>
+          <td style="border:1px solid #e0e0e0;padding:8px;">${(p.details&&p.details.vocabulary)||''}</td>
+          <td style="border:1px solid #e0e0e0;padding:8px;text-align:center;">${statusLabel}</td>
+        </tr>`;
+      });
+      html += `</tbody></table></div>`;
+    }
+    html += `</div>`;
     container.innerHTML = html;
   } catch(e) {
     container.innerHTML = '<div style="color:#888;padding:20px;">خطأ في تحميل البيانات</div>';
@@ -12595,6 +12680,11 @@ function renderWeeklyPlan() {
     // Set default week for admin view
     const wpAdminWeek = document.getElementById('wp-admin-week');
     if (wpAdminWeek && !wpAdminWeek.value) wpAdminWeek.value = getNextSaturday();
+    // Show "all classes" option only for admin and principal
+    const wpAllOpt = document.getElementById('wp-all-option');
+    if (wpAllOpt) {
+      wpAllOpt.style.display = (role === 'admin' || role === 'principal') ? '' : 'none';
+    }
     // If specialist, filter classes
     if (role === 'admin_staff') {
       filterSpecialistClasses();
