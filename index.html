@@ -2768,6 +2768,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     <button class="leave-tab" data-lt="long_sick" onclick="filterLeaveTab('long_sick')" style="padding:8px 16px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);border-radius:8px;cursor:pointer;font-family:inherit;"><i class="fas fa-hospital"></i> مرضية طويلة</button>
     <button class="leave-tab" data-lt="maternity" onclick="filterLeaveTab('maternity')" style="padding:8px 16px;background:rgba(167,139,250,0.15);color:#a78bfa;border:1px solid rgba(167,139,250,0.3);border-radius:8px;cursor:pointer;font-family:inherit;"><i class="fas fa-baby"></i> إجازة وضع</button>
     <button class="leave-tab" data-lt="sick_3" onclick="filterLeaveTab('sick_3')" style="padding:8px 16px;background:rgba(251,191,36,0.15);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);border-radius:8px;cursor:pointer;font-family:inherit;"><i class="fas fa-thermometer-half"></i> مرضية +3 أيام</button>
+    <button class="leave-tab" data-lt="nursing" onclick="filterLeaveTab('nursing')" style="padding:8px 16px;background:rgba(236,72,153,0.15);color:#f472b6;border:1px solid rgba(236,72,153,0.3);border-radius:8px;cursor:pointer;font-family:inherit;"><i class="fas fa-heart"></i> ساعات الرضاعة</button>
   </div>
   <div id="leaves-add-btn" style="margin-bottom:16px;"></div>
   <div id="leaves-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;"></div>
@@ -2782,9 +2783,18 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
         <option value="long_sick">مرضية طويلة</option>
         <option value="maternity">إجازة وضع (90 يوم)</option>
         <option value="sick_3">مرضية أكثر من 3 أيام متواصلة</option>
+        <option value="nursing">ساعات الرضاعة (ساعتان يومياً)</option>
       </select>
       <label style="color:rgba(255,255,255,0.7);font-size:0.85rem;display:block;margin-bottom:4px;">تاريخ بدء الإجازة</label>
       <input type="date" id="leaveStartDt" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:10px;margin-bottom:10px;font-family:inherit;" onchange="autoCalcLeaveEnd()">
+      <div id="nursingTimingRow" style="display:none;margin-bottom:10px;">
+        <label style="color:rgba(255,255,255,0.7);font-size:0.85rem;display:block;margin-bottom:4px;">توقيت ساعات الرضاعة (ساعتان يومياً)</label>
+        <select id="nursingTimingSel" style="width:100%;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:10px;margin-bottom:6px;font-family:inherit;">
+          <option value="morning">صباحاً — 7:00 صباحاً حتى 9:00 صباحاً</option>
+          <option value="afternoon">نهاية الدوام — 1:00 مساءً حتى 3:00 مساءً</option>
+        </select>
+        <p style="color:rgba(255,255,255,0.5);font-size:0.78rem;margin:0;">دوام الموظفة: 7:00 صباحاً – 3:00 مساءً</p>
+      </div>
       <div id="leaveEndSection">
         <label style="color:rgba(255,255,255,0.7);font-size:0.85rem;display:block;margin-bottom:4px;">تاريخ الانتهاء / المباشرة</label>
         <input type="date" id="leaveEndDt" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:10px;margin-bottom:10px;font-family:inherit;">
@@ -7729,11 +7739,20 @@ function renderTeacherSched() {
   const tId = document.getElementById('teacherSchedSelect')?.value;
   const container = document.getElementById('teacher-sched-container');
   if (!container) return;
-  if (!tId) { container.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">اختر معلماً لعرض جدوله</p>'; return; }
+  if (!tId) { container.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">اختر معلمةً لعرض جدولها الأسبوعي</p>'; return; }
   const schedules = getSchedules();
   const classes = getClasses();
   let teacherName = tId;
-  let teacherCells = [];
+  // Build grid: grid[dayIndex][periodIndex] = [{className, subject}]
+  const maxPeriods = 8;
+  const grid = {};
+  for (let d = 0; d < DAYS.length; d++) {
+    grid[d] = {};
+    for (let p = 0; p < maxPeriods; p++) grid[d][p] = null;
+  }
+  let totalPeriods = 0;
+  const subjectSet = new Set();
+  const classSet = new Set();
   Object.entries(schedules).forEach(([classId, clsSched]) => {
     if (classId.startsWith('__mode_')) return;
     const cls = classes.find(c => c.id == classId);
@@ -7742,39 +7761,78 @@ function renderTeacherSched() {
       if (cell && cell.teacherId === tId) {
         teacherName = cell.teacher || tId;
         const [di, pi] = key.split('_').map(Number);
-        teacherCells.push({ class: cls.name || classId, grade: cls.grade || '', day: DAYS[di], period: PERIODS[pi], subject: cell.subject, di, pi });
+        if (di < DAYS.length && pi < maxPeriods) {
+          grid[di][pi] = { className: cls.name || classId, subject: cell.subject || '' };
+          totalPeriods++;
+          subjectSet.add(cell.subject || '');
+          classSet.add(cls.name || classId);
+        }
       }
     });
   });
-  if (teacherCells.length === 0) {
-    container.innerHTML = `<div style="background:#16213e;border-radius:10px;padding:24px;text-align:center;color:#888;"><i class="fas fa-calendar-times" style="font-size:2rem;margin-bottom:12px;color:#444;"></i><br>لا يوجد جدول مسجّل لهذه المعلمة في الجدول الحالي</div>`;
+  if (totalPeriods === 0) {
+    container.innerHTML = `<div style="background:#16213e;border-radius:10px;padding:24px;text-align:center;color:#888;"><i class="fas fa-calendar-times" style="font-size:2rem;margin-bottom:12px;color:#444;display:block;"></i>لا يوجد جدول مسجّل لهذه المعلمة في الجدول الحالي</div>`;
     return;
   }
-  const totalPeriods = teacherCells.length;
-  const uniqueClasses = [...new Set(teacherCells.map(c => c.class))].length;
-  const uniqueSubjects = [...new Set(teacherCells.map(c => c.subject))];
-  let html = `<h3 style="color:white;margin-bottom:8px;font-size:1.1rem;">${teacherName}</h3>`;
-  html += `<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
-    <span style="background:rgba(201,168,76,0.15);color:#C9A84C;padding:4px 12px;border-radius:6px;font-size:0.82rem;">الحصص: <b>${totalPeriods}</b></span>
-    <span style="background:rgba(201,168,76,0.15);color:#C9A84C;padding:4px 12px;border-radius:6px;font-size:0.82rem;">الصفوف: <b>${uniqueClasses}</b></span>
-    <span style="background:rgba(201,168,76,0.15);color:#C9A84C;padding:4px 12px;border-radius:6px;font-size:0.82rem;">المواد: <b>${uniqueSubjects.join('، ')}</b></span>
+  // Determine how many periods actually have data
+  let usedPeriods = 0;
+  for (let p = 0; p < maxPeriods; p++) {
+    for (let d = 0; d < DAYS.length; d++) {
+      if (grid[d][p]) { usedPeriods = p + 1; }
+    }
+  }
+  usedPeriods = Math.max(usedPeriods, 7);
+  const subjectColors = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#14b8a6','#f97316'];
+  const subjectColorMap = {};
+  let colorIdx = 0;
+  [...subjectSet].forEach(s => { if (s) subjectColorMap[s] = subjectColors[colorIdx++ % subjectColors.length]; });
+  let html = '';
+  html += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+    <h3 style="color:white;font-size:1.15rem;margin:0;">${teacherName}</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <span style="background:rgba(201,168,76,0.15);color:#C9A84C;padding:4px 12px;border-radius:6px;font-size:0.8rem;">الحصص: <b>${totalPeriods}</b></span>
+      <span style="background:rgba(201,168,76,0.15);color:#C9A84C;padding:4px 12px;border-radius:6px;font-size:0.8rem;">الصفوف: <b>${classSet.size}</b></span>
+      <span style="background:rgba(201,168,76,0.15);color:#C9A84C;padding:4px 12px;border-radius:6px;font-size:0.8rem;">المواد: <b>${[...subjectSet].filter(Boolean).join('، ')}</b></span>
+    </div>
   </div>`;
-  html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.85rem;">`;
+  // Weekly grid table: rows=periods, cols=days
+  html += `<div style="overflow-x:auto;border-radius:10px;"><table style="width:100%;border-collapse:collapse;font-size:0.83rem;min-width:550px;">`;
   html += `<thead><tr>
-    <th style="background:#16213e;padding:10px;color:var(--accent);border:1px solid rgba(255,255,255,0.1);">الحصة</th>
-    <th style="background:#16213e;padding:10px;color:var(--accent);border:1px solid rgba(255,255,255,0.1);">اليوم</th>
-    <th style="background:#16213e;padding:10px;color:var(--accent);border:1px solid rgba(255,255,255,0.1);">الصف</th>
-    <th style="background:#16213e;padding:10px;color:var(--accent);border:1px solid rgba(255,255,255,0.1);">المادة</th>
-  </tr></thead><tbody>`;
-  teacherCells.sort((a,b) => a.di - b.di || a.pi - b.pi).forEach(c => {
-    html += `<tr>
-      <td style="background:#172030;padding:8px;border:1px solid rgba(255,255,255,0.06);color:white;">${c.period}</td>
-      <td style="background:#172030;padding:8px;border:1px solid rgba(255,255,255,0.06);color:white;">${c.day}</td>
-      <td style="background:#172030;padding:8px;border:1px solid rgba(255,255,255,0.06);color:white;">${c.class}${c.grade ? ' ('+c.grade+')' : ''}</td>
-      <td style="background:#172030;padding:8px;border:1px solid rgba(255,255,255,0.06);color:var(--accent);font-weight:600;">${c.subject}</td>
-    </tr>`;
+    <th style="background:#0d1b2e;padding:10px 8px;color:var(--accent);border:1px solid rgba(255,255,255,0.08);text-align:center;width:80px;">الحصة</th>`;
+  DAYS.forEach(day => {
+    html += `<th style="background:#0d1b2e;padding:10px 8px;color:var(--accent);border:1px solid rgba(255,255,255,0.08);text-align:center;">${day}</th>`;
   });
+  html += `</tr></thead><tbody>`;
+  for (let p = 0; p < usedPeriods; p++) {
+    const periodLabel = PERIODS[p] || ('الحصة ' + (p+1));
+    html += `<tr>`;
+    html += `<td style="background:#131f33;padding:8px 6px;border:1px solid rgba(255,255,255,0.06);color:rgba(201,168,76,0.9);text-align:center;font-weight:600;font-size:0.78rem;">${periodLabel}</td>`;
+    for (let d = 0; d < DAYS.length; d++) {
+      const cell = grid[d][p];
+      if (cell && cell.subject) {
+        const clr = subjectColorMap[cell.subject] || '#6b7280';
+        html += `<td style="background:#131f33;padding:6px;border:1px solid rgba(255,255,255,0.06);text-align:center;vertical-align:middle;">
+          <div style="background:${clr}22;border:1px solid ${clr}55;border-radius:6px;padding:4px 6px;">
+            <div style="color:${clr};font-weight:700;font-size:0.8rem;">${cell.subject}</div>
+            <div style="color:rgba(255,255,255,0.55);font-size:0.72rem;margin-top:2px;">${cell.className}</div>
+          </div>
+        </td>`;
+      } else {
+        html += `<td style="background:#0f1a2b;padding:6px;border:1px solid rgba(255,255,255,0.04);text-align:center;color:rgba(255,255,255,0.1);font-size:0.75rem;">—</td>`;
+      }
+    }
+    html += `</tr>`;
+  }
   html += `</tbody></table></div>`;
+  // Color legend
+  const legendItems = Object.entries(subjectColorMap).filter(([k]) => k);
+  if (legendItems.length > 0) {
+    html += `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;">`;
+    legendItems.forEach(([subj, clr]) => {
+      html += `<span style="background:${clr}22;border:1px solid ${clr}55;color:${clr};padding:3px 10px;border-radius:5px;font-size:0.78rem;">${subj}</span>`;
+    });
+    html += `</div>`;
+  }
   container.innerHTML = html;
 }
 
@@ -7877,7 +7935,8 @@ let currentLeaveTab = 'all';
 const LEAVE_TYPES = {
   long_sick: { label: 'مرضية طويلة', color: '#f87171', bg: 'rgba(239,68,68,0.12)', icon: 'fa-hospital' },
   maternity:  { label: 'إجازة وضع (90 يوم)', color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', icon: 'fa-baby' },
-  sick_3:     { label: 'مرضية +3 أيام', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)', icon: 'fa-thermometer-half' }
+  sick_3:     { label: 'مرضية +3 أيام', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)', icon: 'fa-thermometer-half' },
+  nursing:    { label: 'ساعات الرضاعة', color: '#f472b6', bg: 'rgba(236,72,153,0.12)', icon: 'fa-heart' }
 };
 
 function renderLeavesSection() {
@@ -7957,6 +8016,10 @@ function filterLeaveTab(type) {
           <span style="color:rgba(255,255,255,0.6);">المتبقي:</span>
           <span style="color:${daysLeft <= 7 ? '#f87171' : '#4ade80'};font-weight:700;">${daysLeft > 0 ? daysLeft + ' يوم' : 'اليوم آخر يوم'}</span>
         </div>` : ''}
+        ${leave.type === 'nursing' && leave.nursingTiming ? `<div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+          <span style="color:rgba(255,255,255,0.6);">توقيت ساعات الرضاعة:</span>
+          <span style="color:#f472b6;font-weight:600;">${leave.nursingTiming === 'morning' ? '🌅 7:00 - 9:00 صباحاً' : '🌆 1:00 - 3:00 مساءً (نهاية الدوام)'}</span>
+        </div>` : ''}
         ${leave.notes ? `<div style="margin-top:5px;color:rgba(255,255,255,0.5);font-size:0.78rem;border-top:1px solid rgba(255,255,255,0.06);padding-top:5px;">${leave.notes}</div>` : ''}
       </div>
       ${editBtns}
@@ -7966,6 +8029,12 @@ function filterLeaveTab(type) {
 
 function onLeaveTypeChange() {
   const t = document.getElementById('leaveTypeSel')?.value;
+  // Show/hide nursing timing field
+  const nursingRow = document.getElementById('nursingTimingRow');
+  if (nursingRow) nursingRow.style.display = (t === 'nursing') ? 'block' : 'none';
+  // Hide end date for nursing
+  const endSec = document.getElementById('leaveEndSection');
+  if (endSec) endSec.style.display = (t === 'nursing') ? 'none' : 'block';
   if (t === 'maternity') {
     autoCalcLeaveEnd();
   }
@@ -8017,6 +8086,7 @@ function saveLeaveRecord() {
   const editId = document.getElementById('leaveEditId').value;
   const empId = document.getElementById('leaveEmpSel').value;
   const type = document.getElementById('leaveTypeSel').value;
+  const nursingTiming = type === 'nursing' ? (document.getElementById('nursingTimingSel')?.value || 'morning') : null;
   const startDate = document.getElementById('leaveStartDt').value;
   const endDate = document.getElementById('leaveEndDt').value;
   const notes = document.getElementById('leaveNotesTx').value.trim();
@@ -8024,9 +8094,9 @@ function saveLeaveRecord() {
   const leaves = getLeaves();
   if (editId) {
     const idx = leaves.findIndex(l => l.id === editId);
-    if (idx >= 0) leaves[idx] = { ...leaves[idx], empId, type, startDate, endDate, notes };
+    if (idx >= 0) leaves[idx] = { ...leaves[idx], empId, type, startDate, endDate, notes, nursingTiming };
   } else {
-    leaves.push({ id: Date.now().toString(), empId, type, startDate, endDate, notes });
+    leaves.push({ id: Date.now().toString(), empId, type, startDate, endDate, notes, nursingTiming });
   }
   saveLeaves(leaves);
   closeLeaveModal();
