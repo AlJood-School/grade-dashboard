@@ -4365,7 +4365,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 // ===== PASSWORD MANAGEMENT (Admin Panel) =====
 const defaultPasswords = {
   'admin':     { label: 'مدير النظام (Admin)',      default: 'AlJood@2026',   badge: '<span class="grade-badge grade-a">وصول كامل + تعديل</span>' },
-  'principal': { label: 'المديرة (Principal)',       default: 'Principal2026', badge: '<span class="grade-badge grade-a">وصول كامل — قراءة فقط</span>' },
+  'principal': { label: 'المديرة (Principal)',       default: 'AJH0006', badge: '<span class="grade-badge grade-a">وصول كامل — قراءة فقط</span>' },
   'teacher':   { label: 'المعلمون (Teacher)',        default: 'Teacher2026',   badge: '<span class="grade-badge grade-b">منصات تعليمية معتمدة</span>' },
   'staff':     { label: 'الإداريون (Staff)',         default: 'Staff2026',     badge: '<span class="grade-badge grade-c">الإدارة فقط</span>' },
   'parent':    { label: 'أولياء الأمور (Parent)',    default: 'Parent2026',    badge: '<span class="grade-badge" style="background:#e8d5ff;color:#553c9a">بوابة الأولياء</span>' }
@@ -4535,8 +4535,8 @@ function doLogin() {
   const pass = document.getElementById('loginPass').value.trim();
   const enteredUsername = (document.getElementById('loginUsername')?.value || '').trim();
 
-  // Check individual staff accounts first
-  const staffMember = getStaffFromDB(pass);
+  // Check individual staff accounts first (skip for principal tab)
+  const staffMember = loginRole !== 'principal' ? getStaffFromDB(pass) : null;
   if (staffMember) {
     currentStaff = staffMember;
     currentRole = staffMember.role;
@@ -4643,7 +4643,7 @@ function downloadCredentials() {
     </tbody>
   </table>
   <p class="note">ملاحظة: اليوزرنيم = الأحرف الأولى من الاسم + رقم الموظف. يمكن استخدام الاسم الكامل أيضاً عند الدخول.</p>
-  <p class="note">الحسابات الخاصة: مدير النظام (Noor / AlJood@2026) | مديرة المدرسة (Principal2026) | أولياء الأمور (Parent2026 — قريباً)</p>
+  <p class="note">الحسابات الخاصة: مدير النظام (Noor / AlJood@2026) | مديرة المدرسة (AJH0006) | أولياء الأمور (Parent2026 — قريباً)</p>
   </body></html>`;
 
   const blob = new Blob([html], {type:'text/html;charset=utf-8'});
@@ -5636,6 +5636,7 @@ const NAV_DEFAULT_CONFIG = [
   { id: 'reports',          label: 'تقارير الطلاب',          labelEn: 'Student Reports',    icon: 'fa-clipboard-list', badge: '', badgeColor: '', group: 'sections', visibleTo: ['admin', 'admin_staff', 'tech_staff', 'staff', 'teacher', 'principal'] },
   { id: 'parent_requests',   label: 'استدعاء ولي الأمر',       labelEn: 'Parent Requests',    icon: 'fa-phone-alt',      badge: '', badgeColor: '', group: 'sections', visibleTo: ['admin', 'admin_staff', 'tech_staff', 'staff', 'teacher', 'principal'] },
   { id: 'weekly_plan', label: 'المسار الأسبوعي', labelEn: 'Weekly Newsletter', icon: 'fa-calendar-week', badge: '', badgeColor: '', group: 'sections', visibleTo: ['admin', 'principal', 'admin_staff', 'teacher'] },
+    { id: 'daily_plans', label: 'الخطط الدرسية', labelEn: 'Lesson Plans', icon: 'fas fa-book-open', roles: ['teacher','admin','principal','admin_staff','staff'] },
 ];
 
 const GROUP_LABELS = { main:'القائمة الرئيسية', sections:'الأقسام', programs:'البرامج والأنشطة', content:'المحتوى' };
@@ -6866,6 +6867,9 @@ document.getElementById('fillFormModal').addEventListener('click', function(e) {
         <button onclick="printWeeklyPlan()" style="background:var(--accent);color:var(--primary);font-weight:700;padding:10px 24px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;">
           <i class="fas fa-print" style="margin-left:6px;"></i>طباعة
         </button>
+        <button id="homeroomBtn" onclick="openHomeroomModal()" style="background:#6366f1;color:#fff;padding:10px 24px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;display:none;">
+          <i class="fas fa-chalkboard-teacher" style="margin-left:6px;"></i>مربي الفصل
+        </button>
       </div>
     </div>
     <div id="wp-combined-view"></div>
@@ -6902,6 +6906,181 @@ document.getElementById('fillFormModal').addEventListener('click', function(e) {
   </div>
 </div>
 <!-- end section-weekly_plan -->
+<!-- ===== DAILY LESSON PLANS ===== -->
+<div class="section" id="section-daily_plans" dir="rtl">
+  <div class="page-header">
+    <div class="page-header-text">
+      <h1><i class="fas fa-book-open" style="color:var(--accent);margin-left:10px;"></i>الخطط الدرسية اليومية</h1>
+      <p>منظمة أسبوعياً — الفصل الثالث 2025-2026</p>
+    </div>
+    <i class="fas fa-book-open page-header-icon"></i>
+  </div>
+
+  <!-- Teacher Form View -->
+  <div id="dlp-teacher-view" style="display:none;">
+    <div style="background:white;border-radius:16px;padding:24px;box-shadow:0 2px 15px rgba(0,0,0,0.08);margin-bottom:24px;">
+      <h3 style="color:var(--primary);margin-bottom:16px;font-size:1.1rem;border-bottom:2px solid var(--accent);padding-bottom:8px;">
+        <i class="fas fa-plus-circle" style="color:var(--accent);margin-left:8px;"></i>إضافة خطة درسية يومية
+      </h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;margin-bottom:20px;flex-wrap:wrap;">
+        <div>
+          <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">الصف والشعبة</label>
+          <select id="dlp-class" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;">
+            <option value="">اختر الصف</option>
+            <option>KG1</option><option>KG2</option>
+            <option>1A</option><option>1B</option><option>1C</option>
+            <option>2A</option><option>2B</option><option>2C</option>
+            <option>3A</option><option>3B</option><option>3C</option>
+            <option>4A</option><option>4B</option><option>4C</option>
+            <option>5A</option><option>5B</option><option>5C</option>
+            <option>6A</option><option>6B</option><option>6C</option>
+            <option>7A</option><option>7B</option><option>7C</option>
+            <option>8A</option><option>8B</option><option>8C</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">المادة</label>
+          <input type="text" id="dlp-subject" placeholder="اسم المادة" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">اليوم والتاريخ</label>
+          <input type="date" id="dlp-date" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">رقم الحصة</label>
+          <input type="number" id="dlp-period" min="1" max="7" placeholder="1-7" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;box-sizing:border-box;">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+        <div>
+          <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">موضوع الدرس</label>
+          <input type="text" id="dlp-topic" placeholder="موضوع الدرس" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">الأهداف</label>
+          <input type="text" id="dlp-objectives" placeholder="أهداف الدرس" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;box-sizing:border-box;">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;">
+        <div>
+          <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">الاستراتيجيات</label>
+          <textarea id="dlp-strategies" rows="3" placeholder="استراتيجيات التدريس" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;resize:vertical;box-sizing:border-box;"></textarea>
+        </div>
+        <div>
+          <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">الأنشطة والمواد</label>
+          <textarea id="dlp-activities" rows="3" placeholder="الأنشطة والمواد" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;resize:vertical;box-sizing:border-box;"></textarea>
+        </div>
+        <div>
+          <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">التقييم</label>
+          <textarea id="dlp-assessment" rows="3" placeholder="أدوات التقييم" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;resize:vertical;box-sizing:border-box;"></textarea>
+        </div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">ملاحظات</label>
+        <textarea id="dlp-notes" rows="2" placeholder="ملاحظات إضافية" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;resize:vertical;box-sizing:border-box;"></textarea>
+      </div>
+      <div style="display:flex;gap:12px;">
+        <button onclick="saveDailyLessonPlan()" style="background:var(--accent);color:var(--primary);font-weight:700;padding:10px 28px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.95rem;">
+          <i class="fas fa-save" style="margin-left:6px;"></i>حفظ الخطة
+        </button>
+        <button onclick="clearDlpForm()" style="background:#e2e8f0;color:#333;padding:10px 20px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;">
+          <i class="fas fa-redo" style="margin-left:6px;"></i>مسح
+        </button>
+      </div>
+    </div>
+    <div style="background:white;border-radius:16px;padding:24px;box-shadow:0 2px 15px rgba(0,0,0,0.08);">
+      <h3 style="color:var(--primary);margin-bottom:16px;font-size:1.1rem;border-bottom:2px solid var(--accent);padding-bottom:8px;">
+        <i class="fas fa-history" style="color:var(--accent);margin-left:8px;"></i>خططي المحفوظة
+      </h3>
+      <div id="dlp-my-plans"></div>
+    </div>
+  </div>
+
+  <!-- Admin/Principal View -->
+  <div id="dlp-admin-view" style="display:none;">
+    <div style="background:white;border-radius:16px;padding:24px;box-shadow:0 2px 15px rgba(0,0,0,0.08);margin-bottom:24px;">
+      <h3 style="color:var(--primary);margin-bottom:16px;font-size:1.1rem;border-bottom:2px solid var(--accent);padding-bottom:8px;">
+        <i class="fas fa-search" style="color:var(--accent);margin-left:8px;"></i>عرض الخطط الدرسية
+      </h3>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:20px;">
+        <div>
+          <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">الصف</label>
+          <select id="dlp-admin-class" style="padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;min-width:140px;">
+            <option value="">كل الصفوف</option>
+            <option>KG1</option><option>KG2</option>
+            <option>1A</option><option>1B</option><option>1C</option>
+            <option>2A</option><option>2B</option><option>2C</option>
+            <option>3A</option><option>3B</option><option>3C</option>
+            <option>4A</option><option>4B</option><option>4C</option>
+            <option>5A</option><option>5B</option><option>5C</option>
+            <option>6A</option><option>6B</option><option>6C</option>
+            <option>7A</option><option>7B</option><option>7C</option>
+            <option>8A</option><option>8B</option><option>8C</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">المعلمة</label>
+          <input type="text" id="dlp-admin-teacher" placeholder="اسم المعلمة" style="padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;min-width:180px;">
+        </div>
+        <div>
+          <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">من تاريخ</label>
+          <input type="date" id="dlp-admin-from" style="padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;">
+        </div>
+        <div>
+          <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">إلى تاريخ</label>
+          <input type="date" id="dlp-admin-to" style="padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;">
+        </div>
+        <button onclick="renderDlpAdminView()" style="background:var(--primary);color:#fff;padding:10px 24px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;">
+          <i class="fas fa-eye" style="margin-left:6px;"></i>عرض
+        </button>
+        <button onclick="printDailyLessonPlans()" style="background:var(--accent);color:var(--primary);font-weight:700;padding:10px 24px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;">
+          <i class="fas fa-print" style="margin-left:6px;"></i>طباعة
+        </button>
+      </div>
+      <div id="dlp-admin-results"></div>
+    </div>
+  </div>
+</div>
+<!-- end section-daily_plans -->
+<!-- Homeroom Teacher Modal -->
+<div id="homeroomModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;overflow:auto;" dir="rtl">
+  <div style="background:white;border-radius:16px;padding:28px;max-width:600px;width:90%;margin:40px auto;position:relative;">
+    <button onclick="closeHomeroomModal()" style="position:absolute;top:16px;left:16px;background:none;border:none;font-size:1.3rem;cursor:pointer;color:#888;">&times;</button>
+    <h3 style="color:var(--primary);margin-bottom:16px;font-size:1.1rem;border-bottom:2px solid var(--accent);padding-bottom:8px;">
+      <i class="fas fa-chalkboard-teacher" style="color:var(--accent);margin-left:8px;"></i>تعيين مربي الفصل
+    </h3>
+    <p style="color:#888;font-size:0.9rem;margin-bottom:16px;">يتم التعيين من قِبل الوكيلات (مساعدي المدير) فقط</p>
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">الصف والشعبة</label>
+      <select id="homeroomClass" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;">
+        <option value="">-- اختر الصف --</option>
+        <option>1A</option><option>1B</option><option>1C</option>
+        <option>2A</option><option>2B</option><option>2C</option>
+        <option>3A</option><option>3B</option><option>3C</option>
+        <option>4A</option><option>4B</option><option>4C</option>
+        <option>5A</option><option>5B</option><option>5C</option>
+        <option>6A</option><option>6B</option><option>6C</option>
+        <option>7A</option><option>7B</option><option>7C</option>
+        <option>8A</option><option>8B</option><option>8C</option>
+      </select>
+    </div>
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">المعلمة — مربية الفصل</label>
+      <select id="homeroomTeacher" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;">
+        <option value="">-- اختر المعلمة --</option>
+      </select>
+    </div>
+    <div id="homeroomCurrentList" style="margin-bottom:16px;background:#f8f9fa;border-radius:10px;padding:16px;min-height:60px;"></div>
+    <button onclick="saveHomeroomAssignment()" style="background:var(--accent);color:var(--primary);font-weight:700;padding:12px 32px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.95rem;width:100%;">
+      <i class="fas fa-save" style="margin-left:6px;"></i>حفظ التعيين
+    </button>
+  </div>
+</div>
+<!-- end homeroom modal -->
+
+
+
+
 
 
 <script>
@@ -12011,6 +12190,242 @@ function loadWeeklyPlanForm() {
   if (wpDate && !wpDate.value) wpDate.value = getNextSaturday();
 }
 
+
+// ===== DAILY LESSON PLANS (الخطط الدرسية اليومية) =====
+function getDailyLessonPlans() {
+  try { return JSON.parse(localStorage.getItem('aljood_daily_plans') || '[]'); } catch(e) { return []; }
+}
+function saveDailyLessonPlanData(plans) {
+  localStorage.setItem('aljood_daily_plans', JSON.stringify(plans));
+}
+function saveDailyLessonPlan() {
+  var cls = document.getElementById('dlp-class') ? document.getElementById('dlp-class').value : '';
+  var subject = document.getElementById('dlp-subject') ? document.getElementById('dlp-subject').value.trim() : '';
+  var date = document.getElementById('dlp-date') ? document.getElementById('dlp-date').value : '';
+  var period = document.getElementById('dlp-period') ? document.getElementById('dlp-period').value : '1';
+  var topic = document.getElementById('dlp-topic') ? document.getElementById('dlp-topic').value.trim() : '';
+  if (!cls || !subject || !date || !topic) {
+    showToast('يرجى تعبئة الصف والمادة والتاريخ والموضوع', 'warning'); return;
+  }
+  var dateObj = new Date(date);
+  var weekStart = new Date(dateObj);
+  var day = weekStart.getDay();
+  var diff = day === 6 ? 0 : (day === 0 ? -1 : (7 - day + 6) % 7);
+  weekStart.setDate(weekStart.getDate() - diff);
+  var weekKey = weekStart.toISOString().split('T')[0];
+  var onejan = new Date(weekStart.getFullYear(), 0, 1);
+  var weekNum = Math.ceil((((weekStart - onejan) / 86400000) + onejan.getDay() + 1) / 7);
+  var plan = {
+    id: Date.now(),
+    teacher: currentUsername,
+    teacherId: currentStaff ? currentStaff.id : '',
+    cls: cls,
+    subject: subject,
+    date: date,
+    weekKey: weekKey,
+    weekNum: weekNum,
+    period: period || '1',
+    topic: topic,
+    objectives: (document.getElementById('dlp-objectives') || {value:''}).value.trim(),
+    strategies: (document.getElementById('dlp-strategies') || {value:''}).value.trim(),
+    activities: (document.getElementById('dlp-activities') || {value:''}).value.trim(),
+    assessment: (document.getElementById('dlp-assessment') || {value:''}).value.trim(),
+    notes: (document.getElementById('dlp-notes') || {value:''}).value.trim(),
+    createdAt: new Date().toISOString()
+  };
+  var plans = getDailyLessonPlans();
+  plans.push(plan);
+  saveDailyLessonPlanData(plans);
+  showToast('تم حفظ الخطة الدرسية ✓', 'success');
+  clearDlpForm();
+  renderDlpMyPlans();
+}
+function clearDlpForm() {
+  ['dlp-class','dlp-subject','dlp-date','dlp-period','dlp-topic','dlp-objectives','dlp-strategies','dlp-activities','dlp-assessment','dlp-notes'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+}
+function renderDlpMyPlans() {
+  var container = document.getElementById('dlp-my-plans');
+  if (!container) return;
+  var allPlans = getDailyLessonPlans();
+  var plans = allPlans.filter(function(p) {
+    return p.teacher === currentUsername || p.teacherId === (currentStaff ? currentStaff.id : '');
+  });
+  if (!plans.length) { container.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">لا توجد خطط محفوظة بعد</p>'; return; }
+  var byWeek = {};
+  plans.forEach(function(p) {
+    if (!byWeek[p.weekKey]) byWeek[p.weekKey] = [];
+    byWeek[p.weekKey].push(p);
+  });
+  var weekKeys = Object.keys(byWeek).sort().reverse();
+  container.innerHTML = weekKeys.map(function(wk) {
+    var wPlans = byWeek[wk].sort(function(a,b){ return a.date.localeCompare(b.date); });
+    var wStart = new Date(wk);
+    var wEnd = new Date(wk); wEnd.setDate(wEnd.getDate() + 4);
+    var fmt = function(d) { return d.toLocaleDateString('ar-AE', {day:'numeric',month:'short'}); };
+    var wNum = wPlans[0].weekNum;
+    return '<div style="margin-bottom:20px;">' +
+      '<h4 style="color:var(--primary);background:#f0f4ff;padding:10px 16px;border-radius:8px;margin-bottom:12px;border-right:4px solid var(--accent);">' +
+      'أسبوع ' + wNum + ' — ' + fmt(wStart) + ' إلى ' + fmt(wEnd) + '</h4>' +
+      '<div style="display:grid;gap:10px;">' +
+      wPlans.map(function(p) {
+        var dayName = new Date(p.date).toLocaleDateString('ar-AE',{weekday:'long',day:'numeric',month:'short'});
+        return '<div style="background:#f8f9fa;border-radius:10px;padding:14px;border-right:3px solid var(--accent);display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">' +
+          '<div>' +
+          '<strong style="color:var(--primary);">' + p.topic + '</strong>' +
+          '<div style="font-size:0.85rem;color:#666;margin-top:4px;">' + (p.cls||p['class']||'') + ' — ' + p.subject + ' — حصة ' + p.period + ' — ' + dayName + '</div>' +
+          (p.objectives ? '<div style="font-size:0.82rem;color:#555;margin-top:4px;"><strong>الأهداف:</strong> ' + p.objectives + '</div>' : '') +
+          '</div>' +
+          '<button onclick="deleteDailyPlan(' + p.id + ')" style="background:#fee2e2;color:#ef4444;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.8rem;white-space:nowrap;">' +
+          '<i class="fas fa-trash"></i> حذف</button>' +
+          '</div>';
+      }).join('') + '</div></div>';
+  }).join('');
+}
+function deleteDailyPlan(planId) {
+  if (!confirm('حذف هذه الخطة؟')) return;
+  var plans = getDailyLessonPlans().filter(function(p){ return p.id !== planId; });
+  saveDailyLessonPlanData(plans);
+  renderDlpMyPlans();
+  showToast('تم الحذف', 'info');
+}
+function renderDlpAdminView() {
+  var container = document.getElementById('dlp-admin-results');
+  if (!container) return;
+  var plans = getDailyLessonPlans();
+  var clsFilter = (document.getElementById('dlp-admin-class') || {value:''}).value;
+  var teacherFilter = ((document.getElementById('dlp-admin-teacher') || {value:''}).value || '').trim().toLowerCase();
+  var fromFilter = (document.getElementById('dlp-admin-from') || {value:''}).value;
+  var toFilter = (document.getElementById('dlp-admin-to') || {value:''}).value;
+  if (clsFilter) plans = plans.filter(function(p){ return (p.cls||p['class']||'') === clsFilter; });
+  if (teacherFilter) plans = plans.filter(function(p){ return (p.teacher||'').toLowerCase().includes(teacherFilter); });
+  if (fromFilter) plans = plans.filter(function(p){ return p.date >= fromFilter; });
+  if (toFilter) plans = plans.filter(function(p){ return p.date <= toFilter; });
+  if (!plans.length) { container.innerHTML = '<p style="color:#888;text-align:center;padding:24px;">لا توجد خطط مطابقة للفلتر</p>'; return; }
+  plans.sort(function(a,b){ return a.date.localeCompare(b.date); });
+  var byWeek = {};
+  plans.forEach(function(p){ if (!byWeek[p.weekKey]) byWeek[p.weekKey] = []; byWeek[p.weekKey].push(p); });
+  container.innerHTML = Object.keys(byWeek).sort().map(function(wk) {
+    var wPlans = byWeek[wk];
+    var wStart = new Date(wk);
+    var wNum = wPlans[0].weekNum;
+    return '<div style="margin-bottom:24px;background:white;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">' +
+      '<h4 style="color:var(--primary);border-bottom:2px solid var(--accent);padding-bottom:8px;margin-bottom:12px;">' +
+      'أسبوع ' + wNum + ' — يبدأ ' + wStart.toLocaleDateString('ar-AE',{day:'numeric',month:'long'}) + '</h4>' +
+      '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.88rem;">' +
+      '<thead><tr style="background:var(--primary);color:#fff;">' +
+      '<th style="padding:8px 10px;text-align:right;">التاريخ</th>' +
+      '<th style="padding:8px 10px;text-align:right;">الصف</th>' +
+      '<th style="padding:8px 10px;text-align:right;">المادة</th>' +
+      '<th style="padding:8px 10px;text-align:center;">الحصة</th>' +
+      '<th style="padding:8px 10px;text-align:right;">الموضوع</th>' +
+      '<th style="padding:8px 10px;text-align:right;">الأهداف</th>' +
+      '<th style="padding:8px 10px;text-align:right;">المعلمة</th>' +
+      '</tr></thead>' +
+      '<tbody>' + wPlans.map(function(p,i) {
+        var clsName = p.cls || p['class'] || '';
+        return '<tr style="' + (i%2?'background:#f8f9fa':'') + '">' +
+          '<td style="padding:8px 10px;border-bottom:1px solid #eee;">' + new Date(p.date).toLocaleDateString('ar-AE',{weekday:'short',day:'numeric',month:'short'}) + '</td>' +
+          '<td style="padding:8px 10px;border-bottom:1px solid #eee;">' + clsName + '</td>' +
+          '<td style="padding:8px 10px;border-bottom:1px solid #eee;">' + p.subject + '</td>' +
+          '<td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;">' + p.period + '</td>' +
+          '<td style="padding:8px 10px;border-bottom:1px solid #eee;">' + p.topic + '</td>' +
+          '<td style="padding:8px 10px;border-bottom:1px solid #eee;">' + (p.objectives||'—') + '</td>' +
+          '<td style="padding:8px 10px;border-bottom:1px solid #eee;">' + (p.teacher||'') + '</td>' +
+          '</tr>';
+      }).join('') +
+      '</tbody></table></div></div>';
+  }).join('');
+}
+function printDailyLessonPlans() {
+  renderDlpAdminView();
+  var content = (document.getElementById('dlp-admin-results') || {innerHTML:''}).innerHTML;
+  if (!content.trim()) { showToast('لا توجد خطط لطباعتها', 'warning'); return; }
+  var win = window.open('','_blank');
+  if (!win) return;
+  win.document.write('<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>الخطط الدرسية — مدرسة الجود</title>' +
+    '<style>body{font-family:Arial,sans-serif;direction:rtl;margin:20px;}h2{color:#1A2A4A;border-bottom:3px solid #C9A84C;padding-bottom:8px;}table{width:100%;border-collapse:collapse;font-size:13px;}th{background:#1A2A4A;color:white;padding:8px 10px;text-align:right;}td{padding:8px 10px;border-bottom:1px solid #ddd;}@media print{.no-print{display:none;}}</style></head>' +
+    '<body><h2>الخطط الدرسية اليومية — مدرسة الجود</h2>' + content +
+    '<script>window.onload=function(){window.print();}<\/script></body></html>');
+  win.document.close();
+}
+function renderDailyLessonPlansSection() {
+  var r = currentRole;
+  var isTeacher = r === 'teacher';
+  var isAdmin = r === 'admin' || r === 'principal' || r === 'admin_staff' || r === 'staff';
+  var tv = document.getElementById('dlp-teacher-view');
+  var av = document.getElementById('dlp-admin-view');
+  if (tv) tv.style.display = isTeacher ? '' : 'none';
+  if (av) av.style.display = isAdmin ? '' : 'none';
+  if (isTeacher) renderDlpMyPlans();
+}
+
+// ===== HOMEROOM TEACHER (مربي الفصل) =====
+function getHomeroomAssignments() {
+  try { return JSON.parse(localStorage.getItem('aljood_homeroom') || '{}'); } catch(e) { return {}; }
+}
+function openHomeroomModal() {
+  var modal = document.getElementById('homeroomModal');
+  if (!modal) return;
+  var sel = document.getElementById('homeroomTeacher');
+  if (sel) {
+    sel.innerHTML = '<option value="">-- اختر المعلمة --</option>';
+    STAFF_DB.filter(function(s){ return s.role === 'teacher' || s.category === 'معلم'; }).forEach(function(s) {
+      var op = document.createElement('option');
+      op.value = s.id; op.textContent = s.name_ar;
+      sel.appendChild(op);
+    });
+  }
+  renderHomeroomCurrentList();
+  modal.style.display = 'flex';
+  modal.style.alignItems = 'flex-start';
+}
+function closeHomeroomModal() {
+  var modal = document.getElementById('homeroomModal');
+  if (modal) modal.style.display = 'none';
+}
+function renderHomeroomCurrentList() {
+  var div = document.getElementById('homeroomCurrentList');
+  if (!div) return;
+  var assignments = getHomeroomAssignments();
+  var entries = Object.entries(assignments);
+  if (!entries.length) { div.innerHTML = '<p style="color:#888;font-size:0.9rem;text-align:center;">لا توجد تعيينات بعد</p>'; return; }
+  div.innerHTML = '<h5 style="color:var(--primary);margin-bottom:10px;margin-top:0;">التعيينات الحالية</h5>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+    entries.map(function(entry) {
+      var cls = entry[0]; var data = entry[1];
+      var teacher = STAFF_DB.find(function(s){ return s.id === data.teacherId; });
+      return '<div style="background:white;border-radius:8px;padding:10px;border:1px solid #e0e0e0;display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
+        '<div><strong>' + cls + '</strong> — ' + (teacher ? teacher.name_ar : (data.teacherName||'')) + '</div>' +
+        '<button onclick="removeHomeroomAssignment('' + cls + '')" style="background:#fee2e2;color:#ef4444;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:0.8rem;flex-shrink:0;">✕</button>' +
+        '</div>';
+    }).join('') + '</div>';
+}
+function saveHomeroomAssignment() {
+  var cls = (document.getElementById('homeroomClass') || {value:''}).value;
+  var teacherId = (document.getElementById('homeroomTeacher') || {value:''}).value;
+  if (!cls || !teacherId) { showToast('يرجى اختيار الصف والمعلمة', 'warning'); return; }
+  var teacher = STAFF_DB.find(function(s){ return s.id === teacherId; });
+  var assignments = getHomeroomAssignments();
+  assignments[cls] = { teacherId: teacherId, teacherName: teacher ? teacher.name_ar : '' };
+  localStorage.setItem('aljood_homeroom', JSON.stringify(assignments));
+  showToast('تم تعيين ' + (teacher ? teacher.name_ar : '') + ' مربية لصف ' + cls + ' ✓', 'success');
+  renderHomeroomCurrentList();
+}
+function removeHomeroomAssignment(cls) {
+  var assignments = getHomeroomAssignments();
+  delete assignments[cls];
+  localStorage.setItem('aljood_homeroom', JSON.stringify(assignments));
+  renderHomeroomCurrentList();
+  showToast('تم إلغاء التعيين', 'info');
+}
+document.addEventListener('click', function(e) {
+  var hm = document.getElementById('homeroomModal');
+  if (hm && e.target === hm) closeHomeroomModal();
+});
+
 function saveWeeklyPlan(status) {
   const classVal = document.getElementById('wpClass') ? document.getElementById('wpClass').value : '';
   const subject = document.getElementById('wpSubject') ? document.getElementById('wpSubject').value.trim() : '';
@@ -12163,6 +12578,12 @@ function renderWeeklyPlan() {
   const tv = document.getElementById('wp-teacher-view');
   const av = document.getElementById('wp-admin-view');
   if (!tv || !av) return;
+  // Show homeroom button for vice principals and admin
+  const homeroomBtnWP = document.getElementById('homeroomBtn');
+  if (homeroomBtnWP) {
+    const isVicePrincipal = currentStaff && ((currentStaff.primary_job || '').includes('مساعد مدير'));
+    homeroomBtnWP.style.display = (isVicePrincipal || role === 'admin') ? '' : 'none';
+  }
   if (role === 'teacher') {
     tv.style.display = 'block';
     av.style.display = 'none';
@@ -12269,6 +12690,7 @@ function saveSpecialistAssignment() {
         window.showSection = function(id) {
           _existingShow(id);
           if (id === 'weekly_plan') setTimeout(renderWeeklyPlan, 50);
+          if (id === 'daily_plans') setTimeout(renderDailyLessonPlansSection, 50);
         };
       }
     });
