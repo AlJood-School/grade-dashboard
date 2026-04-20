@@ -5445,7 +5445,10 @@ function getEffectiveAccess(role) {
   // admin_staff and tech_staff use 'staff' access settings
   const accessRole = (role === 'admin_staff' || role === 'tech_staff') ? 'staff' : role;
   const saved = getSavedAccess();
-  return saved[accessRole] || DEFAULT_ACCESS[accessRole] || [];
+  // FIX: Only use saved access if it's non-empty — empty array is falsy in intent but truthy in JS
+  const savedAccess = saved[accessRole];
+  if (savedAccess && Array.isArray(savedAccess) && savedAccess.length > 0) return savedAccess;
+  return DEFAULT_ACCESS[accessRole] || [];
 }
 
 
@@ -5466,15 +5469,15 @@ const NAV_DEFAULT_CONFIG = [
   { id:'forms',         label:'النماذج والاستبيانات',      labelEn:'Forms & Surveys',     icon:'fa-wpforms',            badge:'جديد', badgeColor:'#10b981', group:'content', visibleTo:['admin','principal','teacher','staff'] },
   { id:'templates',    label:'القوالب الرسمية',           labelEn:'Official Templates',  icon:'fa-file-alt',           badge:'',     badgeColor:'', group:'content',    visibleTo:['admin','principal','teacher','staff'] },
   { id:'staff_directory', label:'دليل الموظفين', labelEn:'Staff Directory', icon:'fa-users', badge:'', badgeColor:'', group:'sections', visibleTo:['admin','principal','teacher','admin_staff','tech_staff','staff'] },
-  { id:'my_profile', label:'ملفي الشخصي', labelEn:'My Profile', icon:'fa-id-card', badge:'', badgeColor:'', group:'main', visibleTo:['teacher','admin_staff','tech_staff'] },
+  { id:'my_profile', label:'ملفي الشخصي', labelEn:'My Profile', icon:'fa-id-card', badge:'', badgeColor:'', group:'main', visibleTo:['teacher','admin_staff','tech_staff','staff'] },
   { id:'school_schedule', label:'الجدول المدرسي',           labelEn:'School Schedule',     icon:'fa-calendar-week',      badge:'',     badgeColor:'', group:'sections',   visibleTo:['admin','principal','teacher','staff'] },
   { id:'schedule_builder', label:'منشئ الجدول الذكي',     labelEn:'Smart Scheduler',     icon:'fa-magic',              badge:'جديد', badgeColor:'#22c55e', group:'sections', visibleTo:['admin'] },
   { id:'leaves',          label:'الإجازات والغياب',         labelEn:'Leaves & Absence',    icon:'fa-user-clock',          badge:'',     badgeColor:'', group:'sections',   visibleTo:['admin','principal'] },
   { id:'digital_safety',  label:'السلامة الرقمية',           labelEn:'Digital Safety',     icon:'fa-shield-alt',         badge:'أقدر', badgeColor:'#3b82f6', group:'programs', visibleTo:['admin','principal','teacher','staff'] },
   { id:'meetings',        label:'الاجتماعات',                labelEn:'Meetings',            icon:'fa-handshake',           badge:'',     badgeColor:'', group:'sections',   visibleTo:['admin','principal','teacher','staff'] },
   { id:'analysis',      label:'تحليل الدرجات', labelEn:'Grade Analysis',      icon:'fa-chart-bar',          badge:'',     badgeColor:'', group:'main',       visibleTo:['admin','principal','teacher','staff'] },
-  { id: 'reports',          label: 'تقارير الطلاب',          labelEn: 'Student Reports',    icon: 'fa-clipboard-list', badge: '', badgeColor: '', group: 'sections', visibleTo: ['admin', 'admin_staff', 'teacher', 'principal'] },
-  { id: 'parent_requests',   label: 'استدعاء ولي الأمر',       labelEn: 'Parent Requests',    icon: 'fa-phone-alt',      badge: '', badgeColor: '', group: 'sections', visibleTo: ['admin', 'admin_staff', 'teacher', 'principal'] },
+  { id: 'reports',          label: 'تقارير الطلاب',          labelEn: 'Student Reports',    icon: 'fa-clipboard-list', badge: '', badgeColor: '', group: 'sections', visibleTo: ['admin', 'admin_staff', 'tech_staff', 'staff', 'teacher', 'principal'] },
+  { id: 'parent_requests',   label: 'استدعاء ولي الأمر',       labelEn: 'Parent Requests',    icon: 'fa-phone-alt',      badge: '', badgeColor: '', group: 'sections', visibleTo: ['admin', 'admin_staff', 'tech_staff', 'staff', 'teacher', 'principal'] },
 ];
 
 const GROUP_LABELS = { main:'القائمة الرئيسية', sections:'الأقسام', programs:'البرامج والأنشطة', content:'المحتوى' };
@@ -5505,10 +5508,13 @@ function renderNav() {
   // Group items
   const groups = {};
   const groupOrder = [];
-  // Normalize role for visibleTo check: admin_staff/tech_staff → 'staff'
+  // Normalize role for visibleTo check: admin_staff/tech_staff → 'staff', but also check the original role
   const visibleRole = (currentRole === 'admin_staff' || currentRole === 'tech_staff') ? 'staff' : currentRole;
   config.forEach(item => {
-    if (!(item.visibleTo || []).includes(visibleRole) && currentRole !== 'admin') return;
+    const vt = item.visibleTo || [];
+    // Check both the normalized role ('staff') AND the actual role ('admin_staff'/'tech_staff')
+    const canSeeByRole = vt.includes(visibleRole) || vt.includes(currentRole);
+    if (!canSeeByRole && currentRole !== 'admin') return;
     if (!access.includes(item.id)) return;
     const g = item.group || 'content';
     if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
