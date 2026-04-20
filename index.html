@@ -810,6 +810,9 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
   <!-- ===== END GLOBAL BANNER ===== -->
   <div id="mainContent">
 
+    <!-- ===== GLOBAL NOTIFICATION BANNER ===== -->
+    <div id="global-notif-area" style="padding:12px 20px 0;"></div>
+
     <!-- ===== HOME SECTION ===== -->
     <div class="section active" id="section-home">
     </div>
@@ -3170,6 +3173,9 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
           <label style="display:flex;align-items:center;gap:6px;color:rgba(255,255,255,0.8);font-size:0.83rem;cursor:pointer;">
             <input type="checkbox" class="meetAudPartial" value="admin" id="meetAudAdmin" style="accent-color:var(--accent);width:15px;height:15px;"> المدير
           </label>
+          <label style="display:flex;align-items:center;gap:6px;color:rgba(255,255,255,0.8);font-size:0.83rem;cursor:pointer;">
+            <input type="checkbox" class="meetAudPartial" value="parent" id="meetAudParent" style="accent-color:var(--accent);width:15px;height:15px;"> أولياء الأمور
+          </label>
         </div>
         <p style="color:rgba(255,255,255,0.4);font-size:0.75rem;margin:8px 0 0;">إذا لم يُختر شيء يظهر للجميع — المدير والمديرة يرون جميع الاجتماعات دائماً</p>
       </div>
@@ -4593,6 +4599,7 @@ function doLogin() {
     initGlobalBanner();
     resetSessionTimer();
     showWelcomeToast(currentUsername);
+  setTimeout(function(){ try{ renderGlobalNotifications(); }catch(e){} }, 500);
     showChatBtn();
     setTimeout(function(){ checkPendingMessages(currentUsername); startMsgPolling(currentUsername); }, 800);
     return;
@@ -4804,6 +4811,8 @@ function showSection(name) {
   document.getElementById('section-' + name).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   try { event && event.currentTarget && event.currentTarget.classList.add('active'); } catch(e) {}
+  // Refresh global notifications on every section change
+  try { renderGlobalNotifications(); } catch(e) {}
   // Also mark the correct nav item active by data-section attribute
   const activeNavEl = document.querySelector('#dynamicNav .nav-item[data-section="'+name+'"]');
   if (activeNavEl) activeNavEl.classList.add('active');
@@ -8918,33 +8927,144 @@ function saveMinutesRecord() {
   }
 }
 
+// ═══ GLOBAL NOTIFICATIONS (meetings + surveys) — shown in all sections ═══
+function renderGlobalNotifications() {
+  const area = document.getElementById('global-notif-area');
+  if (!area || !currentRole) return;
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const meetings = getMeetings();
+  const forms = getForms ? getForms() : (JSON.parse(localStorage.getItem('aljood_forms')||'[]'));
+
+  // ── Upcoming meetings (7 days) ──
+  const upcomingMeetings = meetings.filter(m => {
+    const mDate = new Date(m.date); mDate.setHours(0,0,0,0);
+    const daysLeft = Math.ceil((mDate - today) / 86400000);
+    if (daysLeft < 0 || daysLeft > 7) return false;
+    if (m.status === 'cancelled') return false;
+    return userCanSeeMeetingByAudience(m);
+  });
+
+  // ── Active surveys targeted to user ──
+  const activeSurveys = (forms || []).filter(f => {
+    if (!f || !f.title) return false;
+    if (f.isDeleted) return false;
+    if (currentRole === 'admin' || currentRole === 'principal') return true;
+    const aud = f.audience || [];
+    if (aud.length === 0 || aud.includes('all')) return true;
+    const roleMap = { teacher:'teacher', admin_staff:'staff', tech_staff:'staff', parent:'parent', principal:'principal', admin:'admin' };
+    const myKey = roleMap[currentRole] || currentRole;
+    if (aud.includes(myKey)) return true;
+    return f.createdBy === currentUsername;
+  });
+
+  if (upcomingMeetings.length === 0 && activeSurveys.length === 0) {
+    area.innerHTML = ''; return;
+  }
+
+  let html = '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">';
+
+  // ── Meetings banner ──
+  if (upcomingMeetings.length > 0) {
+    html += `<div style="background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.35);border-radius:10px;padding:12px 16px;">
+      <div style="color:var(--accent);font-weight:700;margin-bottom:8px;font-size:0.9rem;">
+        <i class="fas fa-calendar-alt" style="margin-left:6px;"></i>اجتماعات قادمة خلال 7 أيام (${upcomingMeetings.length})
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        ${upcomingMeetings.map(m => {
+          const mDate = new Date(m.date); mDate.setHours(0,0,0,0);
+          const days = Math.ceil((mDate - today) / 86400000);
+          const dayLabel = days === 0 ? '<span style="color:#4ade80;font-weight:700;">اليوم!</span>' : days === 1 ? '<span style="color:#fbbf24;">غداً</span>' : '<span style="color:rgba(255,255,255,0.6);">بعد '+days+' أيام</span>';
+          const ackList = m.acknowledged || [];
+          const myAck = ackList.includes(currentUsername);
+          return `<div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <i class="fas fa-calendar-check" style="color:var(--accent);"></i>
+            <span style="color:white;font-weight:600;font-size:0.88rem;">${m.title}</span>
+            ${dayLabel}
+            <span style="color:rgba(255,255,255,0.4);font-size:0.78rem;">${m.time||''} ${m.location?'— '+m.location:''}</span>
+            ${!myAck && currentRole !== 'admin' ? `<button onclick="ackMeetingGlobal('${m.id}')" style="padding:3px 10px;background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.3);border-radius:6px;cursor:pointer;font-size:0.75rem;font-family:inherit;">
+              <i class="fas fa-check"></i> عُلم
+            </button>` : (myAck ? '<span style="color:#4ade80;font-size:0.78rem;"><i class="fas fa-check-circle"></i> علمتُ</span>' : '')}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  // ── Surveys banner ──
+  if (activeSurveys.length > 0) {
+    html += `<div style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.25);border-radius:10px;padding:12px 16px;">
+      <div style="color:#a78bfa;font-weight:700;margin-bottom:8px;font-size:0.9rem;">
+        <i class="fas fa-poll" style="margin-left:6px;"></i>استبيانات تنتظر مشاركتك (${activeSurveys.length})
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        ${activeSurveys.map(f => `<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(139,92,246,0.2);border-radius:8px;padding:7px 12px;display:flex;align-items:center;gap:8px;">
+          <i class="fas fa-clipboard-list" style="color:#a78bfa;font-size:0.85rem;"></i>
+          <span style="color:white;font-size:0.85rem;">${f.title}</span>
+          <button onclick="showSection('forms')" style="padding:3px 10px;background:rgba(139,92,246,0.2);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);border-radius:6px;cursor:pointer;font-size:0.75rem;font-family:inherit;">
+            <i class="fas fa-external-link-alt"></i> فتح
+          </button>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  html += '</div>';
+  area.innerHTML = html;
+}
+
+function ackMeetingGlobal(meetId) {
+  const meetings = getMeetings();
+  const idx = meetings.findIndex(m => m.id === meetId);
+  if (idx === -1) return;
+  if (!meetings[idx].acknowledged) meetings[idx].acknowledged = [];
+  if (!meetings[idx].acknowledged.includes(currentUsername)) {
+    meetings[idx].acknowledged.push(currentUsername);
+    saveMeetings(meetings);
+    showToast('تم تسجيل "عُلم" بالاجتماع', 'success');
+    renderGlobalNotifications();
+    renderMeetingsSection && renderMeetingsSection();
+  }
+}
+
+// ═══ AUDIENCE-AWARE MEETING CHECK ════════════════════════════
+function userCanSeeMeetingByAudience(m) {
+  if (currentRole === 'admin' || currentRole === 'principal') return true;
+  const aud = m.audience || [];
+  if (aud.length === 0 || aud.includes('all')) return true;
+  const roleMap = { teacher:'teacher', admin_staff:'staff', tech_staff:'staff', parent:'parent', principal:'principal', admin:'admin' };
+  const myKey = roleMap[currentRole] || currentRole;
+  if (aud.includes(myKey)) return true;
+  // Individual attendee check
+  const name = currentUsername || '';
+  const empId = (getEmployeesData().find(e => e.name_ar === name) || {}).id;
+  return !!(m.attendees && empId && m.attendees.includes(empId));
+}
+
 function renderMeetingNotifications() {
   const notifContainer = document.getElementById('meeting-notif-banner');
   if (!notifContainer) return;
   const meetings = getMeetings();
   const today = new Date(); today.setHours(0,0,0,0);
-  const name = currentUsername || '';
-  const empId = (getEmployeesData().find(e => e.name_ar === name) || {}).id;
   const upcoming = meetings.filter(m => {
     const mDate = new Date(m.date); mDate.setHours(0,0,0,0);
     const daysLeft = Math.ceil((mDate - today) / 86400000);
-    if (daysLeft < 0 || daysLeft > 3) return false;
+    if (daysLeft < 0 || daysLeft > 7) return false;
     if (m.status === 'cancelled') return false;
-    if (currentRole === 'admin' || currentRole === 'principal') return true;
-    return m.attendees && empId && m.attendees.includes(empId);
+    return userCanSeeMeetingByAudience(m);
   });
   if (upcoming.length === 0) { notifContainer.innerHTML = ''; return; }
   notifContainer.innerHTML = `<div style="background:rgba(201,168,39,0.12);border:1px solid rgba(201,168,39,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;">
-    <div style="color:var(--accent);font-weight:700;margin-bottom:6px;"><i class="fas fa-bell"></i> تذكير: اجتماعات قادمة خلال 3 أيام</div>
+    <div style="color:var(--accent);font-weight:700;margin-bottom:6px;"><i class="fas fa-bell"></i> تذكير: اجتماعات قادمة خلال 7 أيام</div>
     ${upcoming.map(m => {
-      const mDate = new Date(m.date);
+      const mDate = new Date(m.date); mDate.setHours(0,0,0,0);
       const days = Math.ceil((mDate - today) / 86400000);
       return `<div style="display:flex;gap:10px;align-items:center;padding:6px 0;border-top:1px solid rgba(255,255,255,0.07);">
         <i class="fas fa-calendar-check" style="color:var(--accent);"></i>
         <div>
           <span style="color:white;font-weight:600;">${m.title}</span>
           <span style="color:rgba(255,255,255,0.5);font-size:0.8rem;margin-right:8px;">${days === 0 ? 'اليوم!' : days === 1 ? 'غداً' : 'بعد '+days+' أيام'}</span>
-          <span style="color:rgba(255,255,255,0.4);font-size:0.78rem;">${m.time||''} — ${m.location||''}</span>
+          <span style="color:rgba(255,255,255,0.4);font-size:0.78rem;">${m.time||''} ${m.location ? '— '+m.location : ''}</span>
         </div>
       </div>`;
     }).join('')}
