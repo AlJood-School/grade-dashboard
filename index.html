@@ -9589,6 +9589,19 @@ function viewMeeting(id) {
     ${m.suggestions ? `<div style="margin-bottom:14px;"><div style="color:#4ade80;font-size:0.85rem;font-weight:700;margin-bottom:6px;"><i class="fas fa-lightbulb"></i> المقترحات</div><div style="background:rgba(74,222,128,0.06);border-radius:8px;padding:10px;color:rgba(255,255,255,0.8);font-size:0.88rem;white-space:pre-wrap;">${m.suggestions}</div></div>` : ''}
     ${m.recommendations ? `<div style="margin-bottom:14px;"><div style="color:#f59e0b;font-size:0.85rem;font-weight:700;margin-bottom:6px;"><i class="fas fa-star"></i> التوصيات</div><div style="background:rgba(245,158,11,0.06);border-radius:8px;padding:10px;color:rgba(255,255,255,0.8);font-size:0.88rem;white-space:pre-wrap;">${m.recommendations}</div></div>` : ''}
     ${m.minutes ? `<div style="margin-bottom:14px;"><div style="color:#a78bfa;font-size:0.85rem;font-weight:700;margin-bottom:6px;"><i class="fas fa-file-alt"></i> محضر الاجتماع</div><div style="background:rgba(139,92,246,0.06);border-radius:8px;padding:10px;color:rgba(255,255,255,0.8);font-size:0.88rem;white-space:pre-wrap;">${m.minutes}</div></div>` : ''}
+    ${(()=>{
+      const isCreator = (m.createdBy || '') === currentUsername;
+      const isPrivRole2 = currentRole === 'admin' || currentRole === 'principal';
+      if (!isCreator && !isPrivRole2) return '';
+      const ackObj = typeof m.acknowledged === 'object' && !Array.isArray(m.acknowledged) ? m.acknowledged : {};
+      const ackers = Object.entries(ackObj);
+      if (ackers.length === 0) return `<div style="margin-bottom:14px;"><div style="color:#4ade80;font-size:0.85rem;font-weight:700;margin-bottom:8px;"><i class="fas fa-check-circle"></i> من قال "عُلم" (${ackers.length})</div><div style="color:rgba(255,255,255,0.4);font-size:0.83rem;padding:8px;background:rgba(0,0,0,0.15);border-radius:8px;">لم يُقرّ أحد حتى الآن</div></div>`;
+      return `<div style="margin-bottom:14px;"><div style="color:#4ade80;font-size:0.85rem;font-weight:700;margin-bottom:8px;"><i class="fas fa-check-circle"></i> من قال "عُلم" (${ackers.length})</div><div style="display:flex;flex-wrap:wrap;gap:6px;">${ackers.map(([uname, ts]) => {
+        const fullName = getNameFromUsername(uname);
+        const timeStr = ts ? new Date(ts).toLocaleString('ar-AE', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+        return `<span title="${timeStr}" style="background:rgba(74,222,128,0.1);color:#4ade80;border:1px solid rgba(74,222,128,0.25);border-radius:16px;padding:4px 12px;font-size:0.78rem;display:flex;align-items:center;gap:5px;"><i class="fas fa-check-circle" style="font-size:0.7rem;"></i>${fullName}${timeStr ? `<span style="opacity:0.6;font-size:0.72rem;">${timeStr}</span>` : ''}</span>`;
+      }).join('')}</div></div>`;
+    })()}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
       <button onclick="openMinutesModal('${m.id}')" style="padding:9px 18px;background:rgba(139,92,246,0.2);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.88rem;"><i class="fas fa-file-alt"></i> تحرير المحضر</button>
       <button onclick="document.getElementById('meetViewModal').style.display='none'" style="padding:9px 18px;background:rgba(255,255,255,0.1);color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;">إغلاق</button>
@@ -9596,6 +9609,34 @@ function viewMeeting(id) {
 
   document.getElementById('meetViewContent').innerHTML = content;
   document.getElementById('meetViewModal').style.display = 'flex';
+
+  // ── Real-time refresh: re-render viewMeeting when storage changes ──
+  if (window._viewMeetStorageListener) {
+    window.removeEventListener('storage', window._viewMeetStorageListener);
+  }
+  window._viewMeetingOpenId = id;
+  window._viewMeetStorageListener = function(e) {
+    if (e.key && e.key.includes('meeting') && document.getElementById('meetViewModal') && document.getElementById('meetViewModal').style.display !== 'none') {
+      viewMeeting(window._viewMeetingOpenId);
+    }
+  };
+  window.addEventListener('storage', window._viewMeetStorageListener);
+
+  // Polling fallback every 5s for same-tab updates
+  clearInterval(window._viewMeetPollTimer);
+  window._viewMeetPollTimer = setInterval(() => {
+    if (!document.getElementById('meetViewModal') || document.getElementById('meetViewModal').style.display === 'none') {
+      clearInterval(window._viewMeetPollTimer);
+      return;
+    }
+    const latest = getMeetings().find(x => x.id === window._viewMeetingOpenId);
+    if (!latest) return;
+    const curAcks = Object.keys(typeof latest.acknowledged === 'object' && !Array.isArray(latest.acknowledged) ? latest.acknowledged : {}).length;
+    if (window._lastAckCount !== curAcks) {
+      window._lastAckCount = curAcks;
+      viewMeeting(window._viewMeetingOpenId);
+    }
+  }, 5000);
 }
 
 function openMinutesModal(meetId) {
@@ -9727,17 +9768,27 @@ function renderGlobalNotifications() {
   area.innerHTML = html;
 }
 
+// ── Helper: get staff name from username ──
+function getNameFromUsername(uname) {
+  const emps = getEmployeesData ? getEmployeesData() : [];
+  const emp = emps.find(e => e.username === uname || e.id === uname);
+  if (emp) return emp.name_ar || emp.name || uname;
+  if (uname === 'admin' || uname === 'noor') return 'نور يم (مدير)';
+  if (uname === 'principal' || uname === 'halima') return 'حليمة حسن (مديرة)';
+  return uname;
+}
+
 function ackMeetingGlobal(meetId) {
   const meetings = getMeetings();
   const idx = meetings.findIndex(m => m.id === meetId);
   if (idx === -1) return;
-  if (!meetings[idx].acknowledged) meetings[idx].acknowledged = [];
-  if (!meetings[idx].acknowledged.includes(currentUsername)) {
-    meetings[idx].acknowledged.push(currentUsername);
+  if (!meetings[idx].acknowledged) meetings[idx].acknowledged = {};
+  if (!meetings[idx].acknowledged[currentUsername]) {
+    meetings[idx].acknowledged[currentUsername] = new Date().toISOString();
     saveMeetings(meetings);
-    showToast('تم تسجيل "عُلم" بالاجتماع', 'success');
+    showToast('✓ تم تسجيل "عُلم" بالاجتماع', 'success');
     renderGlobalNotifications();
-    renderMeetingsSection && renderMeetingsSection();
+    if (typeof renderMeetingsSection === 'function') renderMeetingsSection();
   }
 }
 
@@ -9877,15 +9928,17 @@ window.renderHome = function() {
         const mDate = new Date(m.date); mDate.setHours(0,0,0,0);
         const days = Math.ceil((mDate - today) / 86400000);
         const dayBadge = days === 0 ? '<span class="gnb-badge-today">اليوم!</span>' : days === 1 ? '<span class="gnb-badge-tomorrow">غداً</span>' : '<span class="gnb-badge-days">بعد '+days+' أيام</span>';
-        const ackList = m.acknowledged || [];
-        const myAck = ackList.includes(currentUsername);
+        const ackMapH = typeof m.acknowledged === 'object' && !Array.isArray(m.acknowledged) ? m.acknowledged : {};
+        const myAckH = !!ackMapH[currentUsername];
+        const ackCountH = Object.keys(ackMapH).length;
         const sub = [m.time||'', m.location ? '— '+m.location : ''].filter(Boolean).join(' ');
         return `<div class="gnb-item">
           <i class="fas fa-calendar-check" style="color:#C9A84C;flex-shrink:0;"></i>
           <span class="gnb-item-title">${m.title}</span>
           ${dayBadge}
           ${sub ? `<span class="gnb-item-sub">${sub}</span>` : ''}
-          ${!myAck ? `<button class="gnb-ack-btn" onclick="ackMeetingGlobal('${m.id}')"><i class="fas fa-check"></i> عُلم</button>`
+          ${ackCountH > 0 ? `<span class="gnb-badge-days" style="background:rgba(74,222,128,0.15);color:#4ade80;font-size:0.72rem;"><i class="fas fa-check-circle"></i> ${ackCountH} علموا</span>` : ''}
+          ${!myAckH ? `<button class="gnb-ack-btn" onclick="ackMeetingGlobal('${m.id}')"><i class="fas fa-check"></i> عُلم</button>`
             : `<span class="gnb-badge-acked"><i class="fas fa-check-circle"></i> علمتُ</span>`}
         </div>`;
       }).join('')}
