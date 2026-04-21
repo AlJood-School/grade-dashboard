@@ -431,6 +431,60 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 @keyframes wsDotAnim{0%,80%,100%{background:rgba(201,168,76,0.3);transform:scale(1)}
   40%{background:#C9A84C;transform:scale(1.4)}}
 
+/* ===== GLOBAL NOTIFICATION BANNER ===== */
+#global-notif-area { padding:12px 20px 0; }
+.gnb-wrap { display:flex; flex-direction:column; gap:10px; margin-bottom:16px; }
+.gnb-card {
+  border-radius:12px; padding:12px 16px;
+  transition:box-shadow 0.2s;
+}
+.gnb-card:hover { box-shadow:0 4px 18px rgba(0,0,0,0.25); }
+.gnb-card.gnb-meetings {
+  background:linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.06));
+  border:1px solid rgba(201,168,76,0.35);
+}
+.gnb-card.gnb-surveys {
+  background:linear-gradient(135deg,rgba(139,92,246,0.1),rgba(139,92,246,0.05));
+  border:1px solid rgba(139,92,246,0.3);
+}
+.gnb-header {
+  display:flex; align-items:center; gap:8px;
+  font-weight:700; font-size:0.88rem; margin-bottom:10px;
+}
+.gnb-header.gold { color:#C9A84C; }
+.gnb-header.purple { color:#a78bfa; }
+.gnb-items { display:flex; flex-wrap:wrap; gap:8px; }
+.gnb-item {
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:9px; padding:8px 12px;
+  display:flex; align-items:center; gap:8px;
+  flex-wrap:wrap; transition:background 0.15s;
+}
+.gnb-item:hover { background:rgba(255,255,255,0.09); }
+.gnb-item-title { color:#fff; font-weight:600; font-size:0.87rem; }
+.gnb-item-sub { color:rgba(255,255,255,0.42); font-size:0.77rem; }
+.gnb-badge-today { color:#4ade80; font-weight:700; font-size:0.82rem; }
+.gnb-badge-tomorrow { color:#fbbf24; font-weight:600; font-size:0.82rem; }
+.gnb-badge-days { color:rgba(255,255,255,0.5); font-size:0.82rem; }
+.gnb-badge-acked { color:#4ade80; font-size:0.78rem; display:flex; align-items:center; gap:4px; }
+.gnb-ack-btn {
+  padding:3px 10px; background:rgba(74,222,128,0.13);
+  color:#4ade80; border:1px solid rgba(74,222,128,0.35);
+  border-radius:6px; cursor:pointer; font-size:0.75rem;
+  font-family:'Cairo',sans-serif; font-weight:700;
+  transition:background 0.15s;
+}
+.gnb-ack-btn:hover { background:rgba(74,222,128,0.26); }
+.gnb-open-btn {
+  padding:3px 10px; background:rgba(139,92,246,0.18);
+  color:#a78bfa; border:1px solid rgba(139,92,246,0.35);
+  border-radius:6px; cursor:pointer; font-size:0.75rem;
+  font-family:'Cairo',sans-serif; font-weight:700;
+  transition:background 0.15s;
+}
+.gnb-open-btn:hover { background:rgba(139,92,246,0.3); }
+
 /* ===== MODAL ===== */
 .crud-modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center; backdrop-filter:blur(4px); }
 .crud-modal-overlay.open { display:flex; }
@@ -9613,46 +9667,55 @@ function renderGlobalNotifications() {
     area.innerHTML = ''; return;
   }
 
-  let html = '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">';
+  function gnbDayBadge(days) {
+    if (days === 0) return '<span class="gnb-badge-today">اليوم!</span>';
+    if (days === 1) return '<span class="gnb-badge-tomorrow">غداً</span>';
+    return '<span class="gnb-badge-days">بعد ' + days + ' أيام</span>';
+  }
 
-  // ── Meetings banner ──
+  let html = '<div class="gnb-wrap">';
+
+  // ── Meetings card ──
   if (upcomingMeetings.length > 0) {
-    html += `<div style="background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.35);border-radius:10px;padding:12px 16px;">
-      <div style="color:var(--accent);font-weight:700;margin-bottom:8px;font-size:0.9rem;">
-        <i class="fas fa-calendar-alt" style="margin-left:6px;"></i>اجتماعات قادمة خلال 7 أيام (${upcomingMeetings.length})
+    html += `<div class="gnb-card gnb-meetings">
+      <div class="gnb-header gold">
+        <i class="fas fa-calendar-alt"></i>
+        اجتماعات قادمة خلال 7 أيام
+        <span style="background:rgba(201,168,76,0.2);border-radius:20px;padding:1px 9px;font-size:0.8rem;">${upcomingMeetings.length}</span>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      <div class="gnb-items">
         ${upcomingMeetings.map(m => {
           const mDate = new Date(m.date); mDate.setHours(0,0,0,0);
           const days = Math.ceil((mDate - today) / 86400000);
-          const dayLabel = days === 0 ? '<span style="color:#4ade80;font-weight:700;">اليوم!</span>' : days === 1 ? '<span style="color:#fbbf24;">غداً</span>' : '<span style="color:rgba(255,255,255,0.6);">بعد '+days+' أيام</span>';
           const ackList = m.acknowledged || [];
           const myAck = ackList.includes(currentUsername);
-          return `<div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <i class="fas fa-calendar-check" style="color:var(--accent);"></i>
-            <span style="color:white;font-weight:600;font-size:0.88rem;">${m.title}</span>
-            ${dayLabel}
-            <span style="color:rgba(255,255,255,0.4);font-size:0.78rem;">${m.time||''} ${m.location?'— '+m.location:''}</span>
-            ${!myAck && currentRole !== 'admin' ? `<button onclick="ackMeetingGlobal('${m.id}')" style="padding:3px 10px;background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.3);border-radius:6px;cursor:pointer;font-size:0.75rem;font-family:inherit;">
-              <i class="fas fa-check"></i> عُلم
-            </button>` : (myAck ? '<span style="color:#4ade80;font-size:0.78rem;"><i class="fas fa-check-circle"></i> علمتُ</span>' : '')}
+          const sub = [m.time, m.location ? '— ' + m.location : ''].filter(Boolean).join(' ');
+          return `<div class="gnb-item">
+            <i class="fas fa-calendar-check" style="color:#C9A84C;font-size:0.9rem;flex-shrink:0;"></i>
+            <span class="gnb-item-title">${m.title}</span>
+            ${gnbDayBadge(days)}
+            ${sub ? `<span class="gnb-item-sub">${sub}</span>` : ''}
+            ${!myAck ? `<button class="gnb-ack-btn" onclick="ackMeetingGlobal('${m.id}')"><i class="fas fa-check"></i> عُلم</button>`
+              : `<span class="gnb-badge-acked"><i class="fas fa-check-circle"></i> علمتُ</span>`}
           </div>`;
         }).join('')}
       </div>
     </div>`;
   }
 
-  // ── Surveys banner ──
+  // ── Surveys card ──
   if (activeSurveys.length > 0) {
-    html += `<div style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.25);border-radius:10px;padding:12px 16px;">
-      <div style="color:#a78bfa;font-weight:700;margin-bottom:8px;font-size:0.9rem;">
-        <i class="fas fa-poll" style="margin-left:6px;"></i>استبيانات تنتظر مشاركتك (${activeSurveys.length})
+    html += `<div class="gnb-card gnb-surveys">
+      <div class="gnb-header purple">
+        <i class="fas fa-poll"></i>
+        استبيانات تنتظر مشاركتك
+        <span style="background:rgba(139,92,246,0.2);border-radius:20px;padding:1px 9px;font-size:0.8rem;">${activeSurveys.length}</span>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;">
-        ${activeSurveys.map(f => `<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(139,92,246,0.2);border-radius:8px;padding:7px 12px;display:flex;align-items:center;gap:8px;">
-          <i class="fas fa-clipboard-list" style="color:#a78bfa;font-size:0.85rem;"></i>
-          <span style="color:white;font-size:0.85rem;">${f.title}</span>
-          <button onclick="showSection('forms')" style="padding:3px 10px;background:rgba(139,92,246,0.2);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);border-radius:6px;cursor:pointer;font-size:0.75rem;font-family:inherit;">
+      <div class="gnb-items">
+        ${activeSurveys.map(f => `<div class="gnb-item">
+          <i class="fas fa-clipboard-list" style="color:#a78bfa;font-size:0.85rem;flex-shrink:0;"></i>
+          <span class="gnb-item-title">${f.title}</span>
+          <button class="gnb-open-btn" onclick="showSection('forms')">
             <i class="fas fa-external-link-alt"></i> فتح
           </button>
         </div>`).join('')}
@@ -9705,20 +9768,22 @@ function renderMeetingNotifications() {
     return userCanSeeMeetingByAudience(m);
   });
   if (upcoming.length === 0) { notifContainer.innerHTML = ''; return; }
-  notifContainer.innerHTML = `<div style="background:rgba(201,168,39,0.12);border:1px solid rgba(201,168,39,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;">
-    <div style="color:var(--accent);font-weight:700;margin-bottom:6px;"><i class="fas fa-bell"></i> تذكير: اجتماعات قادمة خلال 7 أيام</div>
+  notifContainer.innerHTML = `<div class="gnb-card gnb-meetings" style="margin-bottom:16px;">
+    <div class="gnb-header gold"><i class="fas fa-bell"></i> اجتماعات قادمة خلال 7 أيام</div>
+    <div class="gnb-items">
     ${upcoming.map(m => {
       const mDate = new Date(m.date); mDate.setHours(0,0,0,0);
       const days = Math.ceil((mDate - today) / 86400000);
-      return `<div style="display:flex;gap:10px;align-items:center;padding:6px 0;border-top:1px solid rgba(255,255,255,0.07);">
-        <i class="fas fa-calendar-check" style="color:var(--accent);"></i>
-        <div>
-          <span style="color:white;font-weight:600;">${m.title}</span>
-          <span style="color:rgba(255,255,255,0.5);font-size:0.8rem;margin-right:8px;">${days === 0 ? 'اليوم!' : days === 1 ? 'غداً' : 'بعد '+days+' أيام'}</span>
-          <span style="color:rgba(255,255,255,0.4);font-size:0.78rem;">${m.time||''} ${m.location ? '— '+m.location : ''}</span>
-        </div>
+      const dayText = days === 0 ? '<span class="gnb-badge-today">اليوم!</span>' : days === 1 ? '<span class="gnb-badge-tomorrow">غداً</span>' : '<span class="gnb-badge-days">بعد '+days+' أيام</span>';
+      const sub = [m.time||'', m.location ? '— '+m.location : ''].filter(Boolean).join(' ');
+      return `<div class="gnb-item">
+        <i class="fas fa-calendar-check" style="color:#C9A84C;flex-shrink:0;"></i>
+        <span class="gnb-item-title">${m.title}</span>
+        ${dayText}
+        ${sub ? `<span class="gnb-item-sub">${sub}</span>` : ''}
       </div>`;
     }).join('')}
+    </div>
   </div>`;
 }
 
@@ -9801,20 +9866,30 @@ window.renderHome = function() {
       const mDate = new Date(m.date); mDate.setHours(0,0,0,0);
       const daysLeft = Math.ceil((mDate - today) / 86400000);
       if (daysLeft < 0 || daysLeft > 7) return false;
-      if (currentRole === 'admin' || currentRole === 'principal') return true;
-      return m.attendees && empId && m.attendees.includes(empId);
+      if (m.status === 'cancelled') return false;
+      return userCanSeeMeetingByAudience(m);
     });
     if (upcoming.length === 0) { notifDiv.innerHTML = ''; return; }
-    notifDiv.innerHTML = `<div style="background:rgba(201,168,39,0.12);border:1px solid rgba(201,168,39,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;">
-      <div style="color:var(--accent);font-weight:700;margin-bottom:6px;"><i class="fas fa-bell"></i> اجتماعات قريبة (خلال 7 أيام)</div>
+    notifDiv.innerHTML = `<div class="gnb-card gnb-meetings" style="margin-bottom:16px;">
+      <div class="gnb-header gold"><i class="fas fa-bell"></i> اجتماعات قادمة خلال 7 أيام <span style="background:rgba(201,168,76,0.2);border-radius:20px;padding:1px 9px;font-size:0.8rem;">${upcoming.length}</span></div>
+      <div class="gnb-items">
       ${upcoming.map(m => {
         const mDate = new Date(m.date); mDate.setHours(0,0,0,0);
         const days = Math.ceil((mDate - today) / 86400000);
-        return `<div style="padding:6px 0;border-top:1px solid rgba(255,255,255,0.06);color:rgba(255,255,255,0.8);font-size:0.85rem;">
-          <i class="fas fa-calendar" style="color:var(--accent);margin-left:6px;"></i>
-          <strong>${m.title}</strong> — ${days === 0 ? 'اليوم!' : days === 1 ? 'غداً' : `${days} أيام`} — ${m.time} (${m.location})
+        const dayBadge = days === 0 ? '<span class="gnb-badge-today">اليوم!</span>' : days === 1 ? '<span class="gnb-badge-tomorrow">غداً</span>' : '<span class="gnb-badge-days">بعد '+days+' أيام</span>';
+        const ackList = m.acknowledged || [];
+        const myAck = ackList.includes(currentUsername);
+        const sub = [m.time||'', m.location ? '— '+m.location : ''].filter(Boolean).join(' ');
+        return `<div class="gnb-item">
+          <i class="fas fa-calendar-check" style="color:#C9A84C;flex-shrink:0;"></i>
+          <span class="gnb-item-title">${m.title}</span>
+          ${dayBadge}
+          ${sub ? `<span class="gnb-item-sub">${sub}</span>` : ''}
+          ${!myAck ? `<button class="gnb-ack-btn" onclick="ackMeetingGlobal('${m.id}')"><i class="fas fa-check"></i> عُلم</button>`
+            : `<span class="gnb-badge-acked"><i class="fas fa-check-circle"></i> علمتُ</span>`}
         </div>`;
       }).join('')}
+      </div>
     </div>`;
   }, 200);
 };
