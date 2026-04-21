@@ -5084,7 +5084,7 @@ function doLogin() {
     showSection('home');
     renderHomeDashboard();
     applyLang();
-    setTimeout(() => { renderAllSections(); renderStaffDirectory(); }, 100);
+    setTimeout(() => { renderAllSections(); renderStaffDirectory(); renderMyProfile(); }, 100);
     initCharts();
     updateDate();
     initGlobalBanner();
@@ -5707,7 +5707,7 @@ ${isAdmin ? '<button class="btn" onclick="showSection(\'meetings\')" style="padd
         + '</div>';
     })() : '')
     +adminActions
-    +'<div style="margin-top:20px;border-radius:18px;overflow:hidden;box-shadow:0 8px 32px rgba(26,42,74,0.22);">'+
+    +'<div style="margin-top:20px;border-radius:18px;overflow:hidden;box-shadow:0 8px 32px rgba(26,42,74,0.22);">' 
     +'<div style="background:linear-gradient(135deg,#1A2A4A 0%,#243a70 50%,#1A2A4A 100%);padding:32px 28px;text-align:center;position:relative;">'
     +'<div style="position:relative;z-index:1;">'
     +'<div style="display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;background:linear-gradient(135deg,#C9A84C,#e8c96a);border-radius:50%;margin-bottom:16px;box-shadow:0 4px 16px rgba(201,168,76,0.4);">'
@@ -6157,7 +6157,7 @@ const NAV_DEFAULT_CONFIG = [
   { id:'forms',         label:'النماذج والاستبيانات',      labelEn:'Forms & Surveys',     icon:'fa-wpforms',            badge:'جديد', badgeColor:'#10b981', group:'content', visibleTo:['admin','principal','teacher','staff'] },
   { id:'templates',    label:'القوالب الرسمية',           labelEn:'Official Templates',  icon:'fa-file-alt',           badge:'',     badgeColor:'', group:'content',    visibleTo:['admin','principal','teacher','staff'] },
   { id:'staff_directory', label:'دليل الموظفين', labelEn:'Staff Directory', icon:'fa-users', badge:'', badgeColor:'', group:'sections', visibleTo:['admin','principal','teacher','admin_staff','tech_staff','staff'] },
-  { id:'my_profile', label:'ملفي الشخصي', labelEn:'My Profile', icon:'fa-id-card', badge:'', badgeColor:'', group:'main', visibleTo:['teacher','admin_staff','tech_staff','staff'] },
+  { id:'my_profile', label:'ملفي الشخصي', labelEn:'My Profile', icon:'fa-id-card', badge:'', badgeColor:'', group:'main', visibleTo:['teacher','admin_staff','tech_staff','staff','admin','principal','parent'] },
   { id:'school_schedule', label:'الجدول المدرسي',           labelEn:'School Schedule',     icon:'fa-calendar-week',      badge:'',     badgeColor:'', group:'sections',   visibleTo:['admin','principal','teacher','staff'] },
   { id:'schedule_builder', label:'منشئ الجدول الذكي',     labelEn:'Smart Scheduler',     icon:'fa-magic',              badge:'جديد', badgeColor:'#22c55e', group:'sections', visibleTo:['admin'] },
   { id:'leaves',          label:'الإجازات والغياب',         labelEn:'Leaves & Absence',    icon:'fa-user-clock',          badge:'',     badgeColor:'', group:'sections',   visibleTo:['admin','principal'] },
@@ -8072,31 +8072,107 @@ function saveStaffEdit(empId) {
 function renderMyProfile() {
   const container = document.getElementById('my-profile-content');
   if (!container) return;
-  const emp = currentStaff;
-  if (!emp) {
-    container.innerHTML = '<div style="text-align:center;padding:60px;"><i class="fas fa-user-circle" style="font-size:4rem;color:#ddd;"></i><p style="color:#888;margin-top:16px;">لا توجد بيانات شخصية — هذه الصفحة مخصصة للمعلمين والموظفين الذين يدخلون بحساباتهم الشخصية.</p></div>';
+
+  // Build profile key for localStorage overrides
+  const profileKey = 'aljood_profile_' + currentRole + '_' + (currentStaff ? currentStaff.id : encodeURIComponent(currentUsername));
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(profileKey) || '{}'); } catch(e) {}
+
+  let name, empId, email, jobTitle, category, grade, subjects, allJobs;
+
+  if (currentStaff) {
+    name      = saved.name  || currentStaff.name_ar;
+    empId     = saved.empId || currentStaff.id;
+    email     = saved.email || currentStaff.email || '';
+    jobTitle  = currentStaff.primary_job || currentStaff.category;
+    category  = currentStaff.category;
+    grade     = currentStaff.grade || '';
+    subjects  = currentStaff.subjects || [];
+    allJobs   = currentStaff.all_jobs || [];
+  } else if (currentRole === 'principal') {
+    const pe = (typeof STAFF_DB !== 'undefined') ? STAFF_DB.find(s => s.role === 'principal' || (s.primary_job && s.primary_job.includes('مدير مدرس'))) : null;
+    name      = saved.name  || (pe ? pe.name_ar : currentUsername);
+    empId     = saved.empId || (pe ? pe.id : '');
+    email     = saved.email || (pe ? pe.email : '');
+    jobTitle  = pe ? (pe.primary_job || 'مديرة المدرسة') : 'مديرة المدرسة';
+    category  = 'إداري';  grade = ''; subjects = []; allJobs = [];
+  } else if (currentRole === 'admin') {
+    name      = saved.name  || currentUsername;
+    empId     = saved.empId || '';
+    email     = saved.email || '';
+    jobTitle  = 'مدير النظام';
+    category  = 'إداري';  grade = ''; subjects = []; allJobs = [];
+  } else if (currentRole === 'parent') {
+    name      = saved.name  || currentUsername;
+    empId     = saved.empId || '';
+    email     = saved.email || '';
+    jobTitle  = 'ولي أمر';
+    category  = 'parent'; grade = ''; subjects = []; allJobs = [];
+  } else {
+    container.innerHTML = '<div style="text-align:center;padding:60px;"><i class="fas fa-user-circle" style="font-size:4rem;color:#ddd;"></i><p style="color:#888;margin-top:16px;">لا توجد بيانات شخصية</p></div>';
     return;
   }
-  const catColor = emp.category==='معلم'?'#10b981':emp.category==='إداري'?'#3b82f6':'#8b5cf6';
-  const icon = emp.category==='معلم'?'fa-chalkboard-teacher':emp.category==='إداري'?'fa-user-tie':'fa-tools';
-  container.innerHTML = `<div class="profile-card">
-    <div class="profile-avatar"><i class="fas ${icon}"></i></div>
-    <div class="profile-name">${emp.name_ar}</div>
-    <div class="profile-job">${emp.primary_job||emp.category}</div>
-    <div style="text-align:center;margin-bottom:24px;"><span style="display:inline-block;padding:5px 16px;background:${catColor}22;color:${catColor};border-radius:20px;font-size:0.85rem;font-weight:600;">${emp.category}</span></div>
-    <div class="profile-info-grid">
-      <div class="profile-info-item"><div class="profile-info-label"><i class="fas fa-id-badge" style="color:var(--accent);"></i> رقم الموظف</div><div class="profile-info-value" style="direction:ltr;">${emp.id}</div></div>
-      <div class="profile-info-item"><div class="profile-info-label"><i class="fas fa-layer-group" style="color:var(--accent);"></i> الحلقة الدراسية</div><div class="profile-info-value">${emp.grade||'غير محدد'}</div></div>
-      <div class="profile-info-item" style="grid-column:1/-1;"><div class="profile-info-label"><i class="fas fa-envelope" style="color:var(--accent);"></i> البريد الإلكتروني</div><div class="profile-info-value" style="direction:ltr;font-size:0.85rem;">${emp.email||'غير متوفر'}</div></div>
-      ${emp.subjects&&emp.subjects.length?'<div class="profile-info-item" style="grid-column:1/-1;"><div class="profile-info-label"><i class="fas fa-book" style="color:var(--accent);"></i> المواد الدراسية</div><div class="profile-info-value">'+emp.subjects.join(' — ')+'</div></div>':''}
-      ${emp.all_jobs&&emp.all_jobs.length>1?'<div class="profile-info-item" style="grid-column:1/-1;"><div class="profile-info-label"><i class="fas fa-briefcase" style="color:var(--accent);"></i> المسميات الوظيفية</div><div class="profile-info-value">'+emp.all_jobs.join(' / ')+'</div></div>':''}
-    </div>
-    <div style="margin-top:24px;padding:16px;background:#fffbf0;border-radius:12px;border:1px dashed var(--accent);text-align:center;">
-      <i class="fas fa-school" style="color:var(--accent);"></i>
-      <span style="color:var(--primary);font-weight:600;margin-right:8px;">مدرسة الجود — مدينة العين، أبوظبي</span>
-      <br><span style="color:#888;font-size:0.8rem;">العام الدراسي ٢٠٢٥ – ٢٠٢٦</span>
-    </div>
-  </div>`;
+
+  const catColor = category === 'معلم' ? '#10b981' : category === 'إداري' ? '#3b82f6' : category === 'parent' ? '#f59e0b' : '#8b5cf6';
+  const icon     = category === 'معلم' ? 'fa-chalkboard-teacher' : category === 'إداري' ? 'fa-user-tie' : category === 'parent' ? 'fa-heart' : 'fa-tools';
+  const catLabel = category === 'parent' ? 'ولي أمر' : category;
+
+  container.innerHTML =
+    '<div class="profile-card">'
+   +'<div class="profile-avatar"><i class="fas '+icon+'"></i></div>'
+   +'<div class="profile-name">'+name+'</div>'
+   +'<div class="profile-job">'+jobTitle+'</div>'
+   +'<div style="text-align:center;margin-bottom:24px;"><span style="display:inline-block;padding:5px 16px;background:'+catColor+'22;color:'+catColor+';border-radius:20px;font-size:0.85rem;font-weight:600;">'+catLabel+'</span></div>'
+   +'<div class="profile-info-grid">'
+     +'<div class="profile-info-item" style="grid-column:1/-1;"><div class="profile-info-label"><i class="fas fa-id-card" style="color:var(--accent);"></i> الاسم الكامل</div><div class="profile-info-value">'+name+'</div></div>'
+     +'<div class="profile-info-item"><div class="profile-info-label"><i class="fas fa-hashtag" style="color:var(--accent);"></i> الرقم الوزاري</div><div class="profile-info-value" style="direction:ltr;">'+(empId || '<span style="color:#aaa;font-size:.8rem;">غير محدد</span>')+'</div></div>'
+     +(grade ? '<div class="profile-info-item"><div class="profile-info-label"><i class="fas fa-layer-group" style="color:var(--accent);"></i> الحلقة الدراسية</div><div class="profile-info-value">'+grade+'</div></div>' : '')
+     +'<div class="profile-info-item" style="grid-column:1/-1;"><div class="profile-info-label"><i class="fas fa-envelope" style="color:var(--accent);"></i> البريد الإلكتروني</div><div class="profile-info-value" style="direction:ltr;font-size:0.85rem;">'+(email || '<span style="color:#aaa;font-size:.8rem;">غير متوفر</span>')+'</div></div>'
+     +(subjects && subjects.length ? '<div class="profile-info-item" style="grid-column:1/-1;"><div class="profile-info-label"><i class="fas fa-book" style="color:var(--accent);"></i> المواد الدراسية</div><div class="profile-info-value">'+subjects.join(' — ')+'</div></div>' : '')
+     +(allJobs && allJobs.length > 1 ? '<div class="profile-info-item" style="grid-column:1/-1;"><div class="profile-info-label"><i class="fas fa-briefcase" style="color:var(--accent);"></i> المسميات الوظيفية</div><div class="profile-info-value">'+allJobs.join(' / ')+'</div></div>' : '')
+   +'</div>'
+   +'<div style="text-align:center;margin-top:20px;">'
+     +'<button onclick="showProfileEditForm()" style="padding:10px 24px;background:var(--primary);color:#fff;border:none;border-radius:20px;cursor:pointer;font-weight:600;font-size:0.9rem;"><i class="fas fa-edit" style="margin-left:6px;"></i> تعديل البيانات</button>'
+   +'</div>'
+   +'<div id="profile-edit-form" style="display:none;margin-top:20px;padding:20px;background:#f8f9fc;border-radius:12px;border:1px solid #e0e4ea;">'
+     +'<div style="font-weight:700;color:var(--primary);margin-bottom:16px;"><i class="fas fa-user-edit" style="color:var(--accent);margin-left:6px;"></i> تعديل البيانات الشخصية</div>'
+     +'<div style="margin-bottom:12px;"><label style="font-size:.83rem;color:#555;font-weight:600;display:block;margin-bottom:4px;">الاسم الكامل</label><input id="edit-prof-name" value="'+name.replace(/"/g,"&quot;")+'" style="width:100%;padding:9px 12px;border:1px solid #dde;border-radius:8px;font-size:.9rem;box-sizing:border-box;"></div>'
+     +'<div style="margin-bottom:12px;"><label style="font-size:.83rem;color:#555;font-weight:600;display:block;margin-bottom:4px;">الرقم الوزاري</label><input id="edit-prof-id" value="'+empId.replace(/"/g,"&quot;")+'" style="width:100%;padding:9px 12px;border:1px solid #dde;border-radius:8px;font-size:.9rem;direction:ltr;box-sizing:border-box;"></div>'
+     +'<div style="margin-bottom:16px;"><label style="font-size:.83rem;color:#555;font-weight:600;display:block;margin-bottom:4px;">البريد الإلكتروني</label><input id="edit-prof-email" value="'+email.replace(/"/g,"&quot;")+'" style="width:100%;padding:9px 12px;border:1px solid #dde;border-radius:8px;font-size:.9rem;direction:ltr;box-sizing:border-box;"></div>'
+     +'<div style="display:flex;gap:10px;justify-content:flex-end;">'
+       +'<button onclick="cancelProfileEdit()" style="padding:8px 20px;background:#eee;color:#555;border:none;border-radius:8px;cursor:pointer;">إلغاء</button>'
+       +'<button onclick="saveProfileEdit()" style="padding:8px 20px;background:var(--accent);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;"><i class="fas fa-save" style="margin-left:4px;"></i> حفظ</button>'
+     +'</div>'
+   +'</div>'
+   +'<div style="margin-top:24px;padding:16px;background:#fffbf0;border-radius:12px;border:1px dashed var(--accent);text-align:center;">'
+     +'<i class="fas fa-school" style="color:var(--accent);"></i>'
+     +'<span style="color:var(--primary);font-weight:600;margin-right:8px;">مدرسة الجود — مدينة العين، أبوظبي</span>'
+     +'<br><span style="color:#888;font-size:0.8rem;">العام الدراسي ٢٠٢٥ – ٢٠٢٦</span>'
+   +'</div>'
+  +'</div>';
+}
+
+function showProfileEditForm() {
+  const f = document.getElementById('profile-edit-form');
+  if (f) f.style.display = 'block';
+  const btn = f ? f.previousElementSibling : null;
+  if (btn) btn.style.display = 'none';
+}
+function cancelProfileEdit() {
+  const f = document.getElementById('profile-edit-form');
+  if (f) { f.style.display = 'none'; const btn = f.previousElementSibling; if (btn) btn.style.display = ''; }
+}
+function saveProfileEdit() {
+  const profileKey = 'aljood_profile_' + currentRole + '_' + (currentStaff ? currentStaff.id : encodeURIComponent(currentUsername));
+  const name  = (document.getElementById('edit-prof-name')  || {}).value || '';
+  const empId = (document.getElementById('edit-prof-id')    || {}).value || '';
+  const email = (document.getElementById('edit-prof-email') || {}).value || '';
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(profileKey) || '{}'); } catch(e) {}
+  saved.name = name.trim(); saved.empId = empId.trim(); saved.email = email.trim();
+  localStorage.setItem(profileKey, JSON.stringify(saved));
+  showToast('✅ تم حفظ التعديلات بنجاح');
+  renderMyProfile();
 }
 
 </script>
