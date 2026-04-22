@@ -294,11 +294,13 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 
 /* Responsive */
 @media(max-width:768px) {
-  #sidebar { transform:translateX(100%); }
+  #sidebar { transform:translateX(110%); transition:transform 0.3s ease; z-index:999; }
+  #sidebar.mobile-open { transform:translateX(0); }
   #mainArea { margin-right:0; }
-  #mainArea { /* mobile: show without sidebar */ }
   .charts-grid { grid-template-columns:1fr; }
   .stats-grid { grid-template-columns:1fr 1fr; }
+  #hamburger-btn { display:inline-flex !important; }
+  .topbar { padding:0 12px; }
 }
 
 /* Scrollbar */
@@ -1105,9 +1107,11 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
   <!-- Main Content -->
   <div id="mainArea">
   <div class="topbar">
+    <button id="hamburger-btn" onclick="toggleMobileSidebar()" title="القائمة" style="display:none;background:none;border:none;cursor:pointer;padding:6px 10px;margin-left:8px;color:#1A2A4A;font-size:1.4rem;line-height:1;">&#9776;</button>
     <div class="topbar-title" id="topbarTitle">🏠 الصفحة الرئيسية</div>
     <div class="topbar-date" id="topbarDate"></div>
   </div>
+  <div id="sidebar-overlay" onclick="toggleMobileSidebar()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:998;"></div>
 
   <!-- ===== GLOBAL RETURN-TO-SCHOOL BANNER ===== -->
   <div id="global-attendance-banner" style="display:none;background:linear-gradient(135deg,#1A2A4A 0%,#0d1b30 60%,#1a3a2a 100%);padding:12px 24px;position:relative;overflow:hidden;border-bottom:2px solid #C9A84C;">
@@ -2823,7 +2827,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     <span style="color:var(--accent);font-weight:700;font-size:0.88rem;"><i class="fas fa-calendar-alt"></i> نوع الجدول:</span>
     <button class="sched-mode-btn" data-mode="normal" onclick="switchSchedMode('normal')" style="padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.82rem;font-family:inherit;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:white;"><i class="fas fa-table"></i> اعتيادي</button>
     <button class="sched-mode-btn" data-mode="ramadan" onclick="switchSchedMode('ramadan')" style="padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.82rem;font-family:inherit;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:white;"><i class="fas fa-moon"></i> رمضان</button>
-    <button class="sched-mode-btn" data-mode="distance" onclick="switchSchedMode('distance')" style="padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.82rem;font-family:inherit;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:white;"><i class="fas fa-laptop-house"></i> تعلم عن بعد</button>
+    <button class="sched-mode-btn" data-mode="distance" onclick="switchSchedMode('distance')" style="padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.82rem;font-family:inherit;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:white;"><i id="ds-mode-icon" class="fas fa-laptop-house"></i> <span id="ds-mode-btn-label">تعلم عن بعد</span></button>
     <span id="sched-mode-badge" style="font-size:0.78rem;color:rgba(255,255,255,0.55);padding:3px 8px;background:rgba(255,255,255,0.07);border-radius:4px;"></span>
     <button id="sched-activate-btn" onclick="activateSchedMode()" style="display:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.82rem;font-family:inherit;border:none;background:#28a745;color:white;margin-right:auto;"><i class="fas fa-check-circle"></i> تفعيل كجدول نشط</button>
   </div>
@@ -3467,8 +3471,8 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;font-size:0.88rem;color:rgba(255,255,255,0.8);">
         <div>
           <div style="color:rgba(255,255,255,0.5);font-size:0.78rem;margin-bottom:4px;">نمط التعليم الحالي</div>
-          <div><span class="ds-badge ds-badge-blue">تعلم عن بعد</span> عبر Microsoft Teams</div>
-          <div style="margin-top:4px;font-size:0.8rem;color:rgba(255,255,255,0.5);">من ٢٣ مارس ٢٠٢٦ حتى ١٧ أبريل ٢٠٢٦</div>
+          <div><span id="ds-mode-badge-main" class="ds-badge ds-badge-blue">تعلم عن بعد</span> <span id="ds-mode-platform">عبر Microsoft Teams</span></div>
+          <div id="ds-mode-dates" style="margin-top:4px;font-size:0.8rem;color:rgba(255,255,255,0.5);">من ٢٣ مارس ٢٠٢٦ حتى ١٧ أبريل ٢٠٢٦</div>
         </div>
         <div>
           <div style="color:rgba(255,255,255,0.5);font-size:0.78rem;margin-bottom:4px;">العودة للتعليم الحضوري</div>
@@ -5207,6 +5211,7 @@ function restoreSession() {
     initCharts();
     updateDate();
     initGlobalBanner();
+    setTimeout(applyLearningMode, 500);
     setTimeout(initGlobalBanner, 300); // re-run after renderAllSections completes
     resetSessionTimer();
     showChatBtn();
@@ -5523,6 +5528,47 @@ function showSection(name) {
   if (name === 'achievements') { try { renderAchievements(); } catch(e) {} }
   if (name === 'events') { try { renderEvents(); renderUpcoming(); } catch(e) {} }
   if (name === 'projects') { try { renderProjects(); } catch(e) {} }
+  if (name === 'digital_safety') { setTimeout(applyLearningMode, 100); }
+}
+
+
+// ===== LEARNING MODE AUTO-DETECT =====
+function getCurrentLearningMode() {
+  var now = new Date();
+  var returnDate = new Date('2026-04-19');
+  if (now >= returnDate) {
+    return { mode: 'حضوري', icon: 'fa-school', badge: 'ds-badge-green', platform: 'في مبنى المدرسة', dates: 'من ١٩ أبريل ٢٠٢٦' };
+  }
+  return { mode: 'تعلم عن بعد', icon: 'fa-laptop-house', badge: 'ds-badge-blue', platform: 'عبر Microsoft Teams', dates: 'من ٢٣ مارس ٢٠٢٦ حتى ١٧ أبريل ٢٠٢٦' };
+}
+
+function applyLearningMode() {
+  var m = getCurrentLearningMode();
+  var btnLabel = document.getElementById('ds-mode-btn-label');
+  var btnIcon  = document.getElementById('ds-mode-icon');
+  var badgeMain = document.getElementById('ds-mode-badge-main');
+  var platform  = document.getElementById('ds-mode-platform');
+  var dates     = document.getElementById('ds-mode-dates');
+  if (btnLabel)  btnLabel.textContent = m.mode;
+  if (btnIcon)   { btnIcon.className = 'fas ' + m.icon; }
+  if (badgeMain) { badgeMain.textContent = m.mode; badgeMain.className = 'ds-badge ' + m.badge; }
+  if (platform)  platform.textContent = m.platform;
+  if (dates)     dates.textContent = m.dates;
+}
+
+// ===== MOBILE SIDEBAR TOGGLE =====
+function toggleMobileSidebar() {
+  var sidebar = document.getElementById('sidebar');
+  var overlay = document.getElementById('sidebar-overlay');
+  if (!sidebar) return;
+  var isOpen = sidebar.classList.contains('mobile-open');
+  if (isOpen) {
+    sidebar.classList.remove('mobile-open');
+    if (overlay) overlay.style.display = 'none';
+  } else {
+    sidebar.classList.add('mobile-open');
+    if (overlay) overlay.style.display = 'block';
+  }
 }
 
 // ===== DATE =====
