@@ -648,6 +648,16 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     #section-digital_safety .ds-field textarea{resize:vertical;}
     #section-digital_safety .ds-sev-badge{display:inline-block;padding:3px 12px;border-radius:20px;font-size:0.75rem;font-weight:700;}
     #section-digital_safety .sev-low{background:rgba(34,197,94,0.2);color:#4ade80;}
+    #section-digital_safety .ds-tasks-table{width:100%;border-collapse:collapse;font-size:0.83rem;}
+    #section-digital_safety .ds-tasks-table th{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.6);font-weight:600;padding:8px 10px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.08);}
+    #section-digital_safety .ds-tasks-table td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,0.05);color:rgba(255,255,255,0.82);vertical-align:middle;}
+    #section-digital_safety .ds-tasks-table tr:last-child td{border-bottom:none;}
+    #section-digital_safety .ds-tasks-table tr:hover td{background:rgba(255,255,255,0.03);}
+    #section-digital_safety .dst-num{color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:700;}
+    #section-digital_safety .dst-status{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:0.75rem;font-weight:700;cursor:pointer;border:none;font-family:inherit;}
+    #section-digital_safety .dst-done{background:rgba(16,185,129,0.2);color:#34d399;}
+    #section-digital_safety .dst-inprogress{background:rgba(59,130,246,0.2);color:#60a5fa;}
+    #section-digital_safety .dst-pending{background:rgba(148,163,184,0.12);color:#94a3b8;}
     #section-digital_safety .sev-med{background:rgba(251,191,36,0.2);color:#fbbf24;}
     #section-digital_safety .sev-high{background:rgba(249,115,22,0.2);color:#fb923c;}
     #section-digital_safety .sev-crit{background:rgba(239,68,68,0.25);color:#f87171;}
@@ -4044,13 +4054,18 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
       </div>
     </div>
 
-    <!-- التكاليف -->
-    <div class="ds-card">
-      <h4 style="color:var(--accent);margin:0 0 12px;"><i class="fas fa-file-signature" style="margin-left:6px;"></i>تكاليف فريق السلامة الرقمية (11 تكليف)</h4>
-      <p style="color:rgba(255,255,255,0.6);font-size:0.82rem;margin:0 0 12px;">التكاليف الرسمية لجميع أعضاء فريق السلامة الرقمية — متاحة على Google Drive المجلد الخاص</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <a href="https://drive.google.com/drive/folders/1zLdcVj9_bs_DboblrIYO3Gt0b4AyIuLe" target="_blank" style="padding:8px 16px;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.15);border-radius:8px;text-decoration:none;font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;"><i class="fab fa-google-drive"></i> فتح مجلد Drive الخاص</a>
+    <!-- التكاليف — للمدير والمديرة والإداري فقط -->
+    <div class="ds-card" id="ds-tasks-card" style="display:none;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+        <h4 style="color:var(--accent);margin:0;"><i class="fas fa-file-signature" style="margin-left:6px;"></i>تكاليف فريق السلامة الرقمية <span id="ds-tasks-count-badge" style="background:rgba(201,168,39,0.2);color:var(--accent);border-radius:20px;padding:2px 10px;font-size:0.78rem;margin-right:6px;"></span></h4>
+        <div id="ds-tasks-progress-wrap" style="display:flex;align-items:center;gap:8px;">
+          <div style="width:100px;background:rgba(255,255,255,0.1);border-radius:10px;height:7px;overflow:hidden;">
+            <div id="ds-tasks-bar" style="height:100%;background:var(--accent);border-radius:10px;width:0%;transition:.4s;"></div>
+          </div>
+          <span id="ds-tasks-pct" style="color:var(--accent);font-weight:700;font-size:0.85rem;">0%</span>
+        </div>
       </div>
+      <div id="ds-tasks-container"></div>
     </div>
   </div>
 
@@ -4320,6 +4335,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     if (name === 'overview') dsUpdateOverviewPct();
     if (name === 'incidents') { renderIncidentStats(); renderIncidents(); }
     if (name === 'surveys') { showSurvey(currentSurveyType || 'student'); }
+    if (name === 'materials') dsRenderTasks();
   }
 
   // ─── MEETING MINUTES ──────────────────────────────────────────────────────
@@ -4619,6 +4635,89 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     if (el) el.textContent = pct + '%';
     const badge = document.getElementById('ds-overall-badge');
     if (badge) badge.textContent = pct < 40 ? 'الوضع: بدء التطبيق' : pct < 75 ? 'الوضع: قيد التطبيق' : pct < 100 ? 'الوضع: متقدم' : 'الوضع: جاهز للاعتماد';
+  }
+
+  // ─── TASKS (تكاليف) ───────────────────────────────────────────────────────
+  const DS_TASKS_KEY = 'aljood_ds_tasks';
+
+  const DS_TASKS = [
+    { id:'t01', title:'إعداد وثيقة سياسة الاستخدام المقبول (AUP) وتوقيعها من القيادة', assigned:'منيرة علي المري', deadline:'فبراير ٢٠٢٦', status:'done' },
+    { id:'t02', title:'إعداد التقرير الأولي لتقييم متطلبات برنامج أقدر', assigned:'منيرة علي المري', deadline:'يناير ٢٠٢٦', status:'done' },
+    { id:'t03', title:'تدريب المعلمات على أسس السلامة الرقمية (٣ جلسات)', assigned:'أخصائية تقنية المعلومات', deadline:'مارس ٢٠٢٦', status:'done' },
+    { id:'t04', title:'مراجعة وضبط إعدادات الأمان في Microsoft Teams', assigned:'أخصائية تقنية المعلومات', deadline:'فبراير ٢٠٢٦', status:'done' },
+    { id:'t05', title:'تنفيذ جلسات توعية السلامة الرقمية في فصول الحلقة الأولى (KG–٤)', assigned:'مشرفة الحلقة الأولى', deadline:'مارس ٢٠٢٦', status:'done' },
+    { id:'t06', title:'تنفيذ ورش الاستخدام الآمن للابتوبات ألف — الحلقة الثانية (٥–٨)', assigned:'مشرفة الحلقة الثانية', deadline:'أبريل ٢٠٢٦', status:'inprogress' },
+    { id:'t07', title:'إنشاء وتفعيل سجل الحوادث الإلكترونية وآلية التبليغ', assigned:'أخصائية التوجيه والإرشاد', deadline:'يناير ٢٠٢٦', status:'done' },
+    { id:'t08', title:'إعداد وتوزيع نشرات التوعية لأولياء الأمور (ورقية ورقمية)', assigned:'إدارية التواصل', deadline:'فبراير ٢٠٢٦', status:'done' },
+    { id:'t09', title:'عقد جلسة توعوية لأولياء الأمور حول السلامة الرقمية', assigned:'إدارية التواصل', deadline:'أبريل ٢٠٢٦', status:'inprogress' },
+    { id:'t10', title:'تنظيم يوم الإنترنت الآمن في المدرسة — جميع الصفوف', assigned:'الفريق كاملاً', deadline:'مايو ٢٠٢٦', status:'pending' },
+    { id:'t11', title:'إعداد التقرير الختامي للفصل الثاني وخطة التحسين للفصل الثالث', assigned:'منيرة علي المري', deadline:'أبريل ٢٠٢٦', status:'inprogress' },
+  ];
+
+  function getDSTasks() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(DS_TASKS_KEY) || '{}');
+      return saved;
+    } catch(e) { return {}; }
+  }
+  function saveDSTasks(data) { localStorage.setItem(DS_TASKS_KEY, JSON.stringify(data)); }
+
+  function dsRenderTasks() {
+    var card = document.getElementById('ds-tasks-card');
+    if (!card) return;
+    // visibility check
+    var role = localStorage.getItem('aljood_role') || '';
+    var show = (role === 'admin' || role === 'principal' || role === 'admin_staff');
+    card.style.display = show ? '' : 'none';
+    if (!show) return;
+
+    var overrides = getDSTasks();
+    var container = document.getElementById('ds-tasks-container');
+    if (!container) return;
+
+    var statusMap = { done:'مكتمل', inprogress:'قيد التنفيذ', pending:'لم يبدأ' };
+    var cssMap = { done:'dst-done', inprogress:'dst-inprogress', pending:'dst-pending' };
+    var iconMap = { done:'fa-check-circle', inprogress:'fa-spinner', pending:'fa-circle' };
+
+    var total = DS_TASKS.length;
+    var doneCount = 0;
+    var canToggle = (role === 'admin' || role === 'principal');
+
+    var rows = DS_TASKS.map(function(t) {
+      var st = overrides[t.id] || t.status;
+      if (st === 'done') doneCount++;
+      var clickAttr = canToggle ? 'onclick="dsCycleTask(\'' + t.id + '\')" title="اضغط لتغيير الحالة"' : '';
+      return '<tr>' +
+        '<td class="dst-num">' + t.id.replace('t','') + '</td>' +
+        '<td>' + t.title + '</td>' +
+        '<td style="color:rgba(255,255,255,0.6);white-space:nowrap;">' + t.assigned + '</td>' +
+        '<td style="color:rgba(255,255,255,0.5);white-space:nowrap;font-size:0.8rem;">' + t.deadline + '</td>' +
+        '<td><button class="dst-status ' + cssMap[st] + '" ' + clickAttr + '><i class="fas ' + iconMap[st] + '"></i> ' + statusMap[st] + '</button></td>' +
+        '</tr>';
+    }).join('');
+
+    container.innerHTML = '<div class="ds-table-wrap"><table class="ds-tasks-table">' +
+      '<thead><tr><th style="width:32px;">#</th><th>التكليف</th><th>المسؤول</th><th>الموعد</th><th style="width:130px;">الحالة</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>';
+
+    var pct = Math.round(doneCount / total * 100);
+    var badge = document.getElementById('ds-tasks-count-badge');
+    var bar = document.getElementById('ds-tasks-bar');
+    var pctEl = document.getElementById('ds-tasks-pct');
+    if (badge) badge.textContent = doneCount + ' / ' + total + ' مكتملة';
+    if (bar) bar.style.width = pct + '%';
+    if (pctEl) pctEl.textContent = pct + '%';
+  }
+
+  function dsCycleTask(id) {
+    var overrides = getDSTasks();
+    var task = DS_TASKS.find(function(t){ return t.id === id; });
+    if (!task) return;
+    var current = overrides[id] || task.status;
+    var cycle = { done:'pending', inprogress:'done', pending:'inprogress' };
+    overrides[id] = cycle[current] || 'pending';
+    saveDSTasks(overrides);
+    dsRenderTasks();
   }
 
   // Init
