@@ -9056,14 +9056,16 @@ function renderClassSched() {
         const subj = cell.subject || '';
         const teacher = cell.teacher || '';
         const color = getSubjColor(subj);
+        const dragAttrs = isAdmin ? ' draggable="true" data-classid="' + classId + '" data-di="' + di + '" data-pi="' + p.pi + '" ondragstart="schedDragStart(event)" ondragover="schedDragOver(event)" ondragleave="schedDragLeave(event)" ondrop="schedDrop(event)"' : '';
         if (subj) {
-          html += '<td style="padding:3px;">';
-          html += '<div class="sched-cell" style="background:' + color + '14;border-right-color:' + color + ';">';
+          html += '<td style="padding:3px;transition:opacity 0.2s,background 0.2s;"' + dragAttrs + '>';
+          html += '<div class="sched-cell" style="background:' + color + '14;border-right-color:' + color + ';' + (isAdmin ? 'cursor:grab;' : '') + '">';
+          if (isAdmin) html += '<div style="float:left;font-size:0.6rem;color:rgba(0,0,0,0.25);line-height:1;padding:1px;">⠿</div>';
           html += '<div class="sched-cell-subj" style="color:' + color + ';">' + subj + '</div>';
           if (teacher) html += '<div class="sched-cell-teacher">' + teacher + '</div>';
           html += '</div></td>';
         } else {
-          html += '<td style="padding:3px;"><div style="height:42px;background:#f8f9fa;border-radius:6px;margin:2px;border:1px dashed #d1d5db;"></div></td>';
+          html += '<td style="padding:3px;transition:background 0.2s;"' + dragAttrs + '><div style="height:42px;background:#f8f9fa;border-radius:6px;margin:2px;border:1px dashed #d1d5db;' + (isAdmin ? 'cursor:copy;' : '') + '"></div></td>';
         }
       }
     });
@@ -9253,6 +9255,70 @@ function deleteClass(classId) {
   saveSchedules(schedules);
   renderScheduleSection();
 }
+
+// ─── SCHEDULE DRAG & DROP ────────────────────────────────────
+var _schedDragSrc = null;
+
+function schedDragStart(e) {
+  var td = e.currentTarget;
+  _schedDragSrc = { classId: td.dataset.classid, di: parseInt(td.dataset.di), pi: parseInt(td.dataset.pi) };
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', '1');
+  setTimeout(function(){ td.style.opacity = '0.4'; }, 0);
+}
+
+function schedDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.style.background = 'rgba(201,168,76,0.18)';
+  e.currentTarget.style.outline = '2px dashed #C9A84C';
+}
+
+function schedDragLeave(e) {
+  e.currentTarget.style.background = '';
+  e.currentTarget.style.outline = '';
+  e.currentTarget.style.opacity = '';
+}
+
+function schedDrop(e) {
+  e.preventDefault();
+  var td = e.currentTarget;
+  td.style.background = '';
+  td.style.outline = '';
+  td.style.opacity = '';
+  if (!_schedDragSrc) return;
+  var tgtClassId = td.dataset.classid;
+  var tgtDi = parseInt(td.dataset.di);
+  var tgtPi = parseInt(td.dataset.pi);
+  if (_schedDragSrc.classId !== tgtClassId) { _schedDragSrc = null; return; }
+  if (_schedDragSrc.di === tgtDi && _schedDragSrc.pi === tgtPi) { _schedDragSrc = null; return; }
+  var schedules = getSchedules();
+  var isDistMode = currentSchedMode === 'distance';
+  var srcKey = _schedDragSrc.di + '_' + _schedDragSrc.pi;
+  var tgtKey = tgtDi + '_' + tgtPi;
+  if (isDistMode) {
+    var distSched = schedules['__mode_distance'] || {};
+    if (!distSched[tgtClassId]) distSched[tgtClassId] = {};
+    var clsSched = distSched[tgtClassId];
+    var temp = clsSched[srcKey] ? Object.assign({}, clsSched[srcKey]) : {};
+    clsSched[srcKey] = clsSched[tgtKey] ? Object.assign({}, clsSched[tgtKey]) : {};
+    clsSched[tgtKey] = temp;
+    distSched[tgtClassId] = clsSched;
+    schedules['__mode_distance'] = distSched;
+  } else {
+    if (!schedules[tgtClassId]) schedules[tgtClassId] = {};
+    var cls = schedules[tgtClassId];
+    var tmp = cls[srcKey] ? Object.assign({}, cls[srcKey]) : {};
+    cls[srcKey] = cls[tgtKey] ? Object.assign({}, cls[tgtKey]) : {};
+    cls[tgtKey] = tmp;
+    schedules[tgtClassId] = cls;
+  }
+  saveSchedules(schedules);
+  _schedDragSrc = null;
+  renderClassSched();
+  if (typeof showToast === 'function') showToast('تم تبديل الحصتين ✓', 'success');
+}
+// ─────────────────────────────────────────────────────────────
 
 // Render teacher's own schedule in my_profile
 function renderMySchedule(empId) {
