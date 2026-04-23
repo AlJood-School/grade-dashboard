@@ -4953,7 +4953,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
         </div>
         <div>
           <label class="dlp-field-label"><i class="fas fa-chalkboard" style="color:var(--accent);margin-left:4px;"></i>الصف والشعبة</label>
-          <select id="dlp-class" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;font-size:0.92rem;">
+          <select id="dlp-class" onchange="dlpOnClassChange()" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;font-size:0.92rem;">
             <option value="">اختر الصف</option>
             <option>KG1</option><option>KG2</option>
             <option>1A</option><option>1B</option><option>1C</option>
@@ -4981,6 +4981,8 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
           </select>
         </div>
       </div>
+      <!-- Teacher info badge — auto-populated from schedule -->
+      <div id="dlp-teacher-info-badge" style="display:none;margin-top:8px;"></div>
       <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-top:14px;flex-wrap:wrap;">
         <div>
           <label class="dlp-field-label"><i class="fas fa-lightbulb" style="color:var(--accent);margin-left:4px;"></i>موضوع الدرس</label>
@@ -5870,6 +5872,7 @@ const sectionTitles = {
   'digital_safety': 'السلامة الرقمية — برنامج أقدر',
   'school_schedule': 'الجدول المدرسي',
   'schedule_builder': 'منشئ الجدول الذكي',
+  substitute_scheduler: '🛡️ الاحتياط الذكي',
   'leaves': 'إجازات الموظفات',
   'meetings': 'الاجتماعات',
   'my_profile': 'ملفي الشخصي',
@@ -5920,6 +5923,7 @@ function showSection(name) {
   if (name === 'events') { try { renderEvents(); renderUpcoming(); } catch(e) {} }
   if (name === 'projects') { try { renderProjects(); } catch(e) {} }
   if (name === 'digital_safety') { setTimeout(applyLearningMode, 100); }
+  if (name === 'substitute_scheduler') { try { renderSubstituteScheduler(); } catch(e) {} }
 }
 
 
@@ -6832,7 +6836,7 @@ const ALL_SECTIONS = [
 ];
 
 const DEFAULT_ACCESS = {
-  admin:         ['home','analysis','students','admin_section','distance','resources','projects','events','achievements','documents','parents','forms','templates','staff_directory','school_schedule','schedule_builder','leaves','meetings','weekly_plan','daily_plans','behavior_log','reports','parent_requests','digital_safety','my_profile','tech_support','credentials_center','lms_credentials'],
+  admin:         ['home','analysis','students','admin_section','distance','resources','projects','events','achievements','documents','parents','forms','templates','staff_directory','school_schedule','substitute_scheduler', 'schedule_builder','leaves','meetings','weekly_plan','daily_plans','behavior_log','reports','parent_requests','digital_safety','my_profile','tech_support','credentials_center','lms_credentials'],
   principal:     ['home','analysis','students','admin_section','distance','resources','projects','events','achievements','documents','parents','forms','templates','staff_directory','school_schedule','leaves','meetings','weekly_plan','daily_plans','behavior_log','reports','parent_requests','digital_safety','my_profile','tech_support'],
   teacher:       ['home','analysis','students','distance','resources','projects','events','achievements','forms','templates','staff_directory','my_profile','school_schedule','meetings','weekly_plan','daily_plans','behavior_log','reports','parent_requests','digital_safety','tech_support'],
   staff:         ['home','analysis','events','achievements','documents','forms','templates','staff_directory','my_profile','school_schedule','meetings','resources','weekly_plan','daily_plans','behavior_log','reports','parent_requests','digital_safety','tech_support'],
@@ -6883,6 +6887,7 @@ const NAV_DEFAULT_CONFIG = [
   { id:'analysis',         label:'تحليل الدرجات',          labelEn:'Grade Analysis',    icon:'fa-chart-bar',          badge:'', badgeColor:'', group:'academic',     visibleTo:['admin','principal','teacher','staff'] },
   { id:'school_schedule',  label:'الجدول المدرسي',         labelEn:'School Schedule',   icon:'fa-calendar-week',      badge:'', badgeColor:'', group:'academic',     visibleTo:['admin','principal','teacher','staff'] },
   { id:'schedule_builder', label:'منشئ الجدول الذكي',     labelEn:'Smart Scheduler',   icon:'fa-magic',              badge:'جديد', badgeColor:'#22c55e', group:'academic', visibleTo:['admin'] },
+  { id:'substitute_scheduler', label:'الاحتياط الذكي',       labelEn:'Smart Cover',        icon:'fa-user-shield',         badge:'جديد', badgeColor:'#f59e0b', group:'academic', visibleTo:['admin','principal','staff'] },
   { id:'weekly_plan',      label:'المسار الأسبوعي',        labelEn:'Weekly Newsletter', icon:'fa-calendar-check',     badge:'', badgeColor:'', group:'academic',     visibleTo:['admin','principal','admin_staff','teacher'] },
   { id:'daily_plans',      label:'الخطط الدرسية',          labelEn:'Lesson Plans',      icon:'fa-book-open',          badge:'', badgeColor:'', group:'academic',     visibleTo:['teacher','admin','principal','admin_staff','staff'] },
   /* ===== التواصل والفعاليات ===== */
@@ -6916,7 +6921,7 @@ const GROUP_LABELS = {
   support:       'الدعم والمساعدة'
 };
 
-const NAV_CONFIG_VERSION = '2026-04-22-v2';
+const NAV_CONFIG_VERSION = '2026-04-24-v1';
 function getNavConfig() {
   try {
     const savedVersion = localStorage.getItem('aljood_nav_version');
@@ -13720,6 +13725,72 @@ function getDlpSelectedTags(groupId) {
   return Array.from(group.querySelectorAll('.dlp-tag-pill.active'))
     .map(function(t){ return t.textContent.trim(); }).join('، ');
 }
+function dlpOnClassChange() {
+  var classVal = document.getElementById('dlp-class') ? document.getElementById('dlp-class').value : '';
+  var sel = document.getElementById('dlp-subject');
+  if (!sel) return;
+  if (!classVal) { initDlpSubjectOptions(); return; }
+  try {
+    var schedules = getSchedules();
+    var classSchedule = schedules[classVal] || {};
+    // استخرج المعلمات والمواد من جدول هذا الصف
+    var teacherSubjectMap = {}; // {teacher: Set<subject>}
+    Object.values(classSchedule).forEach(function(cell) {
+      if (!cell || !cell.teacher || !cell.subject) return;
+      if (!teacherSubjectMap[cell.teacher]) teacherSubjectMap[cell.teacher] = new Set();
+      teacherSubjectMap[cell.teacher].add(cell.subject);
+    });
+    // للمعلمة: حاول مطابقة اسمها
+    var myName = currentUsername || '';
+    var myStaff = currentStaff;
+    var mySubjects = [];
+    var matchedTeacher = '';
+    // جرب المطابقة مع الاسم الكامل أو الجزئي
+    Object.keys(teacherSubjectMap).forEach(function(tname) {
+      var tLow = tname.toLowerCase().replace(/[.\s]/g,'');
+      var mLow = myName.toLowerCase().replace(/[.\s]/g,'');
+      if (tLow === mLow || mLow.includes(tLow) || tLow.includes(mLow) ||
+          (myStaff && myStaff.name_ar && myStaff.name_ar.includes(tname))) {
+        mySubjects = mySubjects.concat(Array.from(teacherSubjectMap[tname]));
+        matchedTeacher = tname;
+      }
+    });
+    // عرض مؤشر المعلمة
+    var infoEl = document.getElementById('dlp-teacher-info-badge');
+    if (infoEl) {
+      if (matchedTeacher) {
+        infoEl.innerHTML = '<span style="background:#e8f5e9;color:#2e7d32;padding:4px 12px;border-radius:20px;font-size:0.82rem;font-weight:700;"><i class=\'fas fa-user-check\'></i> ' + myName + ' — ' + classVal + '</span>';
+        infoEl.style.display = '';
+      } else {
+        infoEl.innerHTML = '<span style="background:#fff3e0;color:#e65100;padding:4px 12px;border-radius:20px;font-size:0.82rem;"><i class=\'fas fa-info-circle\'></i> لم يُعثر على اسمك في جدول هذا الصف — اختر المادة يدوياً</span>';
+        infoEl.style.display = '';
+      }
+    }
+    if (mySubjects.length > 0) {
+      sel.innerHTML = '<option value="">-- اختر المادة --</option>';
+      [...new Set(mySubjects)].forEach(function(sub) {
+        var op = document.createElement('option');
+        op.value = sub; op.textContent = sub;
+        sel.appendChild(op);
+      });
+      if (mySubjects.length === 1) sel.value = mySubjects[0];
+    } else {
+      // إذا لم يوجد مطابقة — اعرض جميع مواد الصف
+      var allSubs = [];
+      Object.values(classSchedule).forEach(function(cell) {
+        if (cell && cell.subject) allSubs.push(cell.subject);
+      });
+      allSubs = [...new Set(allSubs)];
+      sel.innerHTML = '<option value="">-- اختر المادة --</option>';
+      allSubs.forEach(function(sub) {
+        var op = document.createElement('option');
+        op.value = sub; op.textContent = sub;
+        sel.appendChild(op);
+      });
+    }
+  } catch(e) { initDlpSubjectOptions(); }
+}
+
 function initDlpSubjectOptions() {
   var sel = document.getElementById('dlp-subject');
   if (!sel) return;
@@ -15451,6 +15522,68 @@ function renderLoginAnalytics() {
   </div>
 </section>
 
+<!-- ═══════════ SUBSTITUTE SCHEDULER ═══════════ -->
+<div class="section" id="section-substitute_scheduler" style="background:linear-gradient(135deg,#0a1628 0%,#1a2d4a 60%,#0d2137 100%);min-height:100vh;padding:24px;">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+    <div style="background:linear-gradient(135deg,#C9A84C,#e8c84a);width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <i class="fas fa-user-shield" style="color:#1A2A4A;font-size:1.3rem;"></i>
+    </div>
+    <div>
+      <h2 style="color:var(--accent);font-size:1.3rem;margin:0;">الاحتياط الذكي</h2>
+      <p style="color:rgba(255,255,255,0.6);font-size:0.82rem;margin:0;">توليد جدول الاحتياط تلقائياً بناءً على المتغيبات والجدول المدرسي</p>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:14px;margin-bottom:20px;align-items:end;">
+    <div>
+      <label style="color:rgba(201,168,76,0.9);font-size:0.82rem;font-weight:700;display:block;margin-bottom:6px;"><i class="fas fa-calendar-day"></i> يوم الدراسة</label>
+      <select id="sub-day-select" style="width:100%;padding:10px;border:2px solid rgba(201,168,76,0.3);border-radius:8px;background:#1a2d4a;color:white;font-family:inherit;font-size:0.9rem;">
+        <option value="0">الأحد</option><option value="1">الاثنين</option><option value="2">الثلاثاء</option><option value="3">الأربعاء</option><option value="4">الخميس</option>
+      </select>
+    </div>
+    <div>
+      <label style="color:rgba(201,168,76,0.9);font-size:0.82rem;font-weight:700;display:block;margin-bottom:6px;"><i class="fas fa-search"></i> بحث عن معلمة</label>
+      <input id="sub-teacher-search" oninput="filterSubTeachers()" placeholder="ابحث بالاسم..." style="width:100%;padding:10px;border:2px solid rgba(201,168,76,0.3);border-radius:8px;background:#1a2d4a;color:white;font-family:inherit;font-size:0.9rem;box-sizing:border-box;">
+    </div>
+    <div>
+      <button onclick="generateSubstituteSchedule()" style="padding:10px 22px;background:linear-gradient(135deg,#C9A84C,#e8c84a);border:none;border-radius:8px;color:#1A2A4A;font-weight:700;cursor:pointer;font-family:inherit;font-size:0.9rem;white-space:nowrap;">
+        <i class="fas fa-bolt"></i> توليد الجدول
+      </button>
+    </div>
+  </div>
+  <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:16px;margin-bottom:20px;border:1px solid rgba(201,168,76,0.2);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h4 style="color:var(--accent);margin:0;font-size:0.95rem;"><i class="fas fa-users"></i> حالة المعلمات اليوم</h4>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <span style="background:rgba(239,68,68,0.2);color:#fca5a5;padding:3px 10px;border-radius:12px;font-size:0.75rem;">🔴 غائبة</span>
+        <span style="background:rgba(245,158,11,0.2);color:#fcd34d;padding:3px 10px;border-radius:12px;font-size:0.75rem;">🟡 متأخرة (ح1–2)</span>
+        <span style="background:rgba(147,51,234,0.2);color:#d8b4fe;padding:3px 10px;border-radius:12px;font-size:0.75rem;">🟣 رضاعة (ح3–4)</span>
+        <span style="background:rgba(34,197,94,0.2);color:#86efac;padding:3px 10px;border-radius:12px;font-size:0.75rem;">🟢 حاضرة</span>
+      </div>
+    </div>
+    <div id="sub-teachers-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;max-height:360px;overflow-y:auto;"></div>
+  </div>
+  <div style="background:rgba(255,255,255,0.04);border-radius:12px;padding:14px;margin-bottom:20px;border:1px solid rgba(255,255,255,0.1);">
+    <h4 style="color:rgba(201,168,76,0.8);margin:0 0 10px;font-size:0.88rem;"><i class="fas fa-sliders-h"></i> قيود الجدولة</h4>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:0.85rem;color:rgba(255,255,255,0.8);">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="sub-limit-consecutive" checked style="accent-color:#C9A84C;"> لا تتجاوز 3 حصص متتالية</label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="sub-respect-breastfeeding" checked style="accent-color:#C9A84C;"> احترام وقت الرضاعة (ح 3–4)</label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="sub-balance-load" checked style="accent-color:#C9A84C;"> توزيع الحمل بالتساوي</label>
+    </div>
+  </div>
+  <div id="sub-results" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+      <h4 style="color:var(--accent);margin:0;"><i class="fas fa-table"></i> جدول الاحتياط المُولَّد</h4>
+      <div style="display:flex;gap:8px;">
+        <button onclick="printSubstituteSchedule()" style="padding:7px 16px;background:rgba(201,168,76,0.2);border:1px solid #C9A84C;border-radius:7px;color:#C9A84C;cursor:pointer;font-family:inherit;font-size:0.82rem;"><i class="fas fa-print"></i> طباعة</button>
+        <button onclick="copySubstituteSchedule()" style="padding:7px 16px;background:rgba(34,197,94,0.15);border:1px solid #22c55e;border-radius:7px;color:#86efac;cursor:pointer;font-family:inherit;font-size:0.82rem;"><i class="fas fa-copy"></i> نسخ</button>
+      </div>
+    </div>
+    <div id="sub-results-table" style="overflow-x:auto;border-radius:10px;"></div>
+    <div id="sub-stats" style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;"></div>
+  </div>
+</div>
+
+
 <!-- ═══════════════════════════════════════════════════════════
      بيانات دخول المنصة (LMS) — لولي الأمر + المدير
 ═══════════════════════════════════════════════════════════ -->
@@ -15796,6 +15929,247 @@ window.showSection = function(id) {
 };
 </script>
 
+
+
+// ═══════════════════════════════════════════════════
+// SUBSTITUTE SCHEDULER — الاحتياط الذكي
+// ═══════════════════════════════════════════════════
+var subTeacherStates = {}; // teacherId → 'absent'|'late'|'breastfeeding'|'present'
+
+var SUB_PERIODS = {
+  '1A': ['ح1','ح2','ح3','ح4','ح5','ح6','ح7'],
+  default: ['الحصة 1','الحصة 2','الحصة 3','الحصة 4','الحصة 5','الحصة 6','الحصة 7']
+};
+var SUB_DAY_NAMES = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس'];
+
+function renderSubstituteScheduler() {
+  // اضبط اليوم الحالي
+  var today = new Date().getDay(); // 0=Sun ... 4=Thu in UAE week
+  var subDay = document.getElementById('sub-day-select');
+  if (subDay && !subDay.dataset.initialized) {
+    subDay.value = today <= 4 ? today : 0;
+    subDay.dataset.initialized = '1';
+  }
+  renderSubTeachersGrid();
+}
+
+function getSubTeachers() {
+  // كل المعلمات والإداريين من STAFF_DB
+  return (STAFF_DB || []).filter(function(s) {
+    return s.category === 'معلم' || s.role === 'teacher' || s.category === 'معلمة';
+  });
+}
+
+function renderSubTeachersGrid(filter) {
+  var grid = document.getElementById('sub-teachers-grid');
+  if (!grid) return;
+  var teachers = getSubTeachers();
+  var search = (filter || (document.getElementById('sub-teacher-search') ? document.getElementById('sub-teacher-search').value : '')).toLowerCase();
+  if (search) teachers = teachers.filter(function(t){ return (t.name_ar||'').includes(search) || (t.name_en||'').toLowerCase().includes(search); });
+  
+  if (!teachers.length) { grid.innerHTML = '<p style="color:rgba(255,255,255,0.4);font-size:0.85rem;text-align:center;padding:20px;">لا توجد معلمات في قاعدة البيانات</p>'; return; }
+  
+  grid.innerHTML = teachers.map(function(t) {
+    var state = subTeacherStates[t.id] || 'present';
+    var colors = {present:'rgba(34,197,94,0.15)',absent:'rgba(239,68,68,0.25)',late:'rgba(245,158,11,0.25)',breastfeeding:'rgba(147,51,234,0.25)'};
+    var borders = {present:'rgba(34,197,94,0.4)',absent:'rgba(239,68,68,0.6)',late:'rgba(245,158,11,0.6)',breastfeeding:'rgba(147,51,234,0.6)'};
+    var icons = {present:'🟢',absent:'🔴',late:'🟡',breastfeeding:'🟣'};
+    var labels = {present:'حاضرة',absent:'غائبة',late:'متأخرة',breastfeeding:'رضاعة'};
+    return '<div style="background:' + colors[state] + ';border:1.5px solid ' + borders[state] + ';border-radius:10px;padding:10px 12px;cursor:pointer;" onclick="cycleSubTeacherState('' + t.id + '')">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+      '<div style="color:white;font-size:0.82rem;font-weight:700;max-width:75%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (t.name_ar||t.name_en||'معلمة') + '</div>' +
+      '<span style="font-size:0.75rem;">' + icons[state] + '</span>' +
+      '</div>' +
+      '<div style="color:rgba(255,255,255,0.55);font-size:0.72rem;margin-top:3px;">' + (t.primary_job||t.subjects&&t.subjects[0]||'') + ' — <b style="color:rgba(255,255,255,0.8);">' + labels[state] + '</b></div>' +
+      '</div>';
+  }).join('');
+}
+
+function cycleSubTeacherState(teacherId) {
+  var states = ['present','absent','late','breastfeeding'];
+  var cur = subTeacherStates[teacherId] || 'present';
+  var idx = states.indexOf(cur);
+  subTeacherStates[teacherId] = states[(idx+1) % states.length];
+  renderSubTeachersGrid();
+}
+
+function filterSubTeachers() {
+  renderSubTeachersGrid();
+}
+
+function generateSubstituteSchedule() {
+  var dayIdx = parseInt(document.getElementById('sub-day-select').value);
+  var limitConsecutive = document.getElementById('sub-limit-consecutive') ? document.getElementById('sub-limit-consecutive').checked : true;
+  var respectBreastfeeding = document.getElementById('sub-respect-breastfeeding') ? document.getElementById('sub-respect-breastfeeding').checked : true;
+  var balanceLoad = document.getElementById('sub-balance-load') ? document.getElementById('sub-balance-load').checked : true;
+
+  var schedules = getSchedules();
+  var allTeachers = getSubTeachers();
+  
+  // المتغيبات
+  var absentIds = allTeachers.filter(function(t){ return subTeacherStates[t.id] === 'absent'; }).map(function(t){ return t.name_ar; });
+  var lateIds = allTeachers.filter(function(t){ return subTeacherStates[t.id] === 'late'; }).map(function(t){ return t.name_ar; });
+  var breastfeedingIds = allTeachers.filter(function(t){ return subTeacherStates[t.id] === 'breastfeeding'; }).map(function(t){ return t.name_ar; });
+  
+  if (absentIds.length === 0 && lateIds.length === 0) {
+    showToast('لم تُحدَّد أي معلمة غائبة أو متأخرة!', 'warning');
+    return;
+  }
+
+  // احسب الحصص لكل معلمة اليوم (الحصص العادية)
+  // teacherSchedule: {teacherName: Set<periodIdx>}
+  var teacherPeriodsToday = {};
+  var needCover = []; // [{cls, period, subject, absentTeacher}]
+  
+  Object.keys(schedules).forEach(function(cls) {
+    if (cls.startsWith('__')) return;
+    var classSchedule = schedules[cls];
+    Object.keys(classSchedule).forEach(function(key) {
+      var parts = key.split('_');
+      if (parts.length !== 2) return;
+      var d = parseInt(parts[0]), p = parseInt(parts[1]);
+      if (d !== dayIdx) return;
+      var cell = classSchedule[key];
+      if (!cell || !cell.teacher) return;
+      var tname = cell.teacher;
+      if (!teacherPeriodsToday[tname]) teacherPeriodsToday[tname] = [];
+      teacherPeriodsToday[tname].push(p);
+      // هل هذه المعلمة غائبة؟
+      var isAbsent = absentIds.some(function(a){ return a === tname || tname.includes(a) || a.includes(tname); });
+      var isLate = lateIds.some(function(a){ return a === tname || tname.includes(a) || a.includes(tname); });
+      if (isAbsent) {
+        needCover.push({cls:cls, period:p, subject:cell.subject, absentTeacher:tname, lateOnly:false});
+      } else if (isLate && p <= 1) { // الحصة 1 و2 فقط للمتأخرات
+        needCover.push({cls:cls, period:p, subject:cell.subject, absentTeacher:tname, lateOnly:true});
+      }
+    });
+  });
+
+  if (!needCover.length) {
+    showToast('لا توجد حصص تحتاج احتياط لهذا اليوم بناءً على الجدول!', 'info');
+    return;
+  }
+
+  // رتّب حسب الحصة ثم الصف
+  needCover.sort(function(a,b){ return a.period - b.period || a.cls.localeCompare(b.cls); });
+
+  // بناء قاعدة الاحتياط
+  var substituteAssignments = {}; // teacherName → assignCount
+  var coverResults = [];
+
+  needCover.forEach(function(item) {
+    // إيجاد أفضل معلمة بديلة
+    var candidates = [];
+    allTeachers.forEach(function(t) {
+      var tname = t.name_ar;
+      var state = subTeacherStates[t.id] || 'present';
+      if (state === 'absent') return; // غائبة
+      if (state === 'late' && item.period <= 1) return; // متأخرة — لا تُعطى أولى اثنين
+      if (respectBreastfeeding && state === 'breastfeeding' && (item.period === 2 || item.period === 3)) return; // رضاعة
+      // لا تُعط معلمة حصة في نفس الوقت
+      var teachingNow = (teacherPeriodsToday[tname] || []).indexOf(item.period) !== -1;
+      if (teachingNow) return;
+      // قيد 3 حصص متتالية
+      if (limitConsecutive) {
+        var assigned = coverResults.filter(function(r){ return r.substitute === tname; }).map(function(r){ return r.period; });
+        var all = assigned.concat(teacherPeriodsToday[tname] || []).sort(function(a,b){return a-b;});
+        // فحص 3 متتالية
+        var testAll = all.concat([item.period]).sort(function(a,b){return a-b;});
+        var hasThree = false;
+        for (var i=0; i<=testAll.length-3; i++) {
+          if (testAll[i+1]-testAll[i]===1 && testAll[i+2]-testAll[i+1]===1) { hasThree=true; break; }
+        }
+        if (hasThree) return;
+      }
+      var score = balanceLoad ? (substituteAssignments[tname] || 0) : 0;
+      candidates.push({teacher:t, tname:tname, score:score});
+    });
+    // اختر أقل حملاً
+    candidates.sort(function(a,b){ return a.score - b.score; });
+    var chosen = candidates.length > 0 ? candidates[0].tname : '⚠️ لا يوجد بديل';
+    if (chosen !== '⚠️ لا يوجد بديل') {
+      substituteAssignments[chosen] = (substituteAssignments[chosen] || 0) + 1;
+    }
+    coverResults.push({cls:item.cls, period:item.period, subject:item.subject, absentTeacher:item.absentTeacher, substitute:chosen, lateOnly:item.lateOnly});
+  });
+
+  renderSubResults(coverResults, dayIdx, substituteAssignments);
+}
+
+function renderSubResults(results, dayIdx, loadMap) {
+  var el = document.getElementById('sub-results');
+  var tableEl = document.getElementById('sub-results-table');
+  var statsEl = document.getElementById('sub-stats');
+  if (!el || !tableEl) return;
+  el.style.display = '';
+  
+  var periodNames = ['الحصة الأولى','الحصة الثانية','الحصة الثالثة','الحصة الرابعة','الحصة الخامسة','الحصة السادسة','الحصة السابعة'];
+  
+  var html = '<table style="width:100%;border-collapse:collapse;background:rgba(255,255,255,0.05);border-radius:10px;overflow:hidden;">';
+  html += '<thead><tr style="background:linear-gradient(135deg,#1A2A4A,#2d3f6b);">' +
+    '<th style="padding:10px 14px;color:#C9A84C;text-align:right;font-size:0.85rem;">الحصة</th>' +
+    '<th style="padding:10px 14px;color:#C9A84C;text-align:right;font-size:0.85rem;">الصف</th>' +
+    '<th style="padding:10px 14px;color:#C9A84C;text-align:right;font-size:0.85rem;">المادة</th>' +
+    '<th style="padding:10px 14px;color:#C9A84C;text-align:right;font-size:0.85rem;">المعلمة الغائبة</th>' +
+    '<th style="padding:10px 14px;color:#C9A84C;text-align:right;font-size:0.85rem;">المعلمة البديلة</th>' +
+    '<th style="padding:10px 14px;color:#C9A84C;text-align:center;font-size:0.85rem;">النوع</th>' +
+    '</tr></thead><tbody>';
+  
+  results.forEach(function(r, i) {
+    var isNoSub = r.substitute.startsWith('⚠');
+    var subStyle = isNoSub ? 'color:#fca5a5;font-weight:700;' : 'color:#86efac;font-weight:700;';
+    html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.07);background:' + (i%2===0?'rgba(255,255,255,0.02)':'rgba(255,255,255,0.05)') + '">' +
+      '<td style="padding:10px 14px;color:rgba(255,255,255,0.9);font-size:0.85rem;">' + (periodNames[r.period] || ('ح'+r.period)) + '</td>' +
+      '<td style="padding:10px 14px;"><span style="background:var(--navy,#1A2A4A);color:var(--gold,#C9A84C);padding:2px 10px;border-radius:10px;font-size:0.82rem;font-weight:700;">' + r.cls + '</span></td>' +
+      '<td style="padding:10px 14px;color:rgba(255,255,255,0.75);font-size:0.82rem;">' + (r.subject||'—') + '</td>' +
+      '<td style="padding:10px 14px;color:#fcd34d;font-size:0.82rem;">' + r.absentTeacher + '</td>' +
+      '<td style="padding:10px 14px;font-size:0.82rem;' + subStyle + '">' + r.substitute + '</td>' +
+      '<td style="padding:10px 14px;text-align:center;font-size:0.75rem;">' + (r.lateOnly ? '<span style="background:rgba(245,158,11,0.2);color:#fcd34d;padding:2px 8px;border-radius:8px;">متأخرة</span>' : '<span style="background:rgba(239,68,68,0.2);color:#fca5a5;padding:2px 8px;border-radius:8px;">غياب</span>') + '</td>' +
+      '</tr>';
+  });
+  html += '</tbody></table>';
+  tableEl.innerHTML = html;
+  
+  // إحصائيات الحمل
+  var statsHtml = Object.keys(loadMap).map(function(name) {
+    var n = loadMap[name];
+    var color = n >= 3 ? '#fca5a5' : n >= 2 ? '#fcd34d' : '#86efac';
+    return '<span style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);padding:5px 12px;border-radius:20px;font-size:0.78rem;color:' + color + ';">' + name + ' — ' + n + ' ح</span>';
+  }).join('');
+  if (statsEl) statsEl.innerHTML = statsHtml ? '<div style="color:rgba(255,255,255,0.6);font-size:0.8rem;margin-left:4px;">توزيع الحمل:</div>' + statsHtml : '';
+  
+  el.scrollIntoView({behavior:'smooth', block:'nearest'});
+  showToast('تم توليد جدول الاحتياط ✓', 'success');
+}
+
+function printSubstituteSchedule() {
+  var el = document.getElementById('sub-results-table');
+  if (!el) return;
+  var dayName = SUB_DAY_NAMES[parseInt(document.getElementById('sub-day-select').value)] || '';
+  var w = window.open('', '_blank', 'width=900,height=700');
+  w.document.write('<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>جدول الاحتياط</title>' +
+    '<style>body{font-family:Cairo,sans-serif;direction:rtl;padding:20px;} table{width:100%;border-collapse:collapse;} th,td{border:1px solid #ccc;padding:8px 12px;font-size:12pt;} th{background:#1A2A4A;color:#C9A84C;} tr:nth-child(even){background:#f9f9f9;} h2{color:#1A2A4A;}</style>' +
+    '</head><body><h2>جدول الاحتياط — ' + dayName + '</h2><p>تاريخ الطباعة: ' + new Date().toLocaleDateString("ar-AE") + '</p>' +
+    el.innerHTML + '</body></html>');
+  w.document.close();
+  w.print();
+}
+
+function copySubstituteSchedule() {
+  var el = document.getElementById('sub-results-table');
+  if (!el) return;
+  var rows = el.querySelectorAll('tr');
+  var text = 'جدول الاحتياط\n';
+  rows.forEach(function(row){
+    var cells = row.querySelectorAll('th,td');
+    var line = [];
+    cells.forEach(function(c){ line.push(c.textContent.trim()); });
+    text += line.join('\t') + '\n';
+  });
+  navigator.clipboard.writeText(text).catch(function(){});
+  showToast('تم نسخ الجدول ✓', 'success');
+}
+// ═══════════════════ END SUBSTITUTE SCHEDULER ═══════════════════
 
 </script>
 </body>
