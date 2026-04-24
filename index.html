@@ -5471,10 +5471,17 @@ function getStaffById(id) {
   return STAFF_DB.find(e => e.id === id) || null;
 }
 function getStaffRoleLabel(emp) {
-  if (emp.category === 'معلم') return 'معلم / Teacher';
+  if (emp.category === 'معلم') return 'معلمة / Teacher';
   if (emp.category === 'إداري') return 'إداري / Staff';
   if (emp.category === 'فني') return 'فني / Technician';
   return emp.primary_job || 'موظف';
+}
+
+// Helper: get short name (first 3 words only for consistent display)
+function getShortName(fullName) {
+  if (!fullName) return '';
+  var parts = fullName.trim().split(/\s+/);
+  return parts.slice(0, 3).join(' ');
 }
 
 let currentRole = 'admin';
@@ -5514,41 +5521,63 @@ function restoreSession() {
   const lastActive = parseInt(localStorage.getItem('aljood_last_active') || '0');
   const elapsed = Date.now() - lastActive;
 
-  if (savedPass && savedRole && PASSWORDS[savedPass] && elapsed < SESSION_TIMEOUT_MS) {
-    const user = PASSWORDS[savedPass];
+  if (!savedPass || !savedRole || elapsed >= SESSION_TIMEOUT_MS) {
+    if (savedPass) {
+      localStorage.removeItem('aljood_session_role');
+      localStorage.removeItem('aljood_session_pass');
+      localStorage.removeItem('aljood_last_active');
+    }
+    return;
+  }
+
+  // Try PASSWORDS map first (role-level accounts: admin, principal, teacher, staff, parent)
+  var user = PASSWORDS[savedPass] || null;
+  var roleLabel = '';
+  if (user) {
     currentRole = savedRole;
     currentUsername = localStorage.getItem('aljood_session_username') || user.name;
+    roleLabel = user.roleLabel;
     const savedStaffId = localStorage.getItem('aljood_session_staff_id');
     currentStaff = savedStaffId ? getStaffById(savedStaffId) : null;
-    document.getElementById('loginScreen').style.display = 'none';
-    document.getElementById('app').classList.add('visible');
-    document.getElementById('userNameDisplay').textContent = currentUsername;
-    document.getElementById('userRoleDisplay').textContent = user.roleLabel;
-    if (user.role === 'admin' || user.role === 'principal') document.getElementById('adminMenu').style.display = 'block';
-    const credBtnR = document.getElementById('credentialsBtn');
-    if (credBtnR) credBtnR.style.display = user.role === 'admin' ? '' : 'none';
-    const expBtnR = document.getElementById('exportDataBtn'); if (expBtnR) expBtnR.style.display = user.role === 'admin' ? '' : 'none';
-    renderNav();
-    showSection('home');
-    renderHomeDashboard();
-    applyLang();
-    setTimeout(() => { renderAllSections(); renderStaffDirectory(); if (currentStaff) renderMyProfile(); }, 100);
-    initCharts();
-    updateDate();
-    initGlobalBanner();
-    setTimeout(applyLearningMode, 500);
-    setTimeout(initGlobalBanner, 300); // re-run after renderAllSections completes
-    resetSessionTimer();
-    showChatBtn();
-    setTimeout(function(){ if(window._showPortalFooter) window._showPortalFooter(); }, 500);
-    // Splash only shows on actual login (doLogin) — not on session restore
-    setTimeout(function(){ checkPendingMessages(currentUsername); startMsgPolling(currentUsername); }, 800);
-  } else if (savedPass) {
-    // Session expired while away
-    localStorage.removeItem('aljood_session_role');
-    localStorage.removeItem('aljood_session_pass');
-    localStorage.removeItem('aljood_last_active');
+  } else {
+    // Try individual STAFF_DB accounts
+    var staffMember = getStaffFromDB(savedPass);
+    if (!staffMember) {
+      localStorage.removeItem('aljood_session_role');
+      localStorage.removeItem('aljood_session_pass');
+      localStorage.removeItem('aljood_last_active');
+      return;
+    }
+    currentStaff = staffMember;
+    currentRole = savedRole || staffMember.role;
+    currentUsername = localStorage.getItem('aljood_session_username') || staffMember.name_ar;
+    roleLabel = staffMember.primary_job || getStaffRoleLabel(staffMember);
+    user = { role: currentRole, name: currentUsername, roleLabel: roleLabel };
   }
+
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('userNameDisplay').textContent = currentUsername;
+  document.getElementById('userRoleDisplay').textContent = roleLabel;
+  if (currentRole === 'admin' || currentRole === 'principal') document.getElementById('adminMenu').style.display = 'block';
+  else document.getElementById('adminMenu').style.display = 'none';
+  const credBtnR = document.getElementById('credentialsBtn');
+  if (credBtnR) credBtnR.style.display = currentRole === 'admin' ? '' : 'none';
+  const expBtnR = document.getElementById('exportDataBtn'); if (expBtnR) expBtnR.style.display = currentRole === 'admin' ? '' : 'none';
+  renderNav();
+  showSection('home');
+  renderHomeDashboard();
+  applyLang();
+  setTimeout(() => { renderAllSections(); renderStaffDirectory(); if (currentStaff) renderMyProfile(); }, 100);
+  initCharts();
+  updateDate();
+  initGlobalBanner();
+  setTimeout(applyLearningMode, 500);
+  setTimeout(initGlobalBanner, 300);
+  resetSessionTimer();
+  showChatBtn();
+  setTimeout(function(){ if(window._showPortalFooter) window._showPortalFooter(); }, 500);
+  setTimeout(function(){ checkPendingMessages(currentUsername); startMsgPolling(currentUsername); }, 800);
 }
 // Run after DOM is fully ready
 document.addEventListener('DOMContentLoaded', restoreSession);
@@ -16054,7 +16083,7 @@ function renderCredTable(data) {
     var rColor = roleColors[s.role] || '#888';
     return '<tr style="border-bottom:1px solid #f5f0e8;transition:.15s;" onmouseover="this.style.background=\'#fffdf5\'" onmouseout="this.style.background=\'\'"> '
       + '<td style="padding:12px 16px;color:#999;font-size:0.82rem;">' + (i+1) + '</td>'
-      + '<td style="padding:12px 16px;font-weight:600;color:#1A2A4A;white-space:nowrap;">' + s.name_ar + '</td>'
+      + '<td style="padding:12px 16px;"><div style="font-size:0.87rem;font-weight:700;color:#1A2A4A;">' + (s.name_ar||'').trim().split(/\s+/).slice(0,3).join(' ') + '</div>' + (s.primary_job ? '<div style="font-size:0.72rem;color:#aaa;margin-top:2px;">' + String(s.primary_job).substring(0,28) + '</div>' : '') + '</td>'
       + '<td style="padding:12px 16px;"><span style="background:#f0f4ff;color:#3b82f6;padding:3px 10px;border-radius:20px;font-size:0.82rem;font-weight:600;">' + s.id + '</span></td>'
       + '<td style="padding:12px 16px;"><span style="background:' + rColor + '22;color:' + rColor + ';padding:3px 10px;border-radius:20px;font-size:0.8rem;font-weight:600;">' + rLabel + '</span></td>'
       + '<td style="padding:12px 16px;color:#555;font-size:0.85rem;">' + (s.email||'—') + '</td>'
