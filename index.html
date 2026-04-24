@@ -126,6 +126,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
   min-width:0;
   overflow-x:hidden;
   padding:0;
+  padding-bottom:50px;
   scroll-behavior:smooth;
   background: var(--light);
   background-image: radial-gradient(circle at 20% 50%, rgba(201,162,39,0.03) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(26,42,74,0.04) 0%, transparent 50%);
@@ -5369,6 +5370,13 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 
 <!-- ════════════════ BEHAVIOR LOG SECTION ════════════════ -->
 <div class="section" id="section-behavior_log" dir="rtl" style="padding:24px;min-height:60vh;background:linear-gradient(135deg,#f8faff 0%,#eef2ff 100%);">
+  <div class="page-header">
+    <div class="page-header-text">
+      <h1><i class="fas fa-exclamation-triangle" style="color:#ef4444;margin-left:10px;"></i>التبليغ السلوكي</h1>
+      <p>تتبع تدرج الإجراءات السلوكية — Behavioral Reporting System</p>
+    </div>
+    <i class="fas fa-shield-alt page-header-icon"></i>
+  </div>
   <div id="bl-container"></div>
 </div>
 <!-- end mainContent -->
@@ -5828,7 +5836,7 @@ function showSection(name) {
   if (name === 'forms') {
     renderFormsList();
     const fbt = document.getElementById('formBuilderToggle');
-    if (fbt) fbt.style.display = (currentRole && currentRole !== 'parent') ? 'block' : 'none'; // All users except parents can create forms
+    if (fbt) fbt.style.display = (currentRole === 'admin' || currentRole === 'principal') ? 'block' : 'none'; // Only admin/principal can create forms
   }
   if (name === 'staff_directory') renderStaffDirectory();
   if (name === 'my_profile') renderMyProfile();
@@ -5851,6 +5859,8 @@ function showSection(name) {
   if (name === 'projects') { try { renderProjects(); } catch(e) {} }
   if (name === 'digital_safety') { setTimeout(applyLearningMode, 100); }
   if (name === 'substitute_scheduler') { try { renderSubstituteScheduler(); } catch(e) {} }
+  if (name === 'tech_support') { setTimeout(function(){ try{ if(typeof renderTktSection==='function') renderTktSection(); }catch(e){} }, 120); }
+  if (name === 'behavior_log') { setTimeout(function(){ try{ if(typeof renderBehaviorLog==='function') renderBehaviorLog(); }catch(e){} }, 120); }
 }
 
 
@@ -8952,7 +8962,14 @@ function saveClasses(arr) {
 
 let currentSchedGrade = 'all';
 let currentSchedView = 'class';
-let currentSchedMode = localStorage.getItem('activeSchedMode') || 'normal';
+let currentSchedMode = (function() {
+  var _now = new Date();
+  if (_now >= new Date('2026-04-19')) {
+    localStorage.setItem('activeSchedMode', 'normal');
+    return 'normal';
+  }
+  return localStorage.getItem('activeSchedMode') || 'normal';
+})();
 
 function renderScheduleSection() {
   // Initialize schedule mode buttons
@@ -9265,10 +9282,22 @@ function renderClassSched() {
   html += '</tr></thead><tbody>';
 
   DAYS_LIST.forEach((day, di) => {
+    // Friday in distance mode: only show periods up to 11:00 (no 2nd break, fewer periods)
+    const isFriday = isDistMode && di === 4;
+    const fridayC1Periods = [
+      { key: 'P1', label: 'P1', time: '10:30–11:05', pi: 0 },
+      { key: 'P2', label: 'P2', time: '11:05–11:40', pi: 1 },
+    ];
+    const fridayC2Periods = [
+      { key: 'P1', label: 'P1', time: '8:00–8:40', pi: 0 },
+      { key: 'P2', label: 'P2', time: '8:40–9:20', pi: 1 },
+      { key: 'P3', label: 'P3', time: '10:00–10:40', pi: 2 },
+    ];
+    const dayPeriods = isFriday ? (isC2 ? fridayC2Periods : fridayC1Periods) : periods;
     html += '<tr>';
     html += '<td class="day-col">' + day + '</td>';
     if (!isDistMode) html += '<td class="assembly-cell"><i class="fas fa-flag" style="color:#C9A84C;font-size:0.7rem;"></i></td>';
-    periods.forEach(p => {
+    dayPeriods.forEach(p => {
       if (p.isBreak) {
         html += '<td class="break-cell">&#9749;<br>' + p.label + '</td>';
       } else {
@@ -9291,7 +9320,7 @@ function renderClassSched() {
     });
     if (isAdmin) {
       html += '<td style="text-align:center;background:#0d1f3c;">';
-      periods.filter(p => !p.isBreak).forEach(p => {
+      dayPeriods.filter(p => !p.isBreak).forEach(p => {
         html += '<button onclick="openSchedEdit(\'' + classId + '\',' + di + ',' + p.pi + ')" title="\u062a\u0639\u062f\u064a\u0644 ' + p.label + '" style="display:inline-block;margin:1px;padding:2px 4px;background:transparent;color:var(--accent);border:1px solid rgba(201,168,39,0.3);border-radius:3px;cursor:pointer;font-size:0.65rem;font-family:inherit;">' + p.label + '</button>';
       });
       html += '</td>';
@@ -14010,7 +14039,7 @@ function printDailyLessonPlans() {
   win.document.close();
 }
 function renderDailyLessonPlansSection() {
-  var r = currentRole;
+  var r = currentRole || localStorage.getItem('aljood_session_role') || '';
   var isTeacher = r === 'teacher';
   var isAdmin = r === 'admin' || r === 'principal' || r === 'admin_staff' || r === 'staff';
   var tv = document.getElementById('dlp-teacher-view');
@@ -14291,7 +14320,7 @@ function printWeeklyPlan() {
 }
 
 function renderWeeklyPlan() {
-  const role = (typeof currentUser !== 'undefined' && currentUser) ? currentUser.role : (typeof currentRole !== 'undefined' ? currentRole : '');
+  const role = (typeof currentUser !== 'undefined' && currentUser) ? currentUser.role : (typeof currentRole !== 'undefined' ? currentRole : '') || localStorage.getItem('aljood_session_role') || '';
   const tv = document.getElementById('wp-teacher-view');
   const av = document.getElementById('wp-admin-view');
   if (!tv || !av) return;
@@ -15948,7 +15977,7 @@ function renderLoginAnalytics() {
 </section>
 
 <!-- ===== PORTAL FOOTER ===== -->
-<footer id="portal-footer" style="display:none;background:#1A2A4A;color:rgba(255,255,255,0.6);text-align:center;padding:14px 20px;font-size:0.78rem;letter-spacing:0.5px;border-top:2px solid #C9A84C;position:relative;z-index:10;">
+<footer id="portal-footer" style="display:none;background:#1A2A4A;color:rgba(255,255,255,0.6);text-align:center;padding:14px 20px;font-size:0.78rem;letter-spacing:0.5px;border-top:2px solid #C9A84C;position:fixed;bottom:0;right:var(--sidebar-width,240px);left:0;z-index:50;">
   <span style="color:#C9A84C;font-weight:700;">مدرسة الجود</span>
   <span style="margin:0 10px;color:rgba(201,168,76,0.4);">|</span>
   <span>العين — إمارة أبوظبي</span>
