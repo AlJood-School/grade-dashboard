@@ -2448,10 +2448,10 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
             <div class="doc-icon2 sheet"><i class="fas fa-table"></i></div>
             <div class="doc-info2"><div class="doc-name2">الجدول المدرسي</div><div class="doc-size2">عرض الجداول وطباعتها</div></div>
           </div>
-          <a href="https://aljood-school.github.io/grade-dashboard/schedule_manager.html" target="_blank" class="doc-card2">
+          <div class="doc-card2" onclick="showSection('school_schedule')">
             <div class="doc-icon2 html"><i class="fas fa-tools"></i></div>
             <div class="doc-info2"><div class="doc-name2">منظومة الجدول (متقدمة)</div><div class="doc-size2">بناء وتعديل الجداول</div></div>
-          </a>
+          </div>
           <a href="https://drive.google.com/file/d/1rgWr3jqLeOBNdt6HXufX7mEBAKsQLrea/view?usp=sharing" target="_blank" class="doc-card2">
             <div class="doc-icon2 pdf"><i class="fas fa-language"></i></div>
             <div class="doc-info2"><div class="doc-name2">دليل الترجمة (Chrome)</div><div class="doc-size2">للمعلمات الأجنبيات</div></div>
@@ -6258,6 +6258,14 @@ function _normTeacherName(s) {
   // Strip leading vowel for Arabic name transliterations (Ibtesam/Ebtesam, etc.)
   return (s || '').toLowerCase().replace(/^[aeiou]/, '');
 }
+function getTeacherScheduleKey() {
+  // Returns English email-prefix for matching teacher name in schedule
+  // Email like "Ibtesam.Q.Abd@moe.sch.ae" → "Ibtesam.Q.Abd"
+  if (typeof currentStaff !== 'undefined' && currentStaff && currentStaff.email) {
+    return currentStaff.email.split('@')[0];
+  }
+  return currentUsername || '';
+}
 function teacherNameMatchesUser(schedName, username) {
   // Checks if a schedule teacher name (e.g. "Ebtesam", "Ibtesam.Q") matches the login username
   if (!schedName || !username) return false;
@@ -6425,7 +6433,7 @@ ${isAdmin ? '<button class="btn" onclick="window.open(\'https://aljood-school.gi
       // ── جدول المعلمة الكامل ──
       try {
         var schedules = (typeof getSchedules === 'function') ? getSchedules() : {};
-        var uname = currentUsername || '';
+        var uname = getTeacherScheduleKey();
         var teacherId = null;
         var teacherDispName = name;
         // إيجاد teacherId من الجدول بمطابقة اسم المعلمة
@@ -6471,16 +6479,12 @@ ${isAdmin ? '<button class="btn" onclick="window.open(\'https://aljood-school.gi
         html2 += '<th style="padding:8px;background:#1A2A4A;color:#C9A84C;border-radius:8px 0 0 0;min-width:70px;">اليوم</th>';
         for(var p=0;p<7;p++) html2 += '<th style="padding:8px;background:#1A2A4A;color:rgba(255,255,255,0.85);text-align:center;min-width:80px;">ح'+(p+1)+'</th>';
         html2 += '</tr></thead><tbody>';
-        var dayColors = ['#3b82f6','#8b5cf6','#f59e0b','#10b981','#ef4444'];
-        TDAYS.forEach(function(dname, di){
+        var dayColors = ['#3b82f6','#8b5cf6','#f59e0b','#10b981'];
+        // الأيام الاثنين–الخميس فقط في الجدول الرئيسي
+        ['الاثنين','الثلاثاء','الأربعاء','الخميس'].forEach(function(dname, di){
           html2 += '<tr style="border-bottom:1px solid #f0f0f0;">';
           html2 += '<td style="padding:8px;font-weight:700;color:'+dayColors[di]+';background:rgba(0,0,0,0.02);text-align:center;">'+dname+'</td>';
-          var maxP = (di===4) ? 4 : 7; // الجمعة: 4 حصص
           for(var p=0;p<7;p++){
-            if(di===4 && p>=4){
-              if(p===4) html2 += '<td colspan="3" style="padding:8px;text-align:center;background:#fff8e1;color:#b8922f;font-size:0.75rem;border-radius:8px;">يوم مقصور</td>';
-              continue;
-            }
             var cells = grid[di][p];
             if(cells && cells.length>0){
               html2 += '<td style="padding:4px;vertical-align:top;">';
@@ -6498,6 +6502,52 @@ ${isAdmin ? '<button class="btn" onclick="window.open(\'https://aljood-school.gi
           html2 += '</tr>';
         });
         html2 += '</tbody></table></div>';
+        // ── جمعة — بطاقة مستقلة بتوقيتها الخاص ──
+        (function(){
+          var friGrid = grid[4];
+          var hasFri = [0,1,2,3].some(function(fp){ return friGrid[fp] && friGrid[fp].length>0; });
+          if(!hasFri) return;
+          var friClasses = [];
+          [0,1,2,3].forEach(function(fp){ if(friGrid[fp]) friGrid[fp].forEach(function(c){ friClasses.push(c.cls); }); });
+          var hasC1 = friClasses.some(function(c){ return /^KG|^[1-5]/.test(c); });
+          var hasC2 = friClasses.some(function(c){ return /^[6-9]/.test(c); });
+          var c1Times = ['7:00–7:45','7:45–8:35','9:00–9:45','9:45–10:30'];
+          var c2Times = ['8:00–8:45','8:50–9:35','10:00–10:45','10:45–11:30'];
+          html2 += '<div style="margin-top:16px;background:linear-gradient(135deg,#fff5f5,#fff);border:2px solid rgba(220,38,38,0.25);border-radius:14px;padding:16px;">';
+          html2 += '<div style="font-weight:700;color:#dc2626;font-size:0.95rem;margin-bottom:10px;"><i class="fas fa-mosque" style="margin-left:6px;"></i>جدول يوم الجمعة — توقيت مختلف</div>';
+          html2 += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">';
+          if(hasC1) html2 += '<div style="background:#fff3e0;border:1px solid #ffcc80;border-radius:8px;padding:6px 12px;font-size:0.78rem;"><strong style="color:#e65100;">الحلقة الأولى (ص 1–5):</strong> ح1: 7:00–7:45 | ح2: 7:45–8:35 | استراحة | ح3: 9:00–9:45 | ح4: 9:45–10:30</div>';
+          if(hasC2) html2 += '<div style="background:#e3f2fd;border:1px solid #90caf9;border-radius:8px;padding:6px 12px;font-size:0.78rem;"><strong style="color:#1565c0;">الحلقة الثانية (ص 6–9):</strong> ح1: 8:00–8:45 | ح2: 8:50–9:35 | استراحة | ح3: 10:00–10:45 | ح4: 10:45–11:30</div>';
+          html2 += '</div>';
+          html2 += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;" dir="rtl"><thead><tr>';
+          html2 += '<th style="padding:7px 10px;background:#dc2626;color:white;border-radius:6px 0 0 0;text-align:center;min-width:50px;">الحصة</th>';
+          if(hasC1) html2 += '<th style="padding:7px 10px;background:#e65100;color:white;text-align:center;">توقيت أولى</th>';
+          if(hasC2) html2 += '<th style="padding:7px 10px;background:#1565c0;color:white;text-align:center;">توقيت ثانية</th>';
+          html2 += '<th style="padding:7px 10px;background:#1A2A4A;color:#C9A84C;">الصف / المادة</th>';
+          html2 += '</tr></thead><tbody>';
+          [0,1,2,3].forEach(function(fp){
+            html2 += '<tr style="border-bottom:1px solid #fee2e2;">';
+            html2 += '<td style="padding:7px;text-align:center;font-weight:700;color:#dc2626;background:#fff5f5;">ح'+(fp+1)+'</td>';
+            if(hasC1) html2 += '<td style="padding:7px;text-align:center;font-size:0.74rem;color:#e65100;font-weight:600;">'+c1Times[fp]+'</td>';
+            if(hasC2) html2 += '<td style="padding:7px;text-align:center;font-size:0.74rem;color:#1565c0;font-weight:600;">'+c2Times[fp]+'</td>';
+            var fcells = friGrid[fp];
+            if(fcells && fcells.length>0){
+              html2 += '<td style="padding:4px;">';
+              fcells.forEach(function(c){
+                var col = gc(c.subj);
+                html2 += '<div style="background:'+col+'18;border-right:3px solid '+col+';border-radius:6px;padding:3px 8px;margin-bottom:2px;display:inline-flex;align-items:center;gap:6px;margin-left:4px;">';
+                html2 += '<span style="font-weight:700;font-size:0.78rem;color:'+col+';">'+c.cls+'</span>';
+                html2 += '<span style="font-size:0.72rem;color:#555;">'+c.subj+'</span></div>';
+              });
+              html2 += '</td>';
+            } else {
+              html2 += '<td style="padding:4px;"><div style="height:32px;background:#f8f9fa;border-radius:6px;border:1px dashed #fca5a5;"></div></td>';
+            }
+            html2 += '</tr>';
+          });
+          html2 += '</tbody></table>';
+          html2 += '</div>';
+        })();
         // مواد المعلمة
         if(mySubjectsSet.size>0){
           html2 += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid #f0f0f0;">';
@@ -13927,7 +13977,7 @@ function wpOnClassChange() {
     var schedules = getSchedules ? getSchedules() : {};
     var classSchedule = schedules[classVal] || {};
     var mySubjects = new Set();
-    var uname = (typeof currentUsername !== 'undefined') ? currentUsername : '';
+    var uname = getTeacherScheduleKey();
     Object.values(classSchedule).forEach(function(cell) {
       if (!cell) return;
       if (cell.teacher && cell.subject && (teacherNameMatchesUser(cell.teacher, uname) || uname === '')) {
@@ -13960,7 +14010,7 @@ function loadWeeklyPlanForm() {
   try {
     var subjectField = document.getElementById('wpSubject');
     if (subjectField && !subjectField.value && typeof currentRole !== 'undefined' && currentRole === 'teacher') {
-      var uname = currentUsername || '';
+      var uname = getTeacherScheduleKey();
       var schedules = (typeof getSchedules === 'function') ? getSchedules() : {};
       var topSubject = getTeacherTopSubject(uname, schedules);
       if (topSubject) subjectField.value = topSubject;
@@ -14012,7 +14062,7 @@ function dlpOnClassChange() {
       teacherSubjectMap[cell.teacher].add(cell.subject);
     });
     // للمعلمة: حاول مطابقة اسمها
-    var myName = currentUsername || '';
+    var myName = getTeacherScheduleKey();
     var myStaff = currentStaff;
     var mySubjects = [];
     var matchedTeacher = '';
