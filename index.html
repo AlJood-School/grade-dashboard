@@ -441,16 +441,18 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 /* ===== GLOBAL NOTIFICATION BANNER ===== */
 /* ===== GLOBAL NOTIFICATION BANNER ===== */
 #global-notif-area { padding:0 0 4px; }
-.gnb-wrap { display:flex; flex-direction:column; gap:10px; margin-bottom:18px; }
+.gnb-wrap { display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
 
 .gnb-card {
-  border-radius:14px;
-  padding:14px 18px;
+  border-radius:10px;
+  padding:8px 14px;
   box-shadow:0 2px 10px rgba(0,0,0,0.06);
   transition:box-shadow 0.2s, transform 0.15s;
   background:#fff;
 }
 .gnb-card:hover { box-shadow:0 6px 22px rgba(0,0,0,0.1); transform:translateY(-1px); }
+.gnb-card.gnb-collapsed .gnb-items,
+.gnb-card.gnb-collapsed .gnb-surveys { display:none; }
 
 .gnb-card.gnb-meetings {
   background:linear-gradient(135deg,#fffbf0,#fff8e6);
@@ -6081,6 +6083,8 @@ const sectionTitles = {
   'prof_development':  '🎓 التنمية المهنية',
   'conferences':       '🏆 المؤتمرات والمسابقات',
 'behavior_log': '🚨 التبليغ السلوكي',
+  'lms_credentials': '🔑 بيانات دخول المنصات التعليمية',
+  'login_analytics': '📊 تحليلات الاستخدام',
 };
 
 function showSection(name) {
@@ -6130,6 +6134,8 @@ function showSection(name) {
   if (name === 'substitute_scheduler') { try { renderSubstituteScheduler(); } catch(e) {} }
   if (name === 'tech_support') { setTimeout(function(){ try{ if(typeof renderTktSection==='function') renderTktSection(); }catch(e){} }, 120); }
   if (name === 'behavior_log') { setTimeout(function(){ try{ if(typeof renderBehaviorLog==='function') renderBehaviorLog(); }catch(e){} }, 120); }
+  if (name === 'lms_credentials') { setTimeout(initLMSSection, 80); }
+  if (name === 'login_analytics') { setTimeout(function(){ try{ renderLoginAnalytics(); }catch(e){} }, 100); }
 }
 
 
@@ -10358,7 +10364,7 @@ function saveLeaveRecord() {
   const startDate = document.getElementById('leaveStartDt').value;
   const endDate = document.getElementById('leaveEndDt').value;
   const notes = document.getElementById('leaveNotesTx').value.trim();
-  if (!empId || !startDate) { alert('يرجى اختيار الموظفة وتاريخ البدء'); return; }
+  if (!empId || !startDate) { showToast('⚠️ يرجى اختيار الموظفة وتاريخ البداية', 'error'); return; }
   const leaves = getLeaves();
   if (editId) {
     const idx = leaves.findIndex(l => l.id === editId);
@@ -10773,7 +10779,7 @@ function saveMeetingRecord() {
   const time  = document.getElementById('meetTime').value;
   const location = document.getElementById('meetLocation').value.trim();
   if (!title || !date || !location) {
-    alert('يرجى تعبئة الحقول المطلوبة: العنوان، التاريخ، المكان');
+    showToast('⚠️ يرجى تعبئة: العنوان + التاريخ + المكان', 'error');
     return;
   }
   const editId = document.getElementById('meetEditId').value;
@@ -11027,8 +11033,8 @@ function renderGlobalNotifications() {
 
   // ── Meetings card ──
   if (upcomingMeetings.length > 0) {
-    html += `<div class="gnb-card gnb-meetings">
-      <div class="gnb-header gold">
+    html += `<div class="gnb-card gnb-meetings" style="transition:max-height 0.3s;">
+      <div class="gnb-header gold" onclick="this.closest('.gnb-card').classList.toggle('gnb-collapsed')" style="cursor:pointer;" title="انقر للطي/التوسيع">
         <i class="fas fa-calendar-alt"></i>
         اجتماعات قادمة خلال 7 أيام
         <span style="background:rgba(201,168,76,0.2);border-radius:20px;padding:1px 9px;font-size:0.8rem;">${upcomingMeetings.length}</span>
@@ -14977,8 +14983,11 @@ function openSpecialistModal() {
   if (select) {
     select.innerHTML = '<option value="">-- اختر --</option>';
     try {
-      const staff = JSON.parse(localStorage.getItem('aljood_staff') || JSON.parse(localStorage.getItem('staff') || '[]') || '[]');
-      const admStaff = Array.isArray(staff) ? staff.filter(s => s.role === 'admin_staff' || s.position === 'أخصائي' || s.position === 'أخصائية') : [];
+      const staff = (typeof getStaffData === 'function') ? getStaffData() : [];
+      const admStaff = Array.isArray(staff) ? staff.filter(s => 
+        s.primary_job && (s.primary_job.includes('أخصائي') || s.primary_job.includes('اجتماعي') || s.position === 'أخصائية') ||
+        s.role === 'counselor'
+      ) : [];
       admStaff.forEach(s => {
         const opt = document.createElement('option');
         opt.value = s.username || s.name;
@@ -16783,6 +16792,81 @@ function initLmsCredentials() {
   });
 }
 
+
+// ===== LMS CREDENTIALS SECTION INIT =====
+
+// ===== EXPORT NEW CREDENTIALS =====
+
+// ===== SHOW CREDENTIALS EXPORT PANEL =====
+function showCredExportPanel() {
+  var panel = document.getElementById('globalCredExport');
+  if (panel) { panel.style.display = 'block'; panel.scrollIntoView({behavior:'smooth'}); }
+}
+
+function exportNewCredentials() {
+  var creds = JSON.parse(localStorage.getItem('aljood_new_credentials') || '[]');
+  if (creds.length === 0) { showToast('لا توجد بيانات جديدة لتصديرها'); return; }
+  var rows = creds.map(function(c) {
+    return c.name + '\t' + c.email + '\t' + c.password + '\t' + c.minId + '\t' + c.phone + '\t' + (c.position||'') + '\t' + c.addedAt;
+  });
+  var content = 'الاسم\tالبريد\tكلمة المرور\tالرقم الوزاري\tالهاتف\tالمنصب\tتاريخ الإضافة\n' + rows.join('\n');
+  var blob = new Blob([content], {type:'text/plain;charset=utf-8'});
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'new_credentials_' + new Date().toISOString().slice(0,10) + '.txt';
+  a.click();
+  showToast('✅ تم تصدير ' + creds.length + ' سجل');
+}
+function printNewCredentials() {
+  var creds = JSON.parse(localStorage.getItem('aljood_new_credentials') || '[]');
+  if (creds.length === 0) { showToast('لا توجد بيانات جديدة'); return; }
+  var rows = creds.map(function(c) {
+    return '<tr><td>' + (c.name||'') + '</td><td>' + (c.email||'') + '</td><td style="font-family:monospace">' + (c.password||'') + '</td><td>' + (c.minId||'') + '</td><td>' + (c.phone||'') + '</td><td>' + (c.addedAt||'') + '</td></tr>';
+  }).join('');
+  var w = window.open('','_blank');
+  w.document.write('<html dir="rtl"><head><title>بيانات الدخول الجديدة</title><style>body{font-family:Cairo,sans-serif;direction:rtl;padding:20px} table{width:100%;border-collapse:collapse} th,td{border:1px solid #ddd;padding:8px;font-size:13px} th{background:#1A2A4A;color:#C9A84C}</style></head><body>');
+  w.document.write('<h2 style="color:#1A2A4A">مدرسة الجود — بيانات دخول الموظفين الجدد</h2>');
+  w.document.write('<table><thead><tr><th>الاسم</th><th>البريد</th><th>كلمة المرور</th><th>الرقم الوزاري</th><th>الهاتف</th><th>تاريخ الإضافة</th></tr></thead><tbody>' + rows + '</tbody></table>');
+  w.document.write('</body></html>');
+  w.document.close(); w.print();
+}
+
+function initLMSSection() {
+  var sel = document.getElementById('lms-class');
+  if (!sel) return;
+  if (sel.options.length > 1) return; // already populated
+  // Populate from STUDENTS_DATA keys
+  var classes = [];
+  if (typeof STUDENTS_DATA !== 'undefined') {
+    classes = Object.keys(STUDENTS_DATA).sort(function(a,b){
+      // Sort: KG1, KG2, 1A..8C
+      var order = function(s){ 
+        if(s.startsWith('KG')) return s.replace('KG','0').replace('A','1').replace('B','2').replace('C','3');
+        return s;
+      };
+      return order(a).localeCompare(order(b));
+    });
+  }
+  classes.forEach(function(c) {
+    var opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = c;
+    sel.appendChild(opt);
+  });
+  // If admin role, show all; if parent, pre-filter to linked children's classes
+  if (currentRole === 'parent') {
+    // Try to filter to parent's children's classes
+    try {
+      var parentChildren = JSON.parse(localStorage.getItem('aljood_parent_children_' + currentUsername) || '[]');
+      if (parentChildren.length > 0) {
+        var childClasses = parentChildren.map(function(c){ return c.classId; });
+        Array.from(sel.options).forEach(function(opt){
+          if (opt.value && !childClasses.includes(opt.value)) opt.remove();
+        });
+      }
+    } catch(e) {}
+  }
+}
+
 function lmsLoadStudents() {
   var cls = (document.getElementById('lms-class')||{}).value || '';
   var sel = document.getElementById('lms-student');
@@ -17240,9 +17324,9 @@ function renderHRAssignments() {
   var tam = getTeacherAssignmentMap();
   var subjects = getAllSubjects();
   var classes = getAllClasses();
-  var staff = (typeof STAFF_DB !== 'undefined') ? STAFF_DB : [];
+  var staff = (typeof getStaffData === 'function') ? getStaffData() : ((typeof STAFF_DB !== 'undefined') ? STAFF_DB : []);
   var teachers = staff.filter(function(s) {
-    return s.role === 'teacher' || s.role === 'principal' || !s.role;
+    return s.role === 'teacher' || s.role === 'principal' || s.role === 'vice_principal' || s.role === 'dept_head' || s.role === 'counselor' || !s.role;
   });
 
   var rows = teachers.map(function(t) {
@@ -17340,6 +17424,36 @@ function renderHRAddStaff() {
     '<button onclick="generateNewStaffPw()" style="background:#1A2A4A;color:#fff;border:none;border-radius:8px;padding:10px 16px;cursor:pointer;">🔄 جديدة</button>' +
     '</div><p style="margin:6px 0 0;font-size:0.75rem;color:#888;">ستُرسَل تلقائياً عبر SMS لرقم هاتف الموظفة</p>' +
     '</div>' +
+    '<div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">' +
+    '<div><label style="font-size:0.85rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">التخصص العلمي</label>' +
+    '<select id="staffSpecialization" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;">' +
+    '<option value="">-- اختر التخصص --</option>' +
+    '<option value="arabic">اللغة العربية</option>' +
+    '<option value="math">الرياضيات</option>' +
+    '<option value="science">العلوم</option>' +
+    '<option value="english">اللغة الإنجليزية</option>' +
+    '<option value="islamic">التربية الإسلامية</option>' +
+    '<option value="social">الدراسات الاجتماعية</option>' +
+    '<option value="pe">التربية البدنية</option>' +
+    '<option value="art">التربية الفنية</option>' +
+    '<option value="quran">القرآن الكريم</option>' +
+    '<option value="it">تقنية المعلومات</option>' +
+    '<option value="admin">إدارة وقيادة</option>' +
+    '<option value="counseling">إرشاد اجتماعي</option>' +
+    '<option value="other">أخرى</option>' +
+    '</select></div>' +
+    '<div><label style="font-size:0.85rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">المهام الإضافية (متعدد)</label>' +
+    '<select id="staffTasks" multiple size="4" style="width:100%;border:2px solid #e0e0e0;border-radius:8px;padding:4px;font-family:Cairo,sans-serif;font-size:0.82rem;">' +
+    '<option value="dept_head">رئيسة قسم</option>' +
+    '<option value="mentor">مرشدة طلابية</option>' +
+    '<option value="homeroom">مربية فصل</option>' +
+    '<option value="lab_supervisor">مشرفة مختبر</option>' +
+    '<option value="safety_team">فريق السلامة الرقمية</option>' +
+    '<option value="exam_committee">لجنة الامتحانات</option>' +
+    '<option value="schedule_team">فريق الجدول</option>' +
+    '<option value="training">التدريب والتطوير</option>' +
+    '</select><small style="color:#888;font-size:0.72rem;">اضغط Ctrl للاختيار المتعدد</small></div>' +
+    '</div>' +
     '<button onclick="submitAddStaff()" style="margin-top:20px;width:100%;padding:14px;background:linear-gradient(135deg,#1A2A4A,#2a4a6a);color:#fff;border:none;border-radius:10px;font-family:Cairo,sans-serif;font-size:1rem;font-weight:700;cursor:pointer;">✅ إضافة الموظفة وإرسال بيانات الدخول</button>' +
     '</div></div>';
 }
@@ -17357,6 +17471,28 @@ function generateNewStaffPw() {
 }
 
 function submitAddStaff() {
+  // ── Mandatory field validation ──
+  var nameAr = (document.getElementById('staffNameAr')||{}).value || '';
+  var nameEn = (document.getElementById('staffNameEn')||{}).value || '';
+  var minId  = (document.getElementById('staffMinId')||{}).value || '';
+  var email  = (document.getElementById('staffEmail')||{}).value || '';
+  var phone  = (document.getElementById('staffPhone')||{}).value || '';
+  var pos    = (document.getElementById('staffPosition')||{}).value || '';
+  var pw     = (document.getElementById('staffPassword')||{}).value || '';
+  var missing = [];
+  if (!nameAr.trim()) missing.push('الاسم الكامل (عربي)');
+  if (!minId.trim())  missing.push('الرقم الوزاري');
+  if (!email.trim())  missing.push('البريد الوزاري');
+  if (!phone.trim())  missing.push('رقم الهاتف');
+  if (!pos)           missing.push('المنصب/الدور');
+  if (!pw.trim())     missing.push('كلمة المرور');
+  if (missing.length > 0) {
+    showToast('⚠️ يرجى تعبئة: ' + missing.join(' — '), 'error');
+    return;
+  }
+  if (!email.includes('@')) { showToast('⚠️ البريد الإلكتروني غير صحيح', 'error'); return; }
+  if (phone.length < 9) { showToast('⚠️ رقم الهاتف قصير جداً', 'error'); return; }
+
   var nameAr = (document.getElementById('staffNameAr') || {}).value || '';
   var nameEn = (document.getElementById('staffNameEn') || {}).value || '';
   var minId  = (document.getElementById('staffMinId') || {}).value || '';
@@ -17411,6 +17547,16 @@ function submitAddStaff() {
   } catch(e) {}
 
   showToast('✅ تمت إضافة ' + nameAr + ' وإرسال SMS');
+  // ── Track new credential ──
+  try {
+    var creds = JSON.parse(localStorage.getItem('aljood_new_credentials') || '[]');
+    var tasks = [];
+    try { var te = document.getElementById('staffTasks'); if(te) tasks = Array.from(te.selectedOptions).map(function(o){ return o.value; }); } catch(te2){}
+    var spec = (document.getElementById('staffSpecialization')||{}).value || '';
+    creds.push({ name: nameAr, email: email, minId: minId, phone: phone, password: pw, position: pos, specialization: spec, tasks: tasks, addedAt: new Date().toLocaleDateString('ar-AE') });
+    localStorage.setItem('aljood_new_credentials', JSON.stringify(creds));
+  } catch(e) {}
+  var ne = document.getElementById('newCredsExport'); if(ne) ne.style.display='block';
   renderHRContent('add_staff');
 }
 
@@ -17591,6 +17737,53 @@ function switchAdmTab(tab) {
     b.style.borderBottom = b.id === ('admTab-' + tab) ? '3px solid #C9A84C' : '3px solid transparent';
   });
   renderAdmContent(tab);
+}
+
+
+// ===== SUBMIT STUDENT ADMISSION =====
+function submitStudentAdmission() {
+  var nameAr = (document.getElementById('adm_nameAr')||{}).value || '';
+  var natId = (document.getElementById('adm_nationalId')||{}).value || '';
+  var cls = (document.getElementById('adm_class')||{}).value || '';
+  var dob = (document.getElementById('adm_dob')||{}).value || '';
+  var missing = [];
+  if (!nameAr.trim()) missing.push('اسم الطالب');
+  if (!natId.trim()) missing.push('رقم الهوية');
+  if (!cls) missing.push('الصف');
+  if (!dob) missing.push('تاريخ الميلاد');
+  if (missing.length > 0) {
+    showToast('⚠️ يرجى تعبئة: ' + missing.join(' — '), 'error');
+    return;
+  }
+  // Collect all form data
+  var record = {
+    id: 'STU_' + Date.now(),
+    name_ar: nameAr,
+    name_en: (document.getElementById('adm_nameEn')||{}).value || '',
+    national_id: natId,
+    classId: cls,
+    dob: dob,
+    gender: (document.getElementById('adm_gender')||{}).value || '',
+    guardian_name: (document.getElementById('adm_guardianName')||{}).value || '',
+    guardian_phone: (document.getElementById('adm_guardianPhone')||{}).value || '',
+    guardian_email: (document.getElementById('adm_guardianEmail')||{}).value || '',
+    admission_date: new Date().toISOString().slice(0,10),
+    status: 'active'
+  };
+  // Save to localStorage
+  try {
+    var admissions = JSON.parse(localStorage.getItem('aljood_admissions') || '[]');
+    admissions.push(record);
+    localStorage.setItem('aljood_admissions', JSON.stringify(admissions));
+    showToast('✅ تم تسجيل الطالب: ' + nameAr + ' في صف ' + cls);
+    // Reset form
+    ['adm_nameAr','adm_nameEn','adm_nationalId','adm_dob','adm_guardianName','adm_guardianPhone','adm_guardianEmail'].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el) el.value = '';
+    });
+  } catch(e) {
+    showToast('❌ خطأ في الحفظ: ' + e.message, 'error');
+  }
 }
 
 function renderStudentAdmission() {
