@@ -3561,7 +3561,18 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
       </div>
       <div id="meetViewContent"></div>
     </div>
+  
+  <div id="section-specialist_inbox" class="section" dir="rtl">
+    <div class="page-header" style="background:linear-gradient(135deg,#1A2A4A,#2a3f6f)">
+      <div class="page-header-text">
+        <h1>📥 رسائل أولياء الأمور</h1>
+        <p>Parent Messages — إدارة طلبات التواصل وتحديد المواعيد</p>
+      </div>
+      <i class="fas fa-inbox page-header-icon" style="color:#C9A84C"></i>
+    </div>
+    <div id="specialistInboxContent" style="padding:20px;"></div>
   </div>
+</div>
 
 </div>
 
@@ -6135,6 +6146,7 @@ function showSection(name) {
   if (name === 'tech_support') { setTimeout(function(){ try{ if(typeof renderTktSection==='function') renderTktSection(); }catch(e){} }, 120); }
   if (name === 'behavior_log') { setTimeout(function(){ try{ if(typeof renderBehaviorLog==='function') renderBehaviorLog(); }catch(e){} }, 120); }
   if (name === 'lms_credentials') { setTimeout(initLMSSection, 80); }
+  if (name === 'specialist_inbox') { setTimeout(renderSpecialistInbox, 80); }
   if (name === 'login_analytics') { setTimeout(function(){ try{ renderLoginAnalytics(); }catch(e){} }, 100); }
 }
 
@@ -7340,10 +7352,10 @@ const ALL_SECTIONS = [
 ];
 
 const DEFAULT_ACCESS = {
-  admin:         ['home','analysis','students','admin_section','distance','resources','projects','events','achievements','documents','parents','forms','templates','staff_directory','school_schedule','substitute_scheduler','schedule_builder','leaves','meetings','weekly_plan','daily_plans','behavior_log','reports','parent_requests','digital_safety','my_profile','tech_support','credentials_center','lms_credentials','hr_management','student_admission','prof_development','conferences','login_analytics'],
+  admin:         ['home','analysis','students','admin_section','distance','resources','projects','events','achievements','documents','parents','forms','templates','staff_directory','school_schedule','substitute_scheduler','schedule_builder','leaves','meetings','weekly_plan','daily_plans','behavior_log','reports','parent_requests','digital_safety','my_profile','tech_support','credentials_center','lms_credentials','hr_management','student_admission','prof_development','conferences','login_analytics','specialist_inbox'],
   principal:     ['home','analysis','students','admin_section','distance','resources','projects','events','achievements','documents','parents','forms','templates','staff_directory','school_schedule','substitute_scheduler','schedule_builder','leaves','meetings','weekly_plan','daily_plans','behavior_log','reports','parent_requests','digital_safety','my_profile','tech_support','credentials_center','lms_credentials','hr_management','student_admission','prof_development','conferences','login_analytics'],
   teacher:       ['home','analysis','students','distance','resources','projects','events','achievements','forms','templates','prof_development','staff_directory','my_profile','school_schedule','meetings','weekly_plan','daily_plans','behavior_log','reports','parent_requests','digital_safety','tech_support'],
-  staff:         ['home','analysis','events','achievements','documents','forms','templates','staff_directory','my_profile','school_schedule','meetings','resources','weekly_plan','daily_plans','behavior_log','reports','parent_requests','digital_safety','tech_support','prof_development','student_admission'],
+  staff:         ['home','analysis','events','achievements','documents','forms','templates','staff_directory','my_profile','school_schedule','meetings','resources','weekly_plan','daily_plans','behavior_log','reports','parent_requests','specialist_inbox','digital_safety','tech_support','prof_development','student_admission'],
   parent:        ['parents','resources','lms_credentials','prof_development']
 };
 
@@ -7442,7 +7454,7 @@ const GROUP_LABELS = {
   support:       'الدعم والمساعدة'
 };
 
-const NAV_CONFIG_VERSION = '2026-04-24-v1';
+const NAV_CONFIG_VERSION = '2026-04-25-v2';
 function getNavConfig() {
   try {
     const savedVersion = localStorage.getItem('aljood_nav_version');
@@ -18314,17 +18326,40 @@ function renderParentPortal() {
       '</div>';
   }).join('') || '<div style="padding:20px;color:#888;text-align:center;">لم يتم ربط أبناء بهذا الحساب</div>';
 
-  // Parent communications
+  // Parent communications - smart form
+  // Build children dropdown
+  var childOptions = allChildren.map(function(child) {
+    var name = child.nameAr || child.name_ar || 'الطالب';
+    var cls = child.class || '';
+    return '<option value="' + (child.num || child.ministry_id || '') + '">' + name + ' (' + cls + ')</option>';
+  }).join('');
+
   var commHtml = '<div style="background:#fff;border-radius:14px;padding:20px;box-shadow:0 3px 15px rgba(0,0,0,0.07);margin-bottom:14px;">' +
-    '<h4 style="margin:0 0 12px;color:#1A2A4A;">💬 التواصل مع المدرسة</h4>' +
-    '<textarea id="parentMsgText" rows="3" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;box-sizing:border-box;" placeholder="اكتب رسالتك أو استفساركم..."></textarea>' +
-    '<div style="display:flex;gap:8px;margin-top:10px;">' +
-    '<select id="parentMsgType" style="flex:1;padding:8px;border:2px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;font-size:0.85rem;">' +
-    '<option value="inquiry">استفسار عام</option><option value="complaint">شكوى</option><option value="suggestion">مقترح</option><option value="meeting_request">طلب موعد</option>' +
-    '</select>' +
-    '<button onclick="sendParentMessage()" style="background:#1A2A4A;color:#fff;border:none;border-radius:8px;padding:10px 20px;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;">إرسال</button>' +
+    '<h4 style="margin:0 0 16px;color:#1A2A4A;display:flex;align-items:center;gap:8px;"><span style="background:#e8f0fe;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;">💬</span> تواصل مع المدرسة</h4>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">' +
+    '<div><label style="font-size:0.82rem;color:#555;display:block;margin-bottom:4px;">الطالب</label>' +
+    '<select id="pmChild" style="width:100%;padding:9px;border:1.5px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;font-size:0.85rem;">' +
+    '<option value="">— اختر الطالب —</option>' + childOptions +
+    '</select></div>' +
+    '<div><label style="font-size:0.82rem;color:#555;display:block;margin-bottom:4px;">نوع الطلب</label>' +
+    '<select id="pmType" onchange="updateParentSubjects()" style="width:100%;padding:9px;border:1.5px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;font-size:0.85rem;">' +
+    '<option value="inquiry">💬 استفسار</option>' +
+    '<option value="complaint">⚠️ شكوى</option>' +
+    '<option value="suggestion">💡 مقترح</option>' +
+    '<option value="meeting_request">📅 طلب موعد</option>' +
+    '</select></div>' +
     '</div>' +
-    '</div>';
+    '<div style="margin-bottom:12px;"><label style="font-size:0.82rem;color:#555;display:block;margin-bottom:4px;">الموضوع</label>' +
+    '<select id="pmSubject" style="width:100%;padding:9px;border:1.5px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;font-size:0.85rem;">' +
+    '<option>الدرجات والنتائج</option><option>الجدول الدراسي</option><option>الواجبات والأنشطة</option><option>السلوك والانضباط</option><option>النظام المدرسي</option><option>بيانات LMS</option><option>أخرى</option>' +
+    '</select></div>' +
+    '<div style="margin-bottom:14px;"><label style="font-size:0.82rem;color:#555;display:block;margin-bottom:4px;">ملاحظات إضافية <span style="color:#aaa;">(اختياري)</span></label>' +
+    '<input type="text" id="pmNotes" placeholder="أضف أي تفاصيل مهمة..." style="width:100%;padding:9px;border:1.5px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;font-size:0.85rem;box-sizing:border-box;">' +
+    '</div>' +
+    '<button onclick="sendParentMessage()" style="width:100%;background:linear-gradient(135deg,#1A2A4A,#2a3f6f);color:#fff;border:none;border-radius:10px;padding:12px;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;font-size:0.95rem;">📤 إرسال الطلب</button>' +
+    '<p style="font-size:0.77rem;color:#888;margin:8px 0 0;text-align:center;">سيصل طلبك للأخصائية المسؤولة عن صف طالبك</p>' +
+    '</div>' +
+    '<div id="pmHistoryContainer" style="margin-top:4px;"></div>';
 
   el.innerHTML = '<div style="padding:0;">' +
     '<div style="background:linear-gradient(135deg,#1A2A4A,#2a3f6f);border-radius:14px;padding:20px;margin-bottom:20px;color:#fff;">' +
@@ -18334,23 +18369,527 @@ function renderParentPortal() {
     '<h4 style="color:#1A2A4A;margin-bottom:12px;">👨‍👩‍👧 أبنائي</h4>' +
     childCards + commHtml +
     '</div>';
-}
+
+  setTimeout(renderParentMsgList, 100);}
 
 function parentActionBtn(label, onclick) {
   return '<button onclick="' + onclick + '" style="padding:10px 8px;background:#f8f9fa;border:1px solid #e0e0e0;border-radius:8px;cursor:pointer;font-family:Cairo,sans-serif;font-size:0.78rem;text-align:center;transition:all 0.2s;" onmouseover="this.style.background=\'#1A2A4A\';this.style.color=\'#fff\'" onmouseout="this.style.background=\'#f8f9fa\';this.style.color=\'#333\'">' + label + '</button>';
 }
 
-function sendParentMessage() {
-  var txt = (document.getElementById('parentMsgText') || {}).value || '';
-  var type = (document.getElementById('parentMsgType') || {}).value || 'inquiry';
-  if (!txt.trim()) { showToast('⚠️ الرجاء كتابة رسالتك'); return; }
-  var msgs = [];
-  try { msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]'); } catch(e) {}
-  msgs.push({ text: txt, type: type, from_parent: true, at: new Date().toISOString(), status: 'pending' });
-  localStorage.setItem('aljood_parent_messages', JSON.stringify(msgs));
-  if (document.getElementById('parentMsgText')) document.getElementById('parentMsgText').value = '';
-  showToast('✅ تم إرسال رسالتك — سيتم الرد في أقرب وقت');
+// ===== SPECIALIST MESSAGING SYSTEM =====
+
+function isCurrentUserSpecialist() {
+  try {
+    if (typeof currentUser === 'undefined' || !currentUser) return false;
+    var staff = getStaffData();
+    var me = staff.find(function(s) {
+      return s.email && currentUser.email &&
+             s.email.toLowerCase() === currentUser.email.toLowerCase();
+    });
+    return !!(me && me.primary_job && me.primary_job.includes('اخصائي'));
+  } catch(e) { return false; }
 }
+
+function getSpecialistForClass(classCode) {
+  try {
+    var assignments = JSON.parse(localStorage.getItem('aljood_class_specialist') || '{}');
+    if (assignments[classCode]) return assignments[classCode];
+    var staff = getStaffData();
+    var specialists = staff.filter(function(s) {
+      return s.primary_job && s.primary_job.includes('اخصائي');
+    });
+    return specialists.length > 0 ? specialists[0].email : null;
+  } catch(e) { return null; }
+}
+
+function getParentMsgSubjects(type) {
+  var opts = {
+    inquiry:         ['الدرجات والنتائج','الجدول الدراسي','الواجبات والأنشطة','السلوك والانضباط','النظام المدرسي','بيانات LMS','أخرى'],
+    complaint:       ['مشكلة مع معلمة','مشكلة مع طالب/ة','مشكلة في النظام','بيئة الصف','تأخر في المعالجة','أخرى'],
+    suggestion:      ['تحسين المناهج','الأنشطة المدرسية','البيئة المدرسية','التواصل مع الأهالي','الجدول الدراسي','أخرى'],
+    meeting_request: ['متابعة أكاديمية','متابعة سلوكية','مناقشة نتائج','استفسار عاجل','تقديم وثائق','أخرى']
+  };
+  return opts[type] || opts.inquiry;
+}
+
+function updateParentSubjects() {
+  var typeEl = document.getElementById('pmType');
+  var subjectEl = document.getElementById('pmSubject');
+  if (!typeEl || !subjectEl) return;
+  var subjects = getParentMsgSubjects(typeEl.value);
+  subjectEl.innerHTML = subjects.map(function(s) {
+    return '<option value="' + s + '">' + s + '</option>';
+  }).join('');
+}
+
+function sendParentMessage() {
+  var childSel = document.getElementById('pmChild');
+  var typeSel  = document.getElementById('pmType');
+  var subjectSel = document.getElementById('pmSubject');
+  var notesEl  = document.getElementById('pmNotes');
+  if (!childSel || !typeSel || !subjectSel) { showToast('⚠️ خطأ في النموذج'); return; }
+  var childVal = childSel.value;
+  if (!childVal) { showToast('⚠️ يرجى اختيار الطالب'); return; }
+  var childText = childSel.options[childSel.selectedIndex].text;
+  // Parse child info: "اسم (الصف)"
+  var classMatch = childText.match(/\(([^)]+)\)/);
+  var childClass = classMatch ? classMatch[1] : '';
+  var childName  = childText.replace(/\s*\([^)]*\)/, '').trim();
+
+  var type    = typeSel.value;
+  var subject = subjectSel.value;
+  var notes   = (notesEl ? notesEl.value.trim() : '');
+
+  var typeLabels = {inquiry:'استفسار',complaint:'شكوى',suggestion:'مقترح',meeting_request:'طلب موعد'};
+
+  // Get parent info
+  var parentName = '';
+  try { parentName = (typeof currentUser !== 'undefined' && currentUser) ? (currentUser.name_ar || currentUser.username || '') : ''; } catch(e){}
+
+  // Find specialist for class
+  var specialistEmail = getSpecialistForClass(childClass);
+
+  // Build message
+  var msg = {
+    id: 'pm_' + Date.now() + '_' + Math.random().toString(36).substr(2,4),
+    parent_name: parentName,
+    parent_username: (typeof currentUser !== 'undefined' && currentUser) ? (currentUser.username || '') : '',
+    child_name: childName,
+    child_num: childVal,
+    child_class: childClass,
+    type: type,
+    type_label: typeLabels[type] || type,
+    subject: subject,
+    notes: notes,
+    at: new Date().toISOString(),
+    status: 'pending',
+    specialist_email: specialistEmail,
+    forwarded_to_email: null,
+    forwarded_to_name: null,
+    meeting_date: null,
+    meeting_time: null,
+    specialist_note: null,
+    response_text: null,
+    updated_at: null
+  };
+
+  var msgs = [];
+  try { msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]'); } catch(e){}
+  msgs.unshift(msg);
+  localStorage.setItem('aljood_parent_messages', JSON.stringify(msgs));
+
+  // Update specialist badge
+  updateSpecialistBadge();
+
+  showToast('✅ تم إرسال طلبك — سيتواصل معك الأخصائي قريباً');
+
+  // Reset form
+  if (notesEl) notesEl.value = '';
+  if (childSel) childSel.selectedIndex = 0;
+  if (typeSel) { typeSel.selectedIndex = 0; updateParentSubjects(); }
+
+  // Re-render parent messages list
+  renderParentMsgList();
+}
+
+function renderParentMsgList() {
+  var container = document.getElementById('pmHistoryContainer');
+  if (!container) return;
+  var username = '';
+  try { username = (typeof currentUser !== 'undefined' && currentUser) ? (currentUser.username || '') : ''; } catch(e){}
+  var msgs = [];
+  try { msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]'); } catch(e){}
+  var myMsgs = msgs.filter(function(m) { return m.parent_username === username; });
+  if (!myMsgs.length) {
+    container.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">لا توجد رسائل سابقة</p>';
+    return;
+  }
+  var statusColors = {pending:'#f59e0b',assigned:'#3b82f6',forwarded:'#8b5cf6',scheduled:'#10b981',resolved:'#6b7280'};
+  var statusLabels = {pending:'قيد المراجعة',assigned:'لدى الأخصائية',forwarded:'تمت الإحالة',scheduled:'تم تحديد موعد',resolved:'تم الحل'};
+  container.innerHTML = myMsgs.map(function(m) {
+    var color = statusColors[m.status] || '#888';
+    var label = statusLabels[m.status] || m.status;
+    var meetingInfo = (m.meeting_date && m.meeting_time)
+      ? '<div style="background:#e8f5e9;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:0.82rem;">' +
+        '<strong>📅 موعد الاجتماع:</strong> ' + m.meeting_date + ' الساعة ' + m.meeting_time +
+        (m.forwarded_to_name ? ' — مع: ' + m.forwarded_to_name : '') + '</div>'
+      : '';
+    var responseInfo = m.response_text
+      ? '<div style="background:#f0f7ff;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:0.82rem;">' +
+        '<strong>الرد:</strong> ' + m.response_text + '</div>'
+      : '';
+    return '<div style="background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-right:4px solid ' + color + ';">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+      '<span style="font-weight:700;color:#1A2A4A;">' + m.type_label + ' — ' + m.subject + '</span>' +
+      '<span style="background:' + color + ';color:#fff;padding:3px 10px;border-radius:12px;font-size:0.75rem;">' + label + '</span>' +
+      '</div>' +
+      '<p style="margin:4px 0;font-size:0.82rem;color:#888;">الطالب: ' + m.child_name + ' (' + m.child_class + ') | ' + new Date(m.at).toLocaleDateString('ar-AE') + '</p>' +
+      (m.notes ? '<p style="margin:4px 0;font-size:0.82rem;color:#555;">ملاحظات: ' + m.notes + '</p>' : '') +
+      meetingInfo + responseInfo +
+      '</div>';
+  }).join('');
+}
+
+function updateSpecialistBadge() {
+  try {
+    var msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]');
+    var pending = msgs.filter(function(m) { return m.status === 'pending'; }).length;
+    // Find nav item and update badge
+    var navItems = document.querySelectorAll('[data-section="specialist_inbox"] .nav-badge');
+    navItems.forEach(function(b) {
+      if (pending > 0) { b.textContent = pending; b.style.display = ''; }
+      else { b.style.display = 'none'; }
+    });
+  } catch(e){}
+}
+
+function renderSpecialistInbox() {
+  var container = document.getElementById('specialistInboxContent');
+  if (!container) { container = document.getElementById('mainContent'); }
+  if (!container) return;
+
+  var msgs = [];
+  try { msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]'); } catch(e){}
+
+  var isSpec = isCurrentUserSpecialist();
+  var isAdminOrPrincipal = (typeof currentRole !== 'undefined' && (currentRole === 'admin' || currentRole === 'principal'));
+  var myEmail = '';
+  try { myEmail = (typeof currentUser !== 'undefined' && currentUser) ? (currentUser.email || '').toLowerCase() : ''; } catch(e){}
+
+  // Filter messages:
+  // - Specialist sees messages assigned to them
+  // - Admin/Principal sees all
+  // - Other admin_staff sees messages forwarded to them
+  var visibleMsgs;
+  if (isAdminOrPrincipal) {
+    visibleMsgs = msgs;
+  } else if (isSpec) {
+    visibleMsgs = msgs.filter(function(m) {
+      return !m.specialist_email || m.specialist_email.toLowerCase() === myEmail;
+    });
+  } else {
+    visibleMsgs = msgs.filter(function(m) {
+      return m.forwarded_to_email && m.forwarded_to_email.toLowerCase() === myEmail;
+    });
+  }
+
+  var statusColors = {pending:'#f59e0b',assigned:'#3b82f6',forwarded:'#8b5cf6',scheduled:'#10b981',resolved:'#6b7280'};
+  var statusLabels = {pending:'جديد',assigned:'قيد المعالجة',forwarded:'تمت الإحالة',scheduled:'تم تحديد موعد',resolved:'مكتمل'};
+
+  // Get staff for forwarding dropdown
+  var staff = getStaffData();
+  var teachers = staff.filter(function(s) { return s.role === 'teacher'; });
+  var admins = staff.filter(function(s) {
+    return (s.role === 'admin_staff' || s.role === 'principal' || s.role === 'admin') && !s.primary_job.includes('اخصائي');
+  });
+
+  var teacherOptions = teachers.map(function(t) {
+    var name = t.name_ar ? t.name_ar.split(' ').slice(0,3).join(' ') : t.email;
+    return '<option value="' + t.email + '">' + name + ' (معلمة)</option>';
+  }).join('');
+  var adminOptions = admins.map(function(a) {
+    var name = a.name_ar ? a.name_ar.split(' ').slice(0,3).join(' ') : a.email;
+    return '<option value="' + a.email + '">' + name + ' (' + (a.primary_job || a.role) + ')</option>';
+  }).join('');
+
+  var msgCards = visibleMsgs.map(function(m, idx) {
+    var color = statusColors[m.status] || '#888';
+    var label = statusLabels[m.status] || m.status;
+    var isResolved = (m.status === 'resolved' || m.status === 'scheduled');
+    var msgId = m.id || ('pm_' + idx);
+
+    var actionPanel = '';
+    if (!isResolved && (isSpec || isAdminOrPrincipal)) {
+      actionPanel = '<div style="background:#f8f9fa;border-radius:10px;padding:14px;margin-top:12px;">' +
+        '<h5 style="margin:0 0 10px;color:#1A2A4A;">⚡ إجراء</h5>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">' +
+        '<div><label style="font-size:0.8rem;color:#555;display:block;margin-bottom:4px;">إحالة إلى</label>' +
+        '<select id="fwd_' + msgId + '" style="width:100%;padding:7px;border:1.5px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;font-size:0.82rem;">' +
+        '<option value="">— معالجة مباشرة —</option>' +
+        '<optgroup label="المعلمات">' + teacherOptions + '</optgroup>' +
+        '<optgroup label="الإدارة">' + adminOptions + '</optgroup>' +
+        '</select></div>' +
+        '<div><label style="font-size:0.8rem;color:#555;display:block;margin-bottom:4px;">تاريخ الاجتماع</label>' +
+        '<input type="date" id="mdate_' + msgId + '" style="width:100%;padding:7px;border:1.5px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;font-size:0.82rem;" min="' + new Date().toISOString().split('T')[0] + '"></div>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">' +
+        '<div><label style="font-size:0.8rem;color:#555;display:block;margin-bottom:4px;">وقت الاجتماع</label>' +
+        '<input type="time" id="mtime_' + msgId + '" style="width:100%;padding:7px;border:1.5px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;font-size:0.82rem;"></div>' +
+        '<div><label style="font-size:0.8rem;color:#555;display:block;margin-bottom:4px;">ملاحظة للطرف المعني</label>' +
+        '<input type="text" id="snote_' + msgId + '" placeholder="اختياري" style="width:100%;padding:7px;border:1.5px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;font-size:0.82rem;box-sizing:border-box;"></div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;">' +
+        '<button onclick="confirmSpecialistAction(' + "'" + msgId + "'" + ')" style="flex:1;background:#1A2A4A;color:#fff;border:none;border-radius:8px;padding:9px;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;font-size:0.85rem;">✅ تأكيد وإرسال</button>' +
+        '<button onclick="resolveParentMsg(' + "'" + msgId + "'" + ')" style="background:#6b7280;color:#fff;border:none;border-radius:8px;padding:9px 14px;cursor:pointer;font-family:Cairo,sans-serif;font-size:0.82rem;">أُغلق</button>' +
+        '</div>' +
+        '</div>';
+    } else if (!isResolved) {
+      // Non-specialist, non-admin — teacher/admin sees forwarded request with time selection
+      actionPanel = '<div style="background:#f0f7ff;border-radius:10px;padding:12px;margin-top:10px;">' +
+        '<p style="margin:0 0 8px;font-size:0.85rem;color:#1A2A4A;"><strong>تمت إحالة هذا الطلب إليك</strong>' +
+        (m.specialist_note ? ' — ملاحظة الأخصائية: ' + m.specialist_note : '') + '</p>' +
+        '<div style="display:flex;gap:8px;align-items:flex-end;">' +
+        '<div><label style="font-size:0.8rem;color:#555;display:block;margin-bottom:4px;">اقترح تاريخاً</label>' +
+        '<input type="date" id="staffdate_' + msgId + '" style="padding:7px;border:1.5px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;" min="' + new Date().toISOString().split('T')[0] + '"></div>' +
+        '<div><label style="font-size:0.8rem;color:#555;display:block;margin-bottom:4px;">الوقت</label>' +
+        '<input type="time" id="stafftime_' + msgId + '" style="padding:7px;border:1.5px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;"></div>' +
+        '<button onclick="staffConfirmMeeting(' + "'" + msgId + "'" + ')" style="background:#1A2A4A;color:#fff;border:none;border-radius:8px;padding:9px 14px;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;white-space:nowrap;">تأكيد الموعد</button>' +
+        '</div></div>';
+    }
+
+    var meetingBadge = (m.meeting_date && m.meeting_time)
+      ? '<span style="background:#e8f5e9;color:#2e7d32;padding:3px 8px;border-radius:8px;font-size:0.75rem;margin-right:6px;">📅 ' + m.meeting_date + ' ' + m.meeting_time + '</span>'
+      : '';
+
+    return '<div style="background:#fff;border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:0 3px 12px rgba(0,0,0,0.07);border-right:4px solid ' + color + ';">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">' +
+      '<div>' +
+      '<span style="font-weight:700;color:#1A2A4A;font-size:0.95rem;">' + m.type_label + ' — ' + m.subject + '</span><br>' +
+      '<span style="font-size:0.8rem;color:#888;">ولي أمر: ' + (m.parent_name||'—') + ' | الطالب: ' + m.child_name + ' (' + m.child_class + ')</span><br>' +
+      '<span style="font-size:0.77rem;color:#aaa;">' + new Date(m.at).toLocaleString('ar-AE') + '</span>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:6px;">' +
+      meetingBadge +
+      '<span style="background:' + color + ';color:#fff;padding:4px 10px;border-radius:12px;font-size:0.75rem;">' + label + '</span>' +
+      '</div>' +
+      '</div>' +
+      (m.notes ? '<p style="margin:8px 0 0;font-size:0.82rem;color:#555;background:#f8f9fa;padding:8px;border-radius:6px;">💬 ' + m.notes + '</p>' : '') +
+      (m.forwarded_to_name ? '<p style="margin:6px 0 0;font-size:0.8rem;color:#3b82f6;">↪️ محالة إلى: ' + m.forwarded_to_name + '</p>' : '') +
+      actionPanel +
+      '</div>';
+  }).join('') || '<div style="text-align:center;padding:40px;color:#888;"><div style="font-size:3rem;">📭</div><p>لا توجد رسائل</p></div>';
+
+  var filterBar = '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">' +
+    ['الكل','جديد','محالة','مجدولة','مكتملة'].map(function(f,i) {
+      var vals = ['all','pending','forwarded','scheduled','resolved'];
+      return '<button onclick="filterSpecMsgs(' + "'" + vals[i] + "'" + ')" style="padding:6px 14px;border-radius:20px;border:1.5px solid #1A2A4A;background:' + (i===0?'#1A2A4A':'#fff') + ';color:' + (i===0?'#fff':'#1A2A4A') + ';cursor:pointer;font-family:Cairo,sans-serif;font-size:0.82rem;">' + f + '</button>';
+    }).join('') +
+    '</div>';
+
+  container.innerHTML = '<div style="padding:20px;">' +
+    '<div style="background:linear-gradient(135deg,#1A2A4A,#2a3f6f);border-radius:14px;padding:20px;margin-bottom:20px;color:#fff;">' +
+    '<h3 style="margin:0 0 4px;">📥 ' + (isSpec ? 'صندوق رسائل أولياء الأمور' : 'الطلبات المُحالة إليك') + '</h3>' +
+    '<p style="margin:0;opacity:0.8;font-size:0.88rem;">' + visibleMsgs.length + ' رسالة ' + (isSpec ? '— أنت الأخصائية المسؤولة عن هذه الطلبات' : 'محالة من الأخصائية') + '</p>' +
+    '</div>' +
+    filterBar +
+    '<div id="specMsgList">' + msgCards + '</div>' +
+    '</div>';
+}
+
+function filterSpecMsgs(status) {
+  var msgs = [];
+  try { msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]'); } catch(e){}
+  var filtered = status === 'all' ? msgs : msgs.filter(function(m) { return m.status === status; });
+  var container = document.getElementById('specMsgList');
+  if (!container) return;
+  // Re-render with filter
+  renderSpecialistInbox();
+}
+
+function confirmSpecialistAction(msgId) {
+  var fwdEl   = document.getElementById('fwd_' + msgId);
+  var dateEl  = document.getElementById('mdate_' + msgId);
+  var timeEl  = document.getElementById('mtime_' + msgId);
+  var noteEl  = document.getElementById('snote_' + msgId);
+  if (!dateEl || !timeEl) { showToast('⚠️ حدث خطأ'); return; }
+  var meetDate = dateEl.value;
+  var meetTime = timeEl.value;
+  if (!meetDate) { showToast('⚠️ يرجى تحديد تاريخ الاجتماع'); return; }
+  if (!meetTime) { showToast('⚠️ يرجى تحديد وقت الاجتماع'); return; }
+  var forwardEmail = fwdEl ? fwdEl.value : '';
+  var noteText = noteEl ? noteEl.value.trim() : '';
+
+  // Get forwarded name
+  var forwardedName = '';
+  if (forwardEmail && fwdEl) {
+    var opt = Array.from(fwdEl.options).find(function(o) { return o.value === forwardEmail; });
+    forwardedName = opt ? opt.text : forwardEmail;
+  }
+
+  // Update message
+  var msgs = [];
+  try { msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]'); } catch(e){}
+  var msgIdx = msgs.findIndex(function(m) { return m.id === msgId; });
+  if (msgIdx < 0) { showToast('⚠️ الرسالة غير موجودة'); return; }
+  
+  msgs[msgIdx].meeting_date = meetDate;
+  msgs[msgIdx].meeting_time = meetTime;
+  msgs[msgIdx].forwarded_to_email = forwardEmail || null;
+  msgs[msgIdx].forwarded_to_name = forwardedName || null;
+  msgs[msgIdx].specialist_note = noteText || null;
+  msgs[msgIdx].status = forwardEmail ? 'forwarded' : 'scheduled';
+  msgs[msgIdx].updated_at = new Date().toISOString();
+  localStorage.setItem('aljood_parent_messages', JSON.stringify(msgs));
+
+  // Auto-create meeting
+  autoCreateMeeting(msgs[msgIdx]);
+
+  // Notification for parent (banner)
+  var notifs = [];
+  try { notifs = JSON.parse(localStorage.getItem('aljood_parent_notifs') || '[]'); } catch(e){}
+  notifs.unshift({
+    id: 'notif_' + Date.now(),
+    parent_username: msgs[msgIdx].parent_username,
+    text: 'تم تحديد موعد اجتماع بخصوص طلبك (' + msgs[msgIdx].subject + ') بتاريخ ' + meetDate + ' الساعة ' + meetTime + (forwardedName ? ' مع ' + forwardedName : ''),
+    at: new Date().toISOString(),
+    read: false
+  });
+  localStorage.setItem('aljood_parent_notifs', JSON.stringify(notifs));
+
+  showToast('✅ تم تحديد الموعد وإرسال التأكيد');
+  renderSpecialistInbox();
+}
+
+function staffConfirmMeeting(msgId) {
+  var dateEl = document.getElementById('staffdate_' + msgId);
+  var timeEl = document.getElementById('stafftime_' + msgId);
+  if (!dateEl || !timeEl) { showToast('⚠️ خطأ'); return; }
+  if (!dateEl.value) { showToast('⚠️ يرجى تحديد التاريخ'); return; }
+  if (!timeEl.value) { showToast('⚠️ يرجى تحديد الوقت'); return; }
+
+  var msgs = [];
+  try { msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]'); } catch(e){}
+  var msgIdx = msgs.findIndex(function(m) { return m.id === msgId; });
+  if (msgIdx < 0) { showToast('⚠️ الرسالة غير موجودة'); return; }
+  msgs[msgIdx].meeting_date = dateEl.value;
+  msgs[msgIdx].meeting_time = timeEl.value;
+  msgs[msgIdx].status = 'scheduled';
+  msgs[msgIdx].updated_at = new Date().toISOString();
+  localStorage.setItem('aljood_parent_messages', JSON.stringify(msgs));
+  autoCreateMeeting(msgs[msgIdx]);
+
+  // Notify parent
+  var notifs = [];
+  try { notifs = JSON.parse(localStorage.getItem('aljood_parent_notifs') || '[]'); } catch(e){}
+  notifs.unshift({
+    id: 'notif_' + Date.now(),
+    parent_username: msgs[msgIdx].parent_username,
+    text: 'تم تأكيد موعد اجتماعك بتاريخ ' + dateEl.value + ' الساعة ' + timeEl.value + ' مع ' + (msgs[msgIdx].forwarded_to_name || 'الأخصائية'),
+    at: new Date().toISOString(), read: false
+  });
+  localStorage.setItem('aljood_parent_notifs', JSON.stringify(notifs));
+  showToast('✅ تم تأكيد الموعد');
+  renderSpecialistInbox();
+}
+
+function resolveParentMsg(msgId) {
+  var msgs = [];
+  try { msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]'); } catch(e){}
+  var msgIdx = msgs.findIndex(function(m) { return m.id === msgId; });
+  if (msgIdx >= 0) {
+    msgs[msgIdx].status = 'resolved';
+    msgs[msgIdx].updated_at = new Date().toISOString();
+    localStorage.setItem('aljood_parent_messages', JSON.stringify(msgs));
+  }
+  showToast('تم إغلاق الطلب');
+  renderSpecialistInbox();
+}
+
+function autoCreateMeeting(msg) {
+  try {
+    var meetings = JSON.parse(localStorage.getItem('aljood_meetings') || '[]');
+    // Check if meeting already exists for this msg
+    var exists = meetings.some(function(m) { return m.source_msg_id === msg.id; });
+    if (exists) return;
+    var participantsList = [msg.parent_name || 'ولي الأمر'];
+    if (msg.specialist_email) {
+      var staff = getStaffData();
+      var spec = staff.find(function(s) { return s.email && s.email.toLowerCase() === msg.specialist_email.toLowerCase(); });
+      if (spec) participantsList.push(spec.name_ar ? spec.name_ar.split(' ').slice(0,3).join(' ') : spec.email);
+    }
+    if (msg.forwarded_to_name) participantsList.push(msg.forwarded_to_name);
+    var newMeeting = {
+      id: 'mt_' + Date.now(),
+      title: 'اجتماع ولي أمر — ' + msg.child_name + ' (' + msg.child_class + ')',
+      description: msg.subject + (msg.notes ? ' | ' + msg.notes : ''),
+      date: msg.meeting_date,
+      time: msg.meeting_time,
+      participants: participantsList,
+      source_msg_id: msg.id,
+      type: 'parent_meeting',
+      importance: 'normal',
+      status: 'confirmed',
+      audience: 'specific',
+      created_at: new Date().toISOString()
+    };
+    meetings.unshift(newMeeting);
+    localStorage.setItem('aljood_meetings', JSON.stringify(meetings));
+  } catch(e) { console.error('autoCreateMeeting error:', e); }
+}
+
+function openSpecialistModal() {
+  var staff = getStaffData();
+  var specialists = staff.filter(function(s) {
+    return s.primary_job && s.primary_job.includes('اخصائي');
+  });
+  if (!specialists.length) { showToast('⚠️ لا يوجد أخصائيون مسجلون'); return; }
+
+  // Get all classes from STUDENTS_DATA
+  var allClasses = [];
+  if (typeof STUDENTS_DATA !== 'undefined') {
+    allClasses = Object.keys(STUDENTS_DATA).sort();
+  }
+  var assignments = {};
+  try { assignments = JSON.parse(localStorage.getItem('aljood_class_specialist') || '{}'); } catch(e){}
+
+  var specOptions = specialists.map(function(s) {
+    var name = s.name_ar ? s.name_ar.split(' ').slice(0,3).join(' ') : s.email;
+    return '<option value="' + s.email + '">' + name + '</option>';
+  }).join('');
+
+  var rows = allClasses.map(function(cls) {
+    var current = assignments[cls] || '';
+    return '<tr>' +
+      '<td style="padding:6px 10px;font-weight:700;color:#1A2A4A;">' + cls + '</td>' +
+      '<td style="padding:6px 10px;">' +
+      '<select id="spec_' + cls + '" style="width:100%;padding:6px;border:1.5px solid #e0e0e0;border-radius:6px;font-family:Cairo,sans-serif;font-size:0.8rem;">' +
+      '<option value="">— غير محدد —</option>' + specOptions +
+      '</select>' +
+      '</td>' +
+      '</tr>';
+  }).join('');
+
+  var modal = document.createElement('div');
+  modal.id = 'specialistModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = '<div style="background:#fff;border-radius:16px;padding:24px;width:min(600px,95vw);max-height:80vh;overflow-y:auto;font-family:Cairo,sans-serif;">' +
+    '<h3 style="margin:0 0 16px;color:#1A2A4A;">تعيين الأخصائيين على الصفوف</h3>' +
+    '<p style="font-size:0.85rem;color:#888;margin-bottom:16px;">حدد الأخصائي/ة المسؤول/ة عن كل صف لاستقبال رسائل أولياء الأمور</p>' +
+    '<table style="width:100%;border-collapse:collapse;"><thead>' +
+    '<tr style="background:#f0f4ff;"><th style="padding:8px;text-align:right;">الصف</th><th style="padding:8px;text-align:right;">الأخصائي/ة</th></tr>' +
+    '</thead><tbody id="specTableBody">' + rows + '</tbody></table>' +
+    '<div style="display:flex;gap:10px;margin-top:16px;">' +
+    '<button onclick="saveSpecialistAssignments()" style="flex:1;background:#1A2A4A;color:#fff;border:none;border-radius:8px;padding:10px;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;">حفظ التعيينات</button>' +
+    '<button onclick="document.getElementById(' + "'specialistModal'" + ').remove()" style="background:#f0f0f0;border:none;border-radius:8px;padding:10px 16px;cursor:pointer;font-family:Cairo,sans-serif;">إلغاء</button>' +
+    '</div></div>';
+  document.body.appendChild(modal);
+
+  // Set current values
+  setTimeout(function() {
+    Object.entries(assignments).forEach(function(entry) {
+      var cls = entry[0], email = entry[1];
+      var sel = document.getElementById('spec_' + cls);
+      if (sel) sel.value = email;
+    });
+  }, 50);
+}
+
+function saveSpecialistAssignments() {
+  var allClasses = [];
+  if (typeof STUDENTS_DATA !== 'undefined') {
+    allClasses = Object.keys(STUDENTS_DATA);
+  }
+  var assignments = {};
+  allClasses.forEach(function(cls) {
+    var sel = document.getElementById('spec_' + cls);
+    if (sel && sel.value) assignments[cls] = sel.value;
+  });
+  localStorage.setItem('aljood_class_specialist', JSON.stringify(assignments));
+  var modal = document.getElementById('specialistModal');
+  if (modal) modal.remove();
+  showToast('✅ تم حفظ تعيينات الأخصائيين — ' + Object.keys(assignments).length + ' صف');
+}
+
 
 function showChildGrades(num) {
   showToast('📊 جارٍ تحميل نتائج الطالب رقم ' + num);
