@@ -6253,6 +6253,81 @@ function applyLang() {
   if(searchInput) searchInput.placeholder = isAr ? 'ابحث باسم الطالب او رقمه...' : 'Search by name or ID...';
 }
 
+// ── Teacher name-matching helpers ─────────────────────────────────────────
+function _normTeacherName(s) {
+  // Strip leading vowel for Arabic name transliterations (Ibtesam/Ebtesam, etc.)
+  return (s || '').toLowerCase().replace(/^[aeiou]/, '');
+}
+function teacherNameMatchesUser(schedName, username) {
+  // Checks if a schedule teacher name (e.g. "Ebtesam", "Ibtesam.Q") matches the login username
+  if (!schedName || !username) return false;
+  var uFirst = (username.split('.')[0] || '').toLowerCase();
+  var tParts = schedName.split(/[.\/ ]/);
+  if (tParts.some(function(p){ return p.toLowerCase() === uFirst; })) return true;
+  if (tParts.some(function(p){ return _normTeacherName(p) === _normTeacherName(uFirst); })) return true;
+  return false;
+}
+function detectTeacherFromSchedule(uname, schedules) {
+  // Returns teacherId string or null by matching username against schedule teacher names
+  if (!uname || !schedules) return null;
+  var uParts = uname.split('.');
+  var uFirst = (uParts[0] || '').toLowerCase();
+  var uSecond = (uParts[1] || '').toLowerCase();
+  function stripAl(s){ return s.toLowerCase().replace(/^(al|el)/, ''); }
+  var tMap = {};
+  Object.keys(schedules).forEach(function(clsId){
+    if (clsId.startsWith('__')) return;
+    var clsSched = schedules[clsId];
+    if (!clsSched || typeof clsSched !== 'object') return;
+    Object.keys(clsSched).forEach(function(k){
+      var cell = clsSched[k];
+      if (cell && cell.teacherId && cell.teacher && !tMap[cell.teacherId]) {
+        tMap[cell.teacherId] = cell.teacher;
+      }
+    });
+  });
+  var bestId = null, bestScore = -999;
+  Object.keys(tMap).forEach(function(tid){
+    var tname = tMap[tid];
+    var tParts = tname.split(/[.\/ ]/);
+    var tFirst = (tParts[0] || '').toLowerCase();
+    var tSecond = (tParts[1] || '').toLowerCase();
+    var score = 0;
+    if (uFirst && tFirst) {
+      if (uFirst === tFirst) score += 10;
+      else if (_normTeacherName(uFirst) === _normTeacherName(tFirst)) score += 7;
+    }
+    if (score > 0 && uSecond && tSecond) {
+      var sw = stripAl(uSecond), ts = stripAl(tSecond);
+      if (sw === ts) score += 5;
+      else if (sw.charAt(0) === ts.charAt(0)) score += 3;
+      else score -= 7;
+    }
+    if (score > bestScore){ bestScore = score; bestId = tid; }
+  });
+  return bestScore >= 4 ? bestId : null;
+}
+function getTeacherTopSubject(uname, schedules) {
+  // Returns the most-taught subject for a teacher by matching username to schedule teacher names
+  if (!uname || !schedules) return '';
+  var subjectCount = {};
+  Object.keys(schedules).forEach(function(clsId){
+    if (clsId.startsWith('__')) return;
+    var clsSched = schedules[clsId];
+    if (!clsSched || typeof clsSched !== 'object') return;
+    Object.keys(clsSched).forEach(function(k){
+      var cell = clsSched[k];
+      if (cell && cell.teacher && cell.subject && teacherNameMatchesUser(cell.teacher, uname)) {
+        subjectCount[cell.subject] = (subjectCount[cell.subject] || 0) + 1;
+      }
+    });
+  });
+  var subjects = Object.keys(subjectCount);
+  if (!subjects.length) return '';
+  subjects.sort(function(a,b){ return subjectCount[b] - subjectCount[a]; });
+  return subjects[0];
+}
+
 // ── Home Dashboard ──────────────────────────────────────
 function renderHomeDashboard() {
   const role = currentRole;
@@ -6353,13 +6428,13 @@ ${isAdmin ? '<button class="btn" onclick="window.open(\'https://aljood-school.gi
         var uname = currentUsername || '';
         var teacherId = null;
         var teacherDispName = name;
-        // إيجاد teacherId من STAFF_DB
+        // إيجاد teacherId من الجدول بمطابقة اسم المعلمة
+        teacherId = detectTeacherFromSchedule(uname, schedules);
         if (typeof STAFF_DB !== 'undefined') {
-          var tEntry = STAFF_DB.find(function(s){ return s.username === uname; });
-          if (tEntry && tEntry.teacherId) {
-            teacherId = tEntry.teacherId;
-            teacherDispName = tEntry.name || name;
-          }
+          var tEntry = STAFF_DB.find(function(s){
+            return s.email && s.email.split('@')[0].toLowerCase() === uname.toLowerCase();
+          });
+          if (tEntry) teacherDispName = tEntry.name_ar || tEntry.name_en || name;
         }
         if (!teacherId) return '';
         var TDAYS = ['الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
@@ -6400,10 +6475,10 @@ ${isAdmin ? '<button class="btn" onclick="window.open(\'https://aljood-school.gi
         TDAYS.forEach(function(dname, di){
           html2 += '<tr style="border-bottom:1px solid #f0f0f0;">';
           html2 += '<td style="padding:8px;font-weight:700;color:'+dayColors[di]+';background:rgba(0,0,0,0.02);text-align:center;">'+dname+'</td>';
-          var maxP = (di===4) ? 3 : 7; // الجمعة: 3 حصص فقط
+          var maxP = (di===4) ? 4 : 7; // الجمعة: 4 حصص
           for(var p=0;p<7;p++){
-            if(di===4 && p>=3){
-              if(p===3) html2 += '<td colspan="4" style="padding:8px;text-align:center;background:#fff8e1;color:#b8922f;font-size:0.75rem;border-radius:8px;">يوم مقصور</td>';
+            if(di===4 && p>=4){
+              if(p===4) html2 += '<td colspan="3" style="padding:8px;text-align:center;background:#fff8e1;color:#b8922f;font-size:0.75rem;border-radius:8px;">يوم مقصور</td>';
               continue;
             }
             var cells = grid[di][p];
@@ -9417,14 +9492,20 @@ function renderClassSched() {
   DAYS_LIST.forEach((day, di) => {
     // الجمعة: أوقات مختصرة في جميع الأوضاع
     const isFriday = di === 4;
+    // توقيت الجمعة الصحيح من وثيقة SCHOOL TIMING الرسمية
     const fridayC1Periods = [
-      { key: 'P1', label: 'P1', time: '10:30–11:05', pi: 0 },
-      { key: 'P2', label: 'P2', time: '11:05–11:40', pi: 1 },
+      { key: 'P1', label: 'P1', time: '7:00–7:45', pi: 0 },
+      { key: 'P2', label: 'P2', time: '7:45–8:35', pi: 1 },
+      { key: 'BREAK', label: 'استراحة', time: '8:35–9:00', isBreak: true },
+      { key: 'P3', label: 'P3', time: '9:00–9:45', pi: 2 },
+      { key: 'P4', label: 'P4', time: '9:45–10:30', pi: 3 },
     ];
     const fridayC2Periods = [
-      { key: 'P1', label: 'P1', time: '8:00–8:40', pi: 0 },
-      { key: 'P2', label: 'P2', time: '8:40–9:20', pi: 1 },
-      { key: 'P3', label: 'P3', time: '10:00–10:40', pi: 2 },
+      { key: 'P1', label: 'P1', time: '8:00–8:45', pi: 0 },
+      { key: 'P2', label: 'P2', time: '8:50–9:35', pi: 1 },
+      { key: 'BREAK', label: 'استراحة', time: '9:35–10:00', isBreak: true },
+      { key: 'P3', label: 'P3', time: '10:00–10:45', pi: 2 },
+      { key: 'P4', label: 'P4', time: '10:45–11:30', pi: 3 },
     ];
     const dayPeriods = isFriday ? (isC2 ? fridayC2Periods : fridayC1Periods) : periods;
     html += '<tr>';
@@ -13849,7 +13930,7 @@ function wpOnClassChange() {
     var uname = (typeof currentUsername !== 'undefined') ? currentUsername : '';
     Object.values(classSchedule).forEach(function(cell) {
       if (!cell) return;
-      if (cell.teacher && cell.subject && (cell.teacher === uname || uname === '')) {
+      if (cell.teacher && cell.subject && (teacherNameMatchesUser(cell.teacher, uname) || uname === '')) {
         mySubjects.add(cell.subject);
       }
     });
@@ -13881,26 +13962,8 @@ function loadWeeklyPlanForm() {
     if (subjectField && !subjectField.value && typeof currentRole !== 'undefined' && currentRole === 'teacher') {
       var uname = currentUsername || '';
       var schedules = (typeof getSchedules === 'function') ? getSchedules() : {};
-      var teacherId = null;
-      if (typeof STAFF_DB !== 'undefined') {
-        var tEnt = STAFF_DB.find(function(s){ return s.username === uname; });
-        if (tEnt && tEnt.teacherId) teacherId = tEnt.teacherId;
-      }
-      if (teacherId) {
-        var subjectCount = {};
-        Object.values(schedules).forEach(function(clsSched){
-          Object.values(clsSched).forEach(function(cell){
-            if (cell && cell.teacherId === teacherId && cell.subject) {
-              subjectCount[cell.subject] = (subjectCount[cell.subject]||0) + 1;
-            }
-          });
-        });
-        var subjects = Object.keys(subjectCount);
-        if (subjects.length > 0) {
-          subjects.sort(function(a,b){ return subjectCount[b]-subjectCount[a]; });
-          subjectField.value = subjects[0];
-        }
-      }
+      var topSubject = getTeacherTopSubject(uname, schedules);
+      if (topSubject) subjectField.value = topSubject;
     }
   } catch(e) {}
   var allFields = [
@@ -13955,9 +14018,7 @@ function dlpOnClassChange() {
     var matchedTeacher = '';
     // جرب المطابقة مع الاسم الكامل أو الجزئي
     Object.keys(teacherSubjectMap).forEach(function(tname) {
-      var tLow = tname.toLowerCase().replace(/[.\s]/g,'');
-      var mLow = myName.toLowerCase().replace(/[.\s]/g,'');
-      if (tLow === mLow || mLow.includes(tLow) || tLow.includes(mLow) ||
+      if (teacherNameMatchesUser(tname, myName) ||
           (myStaff && myStaff.name_ar && myStaff.name_ar.includes(tname))) {
         mySubjects = mySubjects.concat(Array.from(teacherSubjectMap[tname]));
         matchedTeacher = tname;
@@ -14774,7 +14835,7 @@ function blLoadStudentsCheckboxes() {
   var grid = document.getElementById('bl-students-grid');
   var countEl = document.getElementById('bl-selected-count');
   if (!classVal) { if(wrapper) wrapper.style.display='none'; if(countEl) countEl.textContent='\u0627\u062e\u062a\u0631 \u0627\u0644\u0635\u0641 \u0623\u0648\u0644\u0627\u064b'; return; }
-  var students = (window.STUDENTS_DATA && STUDENTS_DATA[classVal]) || [];
+  var students = (typeof STUDENTS_DATA !== 'undefined' && STUDENTS_DATA[classVal]) || [];
   if (!students.length) { if(wrapper) wrapper.style.display='none'; if(countEl) countEl.textContent='\u0644\u0627 \u064a\u0648\u062c\u062f \u0637\u0644\u0627\u0628'; return; }
   var d = blGetData();
   grid.innerHTML = students.map(function(s, idx) {
