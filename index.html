@@ -3787,10 +3787,29 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 </div>
 
 <div id="section-login_analytics" class="section">
-  <div class="page-header" style="margin-bottom:22px;">
+  <div class="page-header" style="margin-bottom:22px;flex-wrap:wrap;gap:12px;">
     <div class="page-header-icon" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);"><i class="fas fa-chart-line"></i></div>
     <div class="page-header-text"><h1>📊 تحليلات الاستخدام</h1><p>سجل تسجيلات الدخول وإحصائيات اعتماد البوابة</p></div>
-    <button onclick="clearLoginLog()" style="padding:8px 16px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.85rem;"><i class="fas fa-trash"></i> مسح السجل المحلي</button>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:6px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:6px 12px;">
+        <i class="fas fa-clock" style="color:#7c3aed;font-size:0.85rem;"></i>
+        <span style="font-size:0.82rem;color:#6b7280;">الاحتفاظ:</span>
+        <select id="retentionSelect" onchange="setLoginRetention(parseInt(this.value))"
+          style="border:none;background:transparent;font-family:inherit;font-size:0.85rem;color:#7c3aed;font-weight:700;cursor:pointer;outline:none;padding:0;">
+          <option value="7">7 أيام</option>
+          <option value="14">14 يوم</option>
+          <option value="30" selected>30 يوم</option>
+          <option value="60">60 يوم</option>
+          <option value="90">90 يوم</option>
+        </select>
+      </div>
+      <button onclick="exportLoginCSV()" style="padding:8px 16px;background:linear-gradient(135deg,#059669,#047857);color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.85rem;display:flex;align-items:center;gap:6px;">
+        <i class="fas fa-file-csv"></i> تصدير CSV
+      </button>
+      <button onclick="clearLoginLog()" style="padding:8px 16px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.85rem;display:flex;align-items:center;gap:6px;">
+        <i class="fas fa-trash"></i> مسح السجل
+      </button>
+    </div>
   </div>
   <div id="login-analytics-content">
     <div style="text-align:center;color:#9ca3af;padding:40px;"><i class="fas fa-spinner fa-spin fa-2x"></i></div>
@@ -8040,15 +8059,43 @@ function renderWebsiteManager() {
 }
 
 // ===== Toast Notification =====
-function showToast(msg) {
+function showConfirmModal(title, bodyHtml, onConfirm) {
+  var existing = document.getElementById('_confirmModal');
+  if (existing) existing.remove();
+  var modal = document.createElement('div');
+  modal.id = '_confirmModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML = '<div style="background:#fff;border-radius:16px;padding:28px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);text-align:center;">'
+    + '<div style="font-size:2.2rem;margin-bottom:10px;">⚠️</div>'
+    + '<h3 style="color:#1A2A4A;margin:0 0 12px;font-size:1.1rem;">' + title + '</h3>'
+    + '<p style="color:#6b7280;font-size:0.88rem;margin:0 0 22px;line-height:1.6;" dir="rtl">' + bodyHtml + '</p>'
+    + '<div style="display:flex;gap:10px;justify-content:center;">'
+    + '<button id="_confirmYes" style="padding:10px 28px;background:#dc2626;color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.9rem;font-weight:700;">تأكيد الحذف</button>'
+    + '<button onclick="document.getElementById(\'_confirmModal\').remove()" style="padding:10px 28px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.9rem;">إلغاء</button>'
+    + '</div></div>';
+  document.body.appendChild(modal);
+  document.getElementById('_confirmYes').onclick = function() {
+    modal.remove();
+    onConfirm();
+  };
+}
+
+function showToast(msg, type) {
   const old = document.getElementById('globalToast');
   if (old) old.remove();
+  const colors = {
+    success: { bg:'#064e3b', color:'#6ee7b7', icon:'✅ ' },
+    error:   { bg:'#7f1d1d', color:'#fca5a5', icon:'❌ ' },
+    warning: { bg:'#78350f', color:'#fcd34d', icon:'⚠️ ' },
+    info:    { bg:'#1e3a5f', color:'#93c5fd', icon:'ℹ️ ' }
+  };
+  var c = colors[type] || { bg:'#1a1a2e', color:'#c9a227', icon:'' };
   const t = document.createElement('div');
   t.id = 'globalToast';
-  t.textContent = msg;
-  t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a2e;color:#c9a227;padding:12px 24px;border-radius:10px;font-size:0.9rem;font-weight:700;z-index:999999;box-shadow:0 4px 20px rgba(0,0,0,0.3);direction:rtl;';
+  t.textContent = c.icon + msg;
+  t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:'+c.bg+';color:'+c.color+';padding:12px 24px;border-radius:10px;font-size:0.9rem;font-weight:700;z-index:999999;box-shadow:0 4px 20px rgba(0,0,0,0.3);direction:rtl;white-space:nowrap;';
   document.body.appendChild(t);
-  setTimeout(() => t.remove(), 2500);
+  setTimeout(() => t.remove(), 3000);
 }
 
 function applyNavAccess() {
@@ -16597,11 +16644,56 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 
+// ─── Login Retention ────────────────────────────────────────────────────────
+function getLoginRetentionDays() {
+  return parseInt(localStorage.getItem('aljood_login_retention') || '30', 10);
+}
+function setLoginRetention(days) {
+  localStorage.setItem('aljood_login_retention', String(days));
+  pruneLoginLog();
+  renderLoginAnalytics();
+  showToast('تم تغيير فترة الاحتفاظ إلى ' + days + ' يوم', 'success');
+}
+function pruneLoginLog() {
+  try {
+    var days = getLoginRetentionDays();
+    var cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    var tlog = JSON.parse(localStorage.getItem('aljood_login_log') || '[]');
+    var pruned = tlog.filter(function(e){ return e.ts >= cutoff; });
+    if (pruned.length !== tlog.length) {
+      localStorage.setItem('aljood_login_log', JSON.stringify(pruned));
+    }
+  } catch(e) {}
+}
+function exportLoginCSV() {
+  var log = JSON.parse(localStorage.getItem('aljood_login_log') || '[]');
+  if (!log.length) { showToast('لا توجد بيانات للتصدير', 'warning'); return; }
+  var roleLabels = { admin:'مدير', principal:'مديرة', teacher:'معلمة', admin_staff:'إداري', tech_staff:'فني', staff:'موظف', parent:'ولي أمر' };
+  var rows = ['\uFEFFالاسم,اسم المستخدم,الدور,التاريخ,الوقت'];
+  var sorted = log.slice().sort(function(a,b){ return b.ts.localeCompare(a.ts); });
+  sorted.forEach(function(e) {
+    var d = new Date(e.ts);
+    var dateStr = d.toLocaleDateString('ar-EG');
+    var timeStr = d.toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'});
+    rows.push([(e.name||'').replace(/,/g,' '), (e.username||'').replace(/,/g,' '), (roleLabels[e.role]||e.role||''), dateStr, timeStr].join(','));
+  });
+  var blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'login_log_aljood_' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+  showToast('تم تصدير ' + log.length + ' سجل بنجاح ✅', 'success');
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function trackLogin(fullName, role, username) {
   try {
+    pruneLoginLog();
     var tlog = JSON.parse(localStorage.getItem('aljood_login_log') || '[]');
     tlog.push({ name: fullName, role: role, username: username || fullName, ts: new Date().toISOString() });
-    if (tlog.length > 1000) tlog.splice(0, tlog.length - 1000);
+    if (tlog.length > 2000) tlog.splice(0, tlog.length - 2000);
     localStorage.setItem('aljood_login_log', JSON.stringify(tlog));
   } catch(e) {}
   try {
@@ -16616,19 +16708,32 @@ function trackLogin(fullName, role, username) {
 }
 
 function clearLoginLog() {
-  if (!confirm('مسح سجل تسجيلات الدخول المحلي؟')) return;
-  localStorage.removeItem('aljood_login_log');
-  renderLoginAnalytics();
-  showToast('تم مسح السجل المحلي', 'info');
+  var log = JSON.parse(localStorage.getItem('aljood_login_log') || '[]');
+  showConfirmModal(
+    '🗑️ مسح سجل الدخول',
+    'سيتم حذف <strong>' + log.length + '</strong> سجل تسجيل دخول نهائياً من هذا الجهاز.<br><small style="color:#9ca3af;">لا يمكن التراجع عن هذا الإجراء.</small>',
+    function() {
+      localStorage.removeItem('aljood_login_log');
+      renderLoginAnalytics();
+      showToast('تم مسح ' + log.length + ' سجل بنجاح', 'success');
+    }
+  );
 }
 
 function renderLoginAnalytics() {
   var el = document.getElementById('login-analytics-content');
   if (!el) return;
+  // sync retention selector
+  var retSel = document.getElementById('retentionSelect');
+  if (retSel) retSel.value = String(getLoginRetentionDays());
+  // prune before displaying
+  pruneLoginLog();
   var log = JSON.parse(localStorage.getItem('aljood_login_log') || '[]');
   var emps = getEmployeesData ? getEmployeesData() : [];
   var now = new Date();
   var weekAgo = new Date(now - 7*24*60*60*1000);
+  var retentionDays = getLoginRetentionDays();
+  var retentionCutoff = new Date(now - retentionDays*24*60*60*1000);
   var roleLabels = { admin:'مدير', principal:'مديرة', teacher:'معلمة', admin_staff:'إداري', tech_staff:'فني', staff:'موظف', parent:'ولي أمر' };
 
   if (!log.length) {
@@ -16671,6 +16776,13 @@ function renderLoginAnalytics() {
   html += '<div style="background:#fff;border-radius:14px;padding:18px;text-align:center;box-shadow:0 2px 8px rgba(16,185,129,0.1);border:1px solid #d1fae5;"><div style="font-size:2rem;font-weight:700;color:#059669;">'+uniqUsers.length+'</div><div style="color:#6b7280;font-size:0.85rem;margin-top:4px;">مستخدم فريد</div></div>';
   html += '<div style="background:#fff;border-radius:14px;padding:18px;text-align:center;box-shadow:0 2px 8px rgba(59,130,246,0.1);border:1px solid #dbeafe;"><div style="font-size:2rem;font-weight:700;color:#2563eb;">'+thisWeekLog.length+'</div><div style="color:#6b7280;font-size:0.85rem;margin-top:4px;">دخول هذا الأسبوع</div></div>';
   html += '<div style="background:#fff;border-radius:14px;padding:18px;text-align:center;box-shadow:0 2px 8px rgba(245,158,11,0.1);border:1px solid #fef3c7;"><div style="font-size:2rem;font-weight:700;color:#d97706;">'+adoptionPct+'%</div><div style="color:#6b7280;font-size:0.85rem;margin-top:4px;">نسبة الاعتماد (أسبوعي)</div></div>';
+  html += '</div>';
+  // Retention info bar
+  html += '<div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:10px 16px;margin-bottom:18px;display:flex;align-items:center;gap:10px;font-size:0.83rem;color:#6b7280;">';
+  html += '<i class="fas fa-info-circle" style="color:#7c3aed;"></i>';
+  html += '<span>يتم الاحتفاظ بالسجلات لمدة <strong style="color:#7c3aed;">'+retentionDays+' يوم</strong> — أقدم سجل: ';
+  var oldest = log.length ? new Date(log.reduce(function(a,b){return a.ts<b.ts?a:b;}).ts).toLocaleDateString('ar-EG') : '—';
+  html += '<strong style="color:#374151;">'+oldest+'</strong> — يُحذف تلقائياً ما هو أقدم من '+retentionCutoff.toLocaleDateString('ar-EG')+'</span>';
   html += '</div>';
 
   html += '<div style="background:#fff;border-radius:14px;padding:20px;margin-bottom:22px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">';
