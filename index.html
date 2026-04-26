@@ -3012,7 +3012,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
         <option value="normal">جدول عادي</option>
         <option value="ramadan">جدول رمضان</option>
       </select>
-      <span id="addClassBtnWrap"></span>
+      <span id="addClassBtnWrap"></span><span id="schedEditModeBar" style="margin-right:8px;"></span>
     </div>
     <div id="class-sched-container"><div id="sched-empty-state" style="text-align:center;padding:40px 20px;color:rgba(255,255,255,0.5);"><i class="fas fa-calendar-times" style="font-size:2.5rem;margin-bottom:12px;display:block;"></i><div style="font-size:1rem;">اختري الصف من القائمة أعلاه لعرض جدوله</div><div style="font-size:0.82rem;margin-top:6px;">أو انتقلي إلى منشئ الجدول لبناء جدول جديد</div></div></div>
   </div>
@@ -9708,6 +9708,8 @@ function switchSchedView(view) {
 }
 
 function renderClassSched() {
+  // refresh edit bar whenever table re-renders
+  setTimeout(updateSchedEditBar, 50);
   const classId = document.getElementById('classSelect')?.value;
   const container = document.getElementById('class-sched-container');
   if (!container) return;
@@ -9718,7 +9720,7 @@ function renderClassSched() {
   const classes = getClasses();
   const cls = classes.find(c => c.id == classId);
   if (!cls) return;
-  const schedules = getSchedules();
+  const schedules = (_schedEditMode && _schedPendingSched) ? _schedPendingSched : getSchedules();
   const isDistMode = currentSchedMode === 'distance';
   const gradeFromId = parseInt(classId); // "5A"→5, "1A"→1
   const clsSched = isDistMode ? ((schedules['__mode_distance'] || {})[classId] || {}) : (schedules[classId] || {});
@@ -9913,7 +9915,7 @@ function renderClassSched() {
         const subj = cell.subject || '';
         const teacher = cell.teacher || '';
         const color = getSubjColor(subj);
-        const dragAttrs = isAdmin ? ' draggable="true" data-classid="' + classId + '" data-di="' + di + '" data-pi="' + p.pi + '" ondragstart="schedDragStart(event)" ondragover="schedDragOver(event)" ondragleave="schedDragLeave(event)" ondrop="schedDrop(event)"' : '';
+        const dragAttrs = (isAdmin && _schedEditMode) ? ' draggable="true" data-classid="' + classId + '" data-di="' + di + '" data-pi="' + p.pi + '" ondragstart="schedDragStart(event)" ondragover="schedDragOver(event)" ondragleave="schedDragLeave(event)" ondrop="schedDrop(event)"' : '';
         if (subj) {
           html += '<td style="padding:3px;transition:opacity 0.2s,background 0.2s;"' + dragAttrs + '>';
           html += '<div class="sched-cell" style="background:' + color + '14;border-right-color:' + color + ';' + (isAdmin ? 'cursor:grab;' : '') + '">';
@@ -10115,6 +10117,8 @@ function deleteClass(classId) {
 
 // ─── SCHEDULE DRAG & DROP ────────────────────────────────────
 var _schedDragSrc = null;
+var _schedEditMode = false;       // true = edit mode active
+var _schedPendingSched = null;    // staged (unsaved) changes
 
 function schedDragStart(e) {
   var td = e.currentTarget;
@@ -10170,10 +10174,56 @@ function schedDrop(e) {
     cls[tgtKey] = tmp;
     schedules[tgtClassId] = cls;
   }
-  saveSchedules(schedules);
+  _schedPendingSched = schedules;  // stage — not saved yet
   _schedDragSrc = null;
   renderClassSched();
-  if (typeof showToast === 'function') showToast('تم تبديل الحصتين ✓', 'success');
+  updateSchedEditBar();
+  if (typeof showToast === 'function') showToast('تم نقل الحصة — اضغط "حفظ التعديلات" لتأكيدها', 'info');
+}
+// ─────────────────────────────────────────────────────────────
+
+// ── Edit Mode Controls ───────────────────────────────────────────────
+function updateSchedEditBar() {
+  var bar = document.getElementById('schedEditModeBar');
+  if (!bar) return;
+  if (!_schedEditMode) {
+    // Only show for admin
+    var role = typeof currentRole !== 'undefined' ? currentRole : '';
+    if (role !== 'admin') { bar.innerHTML = ''; return; }
+    bar.innerHTML = '<button onclick="schedToggleEdit()" style="padding:7px 16px;background:rgba(201,168,76,0.15);color:#C9A84C;border:1px solid rgba(201,168,76,0.5);border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700;"><i class=\"fas fa-pencil-alt\" style=\"margin-left:6px;\"></i> تفعيل التعديل</button>';
+  } else {
+    var hasPending = _schedPendingSched !== null;
+    var editBadge = '<span style=\"background:rgba(234,179,8,0.15);color:#fbbf24;border:1px solid rgba(234,179,8,0.4);border-radius:6px;padding:4px 10px;font-size:0.78rem;font-weight:700;\"><i class=\"fas fa-edit\" style=\"margin-left:4px;\"></i> وضع التعديل نشط</span>';
+    var saveBtn = hasPending ? '<button onclick="schedSaveEdits()" style=\"padding:7px 16px;background:#16a34a;color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700;margin-right:6px;\"><i class=\"fas fa-save\" style=\"margin-left:6px;\"></i> حفظ التعديلات</button>' : '';
+    var cancelBtn = '<button onclick="schedCancelEdits()" style=\"padding:7px 14px;background:rgba(220,38,38,0.15);color:#f87171;border:1px solid rgba(220,38,38,0.4);border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.82rem;margin-right:6px;\"><i class=\"fas fa-times\" style=\"margin-left:6px;\"></i> إلغاء</button>';
+    bar.innerHTML = editBadge + saveBtn + cancelBtn;
+  }
+}
+
+function schedToggleEdit() {
+  _schedEditMode = true;
+  _schedPendingSched = null;
+  renderClassSched();
+  if (typeof showToast === 'function') showToast('وضع التعديل نشط — اسحب الحصص لتبديلها', 'info');
+}
+
+function schedSaveEdits() {
+  if (_schedPendingSched) {
+    saveSchedules(_schedPendingSched);
+    if (typeof showToast === 'function') showToast('✓ تم حفظ التعديلات بنجاح', 'success');
+  } else {
+    if (typeof showToast === 'function') showToast('لا توجد تعديلات لحفظها', 'info');
+  }
+  _schedEditMode = false;
+  _schedPendingSched = null;
+  renderClassSched();
+}
+
+function schedCancelEdits() {
+  _schedEditMode = false;
+  _schedPendingSched = null;
+  renderClassSched();
+  if (typeof showToast === 'function') showToast('تم إلغاء التعديلات', 'warning');
 }
 // ─────────────────────────────────────────────────────────────
 
