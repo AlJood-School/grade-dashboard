@@ -5522,13 +5522,19 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 
 <script>
 // ===== PASSWORD MANAGEMENT (Admin Panel) =====
-const defaultPasswords = {
-  'admin':     { label: 'مدير النظام (Admin)',      default: 'AlJood@2026',   badge: '<span class="grade-badge grade-a">وصول كامل + تعديل</span>' },
-  'principal': { label: 'المديرة (Principal)',       default: 'AJH0006', badge: '<span class="grade-badge grade-a">وصول كامل — قراءة فقط</span>' },
-  'teacher':   { label: 'المعلمون (Teacher)',        default: 'Teacher2026',   badge: '<span class="grade-badge grade-b">منصات تعليمية معتمدة</span>' },
-  'staff':     { label: 'الإداريون (Staff)',         default: 'Staff2026',     badge: '<span class="grade-badge grade-c">الإدارة فقط</span>' },
-  'parent':    { label: 'أولياء الأمور (Parent)',    default: 'Parent2026',    badge: '<span class="grade-badge" style="background:#e8d5ff;color:#553c9a">بوابة الأولياء</span>' }
-};
+let defaultPasswords = {};
+let ROLE_USERS_DATA = {};
+function initRoleData(rolesData) {
+  ROLE_USERS_DATA = rolesData;
+  defaultPasswords = {};
+  Object.entries(rolesData).forEach(([role, info]) => {
+    const badgeHtml = info.badgeClass
+      ? '<span class="grade-badge ' + info.badgeClass + '">' + info.badgeText + '</span>'
+      : '<span class="grade-badge" style="' + (info.badgeStyle||'') + '">' + info.badgeText + '</span>';
+    defaultPasswords[role] = { label: info.label, default: info.default, badge: badgeHtml };
+  });
+  buildPasswordsMap();
+}
 function getSavedPasswords() {
   try { return JSON.parse(localStorage.getItem('aljood_passwords') || '{}'); } catch(e) { return {}; }
 }
@@ -5586,13 +5592,16 @@ document.addEventListener('click', function(e) {
 let PASSWORDS = {};
 function buildPasswordsMap() {
   PASSWORDS = {};
-  PASSWORDS[getEffectivePassword('admin')]     = { role: 'admin',     name: 'نور يم',        roleLabel: '👑 Admin | المدير' };
-  PASSWORDS[getEffectivePassword('principal')] = { role: 'principal', name: 'حليمة حسن',     roleLabel: '🏫 Principal | المديرة' };
-  PASSWORDS[getEffectivePassword('teacher')]   = { role: 'teacher',   name: 'معلم / معلمة',  roleLabel: '📚 معلم | Teacher' };
-  PASSWORDS[getEffectivePassword('staff')]     = { role: 'staff',     name: 'موظف إداري',    roleLabel: '🏢 إداري | Staff' };
-  PASSWORDS[getEffectivePassword('parent')]    = { role: 'parent',    name: 'ولي أمر',       roleLabel: '❤️ ولي الأمر | Parent' };
+  ['admin','principal','teacher','staff','parent'].forEach(function(role) {
+    var info = ROLE_USERS_DATA[role] || {};
+    PASSWORDS[getEffectivePassword(role)] = {
+      role:      role,
+      name:      info.name      || role,
+      roleLabel: info.roleLabel || role
+    };
+  });
 }
-buildPasswordsMap();
+// buildPasswordsMap() called by initRoleData() after users.json is loaded
 
 // ===== INDIVIDUAL STAFF ACCOUNTS =====
 
@@ -5656,18 +5665,20 @@ function resetSessionTimer() {
 async function loadPortalData() {
   const base = (window.location.protocol === 'file:') ? '' : '';
   try {
-    const [sRes, stRes, tRes, schRes] = await Promise.all([
+    const [sRes, stRes, tRes, schRes, uRes] = await Promise.all([
       fetch('data/students.json'),
       fetch('data/staff.json'),
       fetch('data/teachers.json'),
-      fetch('data/schedules.json')
+      fetch('data/schedules.json'),
+      fetch('data/users.json')
     ]);
-    if (!sRes.ok || !stRes.ok || !tRes.ok || !schRes.ok) throw new Error('HTTP error');
-    const [s, st, t, sch] = await Promise.all([sRes.json(), stRes.json(), tRes.json(), schRes.json()]);
+    if (!sRes.ok || !stRes.ok || !tRes.ok || !schRes.ok || !uRes.ok) throw new Error('HTTP error');
+    const [s, st, t, sch, u] = await Promise.all([sRes.json(), stRes.json(), tRes.json(), schRes.json(), uRes.json()]);
     STUDENTS_DATA = s;
     STAFF_DB = st;
     TEACHER_ROSTER = t;
     DEFAULT_SCHEDULES = sch;
+    initRoleData(u.roles || u);
     console.log('✅ Portal data loaded dynamically', {
       students: Object.keys(STUDENTS_DATA).reduce((a,k)=>a+STUDENTS_DATA[k].length,0),
       staff: STAFF_DB.length,
