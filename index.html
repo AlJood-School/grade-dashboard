@@ -5772,10 +5772,10 @@ function renderPwTable() {
   if (!tbody) return;
   const saved = getSavedPasswords();
   tbody.innerHTML = Object.entries(defaultPasswords).map(([role, info]) => {
-    const pw = saved[role] || info.default;
+    const isChanged = !!saved[role];
     return `<tr>
       <td><strong>${info.label}</strong></td>
-      <td style="font-family:monospace;letter-spacing:1px;">${pw}</td>
+      <td style="font-family:monospace;letter-spacing:2px;color:#888;">••••••••</td>
       <td>${info.badge}</td>
       <td><button onclick="openPwModal('${role}')" style="padding:6px 14px;background:linear-gradient(135deg,#c9a227,#e8c547);border:none;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:700;color:#1a1a2e;white-space:nowrap;"><i class="fas fa-edit"></i> تعديل</button></td>
     </tr>`;
@@ -5785,7 +5785,7 @@ let editingRole = null;
 function openPwModal(role) {
   editingRole = role;
   document.getElementById('pwModalRole').textContent = defaultPasswords[role].label;
-  document.getElementById('pwNewInput').value = getEffectivePassword(role);
+  document.getElementById('pwNewInput').value = ''; // Never display stored hash
   document.getElementById('pwSaveMsg').style.display = 'none';
   const modal = document.getElementById('pwModal');
   modal.style.display = 'flex';
@@ -5795,11 +5795,13 @@ function closePwModal() {
   document.getElementById('pwModal').style.display = 'none';
   editingRole = null;
 }
-function savePw() {
+async function savePw() {
   const newPw = document.getElementById('pwNewInput').value.trim();
-  if (!newPw || newPw.length < 4) { alert('كلمة المرور يجب أن تكون 4 أحرف على الأقل'); return; }
+  if (!newPw || newPw.length < 4) { showToast('كلمة المرور يجب أن تكون 4 أحرف على الأقل', 'error'); return; }
+  // Hash before saving so stored value is never plain text
+  const newHash = await hashPass(newPw);
   const saved = getSavedPasswords();
-  saved[editingRole] = newPw;
+  saved[editingRole] = newHash;
   localStorage.setItem('aljood_passwords', JSON.stringify(saved));
   // Update live passwords map
   buildPasswordsMap();
@@ -5835,8 +5837,22 @@ let currentStaff = null;
 
 let STAFF_DB = [];
 
-function getStaffFromDB(password) {
-  return STAFF_DB.find(e => e.password === password) || null;
+// ─── SHA-256 (Web Crypto — async) ───────────────────────────────
+async function hashPass(pw) {
+  const enc = new TextEncoder().encode(pw);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+// Direct hash comparison — used by session restore (hash already in localStorage)
+function getStaffFromDBByHash(hash) {
+  return STAFF_DB.find(e => e.password === hash) || null;
+}
+
+// Hash the input then compare — used by doLogin
+async function getStaffFromDB(password) {
+  const hash = await hashPass(password);
+  return STAFF_DB.find(e => e.password === hash) || null;
 }
 function getStaffById(id) {
   return STAFF_DB.find(e => e.id === id) || null;
@@ -5940,6 +5956,7 @@ function restoreSession() {
   }
 
   // Try PASSWORDS map first (role-level accounts: admin, principal, teacher, staff, parent)
+  // savedPass is now stored as SHA-256 hash
   var user = PASSWORDS[savedPass] || null;
   var roleLabel = '';
   if (user) {
@@ -5950,8 +5967,8 @@ function restoreSession() {
     currentStaff = savedStaffId ? getStaffById(savedStaffId) : null;
     localStorage.setItem('aljood_last_active', Date.now()); // refresh timestamp on restore
   } else {
-    // Try individual STAFF_DB accounts
-    var staffMember = getStaffFromDB(savedPass);
+    // Try individual STAFF_DB accounts (savedPass is the SHA-256 hash)
+    var staffMember = getStaffFromDBByHash(savedPass);
     if (!staffMember) {
       localStorage.removeItem('aljood_session_role');
       localStorage.removeItem('aljood_session_pass');
@@ -6010,9 +6027,12 @@ function setRole(r) {
   document.querySelectorAll('.login-tab').forEach((t,i) => t.classList.toggle('active', ['admin','principal','teacher','admin_staff','parent'][i] === r));
 }
 
-function doLogin() {
+async function doLogin() {
   const pass = document.getElementById('loginPass').value.trim();
   const enteredUsername = (document.getElementById('loginUsername')?.value || '').trim();
+
+  // Hash input password once for all comparisons
+  const passHash = await hashPass(pass);
 
   // Tab-to-role compatibility map
   // vice-principals (admin_staff) may use principal tab
@@ -6025,7 +6045,7 @@ function doLogin() {
   };
 
   // Check individual staff accounts first (always check STAFF_DB regardless of tab)
-  const staffMember = getStaffFromDB(pass);
+  const staffMember = getStaffFromDBByHash(passHash);
   if (staffMember) {
     // Validate tab matches actual role
     const allowedRoles = TAB_ROLE_MAP[loginRole] || [];
@@ -6038,7 +6058,7 @@ function doLogin() {
     currentUsername = staffMember.name_ar;
     const roleLabel = getStaffRoleLabel(staffMember);
     localStorage.setItem('aljood_session_role', staffMember.role);
-    localStorage.setItem('aljood_session_pass', pass);
+    localStorage.setItem('aljood_session_pass', passHash);
     localStorage.setItem('aljood_session_username', currentUsername);
     localStorage.setItem('aljood_session_staff_id', staffMember.id);
     localStorage.setItem('aljood_last_active', Date.now());
@@ -6069,14 +6089,14 @@ function doLogin() {
     return;
   }
 
-  // Check role passwords (admin, principal, parent)
-  const user = PASSWORDS[pass];
+  // Check role passwords (admin, principal, parent) — compare by hash
+  const user = PASSWORDS[passHash];
   if (user) {
     currentStaff = null;
     const uname = user.name;
     currentUsername = uname;
     localStorage.setItem('aljood_session_role', user.role);
-    localStorage.setItem('aljood_session_pass', pass);
+    localStorage.setItem('aljood_session_pass', passHash);
     localStorage.setItem('aljood_session_username', uname);
     localStorage.removeItem('aljood_session_staff_id');
     localStorage.setItem('aljood_last_active', Date.now());
