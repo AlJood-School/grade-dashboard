@@ -2230,6 +2230,10 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     </div>
 
     <!-- ===== STUDENTS SECTION ===== -->
+    <div class="section" id="section-smart-report">
+      <!-- Smart Report - loaded dynamically by initSmartReport() -->
+    </div>
+
     <div class="section" id="section-students">
   <div class="page-header">
     <div class="page-header-text">
@@ -2274,6 +2278,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
       <option value="">جميع المراحل</option>
       <option value="C1">الحلقة الأولى (1-4)</option>
       <option value="C2">الحلقة الثانية (5-8)</option>
+      <option value="KG">روضة (KG)</option>
     </select>
     <select class="filter-select" id="gradeFilterSt" onchange="renderStudents()">
       <option value="">جميع الصفوف</option>
@@ -6460,6 +6465,7 @@ function showSection(name) {
   if (name === 'schedule_builder') setTimeout(renderSBSection, 50);
   if (name === 'leaves') setTimeout(renderLeavesSection, 50);
   if (name === 'meetings') setTimeout(renderMeetingsSection, 50);
+  if (name === 'smart_report') { setTimeout(initSmartReport, 0); }
   if (name === 'students') { setTimeout(renderStudents, 0); const pidCard = document.getElementById('parentIdCard'); if(pidCard) pidCard.style.display = (currentRole === 'admin') ? 'block' : 'none'; }
   if (name === 'home') { renderHomeDashboard(); }
   if (name === 'reports') renderReportsSection();
@@ -6656,9 +6662,11 @@ function updateGradeFilter() {
   opts.forEach(o => {
     if(!o.value) return;
     const g = parseInt(o.value);
+    if(cycle === 'KG') { o.style.display = 'none'; return; }
     o.style.display = (!cycle || (cycle==='C1' && g<=4) || (cycle==='C2' && g>=5)) ? '' : 'none';
   });
-  if(gf.value && ((cycle==='C1' && parseInt(gf.value)>4)||(cycle==='C2' && parseInt(gf.value)<5))) {
+  if(cycle === 'KG') { gf.value = ''; }
+  else if(gf.value && ((cycle==='C1' && parseInt(gf.value)>4)||(cycle==='C2' && parseInt(gf.value)<5))) {
     gf.value = '';
   }
 }
@@ -6684,12 +6692,14 @@ function renderStudents() {
 
   let filtered = all.filter(s => {
     const g = parseInt(s.class);
-    if(cycle === 'C1' && g > 4) return false;
-    if(cycle === 'C2' && g < 5) return false;
+    const isKG = s.class && s.class.toUpperCase().startsWith('KG');
+    if(cycle === 'KG' && !isKG) return false;
+    if(cycle === 'C1' && (isKG || g > 4)) return false;
+    if(cycle === 'C2' && (isKG || g < 5)) return false;
     if(grade && String(g) !== grade) return false;
-    if(cls && s.class.slice(-1) !== cls) return false;
+    if(cls && s.class.slice(-1).toUpperCase() !== cls) return false;
     if(search) {
-      const haystack = (s.nameAr + ' ' + s.nameEn + ' ' + s.id + ' ' + s.class).toLowerCase();
+      const haystack = (s.nameAr + ' ' + (s.nameEn||'') + ' ' + s.id + ' ' + s.class).toLowerCase();
       if(!haystack.includes(search)) return false;
     }
     return true;
@@ -6702,15 +6712,22 @@ function renderStudents() {
   const countEl = document.getElementById('studCountSpan');
   if(countEl) {
     const total = 1048;
-    countEl.innerHTML = filtered.length + ' <small style="font-size:0.7em;color:#888;">(الإجمالي الرسمي: 1048 — KG غير متاح في النظام بعد)</small>';
+    countEl.innerHTML = filtered.length + ' <small style="font-size:0.7em;color:#888;">(الإجمالي الرسمي: 1048 — يشمل KG+1-8)</small>';
   }
 
   const statsEl = document.getElementById('studentStatsRow');
   if(statsEl) {
-    const byCycle = {C1:0,C2:0};
-    filtered.forEach(s => { const g=parseInt(s.class); if(g<=4)byCycle.C1++; else byCycle.C2++; });
-    statsEl.innerHTML = '<div class="stat-card" title="الإجمالي الرسمي 1048 (يشمل KG1+KG2)"><div class="stat-icon gold"><i class="fas fa-users"></i></div><div><div class="stat-value">1048</div><div class="stat-label">إجمالي الطلاب (الرسمي)</div></div></div>'
-      +'<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-child"></i></div><div><div class="stat-value">'+byCycle.C1+'</div><div class="stat-label">الحلقة الاولى (1-4)</div></div></div>'
+    const byCycle = {KG:0,C1:0,C2:0};
+    filtered.forEach(s => {
+      const isKG2 = s.class && s.class.toUpperCase().startsWith('KG');
+      const g2=parseInt(s.class);
+      if(isKG2)byCycle.KG++;
+      else if(g2<=4)byCycle.C1++;
+      else byCycle.C2++;
+    });
+    statsEl.innerHTML = '<div class="stat-card" title="الإجمالي الرسمي 1048"><div class="stat-icon gold"><i class="fas fa-users"></i></div><div><div class="stat-value">1048</div><div class="stat-label">إجمالي الطلاب (الرسمي)</div></div></div>'
+      +'<div class="stat-card"><div class="stat-icon purple" style="background:#7c3aed;"><i class="fas fa-seedling"></i></div><div><div class="stat-value">'+byCycle.KG+'</div><div class="stat-label">روضة (KG)</div></div></div>'
+      +'<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-child"></i></div><div><div class="stat-value">'+byCycle.C1+'</div><div class="stat-label">الحلقة الأولى (1-4)</div></div></div>'
       +'<div class="stat-card"><div class="stat-icon green"><i class="fas fa-user-graduate"></i></div><div><div class="stat-value">'+byCycle.C2+'</div><div class="stat-label">الحلقة الثانية (5-8)</div></div></div>'
       +'<div class="stat-card"><div class="stat-icon orange"><i class="fas fa-th"></i></div><div><div class="stat-value">'+new Set(filtered.map(s=>s.class)).size+'</div><div class="stat-label">عدد الشعب</div></div></div>';
   }
@@ -17279,6 +17296,7 @@ function renderLoginAnalytics() {
         { icon:'📖', label:'خطة درسية',        section:'lesson_plan'  },
         { icon:'⚠️', label:'تبليغ سلوكي',      section:'behavioral'   },
         { icon:'📊', label:'الدرجات',           section:'grades'       },
+        { icon:'📝', label:'تقرير ذكي',         section:'smart_report' },
         { icon:'💬', label:'الدعم التقني',      section:'tech_support' },
       ],
       parent: [
@@ -18239,6 +18257,27 @@ function saveStaffPosition(safeId, email) {
   showToast('✅ تم تحديث منصب ' + email);
 }
 
+function renewContract(empId) {
+  var newEnd = prompt('أدخل تاريخ انتهاء العقد الجديد (مثال: 2026-08-31):');
+  if (!newEnd) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(newEnd)) { showToast('صيغة التاريخ غير صحيحة — استخدم YYYY-MM-DD', 'warning'); return; }
+  var sam = getStaffAssignmentMap();
+  if (!sam[empId]) sam[empId] = {};
+  sam[empId].contract_end = newEnd;
+  try { localStorage.setItem('aljood_staff_assignments', JSON.stringify(sam)); } catch(e){}
+  // Also update in added staff
+  try {
+    var arr = JSON.parse(localStorage.getItem('aljood_staff_additions') || '[]');
+    arr = arr.map(function(s){
+      if((s.email||s.id) === empId){ s.contract_end = newEnd; }
+      return s;
+    });
+    localStorage.setItem('aljood_staff_additions', JSON.stringify(arr));
+  } catch(e){}
+  showToast('✅ تم تجديد العقد حتى ' + newEnd, 'success');
+  renderHRContent('contracts');
+}
+
 function renderHRContracts() {
   var sam = getStaffAssignmentMap();
   var staff = (typeof STAFF_DB !== 'undefined') ? STAFF_DB : [];
@@ -18255,10 +18294,12 @@ function renderHRContracts() {
         : daysLeft <= 14 ? '<span style="background:#ff8800;color:#fff;border-radius:4px;padding:2px 6px;font-size:0.75rem;">' + daysLeft + ' يوم</span>'
         : '<span style="background:#00aa44;color:#fff;border-radius:4px;padding:2px 6px;font-size:0.75rem;">' + daysLeft + ' يوم</span>')
       : '';
+    var empId10 = s.email || s.id || '';
     return '<tr style="border-bottom:1px solid #f0f0f0;">' +
       '<td style="padding:10px;">' + (s.name_ar || s.email) + '</td>' +
       '<td style="padding:10px;">' + (CONTRACT_TYPES[a.contract_type] || a.contract_type) + '</td>' +
       '<td style="padding:10px;">' + (a.contract_end || '—') + ' ' + badge + '</td>' +
+      '<td style="padding:10px;"><button onclick="renewContract(''+empId10+'')" style="background:#C9A84C;color:#fff;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-family:Cairo,sans-serif;font-size:0.8rem;">&#x1F504; تجديد</button></td>' +
       '</tr>';
   }).join('');
 
@@ -18272,17 +18313,45 @@ function renderHRContracts() {
         : daysLeft <= 14 ? '<span style="background:#ff8800;color:#fff;border-radius:4px;padding:2px 6px;font-size:0.75rem;">' + daysLeft + ' يوم</span>'
         : '<span style="background:#00aa44;color:#fff;border-radius:4px;padding:2px 6px;font-size:0.75rem;">' + daysLeft + ' يوم</span>')
       : '';
+    var addEmpId = s.email || s.id || '';
     return '<tr style="border-bottom:1px solid #f0f0f0;">' +
       '<td style="padding:10px;">' + (s.name_ar || s.email) + '<br><small style="color:#888;">مُضاف حديثاً</small></td>' +
       '<td style="padding:10px;">' + (CONTRACT_TYPES[s.contract_type] || s.contract_type) + '</td>' +
       '<td style="padding:10px;">' + (s.contract_end || '—') + ' ' + badge + '</td>' +
+      '<td style="padding:10px;"><button onclick="renewContract(''+addEmpId+'')" style="background:#C9A84C;color:#fff;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-family:Cairo,sans-serif;font-size:0.8rem;">&#x1F504; تجديد</button></td>' +
       '</tr>';
   }).join('');
 
-  return '<h3 style="color:#1A2A4A;margin-bottom:16px;">📄 العقود المؤقتة واليومية</h3>' +
+  // Contracts expiring in 7 days
+  var expiringSoon = [];
+  try {
+    var allCon = (typeof STAFF_DB !== 'undefined' ? STAFF_DB : []).concat(addedStaff);
+    allCon.forEach(function(s) {
+      var ac = sam[s.email] || s;
+      var endDt = ac.contract_end ? ac.contract_end : s.contract_end;
+      if (endDt) {
+        var d = new Date(endDt);
+        var diff = Math.ceil((d - now) / 86400000);
+        if (diff >= 0 && diff <= 7) expiringSoon.push({name: s.name_ar||s.email, days: diff});
+      }
+    });
+  } catch(e) {}
+  var alertBanner = '';
+  if (expiringSoon.length > 0) {
+    alertBanner = '<div style="background:#fff3cd;border:2px solid #ff8800;border-radius:12px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;gap:12px;">' +
+      '<span style="font-size:1.5rem;">&#x26A0;&#xFE0F;</span>' +
+      '<div><strong style="color:#cc6600;">تنبيه: عقود تنتهي خلال 7 أيام</strong><ul style="margin:6px 0 0;padding-right:20px;">' +
+      expiringSoon.map(function(ex){ return '<li>'+ex.name+' — <strong>'+ex.days+'</strong> يوم متبقٍ</li>'; }).join('') +
+      '</ul></div></div>';
+  }
+  return '<h3 style="color:#1A2A4A;margin-bottom:16px;">&#x1F4C4; العقود المؤقتة واليومية</h3>' +
+    alertBanner +
     '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:Cairo,sans-serif;">' +
-    '<thead><tr style="background:#1A2A4A;color:#fff;"><th style="padding:10px;text-align:right;">الاسم</th><th style="padding:10px;text-align:right;">نوع العقد</th><th style="padding:10px;text-align:right;">الانتهاء</th></tr></thead>' +
-    '<tbody>' + (rows || addedRows ? rows + addedRows : '<tr><td colspan="3" style="padding:20px;text-align:center;color:#888;">لا توجد عقود مؤقتة</td></tr>') + '</tbody></table></div>';
+    '<thead><tr style="background:#1A2A4A;color:#fff;"><th style="padding:10px;text-align:right;">الاسم</th><th style="padding:10px;text-align:right;">نوع العقد</th><th style="padding:10px;text-align:right;">الانتهاء</th><th style="padding:10px;text-align:right;">إجراءات</th></tr></thead>' +
+    '<tbody>' + (rows || addedRows ? rows + addedRows : '<tr><td colspan="4" style="padding:20px;text-align:center;color:#888;">لا توجد عقود مؤقتة</td></tr>') + '</tbody></table></div>' +
+    '<div style="margin-top:16px;padding:14px;background:#e8f4fd;border-radius:10px;border:1px solid #bee3f8;">' +
+    '<p style="margin:0;color:#1A2A4A;font-size:0.9rem;">&#x1F4A1; <strong>ملاحظة:</strong> لإضافة بديل/يومي اضغط على <a href="#" onclick="switchHRTab('add-staff');return false;" style="color:#C9A84C;font-weight:700;">إضافة موظف</a> ثم عيّنه في <a href="#" onclick="showSection('substitutes');return false;" style="color:#C9A84C;font-weight:700;">منظومة الاحتياط</a></p>' +
+    '</div>';
 }
 
 function renderHRClearance() {
@@ -18303,8 +18372,81 @@ function renderHRClearance() {
     '<option value="">— اختر —</option>' + options + '</select></div>' +
     '<div id="clearanceChecklist" style="display:none;margin-bottom:16px;"></div>' +
     '<button onclick="loadClearanceChecklist()" style="background:#ff4444;color:#fff;border:none;border-radius:8px;padding:12px 24px;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;margin-left:8px;">تحميل قائمة التحقق</button>' +
+    '<button id="previewClearanceBtn" onclick="previewClearanceForm()" style="display:none;background:#1A2A4A;color:#fff;border:none;border-radius:8px;padding:12px 24px;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;margin-left:8px;">👁️ معاينة النموذج الرسمي</button>' +
     '<button id="confirmClearanceBtn" onclick="confirmClearance()" style="display:none;background:#cc0000;color:#fff;border:none;border-radius:8px;padding:12px 24px;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;">🗑️ تأكيد الإخلاء والحذف</button>' +
     '</div></div>';
+}
+
+function previewClearanceForm() {
+  var el = document.getElementById('clearanceStaff');
+  if (!el || !el.value) { showToast('اختر موظفاً أولاً', 'warning'); return; }
+  var staffList = (typeof STAFF_DB !== 'undefined') ? STAFF_DB : [];
+  var addedList = []; try { addedList = JSON.parse(localStorage.getItem('aljood_staff_additions')||'[]'); } catch(e){}
+  var all = staffList.concat(addedList);
+  var emp = all.find(function(s){ return (s.email||s.id) === el.value; });
+  if (!emp) return;
+  var today = new Date();
+  var dateStr = today.getFullYear() + '/' + (today.getMonth()+1) + '/' + today.getDate();
+  var checklist = document.querySelectorAll('#clearanceChecklist input[type=checkbox]');
+  var checkedItems = [];
+  checklist.forEach(function(cb){ if(cb.checked) checkedItems.push(cb.parentNode.textContent.trim()); });
+  var checklistHtml = checkedItems.map(function(item){
+    return '<tr><td style="padding:8px;border:1px solid #ccc;">'+item+'</td><td style="padding:8px;border:1px solid #ccc;text-align:center;">✓</td></tr>';
+  }).join('');
+
+  var formHtml = '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8">' +
+    '<style>body{font-family:Arial,sans-serif;margin:40px;color:#000;direction:rtl;}' +
+    '.header{text-align:center;border-bottom:3px solid #1A2A4A;padding-bottom:20px;margin-bottom:30px;}' +
+    '.header h1{font-size:1.4rem;color:#1A2A4A;margin:8px 0;}' +
+    '.header h2{font-size:1.1rem;color:#C9A84C;margin:4px 0;}' +
+    '.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;}' +
+    '.info-item{border:1px solid #ccc;padding:12px;border-radius:4px;}' +
+    '.info-label{font-size:0.8rem;color:#666;margin-bottom:4px;}' +
+    '.info-value{font-weight:bold;font-size:1rem;}' +
+    'table{width:100%;border-collapse:collapse;margin:20px 0;}' +
+    'th{background:#1A2A4A;color:#fff;padding:10px;text-align:right;}' +
+    '.signature-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:30px;margin-top:60px;}' +
+    '.sig-box{text-align:center;border-top:1px solid #000;padding-top:8px;}' +
+    '@media print{button{display:none!important;}}' +
+    '</style></head><body>' +
+    '<div class="header">' +
+    '<h1>&#x1F1E6;&#x1F1EA; وزارة التربية والتعليم — إمارة أبوظبي</h1>' +
+    '<h2>مدرسة الجود — مدينة العين</h2>' +
+    '<h1 style="font-size:1.6rem;color:#cc0000;margin-top:16px;">نموذج إخلاء طرف موظف</h1>' +
+    '</div>' +
+    '<div style="background:#fff8e1;border:2px solid #C9A84C;border-radius:8px;padding:16px;margin-bottom:24px;">' +
+    '<p style="margin:0;font-size:1rem;">تُقر مدرسة الجود بأن الموظف/ة أدناه قد أتمّ إجراءات إخلاء الطرف وفق المتطلبات الرسمية لوزارة التربية والتعليم، وأنه/أنها قد سلّم/سلّمت جميع ما في عهدته/عهدتها من أجهزة ووثائق ومسؤوليات.</p>' +
+    '</div>' +
+    '<div class="info-grid">' +
+    '<div class="info-item"><div class="info-label">اسم الموظف/ة</div><div class="info-value">'+(emp.name_ar||emp.name||emp.email)+'</div></div>' +
+    '<div class="info-item"><div class="info-label">الرقم الوظيفي</div><div class="info-value">'+(emp.ministry_id||emp.id||'—')+'</div></div>' +
+    '<div class="info-item"><div class="info-label">المسمى الوظيفي</div><div class="info-value">'+(emp.primary_job||emp.role||'—')+'</div></div>' +
+    '<div class="info-item"><div class="info-label">البريد الإلكتروني</div><div class="info-value">'+(emp.email||'—')+'</div></div>' +
+    '<div class="info-item"><div class="info-label">تاريخ إخلاء الطرف</div><div class="info-value">'+dateStr+'</div></div>' +
+    '<div class="info-item"><div class="info-label">المدرسة</div><div class="info-value">مدرسة الجود — العين</div></div>' +
+    '</div>' +
+    (checklistHtml ? '<h3 style="color:#1A2A4A;border-bottom:2px solid #C9A84C;padding-bottom:8px;">قائمة التحقق من إخلاء الطرف</h3>' +
+    '<table><thead><tr><th>البند</th><th style="width:100px;text-align:center;">تم التسليم</th></tr></thead><tbody>'+checklistHtml+'</tbody></table>' : '') +
+    '<div class="signature-row">' +
+    '<div class="sig-box"><p>الموظف/ة</p><br><br><p style="font-size:0.85rem;">التوقيع والتاريخ</p></div>' +
+    '<div class="sig-box"><p>مدير/ة المدرسة</p><br><br><p style="font-size:0.85rem;">التوقيع والختم</p></div>' +
+    '<div class="sig-box"><p>الإداري المسؤول</p><br><br><p style="font-size:0.85rem;">التوقيع والتاريخ</p></div>' +
+    '</div>' +
+    '<div style="text-align:center;margin-top:24px;padding:12px;border-top:1px solid #ccc;color:#666;font-size:0.85rem;">' +
+    'هذا النموذج صادر من بوابة مدرسة الجود الإلكترونية — وزارة التربية والتعليم | العام الدراسي 2025-2026 | تاريخ الإصدار: '+dateStr+
+    '</div>' +
+    '<div style="text-align:center;margin-top:16px;">' +
+    '<button onclick="window.print()" style="background:#1A2A4A;color:#fff;border:none;padding:12px 30px;border-radius:8px;font-size:1rem;cursor:pointer;">طباعة النموذج</button>' +
+    '</div>' +
+    '</body></html>';
+
+  var previewWin = window.open('', '_blank', 'width=900,height=700,scrollbars=yes');
+  if (previewWin) {
+    previewWin.document.write(formHtml);
+    previewWin.document.close();
+  } else {
+    showToast('يرجى السماح بفتح النوافذ المنبثقة', 'warning');
+  }
 }
 
 function loadClearanceChecklist() {
@@ -18317,8 +18459,178 @@ function loadClearanceChecklist() {
   }).join('');
   var clEl = document.getElementById('clearanceChecklist');
   if (clEl) { clEl.innerHTML = '<div style="background:#fff;border:1px solid #fcc;border-radius:8px;">' + items + '</div>'; clEl.style.display = 'block'; }
+  var previewClearBtn = document.getElementById('previewClearanceBtn');
+  if (previewClearBtn) previewClearBtn.style.display = 'inline-block';
   var btn = document.getElementById('confirmClearanceBtn');
   if (btn) btn.style.display = 'inline-block';
+}
+
+
+// ===== SMART REPORT SYSTEM =====
+function showSmartReport() {
+  showSection('smart_report');
+}
+
+function initSmartReport() {
+  var el = document.getElementById('section-smart-report');
+  if (!el) return;
+  var classes = typeof STUDENTS_DATA !== 'undefined' ? Object.keys(STUDENTS_DATA) : [];
+  var classOpts = classes.map(function(c){ return '<option value="'+c+'">'+c+'</option>'; }).join('');
+
+  el.innerHTML = '<div style="max-width:900px;margin:0 auto;">' +
+    '<h2 style="color:#1A2A4A;border-bottom:3px solid #C9A84C;padding-bottom:10px;">&#x1F4DD; نظام التقرير الذكي</h2>' +
+    '<p style="color:#666;font-size:0.9rem;">اختر من القوائم وسيصيغ النظام التقرير الرسمي تلقائياً مع توصيات لولي الأمر</p>' +
+    '<div style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,0.08);margin-top:16px;">' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">' +
+    '<div><label style="font-size:0.85rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">الصف الدراسي</label>' +
+    '<select id="sr-class" onchange="loadSRStudents()" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;">' +
+    '<option value="">— اختر الصف —</option>'+classOpts+'</select></div>' +
+    '<div><label style="font-size:0.85rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">الطالب/ة</label>' +
+    '<select id="sr-student" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;">' +
+    '<option value="">— اختر الطالب —</option></select></div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">' +
+    '<div><label style="font-size:0.85rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">نوع التقرير</label>' +
+    '<select id="sr-type" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;">' +
+    '<option value="academic">&#x1F4DA; أكاديمي</option>' +
+    '<option value="behavior">&#x26A0;&#xFE0F; سلوكي</option>' +
+    '<option value="attendance">&#x1F4C5; حضور وانتظام</option>' +
+    '<option value="social">&#x1F91D; اجتماعي</option>' +
+    '</select></div>' +
+    '<div><label style="font-size:0.85rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">الفترة الزمنية</label>' +
+    '<select id="sr-period" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;">' +
+    '<option value="week">هذا الأسبوع</option>' +
+    '<option value="month">هذا الشهر</option>' +
+    '<option value="term">الفصل الدراسي</option>' +
+    '</select></div>' +
+    '</div>' +
+    '<hr style="border-color:#f0f0f0;margin:20px 0;">' +
+    srAxisHTML('sr-academic','&#x1F4DA; المستوى الأكاديمي',['ممتاز — يتفوق على أقرانه','جيد جداً — أداء فوق المتوسط','جيد — يلتزم بالمتطلبات','متوسط — يحتاج متابعة','دون المستوى — يحتاج دعماً','ضعيف — يتطلب تدخلاً فورياً']) +
+    srAxisHTML('sr-behavior','&#x1F60A; السلوك العام',['ممتاز — قدوة للزملاء','جيد جداً — سلوك إيجابي','جيد — ملتزم بالنظام','متقلب — يحتاج توجيهاً','مخل بالنظام أحياناً','مخل بالنظام باستمرار']) +
+    srAxisHTML('sr-attendance','&#x1F4C5; الحضور والانتظام',['منتظم — لا غيابات','غياب نادر مقبول','غياب متكرر يُتابع','غياب بعذر متكرر','غياب بدون عذر','نمط قلق من الغياب']) +
+    srAxisHTML('sr-social','&#x1F91D; التفاعل الاجتماعي',['قيادي — يبادر ويتعاون','اجتماعي — يندمج بسهولة','هادئ — مستقل','خجول — يحتاج تشجيعاً','انسحابي','صعوبات تفاعل اجتماعي']) +
+    '<div style="margin-bottom:16px;">' +
+    '<label style="font-size:0.85rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">ملاحظات إضافية (اختياري)</label>' +
+    '<textarea id="sr-notes" rows="3" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;resize:vertical;" placeholder="أي ملاحظات إضافية تودّ إضافتها..."></textarea>' +
+    '</div>' +
+    '<button onclick="generateSmartReport()" style="width:100%;background:linear-gradient(135deg,#1A2A4A,#2a4080);color:#fff;border:none;border-radius:10px;padding:14px;font-size:1rem;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;">&#x2728; توليد التقرير الرسمي تلقائياً</button>' +
+    '</div>' +
+    '<div id="sr-result" style="display:none;margin-top:24px;"></div>' +
+    '</div>';
+}
+
+function srAxisHTML(name, title, opts) {
+  return '<h4 style="color:#1A2A4A;margin-bottom:12px;">'+title+'</h4>' +
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">' +
+    opts.map(function(opt,i){
+      return '<label style="display:flex;align-items:center;gap:8px;background:#f8f9fa;padding:10px;border-radius:8px;cursor:pointer;font-size:0.85rem;">' +
+        '<input type="radio" name="'+name+'" value="'+i+'" style="accent-color:#C9A84C;"> '+opt+'</label>';
+    }).join('') +
+    '</div>';
+}
+
+function loadSRStudents() {
+  var cls = document.getElementById('sr-class').value;
+  var sel = document.getElementById('sr-student');
+  sel.innerHTML = '<option value="">— اختر الطالب —</option>';
+  if (!cls || !STUDENTS_DATA || !STUDENTS_DATA[cls]) return;
+  STUDENTS_DATA[cls].forEach(function(s){
+    var opt = document.createElement('option');
+    opt.value = s.id || s.nameAr;
+    opt.textContent = s.nameAr || s.id;
+    sel.appendChild(opt);
+  });
+}
+
+function generateSmartReport() {
+  var cls = document.getElementById('sr-class').value;
+  var studentSel = document.getElementById('sr-student');
+  var studentName = studentSel.selectedIndex > 0 ? studentSel.options[studentSel.selectedIndex].textContent : '';
+  var period = document.getElementById('sr-period').value;
+  var notes = (document.getElementById('sr-notes').value || '').trim();
+
+  if (!cls || !studentName) { showToast('يرجى اختيار الصف والطالب', 'warning'); return; }
+
+  var acadEl = document.querySelector('input[name="sr-academic"]:checked');
+  var behEl  = document.querySelector('input[name="sr-behavior"]:checked');
+  var attEl  = document.querySelector('input[name="sr-attendance"]:checked');
+  var socEl  = document.querySelector('input[name="sr-social"]:checked');
+  if (!acadEl || !behEl || !attEl || !socEl) { showToast('يرجى اختيار تقييم في جميع المحاور الأربعة', 'warning'); return; }
+
+  var ai = parseInt(acadEl.value), bi = parseInt(behEl.value), atti = parseInt(attEl.value), si = parseInt(socEl.value);
+  var periodText = {week:'خلال هذا الأسبوع', month:'خلال هذا الشهر', term:'خلال هذا الفصل الدراسي'}[period];
+  var today = new Date().toLocaleDateString('ar-AE', {year:'numeric',month:'long',day:'numeric'});
+
+  var acadT=['يُظهر أداءً أكاديمياً متميزاً ويتفوق على أقرانه في جميع المواد','يُحقق أداءً أكاديمياً جيداً جداً فوق المتوسط','يلتزم بالمتطلبات الأكاديمية بمستوى جيد','مستوى أكاديمي متوسط يحتاج متابعة','يواجه صعوبات أكاديمية ويحتاج دعماً إضافياً','يعاني من صعوبات بالغة وتدخل فوري'];
+  var behT=['يتميز بسلوك إيجابي ويُعدّ قدوةً للزملاء','يتسم بسلوك إيجابي وتعامل محترم','يلتزم بقواعد النظام بشكل عام','يُبدي تفاوتاً في السلوك ويحتاج توجيهاً','يُسجّل ملاحظات سلوكية متكررة','السلوك مصدر قلق مستمر يستدعي تدخلاً فورياً'];
+  var attT=['يلتزم بالحضور المنتظم دون غيابات','سجل حضوري جيد مع غيابات نادرة','يُسجّل بعض الغيابات تستدعي المتابعة','غيابات متكررة بأعذار رسمية','غيابات بدون عذر تستدعي متابعة فورية','نمط الغياب مثير للقلق ويستدعي تدخلاً عاجلاً'];
+  var socT=['مهارات قيادية واجتماعية متميزة ويتفاعل بإيجابية','اجتماعي بطبعه ويندمج بسهولة','هادئ وميّال للاستقلالية في التعلم','يُبدي خجلاً ويحتاج تشجيعاً','ميّال للانسحاب ويحتاج دعماً اجتماعياً','يواجه صعوبات اجتماعية تستدعي متابعة متخصصة'];
+
+  var recA=['يُنصح بتحفيزه على الأنشطة الإثرائية والمسابقات','يُنصح بالمحافظة على هذا المستوى وتعزيزه بمصادر إضافية','يُنصح بمراجعة المحتوى يومياً ومتابعة الواجبات','يُنصح بتخصيص وقت يومي للمراجعة والتواصل مع المعلمة','يُنصح بالاستفسار عن برامج الدعم الأكاديمي المتاحة','يُنصح باتخاذ إجراء فوري ووضع خطة دعم مكثفة مع الأخصائي'];
+  var recB=['نشكركم على تربية هذا الطالب المتميز — استمروا في التعزيز الإيجابي','يُرجى تعزيز هذا السلوك الجيد في المنزل والثناء المستمر','يُرجى التذكير بأهمية احترام قواعد المدرسة','يُرجى متابعة الطالب في المنزل ومعالجة أي مشكلة بالحوار','يُرجى التواصل مع الأخصائي لوضع خطة إصلاح سلوكي','يستدعي الوضع اجتماعاً عاجلاً مع الأخصائي الاجتماعي'];
+  var recAtt=['نشكركم على التزام الطالب بالحضور المنتظم','يُرجى المحافظة على هذا النمط الجيد','يُرجى الاهتمام بتنظيم وقت النوم لضمان الحضور','يُرجى مراجعة أسباب الغياب واتخاذ الإجراءات اللازمة','التغيب بدون عذر يؤثر سلباً — يُرجى المتابعة الفورية','يستوجب حضوراً عاجلاً للمدرسة للتداول مع الإدارة'];
+  var recS=['يُرجى تشجيعه على القيادة الإيجابية وتنمية مهاراته','يُرجى دعم هذه الروح الاجتماعية من خلال الأنشطة اللاصفية','يُرجى تشجيعه على العمل الجماعي وبناء الصداقات','يُرجى دعمه بالحوار الإيجابي وتشجيعه على المشاركة','يُنصح بالتواصل مع الأخصائي لتنمية المهارات الاجتماعية','يُستحسن الاجتماع مع الأخصائي الاجتماعي لتقييم الحالة'];
+
+  var score = 5 - Math.floor((ai+bi+atti+si)/4);
+  var badge = score>=4?'<span style="background:#00aa44;color:#fff;padding:4px 12px;border-radius:20px;font-size:0.85rem;">ممتاز</span>':
+    score>=3?'<span style="background:#0066cc;color:#fff;padding:4px 12px;border-radius:20px;font-size:0.85rem;">جيد جداً</span>':
+    score>=2?'<span style="background:#C9A84C;color:#fff;padding:4px 12px;border-radius:20px;font-size:0.85rem;">جيد</span>':
+    score>=1?'<span style="background:#ff8800;color:#fff;padding:4px 12px;border-radius:20px;font-size:0.85rem;">يحتاج متابعة</span>':
+    '<span style="background:#ff4444;color:#fff;padding:4px 12px;border-radius:20px;font-size:0.85rem;">يحتاج تدخلاً</span>';
+
+  var teacherName = '';
+  try { if(window.currentUserName) teacherName = window.currentUserName; } catch(e){}
+  if(!teacherName) teacherName = 'المعلمة المشرفة';
+
+  var html = '<div style="background:#fff;border-radius:16px;padding:28px;box-shadow:0 4px 20px rgba(0,0,0,0.1);border:2px solid #e0e0e0;">' +
+    '<div style="text-align:center;border-bottom:3px solid #C9A84C;padding-bottom:16px;margin-bottom:20px;">' +
+    '<h3 style="color:#1A2A4A;margin:0 0 6px;">مدرسة الجود — مدينة العين</h3>' +
+    '<h2 style="color:#C9A84C;margin:0;font-size:1.3rem;">تقرير طالب متكامل</h2>' +
+    '<p style="color:#888;margin:6px 0 0;font-size:0.85rem;">'+today+' | '+periodText+'</p>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;background:#f8f9fa;padding:14px;border-radius:10px;">' +
+    '<div><strong>الطالب/ة:</strong><br>'+studentName+'</div>' +
+    '<div><strong>الصف:</strong><br>'+cls+'</div>' +
+    '<div><strong>المعلمة:</strong><br>'+teacherName+'</div>' +
+    '</div>' +
+    '<div style="text-align:center;margin-bottom:18px;">التقدير الإجمالي: '+badge+'</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;">' +
+    '<div style="background:#f0f8ff;border-radius:10px;padding:14px;"><h4 style="color:#1A2A4A;margin:0 0 8px;">المستوى الأكاديمي</h4><p style="margin:0;font-size:0.9rem;">'+acadT[ai]+'</p></div>' +
+    '<div style="background:#fff8f0;border-radius:10px;padding:14px;"><h4 style="color:#1A2A4A;margin:0 0 8px;">السلوك والانضباط</h4><p style="margin:0;font-size:0.9rem;">'+behT[bi]+'</p></div>' +
+    '<div style="background:#f0fff0;border-radius:10px;padding:14px;"><h4 style="color:#1A2A4A;margin:0 0 8px;">الحضور والانتظام</h4><p style="margin:0;font-size:0.9rem;">'+attT[atti]+'</p></div>' +
+    '<div style="background:#fdf0ff;border-radius:10px;padding:14px;"><h4 style="color:#1A2A4A;margin:0 0 8px;">التفاعل الاجتماعي</h4><p style="margin:0;font-size:0.9rem;">'+socT[si]+'</p></div>' +
+    '</div>' +
+    (notes?'<div style="background:#fffde7;border:1px solid #f9c74f;border-radius:10px;padding:14px;margin-bottom:16px;"><h4 style="color:#1A2A4A;margin:0 0 8px;">ملاحظات المعلمة</h4><p style="margin:0;font-size:0.9rem;">'+notes+'</p></div>':'') +
+    '<div style="background:linear-gradient(135deg,#1A2A4A,#2a4080);border-radius:12px;padding:18px;color:#fff;">' +
+    '<h4 style="color:#C9A84C;margin:0 0 12px;">رسالة وتوصيات لولي الأمر</h4>' +
+    '<p style="margin:0 0 8px;font-size:0.9rem;">السيد/ة ولي أمر الطالب/ة <strong>'+studentName+'</strong>، السلام عليكم ورحمة الله وبركاته،</p>' +
+    '<p style="margin:0 0 12px;font-size:0.9rem;">نُحيطكم علماً بالتقرير الدوري لأداء طالبكم/ة '+periodText+'، وفيما يلي التوصيات:</p>' +
+    '<ul style="margin:0;padding-right:20px;font-size:0.9rem;">' +
+    '<li style="margin-bottom:6px;">'+recA[ai]+'</li>' +
+    '<li style="margin-bottom:6px;">'+recB[bi]+'</li>' +
+    '<li style="margin-bottom:6px;">'+recAtt[atti]+'</li>' +
+    '<li style="margin-bottom:6px;">'+recS[si]+'</li>' +
+    '</ul>' +
+    '<p style="margin:12px 0 0;font-size:0.85rem;color:#C9A84C;">مع خالص التقدير — '+teacherName+' | مدرسة الجود</p>' +
+    '</div>' +
+    '<div style="display:flex;gap:12px;margin-top:16px;">' +
+    '<button onclick="printSmartReport()" style="flex:1;background:#1A2A4A;color:#fff;border:none;border-radius:8px;padding:12px;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;">طباعة التقرير</button>' +
+    '<button onclick="document.getElementById(\x27sr-result\x27).style.display=\x27none\x27" style="flex:1;background:#f0f0f0;color:#333;border:none;border-radius:8px;padding:12px;cursor:pointer;font-family:Cairo,sans-serif;">اغلاق</button>' +
+    '</div>' +
+    '</div>';
+
+  var resultEl = document.getElementById('sr-result');
+  if (resultEl) { resultEl.innerHTML = html; resultEl.style.display = 'block'; resultEl.scrollIntoView({behavior:'smooth'}); }
+}
+
+function printSmartReport() {
+  var content = document.getElementById('sr-result');
+  if (!content) return;
+  var pw = window.open('', '_blank', 'width=900,height=700');
+  if (!pw) { showToast('يُرجى السماح بالنوافذ المنبثقة', 'warning'); return; }
+  pw.document.write('<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><style>body{font-family:Arial,sans-serif;margin:20px;direction:rtl;}@media print{button{display:none!important;}}</style></head><body>' + content.innerHTML + '</body></html>');
+  pw.document.close();
+  setTimeout(function(){ pw.print(); }, 500);
 }
 
 function confirmClearance() {
