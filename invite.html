@@ -300,45 +300,108 @@ function _createAmbientLayer() {
 
   var now = _audioCtx.currentTime;
 
-  // Layer 1: Deep bass drone
-  var bass = _audioCtx.createOscillator();
-  var bassGain = _audioCtx.createGain();
-  bass.type = 'sine';
-  bass.frequency.setValueAtTime(55, now);
-  bass.frequency.linearRampToValueAtTime(60, now + 8);
-  bass.frequency.linearRampToValueAtTime(55, now + 16);
-  bassGain.gain.setValueAtTime(0.08, now);
-  bass.connect(bassGain);
-  bassGain.connect(_masterGain);
-  bass.start(now);
-  _musicNodes.push(bass);
+  // === REAL MUSIC ENGINE ===
+  // BPM=72, Am pentatonic + Arabic scale, arpeggio + melody + bass + delay reverb
 
-  // Layer 2: Warm pad chords (pentatonic)
-  var notes = [220, 261.63, 329.63, 392, 440];
-  notes.forEach(function(freq, i) {
+  var bpm = 72;
+  var beat = 60 / bpm;  // seconds per beat
+
+  // --- Delay/Reverb ---
+  var delayNode = _audioCtx.createDelay(1.5);
+  var fbGain = _audioCtx.createGain();
+  var delayOut = _audioCtx.createGain();
+  var lpFilter = _audioCtx.createBiquadFilter();
+  delayNode.delayTime.value = 0.33;
+  fbGain.gain.value = 0.38;
+  delayOut.gain.value = 0.25;
+  lpFilter.type = 'lowpass';
+  lpFilter.frequency.value = 1800;
+  delayNode.connect(fbGain);
+  fbGain.connect(delayNode);
+  delayNode.connect(lpFilter);
+  lpFilter.connect(delayOut);
+  delayOut.connect(_masterGain);
+
+  // --- Note player with ADSR ---
+  function _playNote(freq, time, dur, vol, type) {
     var osc = _audioCtx.createOscillator();
-    var g = _audioCtx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(freq, now);
-    g.gain.setValueAtTime(0, now);
-    g.gain.linearRampToValueAtTime(0.015, now + i * 1.2 + 1);
-    g.gain.linearRampToValueAtTime(0.02, now + i * 1.2 + 3);
-    osc.connect(g);
-    g.connect(_masterGain);
-    osc.start(now + i * 0.6);
+    var env = _audioCtx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.value = freq;
+    // Slight detune for warmth
+    osc.detune.value = (Math.random() - 0.5) * 6;
+    env.gain.setValueAtTime(0, time);
+    env.gain.linearRampToValueAtTime(vol, time + 0.04);  // attack
+    env.gain.linearRampToValueAtTime(vol * 0.75, time + dur * 0.25); // decay
+    env.gain.setValueAtTime(vol * 0.65, time + dur * 0.7);  // sustain
+    env.gain.linearRampToValueAtTime(0, time + dur + 0.08); // release
+    osc.connect(env);
+    env.connect(_masterGain);
+    env.connect(delayNode);
+    osc.start(time);
+    osc.stop(time + dur + 0.15);
     _musicNodes.push(osc);
-  });
+    _musicNodes.push(env);
+  }
 
-  // Layer 3: High shimmer
-  var shimmer = _audioCtx.createOscillator();
-  var shimGain = _audioCtx.createGain();
-  shimmer.type = 'sine';
-  shimmer.frequency.setValueAtTime(880, now);
-  shimGain.gain.setValueAtTime(0.005, now);
-  shimmer.connect(shimGain);
-  shimGain.connect(_masterGain);
-  shimmer.start(now);
-  _musicNodes.push(shimmer);
+  // --- Scales and chords ---
+  // A minor pentatonic: A3 C4 D4 E4 G4 A4
+  // Arabic color: add Bb (minor 2nd feel)
+  var A3=220, C4=261.63, D4=293.66, E4=329.63, G4=392, A4=440, Bb4=466.16, C5=523.25, D5=587.33, E5=659.26;
+  var F3=174.61, G3=196, A2=110;
+
+  // Chord blocks: [bass, mid1, mid2, top]
+  var chords = [
+    {b: A2,    arpa: [A3,C4,E4,A4],   name:'Am'},
+    {b: F3,    arpa: [F3,A3,C4,E4],   name:'F'},
+    {b: G3,    arpa: [G3,D4,G4,D4],   name:'G'},
+    {b: A2,    arpa: [A3,E4,A4,C5],   name:'Am2'},
+  ];
+
+  // Melody (in 16th notes, 16 steps per bar)
+  // Each value: freq or 0=rest
+  var melBars = [
+    [0,0,A4,0, 0,G4,0,E4, 0,0,G4,0, 0,E4,0,D4],  // bar1
+    [0,E4,0,0, G4,0,A4,0, Bb4,0,A4,0, G4,0,E4,0],  // bar2
+    [0,0,G4,0, E4,0,D4,0, E4,0,G4,0, A4,0,0,0],    // bar3
+    [A4,0,G4,0, E4,0,D4,0, C4,0,D4,0, E4,0,0,0],   // bar4
+  ];
+
+  var sixteenth = beat * 0.25;
+  var loopLen = 4; // bars per loop
+  var totalLoops = 8;
+
+  for (var loop = 0; loop < totalLoops; loop++) {
+    var loopT = now + loop * loopLen * 4 * beat;
+    // Fade in first loop
+    var volScale = (loop === 0) ? 0.5 : 1.0;
+
+    for (var bar = 0; bar < loopLen; bar++) {
+      var chord = chords[bar % chords.length];
+      var barT = loopT + bar * 4 * beat;
+
+      // -- Bass: beats 1 and 3 --
+      _playNote(chord.b, barT,             beat * 0.7, 0.055 * volScale, 'sine');
+      _playNote(chord.b, barT + 2 * beat,  beat * 0.6, 0.04 * volScale,  'sine');
+
+      // -- Arpeggio: 8th notes, cycle through chord notes --
+      for (var step = 0; step < 8; step++) {
+        var arpFreq = chord.arpa[step % chord.arpa.length];
+        var arpT = barT + step * beat * 0.5;
+        _playNote(arpFreq, arpT, beat * 0.38, 0.03 * volScale, 'triangle');
+      }
+
+      // -- Melody: 16th notes --
+      var melPat = melBars[bar % melBars.length];
+      for (var s = 0; s < 16; s++) {
+        if (melPat[s] > 0) {
+          var mT = barT + s * sixteenth;
+          var mVol = (s % 4 === 0) ? 0.065 : 0.05; // accent on beats
+          _playNote(melPat[s], mT, sixteenth * 1.6, mVol * volScale, 'sine');
+        }
+      }
+    }
+  }
 }
 
 function _toggleMusic() {
