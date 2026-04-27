@@ -17879,46 +17879,116 @@ function renderHRContent(tab) {
 
 function renderHRAssignments() {
   var tam = getTeacherAssignmentMap();
-  var subjects = getAllSubjects();
   var classes = getAllClasses();
-  var staff = (typeof getStaffData === 'function') ? getStaffData() : ((typeof STAFF_DB !== 'undefined') ? STAFF_DB : []);
-  var teachers = staff.filter(function(s) {
-    return s.role === 'teacher' || s.role === 'principal' || s.role === 'vice_principal' || s.role === 'dept_head' || s.role === 'counselor' || !s.role;
-  });
+  // استخدام TEACHER_ROSTER فقط (المعلمات الفعليات)
+  var roster = (typeof TEACHER_ROSTER !== 'undefined') ? TEACHER_ROSTER : {};
+  var rosterKeys = Object.keys(roster);
+  if (rosterKeys.length === 0) {
+    return '<div style="padding:32px;text-align:center;color:#888;font-family:Cairo,sans-serif;">⏳ جاري تحميل بيانات المعلمات...</div>';
+  }
 
-  var rows = teachers.map(function(t) {
-    var email = t.email || '';
-    var assign = tam[email] || {};
-    var subj = assign.subjects || [];
-    var cls = assign.classes || [];
-    var safeEmail = email.replace(/[^a-zA-Z0-9._-]/g, '');
-    var subjOptions = subjects.map(function(s) {
-      return '<option value="' + s + '"' + (subj.includes(s) ? ' selected' : '') + '>' + s + '</option>';
-    }).join('');
+  // بناء قائمة بحث سريع
+  var searchBar = '<div style="margin-bottom:12px;">' +
+    '<input id="hrAssignSearch" placeholder="🔍 ابحث باسم المعلمة أو المادة..." ' +
+    'style="width:100%;padding:10px 14px;border:2px solid #C9A84C;border-radius:8px;font-family:Cairo,sans-serif;font-size:0.9rem;box-sizing:border-box;" ' +
+    'oninput="filterHRAssignRows(this.value)"></div>';
+
+  var rows = rosterKeys.map(function(key) {
+    var t = roster[key];
+    var emailKey = key; // مثل Aayesha.Seedat
+    var fullEmail = key + '@moe.sch.ae';
+    var assign = tam[fullEmail] || tam[key] || {};
+    var savedCls = assign.classes || [];
+    var teacherSubjects = (t.subjects && t.subjects.length > 0) ? t.subjects : ['—'];
+    var subjDisplay = teacherSubjects.join(' · ');
+    var safeKey = key.replace(/[^a-zA-Z0-9._-]/g, '');
     var clsOptions = classes.map(function(c) {
-      return '<option value="' + c + '"' + (cls.includes(c) ? ' selected' : '') + '>' + c + '</option>';
+      return '<option value="' + c + '"' + (savedCls.includes(c) ? ' selected' : '') + '>' + c + '</option>';
     }).join('');
-
-    return '<tr style="border-bottom:1px solid #f0f0f0;">' +
-      '<td style="padding:10px 8px;font-weight:600;font-size:0.85rem;">' + (t.name_ar || t.name_en || email) + '<br><span style="font-size:0.72rem;color:#888;">' + email + '</span></td>' +
-      '<td style="padding:8px;"><select multiple size="3" id="subj_' + safeEmail + '" style="width:100%;border:1px solid #ddd;border-radius:6px;padding:4px;font-size:0.8rem;">' + subjOptions + '</select></td>' +
-      '<td style="padding:8px;"><select multiple size="3" id="cls_' + safeEmail + '" style="width:100%;border:1px solid #ddd;border-radius:6px;padding:4px;font-size:0.8rem;">' + clsOptions + '</select></td>' +
-      '<td style="padding:8px;text-align:center;"><button onclick="saveTeacherAssignment(\'' + safeEmail + '\',\'' + email + '\')" style="background:#1A2A4A;color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.8rem;">💾 حفظ</button></td>' +
+    var savedCount = savedCls.length;
+    var savedBadge = savedCount > 0
+      ? '<span style="background:#1A2A4A;color:#C9A84C;border-radius:12px;padding:2px 8px;font-size:0.72rem;margin-right:6px;">' + savedCount + ' صف</span>'
+      : '<span style="background:#f0f0f0;color:#aaa;border-radius:12px;padding:2px 8px;font-size:0.72rem;margin-right:6px;">لم يُعيَّن</span>';
+    var subjColor = (teacherSubjects[0] === '—') ? '#aaa' : '#1A2A4A';
+    return '<tr class="hr-assign-row" data-search="' + (t.name_ar||'') + ' ' + subjDisplay + '" style="border-bottom:1px solid #f0f0f0;vertical-align:middle;">' +
+      '<td style="padding:10px 8px;font-weight:600;font-size:0.85rem;min-width:140px;">' +
+        (t.name_ar || key) +
+        '<br><span style="font-size:0.72rem;color:#999;">' + key + '</span>' +
+        '<br>' + savedBadge +
+      '</td>' +
+      '<td style="padding:10px 8px;text-align:center;">' +
+        '<span style="background:#f5f0e8;color:' + subjColor + ';border-radius:8px;padding:4px 10px;font-size:0.82rem;font-weight:700;border:1px solid #C9A84C;">' +
+        subjDisplay + '</span>' +
+      '</td>' +
+      '<td style="padding:8px;min-width:160px;">' +
+        '<select multiple size="4" id="cls_' + safeKey + '" ' +
+        'style="width:100%;border:1px solid #C9A84C;border-radius:6px;padding:4px;font-size:0.8rem;font-family:Cairo,sans-serif;">' +
+        clsOptions + '</select>' +
+        '<div style="font-size:0.7rem;color:#aaa;margin-top:2px;">Ctrl للاختيار المتعدد</div>' +
+      '</td>' +
+      '<td style="padding:8px;text-align:center;">' +
+        '<button onclick="saveTeacherAssignmentByKey(\'' + safeKey + '\',\'' + key + '\')" ' +
+        'style="background:#1A2A4A;color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:0.8rem;white-space:nowrap;">💾 حفظ</button>' +
+      '</td>' +
       '</tr>';
   }).join('');
 
-  return '<div style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;">' +
-    '<h3 style="margin:0;color:#1A2A4A;">تعيين المواد والصفوف</h3>' +
-    '<input id="newSubjectInput" placeholder="أضف مادة جديدة..." style="border:2px solid #C9A84C;border-radius:8px;padding:8px 12px;font-family:Cairo,sans-serif;font-size:0.85rem;" onkeydown="if(event.key===\'Enter\')addNewSubjectFromInput()">' +
-    '<button onclick="addNewSubjectFromInput()" style="background:#C9A84C;color:#1A2A4A;border:none;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer;">+ إضافة مادة</button>' +
+  return '<div style="margin-bottom:12px;">' +
+    '<h3 style="margin:0 0 8px;color:#1A2A4A;">📋 تعيين الصفوف للمعلمات</h3>' +
+    '<p style="margin:0;font-size:0.82rem;color:#666;">المادة الأساسية محددة تلقائياً من ملف المعلمات — اختاري الصفوف فقط</p>' +
     '</div>' +
+    searchBar +
     '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:Cairo,sans-serif;">' +
     '<thead><tr style="background:#1A2A4A;color:#fff;">' +
-    '<th style="padding:10px;text-align:right;">الموظفة</th>' +
-    '<th style="padding:10px;text-align:right;">المواد (اختر متعدد)</th>' +
-    '<th style="padding:10px;text-align:right;">الصفوف (اختر متعدد)</th>' +
-    '<th style="padding:10px;">حفظ</th></tr></thead>' +
-    '<tbody>' + rows + '</tbody></table></div>';
+    '<th style="padding:10px;text-align:right;">المعلمة</th>' +
+    '<th style="padding:10px;text-align:center;">المادة</th>' +
+    '<th style="padding:10px;text-align:right;">الصفوف المُعيَّنة</th>' +
+    '<th style="padding:10px;text-align:center;">حفظ</th>' +
+    '</tr></thead>' +
+    '<tbody id="hrAssignBody">' + rows + '</tbody></table></div>';
+}
+
+function filterHRAssignRows(q) {
+  var rows = document.querySelectorAll('.hr-assign-row');
+  var lq = q.trim().toLowerCase();
+  rows.forEach(function(r) {
+    var s = (r.getAttribute('data-search') || '').toLowerCase();
+    r.style.display = (!lq || s.includes(lq)) ? '' : 'none';
+  });
+}
+
+function saveTeacherAssignmentByKey(safeKey, rosterKey) {
+  var clsEl = document.getElementById('cls_' + safeKey);
+  if (!clsEl) return;
+  var classes = Array.from(clsEl.selectedOptions).map(function(o) { return o.value; });
+  var fullEmail = rosterKey + '@moe.sch.ae';
+  var tam = getTeacherAssignmentMap();
+  // احتفظ بالمواد الموجودة من TEACHER_ROSTER
+  var roster = (typeof TEACHER_ROSTER !== 'undefined') ? TEACHER_ROSTER : {};
+  var subjects = (roster[rosterKey] && roster[rosterKey].subjects) ? roster[rosterKey].subjects : (tam[fullEmail] ? tam[fullEmail].subjects : []);
+  tam[fullEmail] = tam[fullEmail] || {};
+  tam[fullEmail].subjects = subjects;
+  tam[fullEmail].classes = classes;
+  // أيضاً بـ rosterKey مباشرةً للتوافق
+  tam[rosterKey] = tam[rosterKey] || {};
+  tam[rosterKey].subjects = subjects;
+  tam[rosterKey].classes = classes;
+  saveTeacherAssignmentMap(tam);
+  showToast('✅ تم حفظ ' + classes.length + ' صف للمعلمة ' + rosterKey, 'success');
+  // تحديث الشارة
+  var tr = clsEl.closest('tr');
+  if (tr) {
+    var badge = tr.querySelector('td:first-child span');
+    if (badge) {
+      if (classes.length > 0) {
+        badge.style.background = '#1A2A4A'; badge.style.color = '#C9A84C';
+        badge.textContent = classes.length + ' صف';
+      } else {
+        badge.style.background = '#f0f0f0'; badge.style.color = '#aaa';
+        badge.textContent = 'لم يُعيَّن';
+      }
+    }
+  }
 }
 
 function saveTeacherAssignment(safeEmail, realEmail) {
