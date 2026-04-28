@@ -18622,6 +18622,35 @@ function showSmartReport() {
   showSection('smart_report');
 }
 
+
+// ── Helper: get current teacher's subject for smart report ──
+function getTeacherSubjectForReport() {
+  try {
+    var prefix = '';
+    if (typeof currentStaff !== 'undefined' && currentStaff && currentStaff.email) {
+      prefix = currentStaff.email.split('@')[0].replace(/-SU|-MH|-KH|-RK|-HM/i,'');
+    } else if (typeof currentUsername !== 'undefined' && currentUsername) {
+      prefix = currentUsername.replace(/-SU|-MH|-KH|-RK|-HM/i,'');
+    }
+    if (!prefix) return '';
+    // Direct lookup
+    if (typeof TEACHER_ROSTER !== 'undefined' && TEACHER_ROSTER[prefix]) {
+      var subj = TEACHER_ROSTER[prefix].subject || (TEACHER_ROSTER[prefix].subjects||[])[0] || '';
+      return subj;
+    }
+    // Case-insensitive fallback
+    if (typeof TEACHER_ROSTER !== 'undefined') {
+      var pl = prefix.toLowerCase();
+      for (var k in TEACHER_ROSTER) {
+        if (k.toLowerCase() === pl) {
+          return TEACHER_ROSTER[k].subject || (TEACHER_ROSTER[k].subjects||[])[0] || '';
+        }
+      }
+    }
+  } catch(e) {}
+  return '';
+}
+
 function initSmartReport() {
   var el = document.getElementById('section-smart_report');
   if (!el) return;
@@ -18712,7 +18741,12 @@ function generateSmartReport() {
   var periodText = {week:'خلال هذا الأسبوع', month:'خلال هذا الشهر', term:'خلال هذا الفصل الدراسي'}[period];
   var today = new Date().toLocaleDateString('ar-AE', {year:'numeric',month:'long',day:'numeric'});
 
-  var acadT=['يُظهر أداءً أكاديمياً متميزاً ويتفوق على أقرانه في جميع المواد','يُحقق أداءً أكاديمياً جيداً جداً فوق المتوسط','يلتزم بالمتطلبات الأكاديمية بمستوى جيد','مستوى أكاديمي متوسط يحتاج متابعة','يواجه صعوبات أكاديمية ويحتاج دعماً إضافياً','يعاني من صعوبات بالغة وتدخل فوري'];
+  // ── Get teacher subject ──
+  var teacherSubject = getTeacherSubjectForReport();
+  var subjectLabel = teacherSubject ? ('مادة ' + teacherSubject) : 'المواد الدراسية';
+  var inSubject = teacherSubject ? ('في مادة ' + teacherSubject) : 'في مستواه الدراسي';
+
+  var acadT=['يُظهر أداءً متميزاً ويتفوق على أقرانه '+inSubject,'يُحقق أداءً جيداً جداً فوق المتوسط '+inSubject,'يلتزم بالمتطلبات الأكاديمية بمستوى جيد '+inSubject,'مستوى '+subjectLabel+' متوسط يحتاج متابعة','يواجه صعوبات '+inSubject+' ويحتاج دعماً إضافياً','يعاني من صعوبات بالغة '+inSubject+' وتدخل فوري'];
   var behT=['يتميز بسلوك إيجابي ويُعدّ قدوةً للزملاء','يتسم بسلوك إيجابي وتعامل محترم','يلتزم بقواعد النظام بشكل عام','يُبدي تفاوتاً في السلوك ويحتاج توجيهاً','يُسجّل ملاحظات سلوكية متكررة','السلوك مصدر قلق مستمر يستدعي تدخلاً فورياً'];
   var attT=['يلتزم بالحضور المنتظم دون غيابات','سجل حضوري جيد مع غيابات نادرة','يُسجّل بعض الغيابات تستدعي المتابعة','غيابات متكررة بأعذار رسمية','غيابات بدون عذر تستدعي متابعة فورية','نمط الغياب مثير للقلق ويستدعي تدخلاً عاجلاً'];
   var socT=['مهارات قيادية واجتماعية متميزة ويتفاعل بإيجابية','اجتماعي بطبعه ويندمج بسهولة','هادئ وميّال للاستقلالية في التعلم','يُبدي خجلاً ويحتاج تشجيعاً','ميّال للانسحاب ويحتاج دعماً اجتماعياً','يواجه صعوبات اجتماعية تستدعي متابعة متخصصة'];
@@ -18733,16 +18767,27 @@ function generateSmartReport() {
   try { if(window.currentUserName) teacherName = window.currentUserName; } catch(e){}
   if(!teacherName) teacherName = 'المعلمة المشرفة';
 
+  var logoAljood = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/assets/logo_aljood_school.png';
+  var logoMinistry = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/assets/logo_ministry_uae.png';
+
   var html = '<div style="background:#fff;border-radius:16px;padding:28px;box-shadow:0 4px 20px rgba(0,0,0,0.1);border:2px solid #e0e0e0;">' +
     '<div style="text-align:center;border-bottom:3px solid #C9A84C;padding-bottom:16px;margin-bottom:20px;">' +
-    '<h3 style="color:#1A2A4A;margin:0 0 6px;">مدرسة الجود — مدينة العين</h3>' +
-    '<h2 style="color:#C9A84C;margin:0;font-size:1.3rem;">تقرير طالب متكامل</h2>' +
-    '<p style="color:#888;margin:6px 0 0;font-size:0.85rem;">'+today+' | '+periodText+'</p>' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">' +
+    '<img src="'+logoAljood+'" style="height:60px;object-fit:contain;" alt="مدرسة الجود">' +
+    '<div style="text-align:center;">' +
+    '<h3 style="color:#1A2A4A;margin:0 0 4px;font-size:1rem;">وزارة التربية والتعليم | إمارة أبوظبي</h3>' +
+    '<h2 style="color:#1A2A4A;margin:0 0 2px;font-size:1.15rem;">مدرسة الجود — مدينة العين</h2>' +
+    '<h3 style="color:#C9A84C;margin:0;font-size:1rem;">تقرير طالب متكامل</h3>' +
     '</div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;background:#f8f9fa;padding:14px;border-radius:10px;">' +
-    '<div><strong>الطالب/ة:</strong><br>'+studentName+'</div>' +
-    '<div><strong>الصف:</strong><br>'+cls+'</div>' +
-    '<div><strong>المعلمة:</strong><br>'+teacherName+'</div>' +
+    '<img src="'+logoMinistry+'" style="height:60px;object-fit:contain;" alt="وزارة التربية">' +
+    '</div>' +
+    '<div style="background:#1A2A4A;color:#C9A84C;border-radius:8px;padding:6px 16px;display:inline-block;font-size:0.85rem;">'+today+' &nbsp;|&nbsp; '+periodText+'</div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:16px;background:#f8f9fa;padding:14px;border-radius:10px;">' +
+    '<div><strong style="color:#666;font-size:0.8rem;">الطالب/ة</strong><br><span style="font-size:1rem;color:#1A2A4A;font-weight:700;">'+studentName+'</span></div>' +
+    '<div><strong style="color:#666;font-size:0.8rem;">الصف</strong><br><span style="font-size:1rem;color:#1A2A4A;font-weight:700;">'+cls+'</span></div>' +
+    '<div><strong style="color:#666;font-size:0.8rem;">المادة</strong><br><span style="font-size:1rem;color:#C9A84C;font-weight:700;">'+(teacherSubject||'—')+'</span></div>' +
+    '<div><strong style="color:#666;font-size:0.8rem;">المعلمة</strong><br><span style="font-size:1rem;color:#1A2A4A;font-weight:700;">'+teacherName+'</span></div>' +
     '</div>' +
     '<div style="text-align:center;margin-bottom:18px;">التقدير الإجمالي: '+badge+'</div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;">' +
@@ -18755,7 +18800,7 @@ function generateSmartReport() {
     '<div style="background:linear-gradient(135deg,#1A2A4A,#2a4080);border-radius:12px;padding:18px;color:#fff;">' +
     '<h4 style="color:#C9A84C;margin:0 0 12px;">رسالة وتوصيات لولي الأمر</h4>' +
     '<p style="margin:0 0 8px;font-size:0.9rem;">السيد/ة ولي أمر الطالب/ة <strong>'+studentName+'</strong>، السلام عليكم ورحمة الله وبركاته،</p>' +
-    '<p style="margin:0 0 12px;font-size:0.9rem;">نُحيطكم علماً بالتقرير الدوري لأداء طالبكم/ة '+periodText+'، وفيما يلي التوصيات:</p>' +
+    '<p style="margin:0 0 12px;font-size:0.9rem;">نُحيطكم علماً بالتقرير الدوري لأداء طالبكم/ة '+(teacherSubject?'<strong>في مادة '+teacherSubject+'</strong> ':'')+periodText+'، وفيما يلي التوصيات:</p>' +
     '<ul style="margin:0;padding-right:20px;font-size:0.9rem;">' +
     '<li style="margin-bottom:6px;">'+recA[ai]+'</li>' +
     '<li style="margin-bottom:6px;">'+recB[bi]+'</li>' +
@@ -18777,11 +18822,26 @@ function generateSmartReport() {
 function printSmartReport() {
   var content = document.getElementById('sr-result');
   if (!content) return;
-  var pw = window.open('', '_blank', 'width=900,height=700');
+  var pw = window.open('', '_blank', 'width=950,height=750');
   if (!pw) { showToast('يُرجى السماح بالنوافذ المنبثقة', 'warning'); return; }
-  pw.document.write('<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><style>body{font-family:Arial,sans-serif;margin:20px;direction:rtl;}@media print{button{display:none!important;}}</style></head><body>' + content.innerHTML + '</body></html>');
+  var printCSS = [
+    'body{font-family:Cairo,Arial,sans-serif;margin:24px;direction:rtl;background:#fff;}',
+    '@media print{',
+    '  button{display:none!important;}',
+    '  body{margin:10mm;}',
+    '  .sr-print-footer{display:block!important;}',
+    '  @page{margin:15mm;}',
+    '}',
+    '.sr-print-footer{display:none;text-align:center;border-top:2px solid #C9A84C;',
+    '  padding-top:10px;margin-top:20px;color:#888;font-size:0.75rem;}',
+    'img{max-width:100%;height:auto;}',
+    'h2,h3,h4{font-family:Cairo,Arial,sans-serif;}',
+    'strong{font-family:Cairo,Arial,sans-serif;}'
+  ].join('\n');
+  var footerHtml = '<div class="sr-print-footer">مدرسة الجود | العين — إمارة أبوظبي | وزارة التربية والتعليم | العام الدراسي 2025–2026</div>';
+  pw.document.write('<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>تقرير طالب — مدرسة الجود</title><style>'+printCSS+'</style></head><body>' + content.innerHTML + footerHtml + '</body></html>');
   pw.document.close();
-  setTimeout(function(){ pw.print(); }, 500);
+  setTimeout(function(){ pw.print(); }, 700);
 }
 
 function confirmClearance() {
