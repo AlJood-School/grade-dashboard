@@ -7811,7 +7811,7 @@ const DEFAULT_ACCESS = {
   principal:     ['home','analysis','students','admin_section','distance','resources','projects','events','achievements','documents','parents','forms','templates','staff_directory','school_schedule','substitute_scheduler','schedule_builder','leaves','meetings','weekly_plan','daily_plans','behavior_log','reports','parent_requests','digital_safety','my_profile','tech_support','credentials_center','lms_credentials','hr_management','student_admission','prof_development','conferences','login_analytics','smart_report'],
   teacher:       ['home','analysis','students','distance','resources','projects','events','achievements','forms','templates','prof_development','staff_directory','my_profile','school_schedule','meetings','weekly_plan','daily_plans','behavior_log','reports','parent_requests','digital_safety','tech_support','smart_report'],
   staff:         ['home','analysis','events','achievements','documents','forms','templates','staff_directory','my_profile','school_schedule','meetings','resources','weekly_plan','daily_plans','behavior_log','reports','parent_requests','specialist_inbox','digital_safety','tech_support','prof_development','student_admission'],
-  parent:        ['parents','resources','lms_credentials','prof_development']
+  parent:        ['parents','reports','resources','lms_credentials','prof_development']
 };
 
 // Locked sections that admin cannot remove from certain roles
@@ -7862,7 +7862,7 @@ const NAV_DEFAULT_CONFIG = [
   { id:'leaves',           label:'الإجازات والغياب',       labelEn:'Leaves & Absence',  icon:'fa-user-clock',         badge:'', badgeColor:'', group:'staff_mgmt',   visibleTo:['admin','principal'] },
   /* ===== الطلاب ===== */
   { id:'students',         label:'الطلاب',                 labelEn:'Students',          icon:'fa-user-graduate',      badge:'', badgeColor:'', group:'students_sec', visibleTo:['admin','principal','teacher','staff'] },
-  { id:'reports',          label:'تقارير الطلاب',          labelEn:'Student Reports',   icon:'fa-clipboard-list',     badge:'', badgeColor:'', group:'students_sec', visibleTo:['admin','admin_staff','tech_staff','staff','teacher','principal'] },
+  { id:'reports',          label:'تقارير الطلاب',          labelEn:'Student Reports',   icon:'fa-clipboard-list',     badge:'', badgeColor:'', group:'students_sec', visibleTo:['admin','parent','admin_staff','tech_staff','staff','teacher','principal'] },
   { id:'behavior_log',     label:'التبليغ السلوكي',        labelEn:'Behavior Log',      icon:'fa-exclamation-triangle', badge:'جديد', badgeColor:'#ef4444', group:'students_sec', visibleTo:['admin','principal','admin_staff','teacher','staff'] },
   { id:'parent_requests',  label:'استدعاء ولي الأمر',      labelEn:'Parent Requests',   icon:'fa-phone-alt',          badge:'', badgeColor:'', group:'students_sec', visibleTo:['admin','admin_staff','tech_staff','staff','teacher','principal'] },
   /* ===== التعليم والجدول ===== */
@@ -13167,6 +13167,16 @@ const MINISTRY_B64 = "data:image/svg+xml;base64,PHN2ZyBpZD0iTGF5ZXJfMSIgZGF0YS1u
 function renderReportsSection() {
   const el = document.getElementById('section-reports');
   if (!el) return;
+  // ── تفريع حسب الدور ──
+  var role = window.currentRole || '';
+  if (role === 'admin' || role === 'principal') {
+    renderReportsAdminView();
+    return;
+  }
+  if (role === 'parent') {
+    renderReportsParentView();
+    return;
+  }
   const activeTab = el.dataset.activeTab || 'create';
   const tabsHtml = `
     <div class="rep-tabs">
@@ -13263,6 +13273,245 @@ function repShowTab(tab) {
   renderReportsSection();
 }
 
+// ── عرض التقارير للمدير/المديرة ── (عرض ومتابعة فقط)
+function renderReportsAdminView() {
+  var el = document.getElementById('section-reports');
+  if (!el) return;
+  var activeFilter = el.dataset.adminFilter || 'all';
+  var allReps = JSON.parse(localStorage.getItem('aljood_reports') || '[]');
+
+  // فلترة
+  var filterClass = el.dataset.filterClass || '';
+  var filterTeacher = el.dataset.filterTeacher || '';
+  var filterDate = el.dataset.filterDate || '';
+  var filtered = allReps.filter(function(r) {
+    if (filterClass && r.studentClass !== filterClass) return false;
+    if (filterTeacher && r.teacher !== filterTeacher) return false;
+    if (filterDate && r.date !== filterDate) return false;
+    return true;
+  });
+
+  // قائمة الصفوف والمعلمات للفلتر
+  var classes = [...new Set(allReps.map(function(r){return r.studentClass||''}))].filter(Boolean).sort();
+  var teachers = [...new Set(allReps.map(function(r){return r.teacher||r.createdBy||''}))].filter(Boolean).sort();
+
+  var html = '<div style="padding:20px;">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px;">';
+  html += '<h3 style="color:#C9A84C;margin:0;font-size:1.1rem;"><i class="fas fa-file-alt"></i> عرض ومتابعة تقارير الطلاب</h3>';
+  html += '<span style="background:rgba(201,168,76,0.15);color:#C9A84C;padding:4px 14px;border-radius:20px;font-size:0.82rem;">' + allReps.length + ' تقرير محفوظ</span>';
+  html += '</div>';
+
+  // فلاتر
+  html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;">';
+  html += '<select onchange=\"document.getElementById(\x27section-reports\x27).dataset.filterClass=this.value;renderReportsSection();\" style=\"padding:8px 12px;border-radius:8px;border:1px solid rgba(201,168,76,0.3);background:rgba(255,255,255,0.06);color:white;font-family:inherit;font-size:0.85rem;\">';
+  html += '<option value="">كل الصفوف</option>';
+  classes.forEach(function(c){ html += '<option value="'+c+'" '+(filterClass===c?'selected':'')+'>'+c+'</option>'; });
+  html += '</select>';
+  html += '<select onchange=\"document.getElementById(\x27section-reports\x27).dataset.filterTeacher=this.value;renderReportsSection();\" style=\"padding:8px 12px;border-radius:8px;border:1px solid rgba(201,168,76,0.3);background:rgba(255,255,255,0.06);color:white;font-family:inherit;font-size:0.85rem;\">';
+  html += '<option value="">كل المعلمات</option>';
+  teachers.forEach(function(t){ html += '<option value="'+t+'" '+(filterTeacher===t?'selected':'')+'>'+t+'</option>'; });
+  html += '</select>';
+  html += '<input type=\"date\" onchange=\"document.getElementById(\x27section-reports\x27).dataset.filterDate=this.value;renderReportsSection();\" value=\"'+filterDate+'\" style=\"padding:8px 12px;border-radius:8px;border:1px solid rgba(201,168,76,0.3);background:rgba(255,255,255,0.06);color:white;font-family:inherit;font-size:0.85rem;\">';
+  if (filterClass||filterTeacher||filterDate) {
+    html += '<button onclick=\"var e=document.getElementById(\x27section-reports\x27);e.dataset.filterClass=\x27\x27;e.dataset.filterTeacher=\x27\x27;e.dataset.filterDate=\x27\x27;renderReportsSection();\" style=\"padding:8px 14px;border-radius:8px;border:1px solid rgba(239,68,68,0.4);background:rgba(239,68,68,0.1);color:#fca5a5;cursor:pointer;font-family:inherit;font-size:0.82rem;\">✕ مسح الفلاتر</button>';
+  }
+  html += '</div>';
+
+  if (!filtered.length) {
+    html += '<div style="text-align:center;padding:60px 20px;color:rgba(255,255,255,0.4);"><i class="fas fa-file-alt fa-3x" style="margin-bottom:16px;display:block;"></i><p>لا توجد تقارير محفوظة حتى الآن</p></div>';
+    html += '</div>';
+    el.innerHTML = html;
+    return;
+  }
+
+  // قائمة التقارير
+  html += '<div style="display:flex;flex-direction:column;gap:12px;">';
+  filtered.slice().reverse().forEach(function(rep, i) {
+    var statusKey = 'rep_status_' + rep.id;
+    var status = localStorage.getItem(statusKey) || 'pending';
+    var noteKey = 'rep_note_' + rep.id;
+    var note = localStorage.getItem(noteKey) || '';
+    var statusColors = {pending:'rgba(245,158,11,0.15)',approved:'rgba(34,197,94,0.15)',noted:'rgba(99,102,241,0.15)'};
+    var statusBorders = {pending:'rgba(245,158,11,0.4)',approved:'rgba(34,197,94,0.4)',noted:'rgba(99,102,241,0.4)'};
+    var statusLabels = {pending:'<span style="color:#fcd34d;">⏳ قيد المراجعة</span>',approved:'<span style="color:#86efac;">✅ معتمد</span>',noted:'<span style="color:#a5b4fc;">💬 مُلاحَظ</span>'};
+    var typeMap = {daily:'يومي',weekly:'أسبوعي',monthly:'شهري'};
+    html += '<div style="background:'+statusColors[status]+';border:1.5px solid '+statusBorders[status]+';border-radius:12px;padding:16px 18px;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">';
+    html += '<div>';
+    html += '<div style="color:white;font-weight:700;font-size:0.95rem;">'+( rep.studentName||'—') +'</div>';
+    html += '<div style="color:rgba(255,255,255,0.6);font-size:0.8rem;margin-top:4px;">';
+    html += '<span style="background:rgba(201,168,76,0.2);color:#C9A84C;padding:1px 8px;border-radius:8px;font-size:0.78rem;margin-left:6px;">' +(rep.studentClass||'—')+'</span>';
+    html += (rep.teacher||rep.createdBy||'—') + ' — ' + (typeMap[rep.type]||rep.type||'—') + ' — ' + (rep.date||'—');
+    html += '</div>';
+    html += '</div>';
+    html += '<div style="display:flex;align-items:center;gap:8px;">';
+    html += statusLabels[status];
+    html += '</div>';
+    html += '</div>';
+    // محتوى مختصر
+    if (rep.academic) html += '<div style="color:rgba(255,255,255,0.75);font-size:0.82rem;margin-top:10px;border-top:1px solid rgba(255,255,255,0.08);padding-top:8px;"><b style="color:#C9A84C;">الأداء الأكاديمي: </b>' + rep.academic.substring(0,120) + (rep.academic.length>120?'...':'') + '</div>';
+    // أزرار الإجراء
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">';
+    html += '<button onclick="repAdminApprove('+rep.id+')" style="padding:6px 14px;border:none;border-radius:6px;background:rgba(34,197,94,0.2);border:1px solid rgba(34,197,94,0.4);color:#86efac;cursor:pointer;font-family:inherit;font-size:0.8rem;">✅ اعتماد</button>';
+    html += '<button onclick="repAdminNote('+rep.id+')" style="padding:6px 14px;border:none;border-radius:6px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;cursor:pointer;font-family:inherit;font-size:0.8rem;">💬 ملاحظة</button>';
+    html += '<button onclick="repAdminPreview('+rep.id+')" style="padding:6px 14px;border:none;border-radius:6px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.3);color:#C9A84C;cursor:pointer;font-family:inherit;font-size:0.8rem;">👁️ عرض كامل</button>';
+    if (note) html += '<span style="color:rgba(255,255,255,0.5);font-size:0.78rem;padding:6px 10px;background:rgba(99,102,241,0.1);border-radius:6px;border:1px solid rgba(99,102,241,0.2);">📝 '+note.substring(0,50)+(note.length>50?'...':'')+'</span>';
+    html += '</div>';
+    html += '</div>';
+  });
+  html += '</div></div>';
+  el.innerHTML = html;
+}
+
+function repAdminApprove(repId) {
+  localStorage.setItem('rep_status_'+repId, 'approved');
+  showToast('تم اعتماد التقرير ✅', 'success');
+  renderReportsSection();
+}
+function repAdminNote(repId) {
+  var note = prompt('أدخلي ملاحظتك على هذا التقرير:');
+  if (note === null) return;
+  localStorage.setItem('rep_status_'+repId, 'noted');
+  localStorage.setItem('rep_note_'+repId, note);
+  showToast('تم حفظ الملاحظة ✅', 'success');
+  renderReportsSection();
+}
+function repAdminPreview(repId) {
+  var allReps = JSON.parse(localStorage.getItem('aljood_reports') || '[]');
+  var rep = allReps.find(function(r){ return r.id == repId; });
+  if (!rep) return;
+  window._repCurrentPreview = rep;
+  repRenderPreview(rep);
+}
+
+// ── تقرير ولي الأمر الدامج ──
+function renderReportsParentView() {
+  var el = document.getElementById('section-reports');
+  if (!el) return;
+  // أبناء ولي الأمر
+  var myChildren = (window.parentStudents || []);
+  var allReps = JSON.parse(localStorage.getItem('aljood_reports') || '[]');
+  // فلتر التقارير لأبنائه فقط
+  var childNames = myChildren.map(function(c){ return typeof c==='object'?(c.nameAr||c.name_ar||c.nameEn||''):c; });
+  var myReps = allReps.filter(function(r){ return childNames.some(function(n){ return n && r.studentName && r.studentName.includes(n); }); });
+
+  var html = '<div style="padding:20px;">';
+  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">';
+  html += '<div style="width:44px;height:44px;background:linear-gradient(135deg,#C9A84C,#e8c96d);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">📊</div>';
+  html += '<div><div style="color:#C9A84C;font-size:1.05rem;font-weight:700;">تقارير أبنائي من المعلمات</div>';
+  html += '<div style="color:rgba(255,255,255,0.5);font-size:0.82rem;">متابعة أداء أبنائك من جميع المعلمات</div></div>';
+  html += '</div>';
+
+  if (!childNames.length) {
+    html += '<div style="text-align:center;padding:60px 20px;color:rgba(255,255,255,0.4);"><i class="fas fa-user-graduate fa-3x" style="margin-bottom:16px;display:block;"></i><p>لم يُسجَّل أبناء في حسابك</p></div>';
+    html += '</div>';
+    el.innerHTML = html;
+    return;
+  }
+
+  // لكل ابن — عرض ملخص + تبويبات مواد
+  childNames.forEach(function(childName, ci) {
+    if (!childName) return;
+    var childReps = myReps.filter(function(r){ return r.studentName && r.studentName.includes(childName); });
+    html += '<div style="background:rgba(255,255,255,0.04);border:1.5px solid rgba(201,168,76,0.25);border-radius:14px;padding:18px;margin-bottom:16px;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">';
+    html += '<div style="color:white;font-size:0.95rem;font-weight:700;"><i class="fas fa-user-graduate" style="color:#C9A84C;margin-left:6px;"></i>'+childName+'</div>';
+    html += '<span style="background:rgba(201,168,76,0.15);color:#C9A84C;padding:3px 12px;border-radius:20px;font-size:0.78rem;">'+childReps.length+' تقرير</span>';
+    html += '</div>';
+
+    if (!childReps.length) {
+      html += '<div style="color:rgba(255,255,255,0.4);font-size:0.85rem;text-align:center;padding:20px;">لا توجد تقارير حتى الآن</div>';
+      html += '</div>';
+      return;
+    }
+
+    // مجموعة بالمواد
+    var bySubject = {};
+    childReps.forEach(function(r) {
+      var subj = r.subject || r.teacherSubject || r.teacher || 'عام';
+      if (!bySubject[subj]) bySubject[subj] = [];
+      bySubject[subj].push(r);
+    });
+    var subjKeys = Object.keys(bySubject);
+
+    // ملخص دامج من آخر تقرير لكل مادة
+    html += '<div style="background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.15);border-radius:10px;padding:14px;margin-bottom:14px;">';
+    html += '<div style="color:#C9A84C;font-size:0.85rem;font-weight:700;margin-bottom:10px;">📋 الملخص الدامج</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;">';
+    subjKeys.forEach(function(subj) {
+      var lastRep = bySubject[subj][bySubject[subj].length - 1];
+      var status = localStorage.getItem('rep_status_'+lastRep.id) || 'pending';
+      var statusIcon = {pending:'⏳',approved:'✅',noted:'💬'}[status] || '⏳';
+      var snippet = (lastRep.academic || lastRep.behavior || lastRep.attendance || '—').substring(0, 60);
+      html += '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px;">';
+      html += '<div style="color:#C9A84C;font-size:0.78rem;font-weight:700;margin-bottom:4px;">'+subj+' '+statusIcon+'</div>';
+      html += '<div style="color:rgba(255,255,255,0.7);font-size:0.78rem;">'+snippet+(snippet.length>=60?'...':'')+'</div>';
+      html += '<div style="color:rgba(255,255,255,0.35);font-size:0.7rem;margin-top:4px;">'+lastRep.teacher+' — '+lastRep.date+'</div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+
+    // تبويبات التفصيل
+    var tabsId = 'par-tabs-'+ci;
+    var paneId = 'par-pane-'+ci;
+    html += '<div id="'+tabsId+'" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">';
+    subjKeys.forEach(function(subj, si) {
+      html += '<button onclick="parShowSubjTab('+ci+','+si+')" id="par-tab-'+ci+'-'+si+'" style="padding:6px 14px;border-radius:8px;border:1px solid rgba(201,168,76,'+(si===0?'1':'0.3')+');background:rgba(201,168,76,'+(si===0?'0.2':'0.05')+');color:'+(si===0?'#C9A84C':'rgba(255,255,255,0.6)')+';cursor:pointer;font-family:inherit;font-size:0.8rem;">'+subj+'</button>';
+    });
+    html += '</div>';
+    html += '<div id="'+paneId+'">';
+    subjKeys.forEach(function(subj, si) {
+      html += '<div id="par-subj-'+ci+'-'+si+'" style="display:'+(si===0?'block':'none')+';">';
+      bySubject[subj].slice().reverse().forEach(function(rep) {
+        var status = localStorage.getItem('rep_status_'+rep.id) || 'pending';
+        var sIcon = {pending:'⏳ قيد المراجعة',approved:'✅ معتمد',noted:'💬 مُلاحَظ'}[status] || '⏳';
+        html += '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;margin-bottom:8px;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+        html += '<span style="color:rgba(255,255,255,0.5);font-size:0.78rem;">'+rep.teacher+' — '+rep.date+'</span>';
+        html += '<span style="font-size:0.75rem;color:rgba(255,255,255,0.4);">'+sIcon+'</span>';
+        html += '</div>';
+        var sections = [
+          ['الحضور',rep.attendance],['الأداء الأكاديمي',rep.academic],
+          ['السلوك',rep.behavior],['الأنشطة',rep.activities],['التوصيات',rep.recommendations]
+        ];
+        sections.forEach(function(sec) {
+          if (sec[1]) {
+            html += '<div style="margin-bottom:6px;"><span style="color:#C9A84C;font-size:0.78rem;font-weight:700;">'+sec[0]+': </span>';
+            html += '<span style="color:rgba(255,255,255,0.75);font-size:0.78rem;">'+sec[1]+'</span></div>';
+          }
+        });
+        html += '</div>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+    html += '</div>';
+  });
+
+  if (!myReps.length) {
+    html += '<div style="text-align:center;padding:40px 20px;color:rgba(255,255,255,0.4);">';
+    html += '<i class="fas fa-clipboard fa-3x" style="margin-bottom:16px;display:block;"></i>';
+    html += '<p>لم تُنشئ المعلمات تقارير بعد</p></div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function parShowSubjTab(ci, si) {
+  // إخفاء كل التبويبات
+  var container = document.getElementById('par-pane-'+ci);
+  if (!container) return;
+  container.querySelectorAll('[id^="par-subj-'+ci+'-"]').forEach(function(p){ p.style.display='none'; });
+  var pane = document.getElementById('par-subj-'+ci+'-'+si);
+  if (pane) pane.style.display = 'block';
+  // تحديث أزرار التبويبات
+  document.getElementById('par-tabs-'+ci).querySelectorAll('button').forEach(function(btn, i) {
+    btn.style.borderColor = i===si ? 'rgba(201,168,76,1)' : 'rgba(201,168,76,0.3)';
+    btn.style.background = i===si ? 'rgba(201,168,76,0.2)' : 'rgba(201,168,76,0.05)';
+    btn.style.color = i===si ? '#C9A84C' : 'rgba(255,255,255,0.6)';
+  });
+}
+
 function repLoadStudents() {
   var cls = (document.getElementById('repClassSel')||{}).value || '';
   var sel = document.getElementById('repStudentSel');
@@ -13320,6 +13569,8 @@ function repGetFormData() {
     activities: (document.getElementById('repActivities')||{}).value || '',
     recommendations: (document.getElementById('repRecommendations')||{}).value || '',
     teacher: (document.getElementById('repTeacherSig')||{}).value || (window.currentUsername||''),
+    teacherSubject: (function(){ try { var tr = Object.values(TEACHER_ROSTER||{}).find(function(t){return t && t.name_ar && (t.name_ar.includes(window.currentUserNameAr||'') || (window.currentUsername&&(t.scheduleKey||'').toLowerCase().startsWith(window.currentUsername.toLowerCase().split('.')[0]))); }); return tr && tr.subjects ? (tr.subjects[0]||'') : ''; } catch(e){ return ''; } })(),
+    subject: (function(){ try { var tr = Object.values(TEACHER_ROSTER||{}).find(function(t){return t && t.name_ar && (t.name_ar.includes(window.currentUserNameAr||'') || (window.currentUsername&&(t.scheduleKey||'').toLowerCase().startsWith(window.currentUsername.toLowerCase().split('.')[0]))); }); return tr && tr.subjects ? (tr.subjects[0]||'') : ''; } catch(e){ return ''; } })(),
     createdBy: window.currentUsername || '',
     createdAt: new Date().toISOString(),
     id: Date.now()
@@ -17834,6 +18085,39 @@ function generateSubstituteSchedule() {
   var absentIds = allTeachers.filter(function(t){ return subTeacherStates[t.id] === 'absent'; }).map(function(t){ return t.name_ar; });
   var lateIds = allTeachers.filter(function(t){ return subTeacherStates[t.id] === 'late'; }).map(function(t){ return t.name_ar; });
   var breastfeedingIds = allTeachers.filter(function(t){ return subTeacherStates[t.id] === 'breastfeeding'; }).map(function(t){ return t.name_ar; });
+
+  // ── بناء خريطة scheduleKey → name_ar من TEACHER_ROSTER ──
+  var _schedKeyToAr = {}; // scheduleKey → name_ar (من teachers.json)
+  var _arFirstToSchedKey = {}; // أول كلمة عربية → scheduleKey (للمطابقة الجزئية)
+  if (typeof TEACHER_ROSTER !== 'undefined' && TEACHER_ROSTER && typeof TEACHER_ROSTER === 'object') {
+    Object.keys(TEACHER_ROSTER).forEach(function(emailKey) {
+      var tr = TEACHER_ROSTER[emailKey];
+      if (tr && tr.scheduleKey && tr.name_ar) {
+        _schedKeyToAr[tr.scheduleKey] = tr.name_ar;
+        var firstWord = tr.name_ar.trim().split(' ')[0];
+        if (firstWord) _arFirstToSchedKey[firstWord] = tr.scheduleKey;
+      }
+    });
+  }
+  // دالة مساعدة: هل المعلمة (schedKey في الجدول) موجودة في قائمة الأسماء؟
+  function _matchesAbsent(schedKey, nameArList) {
+    var arFromKey = _schedKeyToAr[schedKey] || '';
+    return nameArList.some(function(a) {
+      if (!a) return false;
+      // مطابقة عبر خريطة teachers.json
+      if (arFromKey) {
+        if (arFromKey === a) return true;
+        var af = arFromKey.split(' ')[0], bf = a.split(' ')[0];
+        if (af && bf && af === bf) return true;
+      }
+      // مطابقة نصية مباشرة (احتياطي)
+      if (a === schedKey) return true;
+      // مطابقة الاسم الإنجليزي الجزئي
+      var aLow = a.toLowerCase(), kLow = schedKey.toLowerCase();
+      if (kLow.startsWith(aLow.split(' ')[0].toLowerCase())) return true;
+      return false;
+    });
+  }
   
   if (absentIds.length === 0 && lateIds.length === 0) {
     showToast('لم تُحدَّد أي معلمة غائبة أو متأخرة!', 'warning');
@@ -17859,8 +18143,8 @@ function generateSubstituteSchedule() {
       if (!teacherPeriodsToday[tname]) teacherPeriodsToday[tname] = [];
       teacherPeriodsToday[tname].push(p);
       // هل هذه المعلمة غائبة؟
-      var isAbsent = absentIds.some(function(a){ return a === tname || tname.includes(a) || a.includes(tname); });
-      var isLate = lateIds.some(function(a){ return a === tname || tname.includes(a) || a.includes(tname); });
+      var isAbsent = _matchesAbsent(tname, absentIds);
+      var isLate = _matchesAbsent(tname, lateIds);
       if (isAbsent) {
         needCover.push({cls:cls, period:p, subject:cell.subject, absentTeacher:tname, lateOnly:false});
       } else if (isLate && p <= 1) { // الحصة 1 و2 فقط للمتأخرات
@@ -17888,8 +18172,8 @@ function generateSubstituteSchedule() {
       var tname = t.name_ar;
       var state = subTeacherStates[t.id] || 'present';
       if (state === 'absent') return; // غائبة
-      if (state === 'late' && item.period <= 1) return; // متأخرة — لا تُعطى أولى اثنين
-      if (respectBreastfeeding && state === 'breastfeeding' && (item.period === 2 || item.period === 3)) return; // رضاعة
+      if (state === 'breastfeeding' && respectBreastfeeding && (item.period === 1 || item.period === 2)) return; // رضاعة أولى حصتين
+      if (state === 'late' && item.period <= 1) return; // متأخرة — لا تُعطى حصة 1
       // لا تُعط معلمة حصة في نفس الوقت
       var teachingNow = (teacherPeriodsToday[tname] || []).indexOf(item.period) !== -1;
       if (teachingNow) return;
