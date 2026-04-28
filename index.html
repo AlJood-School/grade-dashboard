@@ -11357,12 +11357,46 @@ function closeMeetModal() {
 // ===== Attendee Management =====
 function meetAddGroup(type) {
   const emps = getEmployeesData();
+  // Load teachers.json data for cycle-based filtering
+  var teacherCycles = {};
+  try {
+    var tr = typeof TEACHER_ROSTER !== 'undefined' ? TEACHER_ROSTER : {};
+    Object.keys(tr).forEach(function(k) {
+      var t = tr[k];
+      if (t && t.email && t.cycle) {
+        // Map by ministry_id or name match
+        emps.forEach(function(e) {
+          if (e.email && e.email.toLowerCase() === t.email.toLowerCase()) {
+            teacherCycles[e.id] = String(t.cycle);
+          }
+        });
+      }
+    });
+  } catch(cx) {}
+
   let toAdd = [];
-  if (type === 'all_teachers') toAdd = emps.filter(e => e.category === 'teacher' || e.category === 'kg_teacher').map(e => e.id);
-  else if (type === 'all_admin') toAdd = emps.filter(e => e.category === 'admin' || e.category === 'management').map(e => e.id);
-  else if (type === 'kg') toAdd = emps.filter(e => e.category === 'kg_teacher').map(e => e.id);
-  else if (type === 'cycle1') toAdd = emps.filter(e => e.stage === 'حلقة أولى' || e.cycle === '1').map(e => e.id);
-  else if (type === 'cycle2') toAdd = emps.filter(e => e.stage === 'حلقة ثانية' || e.cycle === '2').map(e => e.id);
+  if (type === 'all_teachers') {
+    toAdd = emps.filter(e => e.role === 'teacher').map(e => e.id);
+  } else if (type === 'all_admin') {
+    toAdd = emps.filter(e => e.role === 'admin_staff' || e.role === 'principal' || e.role === 'vice_principal').map(e => e.id);
+  } else if (type === 'kg') {
+    // KG teachers: cycle === 'KG' or 'kg' in teacherCycles
+    toAdd = emps.filter(e => e.role === 'teacher' && (
+      (teacherCycles[e.id] || '').toUpperCase() === 'KG'
+    )).map(e => e.id);
+    // fallback: all teachers if no KG data
+    if (!toAdd.length) toAdd = emps.filter(e => e.role === 'teacher').map(e => e.id);
+  } else if (type === 'cycle1') {
+    toAdd = emps.filter(e => e.role === 'teacher' && (
+      teacherCycles[e.id] === '1' || teacherCycles[e.id] === 'C1'
+    )).map(e => e.id);
+    if (!toAdd.length) toAdd = emps.filter(e => e.role === 'teacher').map(e => e.id);
+  } else if (type === 'cycle2') {
+    toAdd = emps.filter(e => e.role === 'teacher' && (
+      teacherCycles[e.id] === '2' || teacherCycles[e.id] === 'C2'
+    )).map(e => e.id);
+    if (!toAdd.length) toAdd = emps.filter(e => e.role === 'teacher').map(e => e.id);
+  }
   toAdd.forEach(id => { if (!_meetSelectedAttendees.includes(id)) _meetSelectedAttendees.push(id); });
   meetUpdateChips();
 }
@@ -18977,7 +19011,7 @@ function renderSubResults(coverResults, dayIdx, substituteAssignments) {
     } else if (r.substituteType === 'admin') {
       badge = '<span style="background:#fce7f3;color:#9d174d;padding:2px 8px;border-radius:10px;font-size:0.75rem;">\u0625\u062f\u0627\u0631\u064a</span>';
     } else {
-      badge = '<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:10px;font-size:0.75rem;">\u0637\u0628\u064a\u0639\u064a</span>';
+      badge = '<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:10px;font-size:0.75rem;">\u0646\u0641\u0633 \u0627\u0644\u062d\u0644\u0642\u0629</span>';
     }
     var noSub = !r.substitute || r.substitute === '\u26a0\ufe0f \u0644\u0627 \u064a\u0648\u062c\u062f \u0628\u062f\u064a\u0644';
     var subStyle = noSub ? 'color:#dc2626;font-weight:700;' : 'font-weight:700;color:#065f46;';
@@ -19879,16 +19913,16 @@ function generateSmartReport() {
 function printSmartReport() {
   var content = document.getElementById('sr-result');
   if (!content) return;
-  var pw = window.open('', '_blank', 'width=1000,height=800');
-  if (!pw) { showToast('يُرجى السماح بالنوافذ المنبثقة', 'warning'); return; }
+
+  var logoAljood = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/assets/logo_aljood_school.png';
+  var logoMinistry = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/assets/logo_ministry_uae.png';
+
   var printCSS = [
     '@import url(\'https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap\');',
     '*{box-sizing:border-box;font-family:Cairo,Arial,sans-serif!important;}',
     'body{font-family:Cairo,Arial,sans-serif;margin:6mm;direction:rtl;background:#fff;color:#222;font-size:0.82rem;}',
-    /* ── header ── */
     '.sr-print-header-row{display:flex!important;align-items:center!important;justify-content:space-between!important;width:100%!important;margin-bottom:8px!important;padding-bottom:6px!important;border-bottom:2px solid #C9A84C!important;}',
     '.sr-print-header-logo{width:66px;height:66px;object-fit:contain;flex-shrink:0;display:block;}',
-    '.sr-ministry-logo{width:auto!important;height:80px!important;max-height:80px!important;object-fit:contain;flex-shrink:0;display:block;}',
     '.sr-ministry-logo{height:75px!important;width:auto!important;min-width:50px!important;max-width:95px!important;object-fit:contain!important;flex-shrink:0!important;display:block!important;}',
     '.sr-print-header-title{text-align:center!important;flex:1!important;padding:0 10px!important;}',
     '.sr-print-header-title div{line-height:1.3!important;}',
@@ -19896,85 +19930,77 @@ function printSmartReport() {
     '.sr-print-header-title .sr-ph-school{color:#1A2A4A!important;font-size:1rem!important;font-weight:900!important;}',
     '.sr-print-header-title .sr-ph-report{color:#C9A84C!important;font-size:0.88rem!important;font-weight:700!important;}',
     '.sr-print-date-badge{background:#1A2A4A!important;color:#C9A84C!important;border-radius:6px!important;padding:3px 12px!important;display:block!important;text-align:center!important;font-size:0.75rem!important;font-weight:600!important;margin-top:6px!important;}',
-    /* ── info grid ── */
     '.sr-info-grid{display:grid!important;grid-template-columns:repeat(4,1fr)!important;gap:6px!important;margin-bottom:8px!important;background:#f8f9fa!important;padding:8px!important;border-radius:8px!important;page-break-inside:avoid!important;}',
     '.sr-info-cell strong{color:#666!important;font-size:0.7rem!important;display:block!important;margin-bottom:2px!important;}',
     '.sr-info-cell span{font-size:0.82rem!important;font-weight:700!important;color:#1A2A4A!important;}',
-    /* ── axes ── */
     '.sr-axis-grid{display:grid!important;grid-template-columns:repeat(2,1fr)!important;gap:6px!important;margin-bottom:8px!important;}',
     '.sr-axis-card{background:#f0f4ff!important;border-radius:6px!important;padding:7px 9px!important;font-size:0.76rem!important;page-break-inside:avoid!important;}',
     '.sr-axis-card h4,.sr-axis-card b,.sr-axis-card strong{font-size:0.78rem!important;margin:0 0 3px 0!important;}',
-    '.sr-axis-card p,.sr-axis-card div{margin:2px 0!important;font-size:0.74rem!important;line-height:1.3!important;}',
-    /* ── recommendation msg ── */
-    '.sr-msg-box,.sr-recommendation{font-size:0.76rem!important;line-height:1.4!important;padding:7px 10px!important;margin-bottom:6px!important;border-radius:6px!important;}',
-    '.sr-msg-box h3,.sr-recommendation h3{font-size:0.82rem!important;margin:0 0 4px 0!important;}',
-    '.sr-msg-box ul,.sr-recommendation ul{margin:3px 0!important;padding-right:16px!important;}',
-    '.sr-msg-box li,.sr-recommendation li{margin-bottom:2px!important;font-size:0.74rem!important;line-height:1.3!important;}',
-    /* ── status badge ── */
-    '.sr-status-badge{display:inline-block!important;padding:3px 10px!important;border-radius:16px!important;font-size:0.78rem!important;font-weight:700!important;}',
-    /* ── headings ── */
-    'h2,h3,h4{margin:4px 0!important;font-size:0.88rem!important;}',
-    'p{margin:3px 0!important;}',
-    /* ── print specifics ── */
-    '@media print{',
-    '  button,input,select{display:none!important;}',
-    '  body{margin:0;padding-bottom:35px;}',
-    '',
-    '  @page{margin:6mm;size:A4 portrait;}',
-    '}',
-    '.sr-print-footer{position:fixed;bottom:0;left:0;right:0;text-align:center;border-top:2px solid #C9A84C;padding-top:5px;padding-bottom:4px;background:#fff;color:#888;font-size:0.68rem;}'
+    '.sr-reco-box{background:#fffbeb!important;border:1px solid #fcd34d!important;border-radius:8px!important;padding:7px!important;margin-top:6px!important;font-size:0.78rem!important;}',
+    '.sr-print-footer{position:fixed!important;bottom:0!important;left:0!important;right:0!important;background:#1A2A4A!important;color:#C9A84C!important;text-align:center!important;font-size:0.7rem!important;padding:5px!important;border-top:2px solid #C9A84C!important;}',
+    'img{max-width:100%;}',
+    '@page{margin:6mm;size:A4;}'
   ].join('\n');
 
-  /* Build clean header replacing inline-style header with class-based one */
   var rawHTML = content.innerHTML;
 
-  /* Replace the logo img tags to add class */
-  var logoAljood = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/assets/logo_aljood_school.png';
-  var logoMinistry = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/assets/logo_ministry_uae.png';
+  var htmlContent = '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>\u0627\u0644\u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u0630\u0643\u064a</title>' +
+    '<style>' + printCSS + '</style></head><body>' +
+    rawHTML +
+    '</body></html>';
 
-  /* Inject class on header row div (first flex row inside the report header) */
-  rawHTML = rawHTML.replace(
-    /(<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">)/,
-    '<div class="sr-print-header-row">'
-  );
-  /* Add class to logo imgs */
-  rawHTML = rawHTML.replace(
-    new RegExp('(<img src="' + logoAljood.replace(/\//g,'\\/') + '"[^>]*>)'),
-    function(m){ return m.replace('<img ','<img class="sr-print-header-logo" '); }
-  );
-  rawHTML = rawHTML.replace(
-    new RegExp('(<img src="' + logoMinistry.replace(/\//g,'\\/') + '"[^>]*>)'),
-    function(m){ return m.replace('<img ','<img class="sr-ministry-logo" '); }
-  );
-  /* Add class to center title div */
-  rawHTML = rawHTML.replace(
-    /(<div style="text-align:center;">)(\s*<h3[^>]*>وزارة)/,
-    '<div class="sr-print-header-title">$2'
-  );
-  /* Date badge */
-  rawHTML = rawHTML.replace(
-    /(<div style="background:#1A2A4A;color:#C9A84C;border-radius:8px;padding:6px 16px;display:inline-block;font-size:0.85rem;">)/,
-    '<div class="sr-print-date-badge">'
-  );
-  /* Info grid */
-  rawHTML = rawHTML.replace(
-    /(<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:16px;background:#f8f9fa;padding:14px;border-radius:10px;">)/,
-    '<div class="sr-info-grid">'
-  );
+  // Use hidden iframe to avoid popup blockers
+  var oldFrame = document.getElementById('_srPrintFrame');
+  if (oldFrame) oldFrame.parentNode.removeChild(oldFrame);
 
-  var footerHtml = '<div class="sr-print-footer">مدرسة الجود | العين — إمارة أبوظبي | وزارة التربية والتعليم | العام الدراسي 2025–2026</div>';
-  var headHTML = '<!DOCTYPE html><html dir="rtl" lang="ar"><head>' +
-    '<meta charset="UTF-8">' +
-    '<link rel="preconnect" href="https://fonts.googleapis.com">' +
-    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
-    '<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">' +
-    '<title>تقرير طالب — مدرسة الجود</title>' +
-    '<style>' + printCSS + '</style>' +
-    '</head><body>';
+  var iframe = document.createElement('iframe');
+  iframe.id = '_srPrintFrame';
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;';
+  document.body.appendChild(iframe);
 
-  pw.document.write(headHTML + rawHTML + footerHtml + '</body></html>');
-  pw.document.close();
-  setTimeout(function(){ pw.print(); }, 1200);
+  try {
+    iframe.contentDocument.open();
+    iframe.contentDocument.write(htmlContent);
+    iframe.contentDocument.close();
+
+    // Wait for images to load before printing
+    function doPrint() {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      } catch(pe) {
+        showToast('\u064a\u064f\u0631\u062c\u0649 \u0627\u0644\u0633\u0645\u0627\u062d \u0628\u0627\u0644\u0646\u0648\u0627\u0641\u0630 \u0627\u0644\u0645\u0646\u0628\u062b\u0642\u0629', 'warning');
+      }
+      setTimeout(function() {
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+      }, 2000);
+    }
+
+    var imgs = Array.from(iframe.contentDocument.images || []);
+    if (!imgs.length) {
+      setTimeout(doPrint, 400);
+    } else {
+      var loadCount = 0;
+      var total = imgs.length;
+      var timer = setTimeout(doPrint, 3000); // Fallback after 3s
+      imgs.forEach(function(img) {
+        function onDone() {
+          loadCount++;
+          if (loadCount >= total) { clearTimeout(timer); doPrint(); }
+        }
+        if (img.complete) { onDone(); }
+        else { img.addEventListener('load', onDone); img.addEventListener('error', onDone); }
+      });
+    }
+  } catch(e) {
+    // Fallback to window.open
+    var pw = window.open('', '_blank', 'width=1000,height=800');
+    if (!pw) { showToast('\u064a\u064f\u0631\u062c\u0649 \u0627\u0644\u0633\u0645\u0627\u062d \u0628\u0627\u0644\u0646\u0648\u0627\u0641\u0630 \u0627\u0644\u0645\u0646\u0628\u062b\u0642\u0629', 'warning'); return; }
+    pw.document.write(htmlContent);
+    pw.document.close();
+    pw.print();
+    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+  }
 }
 
 function confirmClearance() {
