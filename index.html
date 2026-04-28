@@ -13525,6 +13525,7 @@ function renderReportsSection() {
       <button class="rep-tab ${activeTab==='create'?'active':''}" onclick="repShowTab('create')">&#128221; إنشاء تقرير</button>
       <button class="rep-tab ${activeTab==='saved'?'active':''}" onclick="repShowTab('saved')">&#128190; التقارير المحفوظة</button>
       <button class="rep-tab ${activeTab==='preview'?'active':''}" onclick="repShowTab('preview')">&#128424; معاينة الطباعة</button>
+      <button class="rep-tab ${activeTab==='smart'?'active':''}" onclick="repShowTab('smart')">&#129504; التقارير الذكية</button>
     </div>`;
 
   const createHtml = `
@@ -13599,7 +13600,9 @@ function renderReportsSection() {
   const savedHtml = `<div id="rep-pane-saved" class="rep-pane ${activeTab==='saved'?'active':''}"><div id="rep-saved-list"></div></div>`;
   const previewHtml = `<div id="rep-pane-preview" class="rep-pane ${activeTab==='preview'?'active':''}"><div id="rep-preview-content"></div></div>`;
 
-  el.innerHTML = '<div style="padding:20px;">' + tabsHtml + createHtml + savedHtml + previewHtml + '</div>';
+  const smartHtml = `<div id="rep-pane-smart" class="rep-pane ${activeTab==='smart'?'active':''}"><div id="rep-smart-list"></div></div>`;
+
+  el.innerHTML = '<div style="padding:20px;">' + tabsHtml + createHtml + savedHtml + previewHtml + smartHtml + '</div>';
 
   const todayInput = document.getElementById('repDate');
   if (todayInput) todayInput.value = new Date().toISOString().split('T')[0];
@@ -13607,6 +13610,7 @@ function renderReportsSection() {
 
   if (activeTab === 'saved') repRenderSaved();
   if (activeTab === 'preview') repRenderPreviewFromStorage();
+  if (activeTab === 'smart') repRenderSmartSaved();
 }
 
 function repShowTab(tab) {
@@ -14002,7 +14006,7 @@ function repSave() {
   const reps = JSON.parse(localStorage.getItem('aljood_reports') || '[]');
   reps.unshift(data);
   localStorage.setItem('aljood_reports', JSON.stringify(reps));
-  alert('تم حفظ التقرير بنجاح');
+  showToast('✅ تم حفظ التقرير بنجاح', 'success');
   repShowTab('saved');
 }
 
@@ -14033,6 +14037,56 @@ function repRenderSaved() {
     '<button class="rep-btn rep-btn-danger" style="font-size:0.8rem;padding:6px 14px;" onclick="repDeleteSaved('+i+')">&#128465; حذف</button>' +
     '</div></div>'
   ).join('');
+}
+
+function repRenderSmartSaved() {
+  const el = document.getElementById('rep-smart-list');
+  if (!el) return;
+  let reports = JSON.parse(localStorage.getItem('aljood_smart_reports') || '[]');
+  // Show newest first
+  reports = reports.slice().reverse();
+  if (!reports.length) {
+    el.innerHTML = '<div style="color:rgba(255,255,255,0.5);text-align:center;padding:40px;"><div style="font-size:2rem;margin-bottom:12px;">📋</div><div>لا توجد تقارير ذكية محفوظة بعد</div><div style="font-size:0.82rem;margin-top:8px;opacity:0.7;">استخدم 🤖 التقرير الذكي من الاختصارات السريعة أو السايدبار</div></div>';
+    return;
+  }
+  el.innerHTML = reports.map((r, i) => `
+    <div class="rep-saved-card" style="margin-bottom:14px;border:1px solid rgba(201,168,76,0.3);border-radius:10px;padding:16px;background:rgba(255,255,255,0.05);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="color:#C9A84C;font-weight:700;font-size:0.95rem;">🤖 تقرير ذكي</div>
+        <span style="color:rgba(255,255,255,0.5);font-size:0.78rem;">📅 ${r.savedAt || '—'}</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="rep-btn rep-btn-secondary" style="font-size:0.82rem;padding:6px 16px;" onclick="repViewSmartSaved(${i})">👁️ عرض</button>
+        <button class="rep-btn" style="font-size:0.82rem;padding:6px 16px;background:rgba(200,50,50,0.3);color:#ff8080;border:1px solid rgba(255,100,100,0.3);" onclick="repDeleteSmartSaved(${i})">🗑️ حذف</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function repViewSmartSaved(revIdx) {
+  let reports = JSON.parse(localStorage.getItem('aljood_smart_reports') || '[]');
+  reports = reports.slice().reverse();
+  var rep = reports[revIdx];
+  if (!rep) return;
+  var modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;';
+  modal.innerHTML = '<div style="background:#1A2A4A;border:1px solid #C9A84C;border-radius:14px;max-width:780px;width:100%;padding:24px;position:relative;margin:auto;">' +
+    '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="position:absolute;top:12px;left:12px;background:rgba(255,255,255,0.1);border:none;color:white;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:1.1rem;">✕</button>' +
+    '<div style="color:#C9A84C;font-weight:700;margin-bottom:16px;font-size:1rem;">🤖 التقرير الذكي المحفوظ — ' + (rep.savedAt||'') + '</div>' +
+    '<div style="background:white;border-radius:8px;padding:16px;">' + (rep.html||'') + '</div>' +
+    '</div>';
+  document.body.appendChild(modal);
+}
+
+function repDeleteSmartSaved(revIdx) {
+  let reports = JSON.parse(localStorage.getItem('aljood_smart_reports') || '[]');
+  var reversed = reports.slice().reverse();
+  var toDelete = reversed[revIdx];
+  if (!toDelete) return;
+  var newReports = reports.filter(function(r){ return r.id !== toDelete.id; });
+  localStorage.setItem('aljood_smart_reports', JSON.stringify(newReports));
+  repRenderSmartSaved();
+  showToast('🗑️ تم حذف التقرير', 'info');
 }
 
 function _repGetFiltered() {
