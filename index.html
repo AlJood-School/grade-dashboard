@@ -18699,35 +18699,75 @@ function showSwapSchedules() {
 }
 
 function buildSwapSchedPanel(teacherName, side) {
-  var key = '';
-  try { key = getTeacherScheduleKey(teacherName); } catch(e) {}
-  var dayNames = ['الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+  // Step 1: find scheduleKey from TEACHER_ROSTER by matching name_ar
+  var schedKey = '';
+  if (typeof TEACHER_ROSTER !== 'undefined') {
+    for (var rk in TEACHER_ROSTER) {
+      var rt = TEACHER_ROSTER[rk];
+      if (rt && rt.name_ar && teacherName && rt.name_ar.trim() === teacherName.trim()) {
+        schedKey = rt.scheduleKey || '';
+        break;
+      }
+    }
+    // fallback: partial match
+    if (!schedKey) {
+      for (var rk2 in TEACHER_ROSTER) {
+        var rt2 = TEACHER_ROSTER[rk2];
+        if (rt2 && rt2.name_ar && teacherName && teacherName.includes(rt2.name_ar.split(' ')[0])) {
+          schedKey = rt2.scheduleKey || '';
+          break;
+        }
+      }
+    }
+  }
+
+  // Step 2: build personal schedule by scanning ALL classes (0-based day/period)
+  // Structure: teacherGrid[day0][period0] = {subject, cls}
+  var teacherGrid = {};
   var sdata = window.SCHEDULES_DATA || {};
-  var teacherSched = key && sdata[key] ? sdata[key] : {};
-  var sideColor = side === 'A' ? '#7c3aed' : '#1A2A4A';
+  for (var clsKey in sdata) {
+    var clsSlots = sdata[clsKey];
+    for (var slotKey in clsSlots) {
+      var info = clsSlots[slotKey];
+      if (!info) continue;
+      var tch = info.teacher || '';
+      if (!schedKey || !tch) continue;
+      if (tch.trim() === schedKey.trim()) {
+        var parts = slotKey.split('_');
+        var d0 = parseInt(parts[0]);  // 0-based day
+        var p0 = parseInt(parts[1]);  // 0-based period
+        if (!teacherGrid[d0]) teacherGrid[d0] = {};
+        teacherGrid[d0][p0] = { subject: info.subject || '', cls: clsKey };
+      }
+    }
+  }
+
+  var dayNames = ['الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
   var sideLabel = side === 'A' ? '(أ)' : '(ب)';
 
   var html = '<div style="background:rgba(0,0,0,0.2);border-radius:10px;padding:10px;border:1.5px solid rgba(147,51,234,0.3);">';
   html += '<div style="font-weight:700;color:#d8b4fe;font-size:0.82rem;margin-bottom:8px;text-align:center;">';
-  html += '<i class="fas fa-chalkboard-teacher"></i> ' + teacherName + ' ' + sideLabel + '</div>';
+  html += '<i class="fas fa-chalkboard-teacher"></i> ' + teacherName + ' ' + sideLabel;
+  if (schedKey) html += ' <span style="color:rgba(255,255,255,0.3);font-size:0.7rem;">(' + schedKey + ')</span>';
+  html += '</div>';
   html += '<div style="overflow-x:auto;">';
   html += '<table style="width:100%;border-collapse:collapse;font-size:0.72rem;">';
   html += '<thead><tr style="background:rgba(147,51,234,0.2);">';
-  html += '<th style="padding:5px 4px;color:#d8b4fe;text-align:center;font-weight:600;border-radius:4px 0 0 0;min-width:36px;">اليوم</th>';
+  html += '<th style="padding:5px 4px;color:#d8b4fe;text-align:center;font-weight:600;min-width:36px;">اليوم</th>';
   for (var p = 1; p <= 7; p++) {
     html += '<th style="padding:5px 2px;color:#d8b4fe;text-align:center;min-width:60px;">ح' + p + '</th>';
   }
   html += '</tr></thead><tbody>';
 
   dayNames.forEach(function(dayName, di) {
-    var dayNum = di + 1;
+    // di is 0-based day index
     html += '<tr>';
     html += '<td style="padding:4px 5px;color:rgba(255,255,255,0.7);font-size:0.7rem;text-align:center;white-space:nowrap;border-bottom:1px solid rgba(255,255,255,0.05);">' + dayName + '</td>';
     for (var p = 1; p <= 7; p++) {
-      var cellKey = dayNum + '_' + p;
-      var cell = teacherSched[cellKey];
+      var p0 = p - 1;  // convert display (1-based) to data (0-based)
+      var cell = (teacherGrid[di] && teacherGrid[di][p0]) ? teacherGrid[di][p0] : null;
       var subj = cell ? (cell.subject || '') : '';
-      var cls = cell ? (cell.class || '') : '';
+      var cls  = cell ? (cell.cls  || '') : '';
       var hasContent = !!(subj || cls);
       var cellStyle = 'padding:4px 3px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.05);border-left:1px solid rgba(255,255,255,0.05);';
       if (hasContent) {
@@ -18736,11 +18776,12 @@ function buildSwapSchedPanel(teacherName, side) {
         cellStyle += 'color:rgba(255,255,255,0.2);';
       }
       var safeSubj = subj.replace(/"/g,'&quot;');
-      var safeCls = cls.replace(/"/g,'&quot;');
-      var safeTch = teacherName.replace(/"/g,'&quot;');
+      var safeCls  = cls.replace(/"/g,'&quot;');
+      var safeTch  = teacherName.replace(/"/g,'&quot;');
       if (hasContent) {
         html += '<td class="swap-cell" style="' + cellStyle + '" draggable="true"' +
-          ' data-side="' + side + '" data-day="' + dayNum + '" data-period="' + p + '"' +
+          ' data-side="' + side + '" data-day="' + (di+1) + '" data-period="' + p + '"' +
+          ' data-period0="' + p0 + '" data-day0="' + di + '"' +
           ' data-subject="' + safeSubj + '" data-class="' + safeCls + '" data-teacher="' + safeTch + '"' +
           ' ondragstart="swapCellDragStart(event)" ondragover="swapCellDragOver(event)"' +
           ' ondragleave="swapCellDragLeave(event)" ondrop="swapCellDrop(event)">' +
@@ -18749,7 +18790,8 @@ function buildSwapSchedPanel(teacherName, side) {
           '</td>';
       } else {
         html += '<td style="' + cellStyle + '" ondragover="swapCellDragOver(event)" ondragleave="swapCellDragLeave(event)" ondrop="swapCellDrop(event)"' +
-          ' data-side="' + side + '" data-day="' + dayNum + '" data-period="' + p + '"' +
+          ' data-side="' + side + '" data-day="' + (di+1) + '" data-period="' + p + '"' +
+          ' data-period0="' + p0 + '" data-day0="' + di + '"' +
           ' data-subject="" data-class="" data-teacher="' + safeTch + '">—</td>';
       }
     }
@@ -20287,30 +20329,46 @@ function closeSrResult() {
   if (el) { el.style.display = 'none'; el.innerHTML = ''; }
 }
 function closeSmartModal(btn) {
-  // Walk up to find the modal overlay
-  var el = btn;
-  while (el && el !== document.body) {
-    if (el.dataset && el.dataset.srmodal === '1') { el.remove(); return; }
-    el = el.parentElement;
-  }
-  // Fallback: remove first fixed overlay
-  var overlays = document.querySelectorAll('[data-srmodal="1"]');
-  overlays.forEach(function(o){ o.remove(); });
+  // Remove ALL open smart-report modals (simplest & most reliable)
+  document.querySelectorAll('[data-srmodal="1"]').forEach(function(o){ o.remove(); });
 }
 function printSavedReport(btn) {
-  var container = btn;
-  while (container && container !== document.body) {
-    if (container.dataset && container.dataset.srmodal === '1') break;
-    container = container.parentElement;
-  }
-  if (!container) { showToast('لا يوجد تقرير لطباعته', 'warning'); return; }
-  var contentDiv = container.querySelector('.sr-saved-content');
-  if (!contentDiv || !contentDiv.innerHTML.trim()) { showToast('لا يوجد تقرير لطباعته', 'warning'); return; }
-  var printWin = window.open('', '_blank', 'width=900,height=700');
-  if (!printWin) { showToast('يرجى السماح بالنوافذ المنبثقة', 'warning'); return; }
-  printWin.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>تقرير ذكي</title><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet"><style>body{font-family:Cairo,sans-serif;margin:0;padding:16px;background:#fff;color:#1A2A4A;} @media print{.no-print{display:none!important;}}</style></head><body>' + contentDiv.innerHTML + '</body></html>');
-  printWin.document.close();
-  setTimeout(function(){ printWin.focus(); printWin.print(); }, 600);
+  // Find the open modal reliably
+  var modal = document.querySelector('[data-srmodal="1"]');
+  if (!modal) { showToast('لا توجد نافذة تقرير مفتوحة', 'warning'); return; }
+  var contentDiv = modal.querySelector('.sr-saved-content');
+  if (!contentDiv || !contentDiv.innerHTML.trim()) { showToast('لا يوجد محتوى للطباعة', 'warning'); return; }
+  // Use hidden iframe — avoids popup blockers entirely
+  var existing = document.getElementById('_sr_print_frame');
+  if (existing) existing.remove();
+  var iframe = document.createElement('iframe');
+  iframe.id = '_sr_print_frame';
+  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:900px;height:700px;border:0;visibility:hidden;';
+  document.body.appendChild(iframe);
+  var doc = iframe.contentDocument || iframe.contentWindow.document;
+  doc.open();
+  doc.write(
+    '<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>\u062a\u0642\u0631\u064a\u0631 \u0630\u0643\u064a</title>' +
+    '<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">' +
+    '<style>@import url(https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap);' +
+    'body{font-family:Cairo,sans-serif;margin:0;padding:16px;background:#fff;color:#1A2A4A;direction:rtl;}' +
+    'img{max-width:100%;height:auto!important;}' +
+    '.sr-action-btns,.no-print{display:none!important;}' +
+    '@media print{.sr-action-btns,.no-print{display:none!important;}}' +
+    '</style></head><body>' +
+    contentDiv.innerHTML +
+    '</body></html>'
+  );
+  doc.close();
+  setTimeout(function(){
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch(e) {
+      showToast('\u062a\u0639\u0630\u0631 \u0641\u062a\u062d \u0646\u0627\u0641\u0630\u0629 \u0627\u0644\u0637\u0628\u0627\u0639\u0629', 'warning');
+    }
+    setTimeout(function(){ if(iframe.parentNode) iframe.remove(); }, 3000);
+  }, 800);
 }
 
 function saveSrReport() {
