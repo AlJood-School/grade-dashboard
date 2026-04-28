@@ -18469,6 +18469,30 @@ function clearAllSwaps() {
 }
 
 
+// ── حالات المعلمات في جدول الاحتياط ──
+var subTeacherStates = {};
+
+// تحديد حالة الرضاعة تلقائياً من سجلات الإجازات
+function autoPopulateNursingStates() {
+  try {
+    var todayDate = new Date();
+    var todayStr = todayDate.toISOString().split('T')[0];
+    var leaves = getLeaves ? getLeaves() : JSON.parse(localStorage.getItem('leavesData') || '[]');
+    leaves.forEach(function(leave) {
+      if (!leave.empId || leave.type !== 'nursing') return;
+      var start = new Date(leave.startDate + 'T00:00:00');
+      var end = leave.endDate ? new Date(leave.endDate + 'T23:59:59') : null;
+      var isActive = start <= todayDate && (!end || end >= todayDate);
+      if (isActive) {
+        // لا تُلغِ تغييراً يدوياً — فقط أضف إذا كانت الحالة الحالية "present"
+        if (!subTeacherStates[leave.empId] || subTeacherStates[leave.empId] === 'present') {
+          subTeacherStates[leave.empId] = 'breastfeeding';
+        }
+      }
+    });
+  } catch(e) { console.warn('autoPopulateNursingStates error:', e); }
+}
+
 function renderSubstituteScheduler() {
   // اضبط اليوم الحالي (الأسبوع الدراسي: الاثنين=0 ... الجمعة=4)
   var today = new Date().getDay(); // 0=Sun,1=Mon,...,5=Fri,6=Sat
@@ -18478,6 +18502,7 @@ function renderSubstituteScheduler() {
     subDay.value = (schoolDayMap[today] !== undefined) ? schoolDayMap[today] : 0;
     subDay.dataset.initialized = '1';
   }
+  autoPopulateNursingStates();
   renderSubTeachersGrid();
 }
 
