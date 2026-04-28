@@ -11179,6 +11179,9 @@ function saveLeaveRecord() {
       leaves_v.push({ id: Date.now().toString(), empId, type, startDate, endDate: endDate_nursing, notes, nursingTiming });
     }
     saveLeaves(leaves_v);
+    // سجّل في نظام الحضور (حضور متأخر بسبب رضاعة)
+    var nurseLeaveId = editId || leaves_v[leaves_v.length-1]?.id || Date.now().toString();
+    recordAttendanceFromLeave(empId, startDate, endDate_nursing, nurseLeaveId, 'nursing');
     closeLeaveModal();
     renderLeavesSection();
     showToast('✅ تم حفظ ساعات الرضاعة (تنتهي: ' + endDate_nursing + ')', 'success');
@@ -11195,18 +11198,72 @@ function saveLeaveRecord() {
     }
   }
   const leaves = getLeaves();
+  var leaveId = editId || Date.now().toString();
   if (editId) {
     const idx = leaves.findIndex(l => l.id === editId);
     if (idx >= 0) leaves[idx] = { ...leaves[idx], empId, type, startDate, endDate: finalEndDate, notes, nursingTiming };
+    // أعد بناء سجلات الحضور عند التعديل
+    clearAttendanceByLeaveId(editId);
   } else {
-    leaves.push({ id: Date.now().toString(), empId, type, startDate, endDate: finalEndDate, notes, nursingTiming });
+    leaves.push({ id: leaveId, empId, type, startDate, endDate: finalEndDate, notes, nursingTiming });
   }
   saveLeaves(leaves);
+  // سجّل غياباً تلقائياً في نظام الحضور لأنواع الإجازات التي تستوجب الغياب
+  if (['maternity','sick_3','sick_long','nursing'].indexOf(type) >= 0) {
+    recordAttendanceFromLeave(empId, startDate, finalEndDate, leaveId, type);
+  }
   closeLeaveModal();
   renderLeavesSection();
 }
+// ══════════════════════════════════════════════
+// نظام الحضور التلقائي — مرتبط بسجلات الإجازات
+// ══════════════════════════════════════════════
+function getTeacherAttendance() {
+  try { return JSON.parse(localStorage.getItem('aljood_teacher_attendance') || '{}'); } catch(e) { return {}; }
+}
+function saveTeacherAttendance(data) {
+  localStorage.setItem('aljood_teacher_attendance', JSON.stringify(data));
+}
+// سجّل غياباً تلقائياً لكل يوم بين startDate و endDate
+function recordAttendanceFromLeave(empId, startDate, endDate, leaveId, leaveType) {
+  if (!empId || !startDate || !endDate) return;
+  var att = getTeacherAttendance();
+  var cur = new Date(startDate + 'T00:00:00');
+  var end = new Date(endDate + 'T00:00:00');
+  var status = (leaveType === 'nursing') ? 'late' : 'absent';
+  while (cur <= end) {
+    var dateStr = cur.toISOString().slice(0,10);
+    var key = empId + '|' + dateStr;
+    att[key] = { empId: empId, date: dateStr, status: status, source: 'leave', leaveType: leaveType, leaveId: leaveId };
+    cur.setDate(cur.getDate() + 1);
+  }
+  saveTeacherAttendance(att);
+}
+// احذف سجلات الحضور المرتبطة بإجازة معينة
+function clearAttendanceByLeaveId(leaveId) {
+  var att = getTeacherAttendance();
+  Object.keys(att).forEach(function(k) { if (att[k].leaveId === leaveId) delete att[k]; });
+  saveTeacherAttendance(att);
+}
+// احذف سجلات الحضور بعد تاريخ معين (عند العودة المبكرة)
+function clearAttendanceByLeaveIdAfterDate(leaveId, fromDate) {
+  var att = getTeacherAttendance();
+  Object.keys(att).forEach(function(k) {
+    if (att[k].leaveId === leaveId && att[k].date > fromDate) delete att[k];
+  });
+  saveTeacherAttendance(att);
+}
+// هل المعلمة غائبة اليوم بسبب إجازة؟
+function isTeacherAbsentToday(empId) {
+  var today = new Date().toISOString().slice(0,10);
+  var att = getTeacherAttendance();
+  var rec = att[empId + '|' + today];
+  return rec ? rec.status : null; // 'absent' | 'late' | null
+}
+
 function deleteLeave(id) {
   if (!confirm('حذف هذا السجل؟')) return;
+  clearAttendanceByLeaveId(id);
   saveLeaves(getLeaves().filter(l => l.id !== id));
   renderLeavesSection();
 }
@@ -11222,6 +11279,8 @@ function returnToWork(id) {
     leaves[idx].endDate = today;
     leaves[idx].returnedEarly = true;
     saveLeaves(leaves);
+    // احذف سجلات الغياب المستقبلية من نظام الحضور
+    clearAttendanceByLeaveIdAfterDate(id, today);
     // تحديث حالة الاحتياط — إزالة الغياب
     if (leaves[idx].empId && subTeacherStates) {
       delete subTeacherStates[leaves[idx].empId];
