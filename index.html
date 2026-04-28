@@ -15566,7 +15566,7 @@ function openHomeroomModal() {
   var sel = document.getElementById('homeroomTeacher');
   if (sel) {
     sel.innerHTML = '<option value="">-- اختر المعلمة --</option>';
-    STAFF_DB.filter(function(s){ return s.role === 'teacher' || s.category === 'معلم'; }).forEach(function(s) {
+    STAFF_DB.filter(function(s){ return !isScheduleExcluded(s) && (s.role === 'teacher' || s.category === 'معلم'); }).forEach(function(s) {
       var op = document.createElement('option');
       op.value = s.id; op.textContent = s.name_ar;
       sel.appendChild(op);
@@ -17411,6 +17411,48 @@ function renderLoginAnalytics() {
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="sub-balance-load" checked style="accent-color:#C9A84C;"> توزيع الحمل بالتساوي</label>
     </div>
   </div>
+  <!-- ── جدول التبديل المؤقت ── -->
+  <div id="sub-swap-card" style="background:rgba(255,255,255,0.04);border-radius:12px;padding:14px;margin-bottom:20px;border:1px solid rgba(147,51,234,0.3);">
+    <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleSwapCard()">
+      <h4 style="color:#d8b4fe;margin:0;font-size:0.92rem;"><i class="fas fa-exchange-alt"></i> جدول التبديل المؤقت — اليوم فقط</h4>
+      <span id="swap-toggle-icon" style="color:#d8b4fe;font-size:0.85rem;">▼ عرض</span>
+    </div>
+    <div id="sub-swap-body" style="display:none;margin-top:14px;">
+      <p style="color:rgba(255,255,255,0.55);font-size:0.8rem;margin-bottom:12px;">
+        أضف تبديلاً مؤقتاً بين معلمتين — سيُحفظ لهذا اليوم فقط ويُعرض لهما في صفحتهما.
+      </p>
+      <div id="sub-swap-form" style="display:grid;grid-template-columns:1fr 1fr auto auto auto;gap:10px;align-items:end;margin-bottom:14px;">
+        <div>
+          <label style="color:rgba(201,168,76,0.8);font-size:0.78rem;display:block;margin-bottom:4px;">المعلمة الأولى (أ)</label>
+          <select id="swap-teacher-a" style="width:100%;padding:8px;background:#1a2d4a;border:1.5px solid rgba(147,51,234,0.4);border-radius:7px;color:white;font-family:inherit;font-size:0.82rem;">
+            <option value="">اختر...</option>
+          </select>
+        </div>
+        <div>
+          <label style="color:rgba(201,168,76,0.8);font-size:0.78rem;display:block;margin-bottom:4px;">المعلمة الثانية (ب)</label>
+          <select id="swap-teacher-b" style="width:100%;padding:8px;background:#1a2d4a;border:1.5px solid rgba(147,51,234,0.4);border-radius:7px;color:white;font-family:inherit;font-size:0.82rem;">
+            <option value="">اختر...</option>
+          </select>
+        </div>
+        <div>
+          <label style="color:rgba(201,168,76,0.8);font-size:0.78rem;display:block;margin-bottom:4px;">الحصة</label>
+          <select id="swap-period" style="padding:8px;background:#1a2d4a;border:1.5px solid rgba(147,51,234,0.4);border-radius:7px;color:white;font-family:inherit;font-size:0.82rem;">
+            <option value="0">الأولى</option><option value="1">الثانية</option><option value="2">الثالثة</option>
+            <option value="3">الرابعة</option><option value="4">الخامسة</option><option value="5">السادسة</option><option value="6">السابعة</option>
+          </select>
+        </div>
+        <div>
+          <label style="color:rgba(201,168,76,0.8);font-size:0.78rem;display:block;margin-bottom:4px;">سبب التبديل</label>
+          <input id="swap-reason" placeholder="اختياري..." style="padding:8px;background:#1a2d4a;border:1.5px solid rgba(147,51,234,0.4);border-radius:7px;color:white;font-family:inherit;font-size:0.82rem;width:120px;">
+        </div>
+        <button onclick="addSwapEntry()" style="padding:8px 16px;background:linear-gradient(135deg,#7c3aed,#9d4edd);border:none;border-radius:7px;color:white;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:700;white-space:nowrap;">
+          <i class="fas fa-plus"></i> إضافة
+        </button>
+      </div>
+      <div id="sub-swap-table" style="overflow-x:auto;"></div>
+    </div>
+  </div>
+
   <div id="sub-results" style="display:none;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
       <h4 style="color:var(--accent);margin:0;"><i class="fas fa-table"></i> جدول الاحتياط المُولَّد</h4>
@@ -18006,6 +18048,116 @@ window.showSection = function(id) {
 
 <script>
 // ═══════════════════════════════════════════════════
+// SWAP SCHEDULE — التبديل المؤقت اليومي
+var _swapVisible = false;
+
+function toggleSwapCard() {
+  _swapVisible = !_swapVisible;
+  var body = document.getElementById('sub-swap-body');
+  var icon = document.getElementById('swap-toggle-icon');
+  if (body) body.style.display = _swapVisible ? '' : 'none';
+  if (icon) icon.textContent = _swapVisible ? '▲ إخفاء' : '▼ عرض';
+  if (_swapVisible) {
+    populateSwapTeacherDropdowns();
+    renderSwapTable();
+  }
+}
+
+function populateSwapTeacherDropdowns() {
+  var teachers = getSubTeachers ? getSubTeachers() : [];
+  var allStaff = STAFF_DB || [];
+  var allNames = teachers.map(function(t){ return t.name_ar || t.name_en; }).filter(Boolean);
+  // إضافة الإداريات والأخصائيات
+  allStaff.forEach(function(s) {
+    var n = s.name_ar || s.name_en;
+    if (n && allNames.indexOf(n) === -1) allNames.push(n);
+  });
+  allNames.sort();
+
+  ['swap-teacher-a','swap-teacher-b'].forEach(function(id) {
+    var sel = document.getElementById(id);
+    if (!sel) return;
+    var val = sel.value;
+    sel.innerHTML = '<option value="">اختر...</option>' +
+      allNames.map(function(n){ return '<option value="' + n + '">' + n + '</option>'; }).join('');
+    if (val) sel.value = val;
+  });
+}
+
+function addSwapEntry() {
+  var ta = document.getElementById('swap-teacher-a') ? document.getElementById('swap-teacher-a').value : '';
+  var tb = document.getElementById('swap-teacher-b') ? document.getElementById('swap-teacher-b').value : '';
+  var per = document.getElementById('swap-period') ? parseInt(document.getElementById('swap-period').value) : 0;
+  var reason = document.getElementById('swap-reason') ? document.getElementById('swap-reason').value.trim() : '';
+
+  if (!ta || !tb) { showToast('اختر المعلمتين أولاً', 'warning'); return; }
+  if (ta === tb) { showToast('يجب أن تكون معلمتين مختلفتين', 'warning'); return; }
+
+  var todayKey = new Date().toISOString().slice(0,10);
+  var key = 'aljood_swap_' + todayKey;
+  var existing = localStorage.getItem(key);
+  var list = existing ? JSON.parse(existing) : [];
+
+  // تحقق من التكرار
+  var dup = list.some(function(sw){ return sw.teacherA === ta && sw.teacherB === tb && sw.period === per; });
+  if (dup) { showToast('هذا التبديل موجود بالفعل', 'info'); return; }
+
+  list.push({teacherA:ta, teacherB:tb, period:per, reason:reason, addedBy: currentUser ? currentUser.name_ar : '', addedAt: new Date().toLocaleTimeString('ar-AE')});
+  localStorage.setItem(key, JSON.stringify(list));
+
+  // مسح الحقول
+  if (document.getElementById('swap-reason')) document.getElementById('swap-reason').value = '';
+  renderSwapTable();
+  showToast('تم إضافة التبديل ✓', 'success');
+}
+
+function removeSwapEntry(idx) {
+  var todayKey = new Date().toISOString().slice(0,10);
+  var key = 'aljood_swap_' + todayKey;
+  var existing = localStorage.getItem(key);
+  if (!existing) return;
+  var list = JSON.parse(existing);
+  list.splice(idx, 1);
+  localStorage.setItem(key, JSON.stringify(list));
+  renderSwapTable();
+}
+
+function renderSwapTable() {
+  var el = document.getElementById('sub-swap-table');
+  if (!el) return;
+  var todayKey = new Date().toISOString().slice(0,10);
+  var existing = localStorage.getItem('aljood_swap_' + todayKey);
+  var list = existing ? JSON.parse(existing) : [];
+  var periodNames = ['الأولى','الثانية','الثالثة','الرابعة','الخامسة','السادسة','السابعة'];
+
+  if (!list.length) {
+    el.innerHTML = '<p style="color:rgba(255,255,255,0.4);font-size:0.8rem;text-align:center;padding:12px;">لا توجد تبديلات مسجلة لهذا اليوم</p>';
+    return;
+  }
+  var html = '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+  html += '<thead><tr style="background:rgba(147,51,234,0.2);">' +
+    '<th style="padding:8px 12px;color:#d8b4fe;text-align:right;">المعلمة أ</th>' +
+    '<th style="padding:8px 12px;color:#d8b4fe;text-align:center;">⇄</th>' +
+    '<th style="padding:8px 12px;color:#d8b4fe;text-align:right;">المعلمة ب</th>' +
+    '<th style="padding:8px 12px;color:#d8b4fe;text-align:center;">الحصة</th>' +
+    '<th style="padding:8px 12px;color:#d8b4fe;text-align:right;">السبب</th>' +
+    '<th style="padding:8px 12px;color:#d8b4fe;text-align:center;">حذف</th>' +
+    '</tr></thead><tbody>';
+  list.forEach(function(sw, i) {
+    html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.07);">' +
+      '<td style="padding:8px 12px;color:rgba(255,255,255,0.85);">' + sw.teacherA + '</td>' +
+      '<td style="padding:8px 12px;text-align:center;color:#d8b4fe;font-size:1rem;">⇄</td>' +
+      '<td style="padding:8px 12px;color:rgba(255,255,255,0.85);">' + sw.teacherB + '</td>' +
+      '<td style="padding:8px 12px;text-align:center;color:#C9A84C;font-weight:700;">' + (periodNames[sw.period] || ('ح'+(sw.period+1))) + '</td>' +
+      '<td style="padding:8px 12px;color:rgba(255,255,255,0.5);font-size:0.78rem;">' + (sw.reason || '—') + '</td>' +
+      '<td style="padding:8px 12px;text-align:center;">' +
+        '<button onclick="removeSwapEntry(' + i + ')" style="padding:3px 10px;background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.4);border-radius:6px;color:#fca5a5;cursor:pointer;font-size:0.75rem;">حذف</button>' +
+      '</td></tr>';
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
 // SUBSTITUTE SCHEDULER — الاحتياط الذكي
 // ═══════════════════════════════════════════════════
 var subTeacherStates = {}; // teacherId → 'absent'|'late'|'breastfeeding'|'present'
@@ -18028,9 +18180,39 @@ function renderSubstituteScheduler() {
   renderSubTeachersGrid();
 }
 
+
+// ─── استثناءات الجداول: المديرة + الوكيلتان لا يظهرن في أي قائمة ───
+var SCHEDULE_EXCLUDED_EMAILS = [
+  'halima.almaamari@moe.sch.ae',
+  'abudli.fatima@moe.sch.ae',
+  'dahoori.fatima@moe.sch.ae'
+];
+var SCHEDULE_EXCLUDED_NAMES_AR = [
+  'حليمة حسن المعمري',
+  'حليمة حسن',
+  'حليمة المعمري',
+  'فاطمة العبيدلي',
+  'فاطمة عبدالله العبيدلي',
+  'فاطمة الظهوري',
+  'فاطمة محمد الظهوري'
+];
+function isScheduleExcluded(s) {
+  if (!s) return false;
+  var email = (s.email || '').toLowerCase().trim();
+  var nameAr = (s.name_ar || '').trim();
+  if (SCHEDULE_EXCLUDED_EMAILS.some(function(e){ return e.toLowerCase() === email; })) return true;
+  if (SCHEDULE_EXCLUDED_NAMES_AR.some(function(n){ return n === nameAr || nameAr.includes(n) || n.includes(nameAr); })) return true;
+  // كشف بالدور: مديرة / نائبة مديرة
+  var role = (s.role || s.category || '').toLowerCase();
+  if (role === 'principal') return true;
+  if (role === 'vice_principal' || role === 'vice principal') return true;
+  return false;
+}
+// ─────────────────────────────────────────────────────────────────────
 function getSubTeachers() {
-  // كل المعلمات والإداريين من STAFF_DB
+  // كل المعلمات من STAFF_DB — مع استثناء المديرة والوكيلتين
   return (STAFF_DB || []).filter(function(s) {
+    if (isScheduleExcluded(s)) return false;
     return s.category === 'معلم' || s.role === 'teacher' || s.category === 'معلمة';
   });
 }
@@ -18056,6 +18238,7 @@ function renderSubTeachersGrid(filter) {
       '<span style="font-size:0.75rem;">' + icons[state] + '</span>' +
       '</div>' +
       '<div style="color:rgba(255,255,255,0.55);font-size:0.72rem;margin-top:3px;">' + (t.primary_job||t.subjects&&t.subjects[0]||'') + ' — <b style="color:rgba(255,255,255,0.8);">' + labels[state] + '</b></div>' +
+      '<div style="font-size:0.68rem;margin-top:2px;opacity:0.7;">' + ((t.cycle||'') === 'c1' ? 'حلقة أولى' : (t.cycle||'') === 'c2' ? 'حلقة ثانية' : '') + '</div>' +
       '</div>';
   }).join('');
 }
@@ -18079,56 +18262,96 @@ function generateSubstituteSchedule() {
   var balanceLoad = document.getElementById('sub-balance-load') ? document.getElementById('sub-balance-load').checked : true;
 
   var schedules = getSchedules();
+  var allStaff = STAFF_DB || [];
   var allTeachers = getSubTeachers();
-  
-  // المتغيبات
+
+  // ── مصطلحات الأدوار للتسلسل الهرمي ──
+  function _staffPriority(s) {
+    var job = (s.primary_job || s.position || '').toLowerCase();
+    var role = (s.role || s.category || '').toLowerCase();
+    // رئيس/ة قسم
+    if (job.includes('\u0631\u0626\u064a\u0633') || job.includes('\u0631\u0626\u064a\u0633\u0629')) return 3;
+    // أخصائي/ة
+    if (job.includes('\u0623\u062e\u0635\u0627\u0626\u064a') || job.includes('\u0627\u062e\u0635\u0627\u0626\u064a')) return 4;
+    // إداري
+    if (role.includes('\u0625\u062f\u0627\u0631\u064a') || role === 'admin_staff' || role === 'staff') return 5;
+    // معلمة (أولوية أساسية)
+    return 1;
+  }
+
+  // ── كشف حلقة الصف ──
+  function _classCycle(cls) {
+    if (!cls) return 0;
+    var c = cls.toString().toLowerCase();
+    if (c.startsWith('kg') || c.startsWith('k')) return 1; // روضة → حلقة أولى
+    var num = parseInt(c.match(/\d+/) ? c.match(/\d+/)[0] : '0');
+    if (num >= 1 && num <= 4) return 1;
+    if (num >= 5 && num <= 8) return 2;
+    return 0;
+  }
+
+  // ── حلقة المعلمة من الجدول ──
+  var teacherCycleMap = {}; // schedKey → dominant cycle
+  Object.keys(schedules).forEach(function(cls) {
+    if (cls.startsWith('__')) return;
+    var cyc = _classCycle(cls);
+    var classSchedule = schedules[cls];
+    Object.keys(classSchedule).forEach(function(key) {
+      var cell = classSchedule[key];
+      if (!cell || !cell.teacher) return;
+      if (!teacherCycleMap[cell.teacher]) teacherCycleMap[cell.teacher] = {c1:0, c2:0};
+      if (cyc === 1) teacherCycleMap[cell.teacher].c1++;
+      if (cyc === 2) teacherCycleMap[cell.teacher].c2++;
+    });
+  });
+  function _teacherCycle(schedKey) {
+    var m = teacherCycleMap[schedKey];
+    if (!m) return 0;
+    if (m.c1 > m.c2) return 1;
+    if (m.c2 > m.c1) return 2;
+    return 0;
+  }
+
+  // ── المتغيبات ──
   var absentIds = allTeachers.filter(function(t){ return subTeacherStates[t.id] === 'absent'; }).map(function(t){ return t.name_ar; });
   var lateIds = allTeachers.filter(function(t){ return subTeacherStates[t.id] === 'late'; }).map(function(t){ return t.name_ar; });
   var breastfeedingIds = allTeachers.filter(function(t){ return subTeacherStates[t.id] === 'breastfeeding'; }).map(function(t){ return t.name_ar; });
 
   // ── بناء خريطة scheduleKey → name_ar من TEACHER_ROSTER ──
-  var _schedKeyToAr = {}; // scheduleKey → name_ar (من teachers.json)
-  var _arFirstToSchedKey = {}; // أول كلمة عربية → scheduleKey (للمطابقة الجزئية)
+  var _schedKeyToAr = {};
+  var _arToSchedKey = {};
   if (typeof TEACHER_ROSTER !== 'undefined' && TEACHER_ROSTER && typeof TEACHER_ROSTER === 'object') {
     Object.keys(TEACHER_ROSTER).forEach(function(emailKey) {
       var tr = TEACHER_ROSTER[emailKey];
       if (tr && tr.scheduleKey && tr.name_ar) {
         _schedKeyToAr[tr.scheduleKey] = tr.name_ar;
-        var firstWord = tr.name_ar.trim().split(' ')[0];
-        if (firstWord) _arFirstToSchedKey[firstWord] = tr.scheduleKey;
+        _arToSchedKey[tr.name_ar] = tr.scheduleKey;
       }
     });
   }
-  // دالة مساعدة: هل المعلمة (schedKey في الجدول) موجودة في قائمة الأسماء؟
   function _matchesAbsent(schedKey, nameArList) {
     var arFromKey = _schedKeyToAr[schedKey] || '';
     return nameArList.some(function(a) {
       if (!a) return false;
-      // مطابقة عبر خريطة teachers.json
-      if (arFromKey) {
-        if (arFromKey === a) return true;
-        var af = arFromKey.split(' ')[0], bf = a.split(' ')[0];
-        if (af && bf && af === bf) return true;
-      }
-      // مطابقة نصية مباشرة (احتياطي)
+      if (arFromKey && (arFromKey === a || arFromKey.split(' ')[0] === a.split(' ')[0])) return true;
       if (a === schedKey) return true;
-      // مطابقة الاسم الإنجليزي الجزئي
-      var aLow = a.toLowerCase(), kLow = schedKey.toLowerCase();
-      if (kLow.startsWith(aLow.split(' ')[0].toLowerCase())) return true;
       return false;
     });
   }
-  
+
+  // ── تحميل التبديلات اليومية ──
+  var todayKey = new Date().toISOString().slice(0,10);
+  var rawSwaps = localStorage.getItem('aljood_swap_' + todayKey);
+  var swapList = rawSwaps ? JSON.parse(rawSwaps) : []; // [{teacherA, teacherB, period, reason}]
+
   if (absentIds.length === 0 && lateIds.length === 0) {
-    showToast('لم تُحدَّد أي معلمة غائبة أو متأخرة!', 'warning');
+    showToast('\u0644\u0645 \u062a\u064f\u062d\u062f\u064e\u062f \u0623\u064a \u0645\u0639\u0644\u0645\u0629 \u063a\u0627\u0626\u0628\u0629 \u0623\u0648 \u0645\u062a\u0623\u062e\u0631\u0629!', 'warning');
     return;
   }
 
-  // احسب الحصص لكل معلمة اليوم (الحصص العادية)
-  // teacherSchedule: {teacherName: Set<periodIdx>}
   var teacherPeriodsToday = {};
-  var needCover = []; // [{cls, period, subject, absentTeacher}]
-  
+  var needCover = [];
+
   Object.keys(schedules).forEach(function(cls) {
     if (cls.startsWith('__')) return;
     var classSchedule = schedules[cls];
@@ -18142,46 +18365,69 @@ function generateSubstituteSchedule() {
       var tname = cell.teacher;
       if (!teacherPeriodsToday[tname]) teacherPeriodsToday[tname] = [];
       teacherPeriodsToday[tname].push(p);
-      // هل هذه المعلمة غائبة؟
+
+      // تحقق من التبديلات — إذا كان هذا المعلم في تبديل لهذه الحصة، اعتبرها مشغولة
+      swapList.forEach(function(sw) {
+        var skA = _arToSchedKey[sw.teacherA] || sw.teacherA;
+        var skB = _arToSchedKey[sw.teacherB] || sw.teacherB;
+        if ((tname === skA || tname === sw.teacherA) && p === sw.period) {
+          // المعلمة أ ستكون مع صف المعلمة ب في هذه الحصة
+        }
+      });
+
       var isAbsent = _matchesAbsent(tname, absentIds);
       var isLate = _matchesAbsent(tname, lateIds);
       if (isAbsent) {
-        needCover.push({cls:cls, period:p, subject:cell.subject, absentTeacher:tname, lateOnly:false});
-      } else if (isLate && p <= 1) { // الحصة 1 و2 فقط للمتأخرات
-        needCover.push({cls:cls, period:p, subject:cell.subject, absentTeacher:tname, lateOnly:true});
+        needCover.push({cls:cls, period:p, subject:cell.subject, absentTeacher:tname, lateOnly:false, classCycle:_classCycle(cls)});
+      } else if (isLate && p <= 1) {
+        needCover.push({cls:cls, period:p, subject:cell.subject, absentTeacher:tname, lateOnly:true, classCycle:_classCycle(cls)});
       }
     });
   });
 
   if (!needCover.length) {
-    showToast('لا توجد حصص تحتاج احتياط لهذا اليوم بناءً على الجدول!', 'info');
+    showToast('\u0644\u0627 \u062a\u0648\u062c\u062f \u062d\u0635\u0635 \u062a\u062d\u062a\u0627\u062c \u0627\u062d\u062a\u064a\u0627\u0637 \u0644\u0647\u0630\u0627 \u0627\u0644\u064a\u0648\u0645 \u0628\u0646\u0627\u0621\u064b \u0639\u0644\u0649 \u0627\u0644\u062c\u062f\u0648\u0644!', 'info');
     return;
   }
 
-  // رتّب حسب الحصة ثم الصف
   needCover.sort(function(a,b){ return a.period - b.period || a.cls.localeCompare(b.cls); });
 
-  // بناء قاعدة الاحتياط
-  var substituteAssignments = {}; // teacherName → assignCount
+  // ── بناء قائمة البدلاء الكاملة (معلمات + إداريات + أخصائيات) ──
+    var allCandidateStaff = allStaff.filter(function(s) {
+    if (isScheduleExcluded(s)) return false; // استثناء المديرة والوكيلتين
+    var role = (s.role || s.category || '').toLowerCase();
+    var job = (s.primary_job || '').toLowerCase();
+    return (role.includes('معلم') || role === 'teacher' ||
+            role.includes('إداري') || role === 'admin_staff' || role === 'staff' ||
+            job.includes('أخصائي') || job.includes('اخصائي') ||
+            job.includes('رئيس'));
+  });
+
+  var substituteAssignments = {};
   var coverResults = [];
 
   needCover.forEach(function(item) {
-    // إيجاد أفضل معلمة بديلة
+    var absentCycle = item.classCycle;
     var candidates = [];
-    allTeachers.forEach(function(t) {
-      var tname = t.name_ar;
+
+    allCandidateStaff.forEach(function(t) {
+      var tname = t.name_ar || t.name_en;
+      if (!tname) return;
       var state = subTeacherStates[t.id] || 'present';
-      if (state === 'absent') return; // غائبة
-      if (state === 'breastfeeding' && respectBreastfeeding && (item.period === 1 || item.period === 2)) return; // رضاعة أولى حصتين
-      if (state === 'late' && item.period <= 1) return; // متأخرة — لا تُعطى حصة 1
-      // لا تُعط معلمة حصة في نفس الوقت
-      var teachingNow = (teacherPeriodsToday[tname] || []).indexOf(item.period) !== -1;
+      if (state === 'absent') return;
+      if (state === 'breastfeeding' && respectBreastfeeding && (item.period === 2 || item.period === 3)) return;
+      if (state === 'late' && item.period <= 1) return;
+
+      // لا تُعط نفس الحصة لمعلمة تدرس فيها
+      var schedKey = _arToSchedKey[tname] || tname;
+      var teachingNow = (teacherPeriodsToday[schedKey] || []).indexOf(item.period) !== -1 ||
+                        (teacherPeriodsToday[tname] || []).indexOf(item.period) !== -1;
       if (teachingNow) return;
+
       // قيد 3 حصص متتالية
       if (limitConsecutive) {
         var assigned = coverResults.filter(function(r){ return r.substitute === tname; }).map(function(r){ return r.period; });
-        var all = assigned.concat(teacherPeriodsToday[tname] || []).sort(function(a,b){return a-b;});
-        // فحص 3 متتالية
+        var all = assigned.concat(teacherPeriodsToday[schedKey] || []).concat(teacherPeriodsToday[tname] || []).sort(function(a,b){return a-b;});
         var testAll = all.concat([item.period]).sort(function(a,b){return a-b;});
         var hasThree = false;
         for (var i=0; i<=testAll.length-3; i++) {
@@ -18189,65 +18435,36 @@ function generateSubstituteSchedule() {
         }
         if (hasThree) return;
       }
-      var score = balanceLoad ? (substituteAssignments[tname] || 0) : 0;
-      candidates.push({teacher:t, tname:tname, score:score});
+
+      // ── حساب الأولوية ──
+      var staffPrio = _staffPriority(t); // 1=معلمة, 3=رئيس قسم, 4=أخصائي, 5=إداري
+      var teacherCyc = _teacherCycle(schedKey) || _teacherCycle(tname);
+      var cyclePrio = 0; // 0=نفس الحلقة (أفضل), 1=حلقة أخرى
+      if (staffPrio === 1) {
+        cyclePrio = (teacherCyc === absentCycle || absentCycle === 0 || teacherCyc === 0) ? 0 : 1;
+      } else {
+        cyclePrio = staffPrio; // إداري/أخصائي يأتي بعد المعلمات
+      }
+
+      var loadScore = balanceLoad ? (substituteAssignments[tname] || 0) : 0;
+      var totalScore = cyclePrio * 100 + loadScore;
+      candidates.push({tname:tname, score:totalScore, cyclePrio:cyclePrio, staffPrio:staffPrio});
     });
-    // اختر أقل حملاً
+
     candidates.sort(function(a,b){ return a.score - b.score; });
-    var chosen = candidates.length > 0 ? candidates[0].tname : '⚠️ لا يوجد بديل';
-    if (chosen !== '⚠️ لا يوجد بديل') {
+    var chosen = candidates.length > 0 ? candidates[0].tname : '\u26a0\ufe0f \u0644\u0627 \u064a\u0648\u062c\u062f \u0628\u062f\u064a\u0644';
+    var chosenCyclePrio = candidates.length > 0 ? candidates[0].cyclePrio : -1;
+    var substituteType = 'normal';
+    if (chosenCyclePrio >= 3) substituteType = 'admin';
+    else if (chosenCyclePrio === 1) substituteType = 'cross-cycle';
+
+    if (chosen !== '\u26a0\ufe0f \u0644\u0627 \u064a\u0648\u062c\u062f \u0628\u062f\u064a\u0644') {
       substituteAssignments[chosen] = (substituteAssignments[chosen] || 0) + 1;
     }
-    coverResults.push({cls:item.cls, period:item.period, subject:item.subject, absentTeacher:item.absentTeacher, substitute:chosen, lateOnly:item.lateOnly});
+    coverResults.push({cls:item.cls, period:item.period, subject:item.subject, absentTeacher:item.absentTeacher, substitute:chosen, lateOnly:item.lateOnly, substituteType:substituteType});
   });
 
   renderSubResults(coverResults, dayIdx, substituteAssignments);
-}
-
-function renderSubResults(results, dayIdx, loadMap) {
-  var el = document.getElementById('sub-results');
-  var tableEl = document.getElementById('sub-results-table');
-  var statsEl = document.getElementById('sub-stats');
-  if (!el || !tableEl) return;
-  el.style.display = '';
-  
-  var periodNames = ['الحصة الأولى','الحصة الثانية','الحصة الثالثة','الحصة الرابعة','الحصة الخامسة','الحصة السادسة','الحصة السابعة'];
-  
-  var html = '<table style="width:100%;border-collapse:collapse;background:rgba(255,255,255,0.05);border-radius:10px;overflow:hidden;">';
-  html += '<thead><tr style="background:linear-gradient(135deg,#1A2A4A,#2d3f6b);">' +
-    '<th style="padding:10px 14px;color:#C9A84C;text-align:right;font-size:0.85rem;">الحصة</th>' +
-    '<th style="padding:10px 14px;color:#C9A84C;text-align:right;font-size:0.85rem;">الصف</th>' +
-    '<th style="padding:10px 14px;color:#C9A84C;text-align:right;font-size:0.85rem;">المادة</th>' +
-    '<th style="padding:10px 14px;color:#C9A84C;text-align:right;font-size:0.85rem;">المعلمة الغائبة</th>' +
-    '<th style="padding:10px 14px;color:#C9A84C;text-align:right;font-size:0.85rem;">المعلمة البديلة</th>' +
-    '<th style="padding:10px 14px;color:#C9A84C;text-align:center;font-size:0.85rem;">النوع</th>' +
-    '</tr></thead><tbody>';
-  
-  results.forEach(function(r, i) {
-    var isNoSub = r.substitute.startsWith('⚠');
-    var subStyle = isNoSub ? 'color:#fca5a5;font-weight:700;' : 'color:#86efac;font-weight:700;';
-    html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.07);background:' + (i%2===0?'rgba(255,255,255,0.02)':'rgba(255,255,255,0.05)') + '">' +
-      '<td style="padding:10px 14px;color:rgba(255,255,255,0.9);font-size:0.85rem;">' + (periodNames[r.period] || ('ح'+r.period)) + '</td>' +
-      '<td style="padding:10px 14px;"><span style="background:var(--navy,#1A2A4A);color:var(--gold,#C9A84C);padding:2px 10px;border-radius:10px;font-size:0.82rem;font-weight:700;">' + r.cls + '</span></td>' +
-      '<td style="padding:10px 14px;color:rgba(255,255,255,0.75);font-size:0.82rem;">' + (r.subject||'—') + '</td>' +
-      '<td style="padding:10px 14px;color:#fcd34d;font-size:0.82rem;">' + r.absentTeacher + '</td>' +
-      '<td style="padding:10px 14px;font-size:0.82rem;' + subStyle + '">' + r.substitute + '</td>' +
-      '<td style="padding:10px 14px;text-align:center;font-size:0.75rem;">' + (r.lateOnly ? '<span style="background:rgba(245,158,11,0.2);color:#fcd34d;padding:2px 8px;border-radius:8px;">متأخرة</span>' : '<span style="background:rgba(239,68,68,0.2);color:#fca5a5;padding:2px 8px;border-radius:8px;">غياب</span>') + '</td>' +
-      '</tr>';
-  });
-  html += '</tbody></table>';
-  tableEl.innerHTML = html;
-  
-  // إحصائيات الحمل
-  var statsHtml = Object.keys(loadMap).map(function(name) {
-    var n = loadMap[name];
-    var color = n >= 3 ? '#fca5a5' : n >= 2 ? '#fcd34d' : '#86efac';
-    return '<span style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);padding:5px 12px;border-radius:20px;font-size:0.78rem;color:' + color + ';">' + name + ' — ' + n + ' ح</span>';
-  }).join('');
-  if (statsEl) statsEl.innerHTML = statsHtml ? '<div style="color:rgba(255,255,255,0.6);font-size:0.8rem;margin-left:4px;">توزيع الحمل:</div>' + statsHtml : '';
-  
-  el.scrollIntoView({behavior:'smooth', block:'nearest'});
-  showToast('تم توليد جدول الاحتياط ✓', 'success');
 }
 
 function printSubstituteSchedule() {
