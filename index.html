@@ -1113,6 +1113,25 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
   #mainContent {
     padding-bottom: 88px !important;
   }
+
+/* ── Smart Report Print CSS ─────────────────────────────────── */
+@media print {
+  body.print-sr * { visibility: hidden !important; }
+  body.print-sr #sr-result,
+  body.print-sr #sr-result * { visibility: visible !important; }
+  body.print-sr #sr-result {
+    position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important;
+    background: white !important; direction: rtl !important; padding: 6mm !important;
+    z-index: 99999 !important; overflow: visible !important;
+  }
+  body.print-sr .sr-print-header-logo { width:66px !important; height:66px !important; object-fit:contain !important; flex-shrink:0 !important; display:block !important; }
+  body.print-sr .sr-ministry-logo { height:90px !important; width:auto !important; object-fit:contain !important; flex-shrink:0 !important; display:block !important; }
+  body.print-sr .sr-print-header-row { display:flex !important; align-items:center !important; justify-content:space-between !important; width:100% !important; margin-bottom:8px !important; padding-bottom:6px !important; border-bottom:2px solid #C9A84C !important; }
+  body.print-sr .sr-axis-grid { display:grid !important; grid-template-columns:repeat(2,1fr) !important; gap:6px !important; }
+  body.print-sr .sr-info-grid { display:grid !important; grid-template-columns:repeat(4,1fr) !important; gap:6px !important; }
+  body.print-sr .sr-print-footer { position:fixed !important; bottom:0 !important; left:0 !important; right:0 !important; }
+  @page { margin:6mm; size:A4; }
+}
 </style>
 
 <style>
@@ -3468,6 +3487,15 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
       </select>
       <label style="color:rgba(255,255,255,0.7);font-size:0.85rem;display:block;margin-bottom:4px;">تاريخ بدء الإجازة</label>
       <input type="date" id="leaveStartDt" style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:10px;margin-bottom:10px;font-family:inherit;" onchange="autoCalcLeaveEnd()">
+      <div id="nursingHintBox" style="display:none;background:rgba(244,114,182,0.1);border:1px solid rgba(244,114,182,0.4);border-radius:8px;padding:10px;margin-bottom:10px;font-size:0.85rem;">
+        <p style="margin:0 0 4px;color:#f472b6;font-weight:700;">📌 قواعد ساعات الرضاعة:</p>
+        <ul style="margin:0;padding-right:16px;color:rgba(255,255,255,0.8);">
+          <li>تبدأ من اليوم 91 من إجازة الوضع (تاريخ المباشرة بعد الوضع)</li>
+          <li>المدة: 6 أشهر (180 يوماً) — تُحسب تلقائياً</li>
+          <li>الوقت: ساعتان يومياً (صباح أو مساء)</li>
+        </ul>
+        <p id="nursingAutoEnd" style="margin:6px 0 0;color:#fbbf24;font-weight:600;"></p>
+      </div>
       <div id="nursingTimingRow" style="display:none;margin-bottom:10px;">
         <label style="color:rgba(255,255,255,0.7);font-size:0.85rem;display:block;margin-bottom:4px;">توقيت ساعات الرضاعة (ساعتان يومياً)</label>
         <select id="nursingTimingSel" style="width:100%;background:#16213e;color:white;border:1px solid rgba(201,168,39,0.4);border-radius:8px;padding:10px;margin-bottom:6px;font-family:inherit;">
@@ -10976,10 +11004,34 @@ function onLeaveTypeChange() {
   // Show/hide nursing timing field
   const nursingRow = document.getElementById('nursingTimingRow');
   if (nursingRow) nursingRow.style.display = (t === 'nursing') ? 'block' : 'none';
-  // Hide end date for nursing
+  // Hide end date for nursing (computed automatically)
   const endSec = document.getElementById('leaveEndSection');
   if (endSec) endSec.style.display = (t === 'nursing') ? 'none' : 'block';
-  if (t === 'maternity') {
+  // Nursing hint
+  const nursingHint = document.getElementById('nursingHintBox');
+  if (nursingHint) nursingHint.style.display = (t === 'nursing') ? 'block' : 'none';
+  // Maternity label
+  const startLbl = document.getElementById('leaveStartLbl');
+  if (startLbl) {
+    if (t === 'maternity') startLbl.textContent = 'تاريخ الولادة (بداية إجازة الوضع 90 يوم)';
+    else if (t === 'nursing') startLbl.textContent = 'تاريخ المباشرة بعد الوضع (ساعات الرضاعة 6 أشهر)';
+    else startLbl.textContent = 'تاريخ البداية';
+  }
+  if (t === 'maternity' || t === 'nursing') {
+    // إذا كان نوع الإجازة رضاعة، اقترح تاريخ المباشرة = نهاية إجازة الوضع + يوم
+    if (t === 'nursing') {
+      const empId = document.getElementById('leaveEmpSel')?.value;
+      if (empId) {
+        const allLeaves = getLeaves ? getLeaves() : [];
+        const matLeave = allLeaves.filter(l => l.empId === empId && l.type === 'maternity' && l.endDate).sort((a,b) => b.endDate.localeCompare(a.endDate))[0];
+        if (matLeave) {
+          const suggestDate = new Date(matLeave.endDate + 'T00:00:00');
+          suggestDate.setDate(suggestDate.getDate() + 1);
+          const startEl = document.getElementById('leaveStartDt');
+          if (startEl && !startEl.value) startEl.value = suggestDate.toISOString().slice(0,10);
+        }
+      }
+    }
     autoCalcLeaveEnd();
   }
 }
@@ -10987,9 +11039,16 @@ function autoCalcLeaveEnd() {
   const t = document.getElementById('leaveTypeSel')?.value;
   const start = document.getElementById('leaveStartDt')?.value;
   if (t === 'maternity' && start) {
+    // إجازة الوضع: 90 يوماً تشمل يوم الولادة → آخر يوم = يوم الولادة + 89 يوماً
     const d = new Date(start);
-    d.setDate(d.getDate() + 90);
+    d.setDate(d.getDate() + 89);
     document.getElementById('leaveEndDt').value = d.toISOString().slice(0,10);
+  } else if (t === 'nursing' && start) {
+    // ساعات الرضاعة: 6 أشهر (180 يوماً) من تاريخ المباشرة بعد الوضع
+    const d = new Date(start);
+    d.setDate(d.getDate() + 180);
+    const nursingEndEl = document.getElementById('nursingAutoEnd');
+    if (nursingEndEl) nursingEndEl.textContent = 'تنتهي تلقائياً في: ' + d.toISOString().slice(0,10) + ' (6 أشهر)';
   }
   const startV = document.getElementById('leaveStartDt')?.value;
   const endV = document.getElementById('leaveEndDt')?.value;
@@ -11035,6 +11094,44 @@ function saveLeaveRecord() {
   const endDate = document.getElementById('leaveEndDt').value;
   const notes = document.getElementById('leaveNotesTx').value.trim();
   if (!empId || !startDate) { showToast('⚠️ يرجى اختيار الموظفة وتاريخ البداية', 'error'); return; }
+  // ── قواعد إجازة الوضع وساعات الرضاعة ──
+  if (type === 'maternity') {
+    // حساب نهاية إجازة الوضع تلقائياً: 90 يوم شاملة يوم الولادة
+    const matD = new Date(startDate + 'T00:00:00');
+    matD.setDate(matD.getDate() + 89);
+    document.getElementById('leaveEndDt').value = matD.toISOString().slice(0,10);
+  }
+  if (type === 'nursing') {
+    // ساعات الرضاعة تبدأ بعد انتهاء إجازة الوضع (اليوم 91 من الولادة)
+    const allL = getLeaves ? getLeaves() : [];
+    const matL = allL.filter(l => l.empId === empId && l.type === 'maternity' && l.endDate && l.id !== editId)
+                     .sort((a,b) => b.endDate.localeCompare(a.endDate))[0];
+    if (matL) {
+      const resumeDate = new Date(matL.endDate + 'T00:00:00');
+      resumeDate.setDate(resumeDate.getDate() + 1);
+      if (new Date(startDate + 'T00:00:00') < resumeDate) {
+        showToast('⚠️ تاريخ مباشرة الرضاعة يجب أن يكون بعد نهاية إجازة الوضع (' + matL.endDate + ')', 'error');
+        return;
+      }
+    }
+    // حساب نهاية ساعات الرضاعة: 6 أشهر (180 يوماً)
+    const nurseEnd = new Date(startDate + 'T00:00:00');
+    nurseEnd.setDate(nurseEnd.getDate() + 180);
+    var endDate_nursing = nurseEnd.toISOString().slice(0,10);
+    // Override endDate with computed value
+    const leaves_v = getLeaves();
+    if (editId) {
+      const idx_v = leaves_v.findIndex(l => l.id === editId);
+      if (idx_v >= 0) leaves_v[idx_v] = { ...leaves_v[idx_v], empId, type, startDate, endDate: endDate_nursing, notes, nursingTiming };
+    } else {
+      leaves_v.push({ id: Date.now().toString(), empId, type, startDate, endDate: endDate_nursing, notes, nursingTiming });
+    }
+    saveLeaves(leaves_v);
+    closeLeaveModal();
+    renderLeavesSection();
+    showToast('✅ تم حفظ ساعات الرضاعة (تنتهي: ' + endDate_nursing + ')', 'success');
+    return;
+  }
   const leaves = getLeaves();
   if (editId) {
     const idx = leaves.findIndex(l => l.id === editId);
@@ -18507,24 +18604,31 @@ function clearAllSwaps() {
 var subTeacherStates = {};
 
 // تحديد حالة الرضاعة تلقائياً من سجلات الإجازات
-function autoPopulateNursingStates() {
+function autoPopulateNursingStates() { autoPopulateLeaveStates(); } // backward compat alias
+
+function autoPopulateLeaveStates() {
+  // تكشف جميع الإجازات النشطة اليوم وتضبط حالة كل معلمة تلقائياً
   try {
     var todayDate = new Date();
-    var todayStr = todayDate.toISOString().split('T')[0];
+    todayDate.setHours(0,0,0,0);
     var leaves = getLeaves ? getLeaves() : JSON.parse(localStorage.getItem('leavesData') || '[]');
     leaves.forEach(function(leave) {
-      if (!leave.empId || leave.type !== 'nursing') return;
+      if (!leave.empId) return;
       var start = new Date(leave.startDate + 'T00:00:00');
       var end = leave.endDate ? new Date(leave.endDate + 'T23:59:59') : null;
       var isActive = start <= todayDate && (!end || end >= todayDate);
-      if (isActive) {
-        // لا تُلغِ تغييراً يدوياً — فقط أضف إذا كانت الحالة الحالية "present"
-        if (!subTeacherStates[leave.empId] || subTeacherStates[leave.empId] === 'present') {
-          subTeacherStates[leave.empId] = 'breastfeeding';
-        }
+      if (!isActive) return;
+      var cur = subTeacherStates[leave.empId] || 'present';
+      if (cur !== 'present') return; // لا تُلغِ تغييراً يدوياً سابقاً
+      if (leave.type === 'nursing') {
+        // ساعات الرضاعة: تبدأ بعد انتهاء إجازة الوضع (اليوم 91 من الولادة)
+        subTeacherStates[leave.empId] = 'breastfeeding';
+      } else {
+        // مرضية طويلة / إجازة وضع / مرضية +3 أيام → غياب
+        subTeacherStates[leave.empId] = 'absent';
       }
     });
-  } catch(e) { console.warn('autoPopulateNursingStates error:', e); }
+  } catch(e) { console.warn('autoPopulateLeaveStates error:', e); }
 }
 
 function renderSubstituteScheduler() {
@@ -19812,6 +19916,30 @@ function loadSRStudents() {
   });
 }
 
+
+// ── Smart Report helpers ──────────────────────────────────────
+function closeSrResult() {
+  var el = document.getElementById('sr-result');
+  if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+}
+
+function saveSrReport() {
+  var content = document.getElementById('sr-result');
+  if (!content || !content.innerHTML.trim()) { showToast('لا يوجد تقرير لحفظه', 'warning'); return; }
+  try {
+    var reports = JSON.parse(localStorage.getItem('aljood_smart_reports') || '[]');
+    var savedAt = new Date().toLocaleDateString('ar-AE', {
+      year:'numeric', month:'long', day:'numeric',
+      hour:'2-digit', minute:'2-digit'
+    });
+    reports.push({ id: Date.now().toString(), savedAt: savedAt, html: content.innerHTML });
+    // احتفظ بآخر 50 تقرير فقط
+    if (reports.length > 50) reports = reports.slice(-50);
+    localStorage.setItem('aljood_smart_reports', JSON.stringify(reports));
+    showToast('✅ تم حفظ التقرير — ' + savedAt, 'success');
+  } catch(e) { showToast('❌ خطأ في الحفظ: ' + e.message, 'error'); }
+}
+// ─────────────────────────────────────────────────────────────
 function generateSmartReport() {
   var cls = document.getElementById('sr-class').value;
   var studentSel = document.getElementById('sr-student');
@@ -19870,7 +19998,7 @@ function generateSmartReport() {
     '<div style="width:60px;height:3px;background:linear-gradient(90deg,#C9A84C,#1A2A4A);margin:6px auto;border-radius:2px;"></div>' +
     '<div style="font-size:1rem;font-weight:700;color:#C9A84C;">&#x1F4CB; تقرير طالب متكامل</div>' +
     '</div>' +
-    '<img src="'+logoMinistry+'" class="sr-ministry-logo" style="height:75px;width:auto;max-width:95px;object-fit:contain;flex-shrink:0;" alt="وزارة التربية">' +
+    '<img src="'+logoMinistry+'" class="sr-ministry-logo" style="height:90px;width:auto;object-fit:contain;flex-shrink:0;" alt="وزارة التربية">' +
     '</div>' +
     '<div class="sr-print-date-badge" style="background:#1A2A4A;color:#C9A84C;border-radius:8px;padding:6px 22px;display:inline-block;font-size:0.85rem;font-weight:600;margin-top:4px;">&#x1F4C5; '+today+' &nbsp;|&nbsp; '+periodText+'</div>' +
     '</div>' +
@@ -19901,8 +20029,9 @@ function generateSmartReport() {
     '<p style="margin:12px 0 0;font-size:0.85rem;color:#C9A84C;">مع خالص التقدير — '+teacherName+' | مدرسة الجود</p>' +
     '</div>' +
     '<div style="display:flex;gap:12px;margin-top:16px;">' +
-    '<button onclick="printSmartReport()" style="flex:1;background:#1A2A4A;color:#fff;border:none;border-radius:8px;padding:12px;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;">طباعة التقرير</button>' +
-    '<button onclick="document.getElementById(\x27sr-result\x27).style.display=\x27none\x27" style="flex:1;background:#f0f0f0;color:#333;border:none;border-radius:8px;padding:12px;cursor:pointer;font-family:Cairo,sans-serif;">اغلاق</button>' +
+    '<button onclick="printSmartReport()" style="flex:1;background:#1A2A4A;color:#fff;border:none;border-radius:8px;padding:12px;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;">🖨️ طباعة</button>' +
+    '<button onclick="saveSrReport()" style="flex:1;background:linear-gradient(135deg,#065f46,#047857);color:#fff;border:none;border-radius:8px;padding:12px;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;">💾 حفظ</button>' +
+    '<button onclick="closeSrResult()" style="flex:1;background:#f0f0f0;color:#333;border:none;border-radius:8px;padding:12px;cursor:pointer;font-family:Cairo,sans-serif;">✖ إغلاق</button>' +
     '</div>' +
     '</div>';
 
@@ -19912,96 +20041,17 @@ function generateSmartReport() {
 
 function printSmartReport() {
   var content = document.getElementById('sr-result');
-  if (!content) return;
-
-  var logoAljood = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/assets/logo_aljood_school.png';
-  var logoMinistry = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/assets/logo_ministry_uae.png';
-
-  var printCSS = [
-    '@import url(\'https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap\');',
-    '*{box-sizing:border-box;font-family:Cairo,Arial,sans-serif!important;}',
-    'body{font-family:Cairo,Arial,sans-serif;margin:6mm;direction:rtl;background:#fff;color:#222;font-size:0.82rem;}',
-    '.sr-print-header-row{display:flex!important;align-items:center!important;justify-content:space-between!important;width:100%!important;margin-bottom:8px!important;padding-bottom:6px!important;border-bottom:2px solid #C9A84C!important;}',
-    '.sr-print-header-logo{width:66px;height:66px;object-fit:contain;flex-shrink:0;display:block;}',
-    '.sr-ministry-logo{height:75px!important;width:auto!important;min-width:50px!important;max-width:95px!important;object-fit:contain!important;flex-shrink:0!important;display:block!important;}',
-    '.sr-print-header-title{text-align:center!important;flex:1!important;padding:0 10px!important;}',
-    '.sr-print-header-title div{line-height:1.3!important;}',
-    '.sr-print-header-title .sr-ph-sub{color:#555!important;font-size:0.72rem!important;}',
-    '.sr-print-header-title .sr-ph-school{color:#1A2A4A!important;font-size:1rem!important;font-weight:900!important;}',
-    '.sr-print-header-title .sr-ph-report{color:#C9A84C!important;font-size:0.88rem!important;font-weight:700!important;}',
-    '.sr-print-date-badge{background:#1A2A4A!important;color:#C9A84C!important;border-radius:6px!important;padding:3px 12px!important;display:block!important;text-align:center!important;font-size:0.75rem!important;font-weight:600!important;margin-top:6px!important;}',
-    '.sr-info-grid{display:grid!important;grid-template-columns:repeat(4,1fr)!important;gap:6px!important;margin-bottom:8px!important;background:#f8f9fa!important;padding:8px!important;border-radius:8px!important;page-break-inside:avoid!important;}',
-    '.sr-info-cell strong{color:#666!important;font-size:0.7rem!important;display:block!important;margin-bottom:2px!important;}',
-    '.sr-info-cell span{font-size:0.82rem!important;font-weight:700!important;color:#1A2A4A!important;}',
-    '.sr-axis-grid{display:grid!important;grid-template-columns:repeat(2,1fr)!important;gap:6px!important;margin-bottom:8px!important;}',
-    '.sr-axis-card{background:#f0f4ff!important;border-radius:6px!important;padding:7px 9px!important;font-size:0.76rem!important;page-break-inside:avoid!important;}',
-    '.sr-axis-card h4,.sr-axis-card b,.sr-axis-card strong{font-size:0.78rem!important;margin:0 0 3px 0!important;}',
-    '.sr-reco-box{background:#fffbeb!important;border:1px solid #fcd34d!important;border-radius:8px!important;padding:7px!important;margin-top:6px!important;font-size:0.78rem!important;}',
-    '.sr-print-footer{position:fixed!important;bottom:0!important;left:0!important;right:0!important;background:#1A2A4A!important;color:#C9A84C!important;text-align:center!important;font-size:0.7rem!important;padding:5px!important;border-top:2px solid #C9A84C!important;}',
-    'img{max-width:100%;}',
-    '@page{margin:6mm;size:A4;}'
-  ].join('\n');
-
-  var rawHTML = content.innerHTML;
-
-  var htmlContent = '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>\u0627\u0644\u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u0630\u0643\u064a</title>' +
-    '<style>' + printCSS + '</style></head><body>' +
-    rawHTML +
-    '</body></html>';
-
-  // Use hidden iframe to avoid popup blockers
-  var oldFrame = document.getElementById('_srPrintFrame');
-  if (oldFrame) oldFrame.parentNode.removeChild(oldFrame);
-
-  var iframe = document.createElement('iframe');
-  iframe.id = '_srPrintFrame';
-  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;';
-  document.body.appendChild(iframe);
-
-  try {
-    iframe.contentDocument.open();
-    iframe.contentDocument.write(htmlContent);
-    iframe.contentDocument.close();
-
-    // Wait for images to load before printing
-    function doPrint() {
-      try {
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-      } catch(pe) {
-        showToast('\u064a\u064f\u0631\u062c\u0649 \u0627\u0644\u0633\u0645\u0627\u062d \u0628\u0627\u0644\u0646\u0648\u0627\u0641\u0630 \u0627\u0644\u0645\u0646\u0628\u062b\u0642\u0629', 'warning');
-      }
-      setTimeout(function() {
-        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-      }, 2000);
-    }
-
-    var imgs = Array.from(iframe.contentDocument.images || []);
-    if (!imgs.length) {
-      setTimeout(doPrint, 400);
-    } else {
-      var loadCount = 0;
-      var total = imgs.length;
-      var timer = setTimeout(doPrint, 3000); // Fallback after 3s
-      imgs.forEach(function(img) {
-        function onDone() {
-          loadCount++;
-          if (loadCount >= total) { clearTimeout(timer); doPrint(); }
-        }
-        if (img.complete) { onDone(); }
-        else { img.addEventListener('load', onDone); img.addEventListener('error', onDone); }
-      });
-    }
-  } catch(e) {
-    // Fallback to window.open
-    var pw = window.open('', '_blank', 'width=1000,height=800');
-    if (!pw) { showToast('\u064a\u064f\u0631\u062c\u0649 \u0627\u0644\u0633\u0645\u0627\u062d \u0628\u0627\u0644\u0646\u0648\u0627\u0641\u0630 \u0627\u0644\u0645\u0646\u0628\u062b\u0642\u0629', 'warning'); return; }
-    pw.document.write(htmlContent);
-    pw.document.close();
-    pw.print();
-    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-  }
+  if (!content || !content.innerHTML.trim()) { showToast('لا يوجد تقرير لطباعته', 'warning'); return; }
+  // Apply print-sr class → @media print CSS will show only the report
+  document.body.classList.add('print-sr');
+  setTimeout(function() {
+    window.print();
+    setTimeout(function() {
+      document.body.classList.remove('print-sr');
+    }, 500);
+  }, 200);
 }
+
 
 function confirmClearance() {
   var el = document.getElementById('clearanceStaff');
