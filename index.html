@@ -7331,6 +7331,52 @@ ${isAdmin ? '<button class="btn" onclick="window.open(\'https://aljood-school.gi
           });
           html2 += '</div>';
         }
+
+        // ── بطاقة نصاب المعلمة الأسبوعية ──
+        try {
+          var _tlWeekLoad = getSubAssignmentsThisWeek();
+          var _tlSchedules = schedules;
+          var _tlActual = 0;
+          Object.keys(_tlSchedules).forEach(function(cls2) {
+            if (cls2.startsWith('__')) return;
+            var cs2 = _tlSchedules[cls2];
+            Object.keys(cs2).forEach(function(k2) {
+              var c2 = cs2[k2];
+              if (c2 && (c2.teacher === teacherId || c2.teacher === uname)) _tlActual++;
+            });
+          });
+          var _tlSub = _tlWeekLoad[teacherDispName] || 0;
+          var _tlMax = 24;
+          // Check expat status
+          if (typeof STAFF_DB !== 'undefined') {
+            var _tlEntry = (STAFF_DB||[]).find(function(s){ return s.id === teacherId || (s.email && s.email.split('@')[0].toLowerCase() === uname.toLowerCase()); });
+            if (_tlEntry) _tlMax = getTeacherMaxContractPeriods(_tlEntry);
+          }
+          var _tlUsed = _tlActual + _tlSub;
+          var _tlRem = _tlMax - _tlUsed;
+          var _tlPct = Math.min(100, Math.round(_tlUsed/_tlMax*100));
+          var _tlColor = _tlRem <= 0 ? '#ef4444' : _tlRem <= 3 ? '#f59e0b' : '#22c55e';
+          var _tlBg = _tlRem <= 0 ? 'rgba(239,68,68,0.08)' : _tlRem <= 3 ? 'rgba(245,158,11,0.08)' : 'rgba(34,197,94,0.08)';
+          var _tlBdr = _tlRem <= 0 ? 'rgba(239,68,68,0.35)' : _tlRem <= 3 ? 'rgba(245,158,11,0.35)' : 'rgba(34,197,94,0.35)';
+          html2 += '<div style="margin-top:14px;background:'+_tlBg+';border:1.5px solid '+_tlBdr+';border-radius:12px;padding:14px 16px;">';
+          html2 += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+          html2 += '<div style="font-size:0.88rem;font-weight:700;color:#1A2A4A;"><i class="fas fa-balance-scale" style="color:'+_tlColor+';margin-left:6px;"></i>نصابي الأسبوعي</div>';
+          html2 += '<span style="background:'+_tlColor+';color:white;padding:2px 12px;border-radius:20px;font-size:0.78rem;font-weight:700;">'
+            + (_tlRem<=0 ? '✅ وصلت للحد' : _tlRem<=3 ? '⚠️ يكاد' : 'مريح') + '</span>';
+          html2 += '</div>';
+          html2 += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">';
+          html2 += '<div style="text-align:center;background:white;border-radius:8px;padding:8px;"><div style="font-size:1.3rem;font-weight:700;color:#1A2A4A;">'+_tlActual+'</div><div style="font-size:0.72rem;color:#666;">نصاب فعلي</div></div>';
+          html2 += '<div style="text-align:center;background:white;border-radius:8px;padding:8px;"><div style="font-size:1.3rem;font-weight:700;color:#C9A84C;">'+_tlSub+'</div><div style="font-size:0.72rem;color:#666;">احتياط هذا الأسبوع</div></div>';
+          html2 += '<div style="text-align:center;background:white;border-radius:8px;padding:8px;"><div style="font-size:1.3rem;font-weight:700;color:'+_tlColor+';">'+_tlRem+'</div><div style="font-size:0.72rem;color:#666;">متبقي حتى '+_tlMax+'</div></div>';
+          html2 += '</div>';
+          html2 += '<div style="background:rgba(255,255,255,0.5);border-radius:6px;height:8px;overflow:hidden;">';
+          html2 += '<div style="background:'+_tlColor+';height:8px;border-radius:6px;width:'+_tlPct+'%;transition:width 0.5s;"></div>';
+          html2 += '</div>';
+          if (_tlSub > 0) {
+            html2 += '<div style="margin-top:8px;font-size:0.75rem;color:#666;"><i class="fas fa-info-circle" style="margin-left:4px;color:'+_tlColor+';"></i>حصص الاحتياط تُحسب ضمن النصاب</div>';
+          }
+          html2 += '</div>';
+        } catch(_tlE) {}
         html2 += '</div>';
         return html2;
       } catch(e){ return ''; }
@@ -18226,12 +18272,52 @@ function renderSubTeachersGrid(filter) {
   
   if (!teachers.length) { grid.innerHTML = '<p style="color:rgba(255,255,255,0.4);font-size:0.85rem;text-align:center;padding:20px;">لا توجد معلمات في قاعدة البيانات</p>'; return; }
   
+  // ── تحميل أحمال هذا الأسبوع مرة واحدة ──
+  var _gridWeekLoad = getSubAssignmentsThisWeek();
+  var _gridActualPeriods = {};
+  var _gridSchedules = (typeof getSchedules === 'function') ? getSchedules() : {};
+  Object.keys(_gridSchedules).forEach(function(cls) {
+    if (cls.startsWith('__')) return;
+    var cs = _gridSchedules[cls];
+    Object.keys(cs).forEach(function(k) {
+      var cell = cs[k];
+      if (cell && cell.teacher) _gridActualPeriods[cell.teacher] = (_gridActualPeriods[cell.teacher]||0)+1;
+    });
+  });
+  var _gridArToKey = {};
+  if (typeof TEACHER_ROSTER !== 'undefined' && TEACHER_ROSTER) {
+    Object.keys(TEACHER_ROSTER).forEach(function(ek) {
+      var tr = TEACHER_ROSTER[ek];
+      if (tr && tr.scheduleKey && tr.name_ar) _gridArToKey[tr.name_ar] = tr.scheduleKey;
+    });
+  }
+
   grid.innerHTML = teachers.map(function(t) {
     var state = subTeacherStates[t.id] || 'present';
     var colors = {present:'rgba(34,197,94,0.15)',absent:'rgba(239,68,68,0.25)',late:'rgba(245,158,11,0.25)',breastfeeding:'rgba(147,51,234,0.25)'};
     var borders = {present:'rgba(34,197,94,0.4)',absent:'rgba(239,68,68,0.6)',late:'rgba(245,158,11,0.6)',breastfeeding:'rgba(147,51,234,0.6)'};
     var icons = {present:'🟢',absent:'🔴',late:'🟡',breastfeeding:'🟣'};
     var labels = {present:'حاضرة',absent:'غائبة',late:'متأخرة',breastfeeding:'رضاعة'};
+
+    // حساب حمل المعلمة
+    var tAr = t.name_ar || t.name_en || '';
+    var sk = _gridArToKey[tAr] || tAr;
+    var actualP = _gridActualPeriods[sk] || _gridActualPeriods[tAr] || 0;
+    var weekSub = _gridWeekLoad[tAr] || 0;
+    var maxP = getTeacherMaxContractPeriods(t);
+    var usedP = actualP + weekSub;
+    var remP = maxP - usedP;
+    var loadPct = Math.min(100, Math.round(usedP / maxP * 100));
+    var loadColor = remP <= 0 ? '#ef4444' : remP <= 3 ? '#f59e0b' : '#22c55e';
+    var loadBar = '<div style="margin-top:6px;">'
+      + '<div style="display:flex;justify-content:space-between;font-size:0.68rem;color:rgba(255,255,255,0.55);margin-bottom:2px;">'
+      + '<span>نصاب: ' + usedP + '/' + maxP + '</span>'
+      + '<span style="color:' + loadColor + ';font-weight:700;">' + (remP <= 0 ? '✓ مكتمل' : 'متبقّى ' + remP) + '</span>'
+      + '</div>'
+      + '<div style="background:rgba(255,255,255,0.1);border-radius:4px;height:4px;">'
+      + '<div style="background:' + loadColor + ';border-radius:4px;height:4px;width:' + loadPct + '%;transition:width 0.3s;"></div>'
+      + '</div></div>';
+
     return '<div style="background:' + colors[state] + ';border:1.5px solid ' + borders[state] + ';border-radius:10px;padding:10px 12px;cursor:pointer;" onclick="cycleSubTeacherState(\'' + t.id + '\')">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;">' +
       '<div style="color:white;font-size:0.82rem;font-weight:700;max-width:75%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (t.name_ar||t.name_en||'معلمة') + '</div>' +
@@ -18403,6 +18489,20 @@ function generateSubstituteSchedule() {
             job.includes('رئيس'));
   });
 
+  // ── مسبق: حساب الأحمال الفعلية من الجدول ──
+  var _teacherActualPeriods = {}; // schedKey → count
+  Object.keys(schedules).forEach(function(cls) {
+    if (cls.startsWith('__')) return;
+    var clsSched = schedules[cls];
+    Object.keys(clsSched).forEach(function(key) {
+      var cell = clsSched[key];
+      if (cell && cell.teacher) {
+        _teacherActualPeriods[cell.teacher] = (_teacherActualPeriods[cell.teacher] || 0) + 1;
+      }
+    });
+  });
+  var _weekSubLoad = getSubAssignmentsThisWeek(); // {name_ar: count}
+
   var substituteAssignments = {};
   var coverResults = [];
 
@@ -18447,8 +18547,22 @@ function generateSubstituteSchedule() {
       }
 
       var loadScore = balanceLoad ? (substituteAssignments[tname] || 0) : 0;
+
+      // ── فحص الحمل الأسبوعي ──
+      var schedKeyT = _arToSchedKey[tname] || tname;
+      var actualP = _teacherActualPeriods[schedKeyT] || _teacherActualPeriods[tname] || 0;
+      var weekSubP = _weekSubLoad[tname] || 0;
+      var todaySubP = substituteAssignments[tname] || 0; // جلسة اليوم الحالية
+      var maxP = getTeacherMaxContractPeriods(t);
+      var usedTotal = actualP + weekSubP + todaySubP;
+      var remainingP = maxP - usedTotal;
+
+      // إن كانت المعلمة وصلت للحد الأقصى → تُحذف من القائمة
+      if (staffPrio === 1 && remainingP <= 0) return; // معلمة — حد صارم
+      if (staffPrio === 1 && remainingP <= 2) loadScore += 10; // معلمة تقترب → عقوبة خفيفة
+
       var totalScore = cyclePrio * 100 + loadScore;
-      candidates.push({tname:tname, score:totalScore, cyclePrio:cyclePrio, staffPrio:staffPrio});
+      candidates.push({tname:tname, score:totalScore, cyclePrio:cyclePrio, staffPrio:staffPrio, remaining:remainingP});
     });
 
     candidates.sort(function(a,b){ return a.score - b.score; });
@@ -18494,6 +18608,167 @@ function copySubstituteSchedule() {
   navigator.clipboard.writeText(text).catch(function(){});
   showToast('تم نسخ الجدول ✓', 'success');
 }
+
+// ─── نظام الأحمال الأسبوعية ─────────────────────────────────────────
+function getSubWeekKey() {
+  // Returns YYYY-WW (ISO week number of Monday–Sunday)
+  var d = new Date();
+  var dayOfWeek = d.getDay() || 7; // Sunday=0 → 7
+  var monday = new Date(d);
+  monday.setDate(d.getDate() - dayOfWeek + 1);
+  var year = monday.getFullYear();
+  var jan1 = new Date(year, 0, 1);
+  var weekNum = Math.ceil((((monday - jan1) / 86400000) + jan1.getDay() + 1) / 7);
+  return year + '-W' + String(weekNum).padStart(2, '0');
+}
+
+function getSubAssignmentsThisWeek() {
+  // Returns {teacherName: countOfSubPeriods}
+  try {
+    var raw = localStorage.getItem('aljood_sub_week_' + getSubWeekKey());
+    return raw ? JSON.parse(raw) : {};
+  } catch(e) { return {}; }
+}
+
+function addSubAssignmentsThisWeek(assignmentsMap) {
+  // assignmentsMap = {teacherName: count}
+  try {
+    var existing = getSubAssignmentsThisWeek();
+    Object.keys(assignmentsMap).forEach(function(nm) {
+      existing[nm] = (existing[nm] || 0) + (assignmentsMap[nm] || 0);
+    });
+    localStorage.setItem('aljood_sub_week_' + getSubWeekKey(), JSON.stringify(existing));
+  } catch(e) {}
+}
+
+function getTeacherActualPeriodsFromScheduleObj(schedKey, schedulesObj) {
+  // Count how many schedule cells belong to this teacher key
+  var count = 0;
+  Object.keys(schedulesObj).forEach(function(cls) {
+    if (cls.startsWith('__')) return;
+    var clsSched = schedulesObj[cls];
+    Object.keys(clsSched).forEach(function(key) {
+      var cell = clsSched[key];
+      if (cell && cell.teacher === schedKey) count++;
+    });
+  });
+  return count;
+}
+
+function getTeacherMaxContractPeriods(staffEntry) {
+  // 30 for expats, 24 for nationals
+  if (!staffEntry) return 24;
+  var nat = (staffEntry.nationality || '').toLowerCase();
+  return (nat === 'expat' || nat === 'expatriate' || nat === 'وافد') ? 30 : 24;
+}
+
+// ─── جدول الاحتياط المُولَّد ─────────────────────────────────────────
+function renderSubResults(coverResults, dayIdx, substituteAssignments) {
+  var container = document.getElementById('sub-results');
+  var tableDiv  = document.getElementById('sub-results-table');
+  var statsDiv  = document.getElementById('sub-stats');
+  if (!container || !tableDiv) return;
+
+  // Store for confirmSubstituteSchedule
+  window._lastSubAssignments = substituteAssignments || {};
+
+  container.style.display = 'block';
+  container.scrollIntoView({behavior:'smooth', block:'start'});
+
+  var dayNames = ['\u0627\u0644\u0627\u062b\u0646\u064a\u0646','\u0627\u0644\u062b\u0644\u0627\u062b\u0627\u0621','\u0627\u0644\u0623\u0631\u0628\u0639\u0627\u0621','\u0627\u0644\u062e\u0645\u064a\u0633','\u0627\u0644\u062c\u0645\u0639\u0629'];
+
+  var html = '<table style="width:100%;border-collapse:collapse;font-family:Tajawal,sans-serif;font-size:0.88rem;">';
+  html += '<thead><tr style="background:#1A2A4A;">';
+  html += '<th style="padding:9px 12px;color:#C9A84C;text-align:right;border-radius:8px 0 0 0;">\u0627\u0644\u062d\u0635\u0629</th>';
+  html += '<th style="padding:9px 12px;color:#C9A84C;text-align:right;">\u0627\u0644\u0635\u0641</th>';
+  html += '<th style="padding:9px 12px;color:#C9A84C;text-align:right;">\u0627\u0644\u0645\u0627\u062f\u0629</th>';
+  html += '<th style="padding:9px 12px;color:#C9A84C;text-align:right;">\u0627\u0644\u063a\u0627\u0626\u0628\u0629</th>';
+  html += '<th style="padding:9px 12px;color:#C9A84C;text-align:right;">\u0627\u0644\u0628\u062f\u064a\u0644\u0629</th>';
+  html += '<th style="padding:9px 12px;color:#C9A84C;text-align:center;border-radius:0 8px 0 0;">\u0627\u0644\u0646\u0648\u0639</th>';
+  html += '</tr></thead><tbody>';
+
+  coverResults.forEach(function(r, i) {
+    var bg = i % 2 === 0 ? '#ffffff' : '#f8faff';
+    var badge = '';
+    if (r.lateOnly) {
+      badge = '<span style="background:#fef3c7;color:#d97706;padding:2px 8px;border-radius:10px;font-size:0.75rem;">\u062a\u0623\u062e\u064a\u0631</span>';
+    } else if (r.substituteType === 'cross-cycle') {
+      badge = '<span style="background:#dbeafe;color:#2563eb;padding:2px 8px;border-radius:10px;font-size:0.75rem;">\u062d\u0644\u0642\u0629 \u0645\u062e\u062a\u0644\u0641\u0629</span>';
+    } else if (r.substituteType === 'admin') {
+      badge = '<span style="background:#fce7f3;color:#9d174d;padding:2px 8px;border-radius:10px;font-size:0.75rem;">\u0625\u062f\u0627\u0631\u064a</span>';
+    } else {
+      badge = '<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:10px;font-size:0.75rem;">\u0637\u0628\u064a\u0639\u064a</span>';
+    }
+    var noSub = !r.substitute || r.substitute === '\u26a0\ufe0f \u0644\u0627 \u064a\u0648\u062c\u062f \u0628\u062f\u064a\u0644';
+    var subStyle = noSub ? 'color:#dc2626;font-weight:700;' : 'font-weight:700;color:#065f46;';
+    html += '<tr style="background:'+bg+';border-bottom:1px solid #e8ecf0;">';
+    html += '<td style="padding:9px 12px;font-weight:700;color:#C9A84C;">\u062d' + r.period + '</td>';
+    html += '<td style="padding:9px 12px;font-weight:700;color:#1A2A4A;">' + (r.cls||'\u2014') + '</td>';
+    html += '<td style="padding:9px 12px;color:#555;">' + (r.subject||'\u2014') + '</td>';
+    html += '<td style="padding:9px 12px;color:#dc2626;">' + (r.absentTeacher||'\u2014') + '</td>';
+    html += '<td style="padding:9px 12px;'+subStyle+'">' + (r.substitute || '\u26a0\ufe0f \u0644\u0627 \u064a\u0648\u062c\u062f \u0628\u062f\u064a\u0644') + '</td>';
+    html += '<td style="padding:9px 12px;text-align:center;">' + badge + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  tableDiv.innerHTML = html;
+
+  // ── stats ──
+  if (statsDiv) {
+    var total   = coverResults.length;
+    var covered = coverResults.filter(function(r){ return r.substitute && r.substitute !== '\u26a0\ufe0f \u0644\u0627 \u064a\u0648\u062c\u062f \u0628\u062f\u064a\u0644'; }).length;
+    var uncov   = total - covered;
+
+    var sHtml = '<div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:10px;padding:10px 16px;flex:1;min-width:110px;">'
+      + '<div style="font-size:1.5rem;font-weight:700;color:#22c55e;">' + covered + '</div>'
+      + '<div style="font-size:0.78rem;color:rgba(255,255,255,0.65);">\u062d\u0635\u0635 \u0645\u063a\u0637\u0651\u0627\u0629</div></div>';
+
+    if (uncov > 0) {
+      sHtml += '<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:10px;padding:10px 16px;flex:1;min-width:110px;">'
+        + '<div style="font-size:1.5rem;font-weight:700;color:#ef4444;">' + uncov + '</div>'
+        + '<div style="font-size:0.78rem;color:rgba(255,255,255,0.65);">\u063a\u064a\u0631 \u0645\u063a\u0637\u0627\u0629</div></div>';
+    }
+
+    sHtml += '<div style="background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.3);border-radius:10px;padding:10px 16px;flex:1;min-width:110px;">'
+      + '<div style="font-size:1.5rem;font-weight:700;color:#C9A84C;">' + total + '</div>'
+      + '<div style="font-size:0.78rem;color:rgba(255,255,255,0.65);">\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u062d\u0635\u0635</div></div>';
+
+    // Teacher load breakdown
+    var subNames = Object.keys(substituteAssignments||{});
+    if (subNames.length > 0) {
+      sHtml += '<div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px 16px;width:100%;margin-top:4px;">'
+        + '<div style="font-size:0.82rem;color:rgba(255,255,255,0.55);margin-bottom:8px;"><i class="fas fa-chart-bar" style="margin-left:6px;"></i>\u0623\u062d\u0645\u0627\u0644 \u0627\u0644\u0628\u062f\u064a\u0644\u0627\u062a \u0627\u0644\u064a\u0648\u0645</div>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+      subNames.forEach(function(nm) {
+        sHtml += '<span style="background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.3);color:#C9A84C;padding:3px 10px;border-radius:10px;font-size:0.78rem;">' + nm + ' \xd7 ' + substituteAssignments[nm] + '</span>';
+      });
+      sHtml += '</div></div>';
+    }
+
+    // Confirm button
+    sHtml += '<div style="width:100%;margin-top:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">'
+      + '<button onclick="confirmSubstituteSchedule()" style="background:linear-gradient(135deg,#22c55e,#16a34a);color:white;border:none;border-radius:8px;padding:9px 22px;font-family:Tajawal,sans-serif;font-size:0.9rem;cursor:pointer;font-weight:700;">'
+      + '<i class="fas fa-check-circle" style="margin-left:7px;"></i>\u062a\u0623\u0643\u064a\u062f \u0648\u062d\u0641\u0638 \u0627\u0644\u0627\u062d\u062a\u064a\u0627\u0637</button>'
+      + '<span style="font-size:0.78rem;color:rgba(255,255,255,0.4);">\u064a\u062d\u0641\u0638 \u0623\u062d\u0645\u0627\u0644 \u0647\u0630\u0627 \u0627\u0644\u0623\u0633\u0628\u0648\u0639 \u2014 \u064a\u0624\u062b\u0651\u0631 \u0639\u0644\u0649 \u062a\u0648\u0632\u064a\u0639 \u0627\u0644\u0627\u062d\u062a\u064a\u0627\u0637 \u0627\u0644\u0642\u0627\u062f\u0645</span>'
+      + '</div>';
+
+    statsDiv.innerHTML = sHtml;
+  }
+}
+
+function confirmSubstituteSchedule() {
+  var map = window._lastSubAssignments;
+  if (!map || Object.keys(map).length === 0) {
+    showToast('\u0644\u0645 \u064a\u062a\u0645 \u062a\u0648\u0644\u064a\u062f \u062c\u062f\u0648\u0644 \u0628\u0639\u062f', 'warning');
+    return;
+  }
+  addSubAssignmentsThisWeek(map);
+  showToast('\u2705 \u062a\u0645 \u062d\u0641\u0638 \u0623\u062d\u0645\u0627\u0644 \u0627\u0644\u0627\u062d\u062a\u064a\u0627\u0637 \u0644\u0647\u0630\u0627 \u0627\u0644\u0623\u0633\u0628\u0648\u0639', 'success');
+  // Refresh grid to update load bars
+  renderSubTeachersGrid();
+}
+// ─────────────────────────────────────────────────────────────────────
+
 // ═══════════════════ END SUBSTITUTE SCHEDULER ═══════════════════
 
 </script>
