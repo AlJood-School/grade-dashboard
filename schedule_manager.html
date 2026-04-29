@@ -115,6 +115,12 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;color:var(--text
 .tab-admin-only{display:none}
 .tab-parent-only{display:none}
 </style>
+
+<style>
+td.drag-over { background: rgba(201,168,76,0.18) !important; outline: 2px dashed #C9A84C; }
+.cell-card[draggable=true]:hover { cursor: grab; }
+.cell-card[draggable=true]:active { cursor: grabbing; }
+</style>
 </head>
 <body>
 
@@ -1239,9 +1245,11 @@ function renderClassSchedule(){
       }
       var tid=dayData?dayData[p.id]:null;
       var teacher=tid?findTeacher(tid):null;
-      html+="<td>";
+      var _dAttr = editMode ? " ondragover='onDragOver(event)' ondrop='onDrop(event,\\\"" + cls + "\\\",\\\"" + day + "\\\",\\\"" + p.id + "\\\")' ondragleave='onDragLeave(event)'" : "";
+      html+="<td"+_dAttr+">" ;
       if(teacher){
-        html+="<div class='cell-card' style='border-right:4px solid "+teacher.color+"' onclick='onCellClick(\""+cls+"\",\""+day+"\",\""+p.id+"\")'>";
+        var _drag = editMode ? " draggable='true' ondragstart='onDragStart(event,\\\"" + cls + "\\\",\\\"" + day + "\\\",\\\"" + p.id + "\\\")' ondragend='onDragEnd(event)'" : "";
+        html+="<div class='cell-card' style='border-right:4px solid "+teacher.color+"'"+_drag+" onclick='onCellClick(\""+cls+"\",\""+day+"\",\""+p.id+"\")'>";
         html+="<div class='c-subj'>"+teacher.subject+"</div>";
         html+="<div class='c-tchr'>"+teacher.name+"</div>";
         html+="</div>";
@@ -1618,6 +1626,49 @@ function saveCell(){
   // All checks passed
   applySave(tid);
 }
+
+/* ─── Drag & Drop ─── */
+var _dragSrc = null;
+function onDragStart(e, cls, day, pid){
+  _dragSrc = {cls:cls, day:day, pid:pid};
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', JSON.stringify(_dragSrc));
+  e.currentTarget.style.opacity = '0.4';
+}
+function onDragEnd(e){
+  e.currentTarget.style.opacity = '';
+  document.querySelectorAll('td.drag-over').forEach(function(td){td.classList.remove('drag-over');});
+}
+function onDragOver(e){
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+  return false;
+}
+function onDragLeave(e){
+  e.currentTarget.classList.remove('drag-over');
+}
+function onDrop(e, cls, day, pid){
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if(!_dragSrc) return;
+  var src = _dragSrc;
+  _dragSrc = null;
+  if(src.cls===cls && src.day===day && src.pid===pid) return;
+  // Swap
+  if(!SCHED[src.cls]) SCHED[src.cls]={};
+  if(!SCHED[src.cls][src.day]) SCHED[src.cls][src.day]={};
+  if(!SCHED[cls]) SCHED[cls]={};
+  if(!SCHED[cls][day]) SCHED[cls][day]={};
+  var srcVal = SCHED[src.cls][src.day][src.pid] || null;
+  var dstVal = SCHED[cls][day][pid] || null;
+  if(srcVal) SCHED[cls][day][pid] = srcVal; else delete SCHED[cls][day][pid];
+  if(dstVal) SCHED[src.cls][src.day][src.pid] = dstVal; else delete SCHED[src.cls][src.day][src.pid];
+  saveScheduleLS(SCHED);
+  renderClassSchedule();
+  showToast('✅ تم تبديل الحصتين');
+}
+
 function saveAllSchedule(){saveScheduleLS(SCHED);showToast("تم حفظ الجدول");}
 
 function exportClassCSV(){
