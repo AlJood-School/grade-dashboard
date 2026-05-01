@@ -18569,6 +18569,8 @@ function renderLoginAnalytics() {
     <button class="adm-tab active" onclick="switchAdmTab('new_student')" id="admTab-new_student" style="padding:12px 20px;border:none;background:none;cursor:pointer;font-family:Cairo,sans-serif;font-size:0.9rem;font-weight:700;color:#1A2A4A;border-bottom:3px solid #C9A84C;white-space:nowrap;">📝 تسجيل طالب جديد</button>
     <button class="adm-tab" onclick="switchAdmTab('all_students')" id="admTab-all_students" style="padding:12px 20px;border:none;background:none;cursor:pointer;font-family:Cairo,sans-serif;font-size:0.9rem;color:#666;white-space:nowrap;">📊 جميع الطلاب</button>
     <button class="adm-tab" onclick="switchAdmTab('transfers')" id="admTab-transfers" style="padding:12px 20px;border:none;background:none;cursor:pointer;font-family:Cairo,sans-serif;font-size:0.9rem;color:#666;white-space:nowrap;">🔄 الطلاب المنتقلون</button>
+    <button class="adm-tab" onclick="switchAdmTab('ocr_id')" id="admTab-ocr_id" style="padding:12px 20px;border:none;background:none;cursor:pointer;font-family:Cairo,sans-serif;font-size:0.9rem;color:#666;white-space:nowrap;">📸 OCR الهوية</button>
+    <button class="adm-tab" onclick="switchAdmTab('bulk_import')" id="admTab-bulk_import" style="padding:12px 20px;border:none;background:none;cursor:pointer;font-family:Cairo,sans-serif;font-size:0.9rem;color:#666;white-space:nowrap;">📥 استيراد دفعي</button>
   </div>
   <div id="admContent" style="padding:20px;"></div>
 </section>
@@ -21246,6 +21248,8 @@ function renderAdmContent(tab) {
   if (tab === 'new_student') el.innerHTML = renderAdmNewStudent();
   else if (tab === 'all_students') el.innerHTML = renderAdmAllStudents();
   else if (tab === 'transfers') el.innerHTML = renderAdmTransfers();
+  else if (tab === 'ocr_id') { el.innerHTML = renderAdmOcrId(); initOcrSection(); }
+  else if (tab === 'bulk_import') el.innerHTML = renderAdmBulkImport();
 }
 
 function renderAdmNewStudent() {
@@ -21380,6 +21384,330 @@ function renderAdmTransfers() {
     '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:Cairo,sans-serif;">' +
     '<thead><tr style="background:#1A2A4A;color:#fff;"><th style="padding:10px;text-align:right;">الاسم</th><th style="padding:10px;">الصف</th><th style="padding:10px;">المدرسة السابقة</th><th style="padding:10px;">تاريخ الانتقال</th></tr></thead>' +
     '<tbody>' + rows + '</tbody></table></div>';
+}
+
+// ═══════════════════════════════════════════════════════════
+// OCR ID + BULK IMPORT — استيراد الهوية والبيانات الدفعي
+// ═══════════════════════════════════════════════════════════
+
+function renderAdmOcrId() {
+  return '<div style="max-width:700px;margin:0 auto;">' +
+    '<div style="background:#fff;border-radius:16px;padding:28px;box-shadow:0 4px 20px rgba(0,0,0,0.08);border-top:4px solid #C9A84C;">' +
+    '<h3 style="margin:0 0 8px;color:#1A2A4A;">📸 استخراج بيانات الهوية الإماراتية</h3>' +
+    '<p style="color:#666;font-size:0.88rem;margin:0 0 20px;">ارفع صورة واضحة للهوية — سيستخرج النظام البيانات تلقائياً ويملأ استمارة القبول</p>' +
+    '<div id="ocr-upload-zone" onclick="document.getElementById(\x27ocr-file-input\x27).click()" ' +
+    'style="border:2px dashed #C9A84C;border-radius:12px;padding:40px;text-align:center;cursor:pointer;background:#fffbf0;transition:all 0.2s;" ' +
+    'ondragover="event.preventDefault();this.style.background=\x27#fff3d0\x27" ' +
+    'ondragleave="this.style.background=\x27#fffbf0\x27" ' +
+    'ondrop="ocrHandleDrop(event)">' +
+    '<div style="font-size:3rem;margin-bottom:8px;">🪪</div>' +
+    '<div style="font-size:1rem;font-weight:700;color:#1A2A4A;">اسحب صورة الهوية هنا أو انقر للاختيار</div>' +
+    '<div style="font-size:0.82rem;color:#888;margin-top:4px;">JPG / PNG / WEBP — يُفضَّل التصوير بإضاءة جيدة</div>' +
+    '</div>' +
+    '<input type="file" id="ocr-file-input" accept="image/*" style="display:none" onchange="ocrProcessFile(this.files[0])">' +
+    '<div id="ocr-preview-zone" style="display:none;margin-top:20px;text-align:center;">' +
+    '<img id="ocr-preview-img" style="max-width:100%;max-height:220px;border-radius:8px;border:2px solid #e0e0e0;" alt="الهوية">' +
+    '</div>' +
+    '<div id="ocr-status" style="display:none;margin-top:16px;padding:14px;background:#f0f7ff;border-radius:10px;border-right:4px solid #1A2A4A;font-size:0.9rem;color:#1A2A4A;">' +
+    '<i class="fas fa-spinner fa-spin" style="margin-left:8px;"></i> جاري تحليل الهوية...</div>' +
+    '<div id="ocr-result-form" style="display:none;margin-top:20px;"></div>' +
+    '</div></div>';
+}
+
+function initOcrSection() {
+  // تحميل Tesseract.js عند الحاجة
+  if (typeof Tesseract === 'undefined' && !document.getElementById('_tesseractScript')) {
+    var s = document.createElement('script');
+    s.id = '_tesseractScript';
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    document.head.appendChild(s);
+  }
+}
+
+function ocrHandleDrop(event) {
+  event.preventDefault();
+  var zone = document.getElementById('ocr-upload-zone');
+  if (zone) zone.style.background = '#fffbf0';
+  var file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) ocrProcessFile(file);
+}
+
+function ocrProcessFile(file) {
+  if (!file) return;
+  // معاينة الصورة
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var prevZone = document.getElementById('ocr-preview-zone');
+    var prevImg  = document.getElementById('ocr-preview-img');
+    if (prevImg) prevImg.src = e.target.result;
+    if (prevZone) prevZone.style.display = 'block';
+    var status = document.getElementById('ocr-status');
+    if (status) { status.style.display = 'block'; status.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-left:8px;color:#C9A84C;"></i> <strong>جاري تحليل الهوية بالذكاء الاصطناعي...</strong> قد يستغرق 15–30 ثانية'; }
+    var result = document.getElementById('ocr-result-form');
+    if (result) { result.style.display = 'none'; result.innerHTML = ''; }
+    ocrRunTesseract(e.target.result);
+  };
+  reader.readAsDataURL(file);
+}
+
+function ocrRunTesseract(imgSrc) {
+  function doOcr() {
+    if (typeof Tesseract === 'undefined') {
+      setTimeout(doOcr, 500); return;
+    }
+    Tesseract.recognize(imgSrc, 'ara+eng', {
+      logger: function(m) {
+        if (m.status === 'recognizing text') {
+          var status = document.getElementById('ocr-status');
+          if (status) status.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-left:8px;color:#C9A84C;"></i> تقدم التحليل: <strong>' + Math.round(m.progress * 100) + '%</strong>';
+        }
+      }
+    }).then(function(res) {
+      ocrParseResult(res.data.text);
+    }).catch(function(err) {
+      var status = document.getElementById('ocr-status');
+      if (status) status.innerHTML = '<span style="color:#e53e3e;">❌ خطأ في التحليل: ' + err.message + '</span>';
+    });
+  }
+  doOcr();
+}
+
+function ocrParseResult(text) {
+  // استخراج البيانات من نص OCR
+  var lines = text.split('\n').map(function(l){ return l.trim(); }).filter(Boolean);
+  var allText = text.replace(/\n/g, ' ');
+
+  // رقم الهوية الإماراتية (784-XXXX-XXXXXXX-X)
+  var idMatch = allText.match(/784[-\s]?\d{4}[-\s]?\d{7}[-\s]?\d/);
+  var idNumber = idMatch ? idMatch[0].replace(/\s/g,'') : '';
+
+  // تاريخ الميلاد
+  var dobMatch = allText.match(/\b(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})\b/);
+  var dob = dobMatch ? dobMatch[1].replace(/\//g,'-') : '';
+  // تحويل لـ YYYY-MM-DD إن كان DD-MM-YYYY
+  if (dob && dob.split('-').length === 3) {
+    var parts = dob.split('-');
+    if (parts[2].length === 4) dob = parts[2]+'-'+(parts[1].padStart(2,'0'))+'-'+(parts[0].padStart(2,'0'));
+  }
+
+  // الاسم العربي — أول سطرَين يحتويان على أحرف عربية
+  var arabicLines = lines.filter(function(l){ return /[\u0600-\u06FF]{3,}/.test(l); });
+  var nameAr = arabicLines.slice(0,2).join(' ').trim();
+
+  // الاسم الإنجليزي — سطر يحتوي على أحرف لاتينية رأسمالية فقط
+  var engLine = lines.find(function(l){ return /^[A-Z][A-Z\s\-']{5,}$/.test(l.trim()); }) || '';
+
+  // الجنسية
+  var natMap = {'UAE':'إماراتي','EMIRATI':'إماراتي','EGYPTIAN':'مصري','INDIA':'هندي','INDIAN':'هندي','PAKISTAN':'باكستاني','JORDAN':'أردني','SYRIAN':'سوري','KUWAIT':'كويتي','SAUDI':'سعودي'};
+  var natKey = Object.keys(natMap).find(function(k){ return allText.toUpperCase().includes(k); });
+  var nationality = natKey ? natMap[natKey] : '';
+
+  var status = document.getElementById('ocr-status');
+  if (status) status.innerHTML = '<span style="color:#1A2A4A;">✅ <strong>تم استخراج البيانات</strong> — راجع وعدّل ثم انقر "ملء الاستمارة"</span>';
+
+  var resultEl = document.getElementById('ocr-result-form');
+  if (!resultEl) return;
+  resultEl.style.display = 'block';
+  resultEl.innerHTML =
+    '<div style="background:#f8f9fa;border-radius:12px;padding:20px;border:1px solid #e0e0e0;">' +
+    '<h4 style="color:#1A2A4A;margin:0 0 16px;">✏️ بيانات مستخرجة — يمكن التعديل:</h4>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">' +
+    ocrField('ocr_out_nameAr', 'الاسم (عربي)', nameAr) +
+    ocrField('ocr_out_nameEn', 'الاسم (إنجليزي)', engLine) +
+    ocrField('ocr_out_idNum', 'رقم الهوية', idNumber) +
+    ocrField('ocr_out_dob', 'تاريخ الميلاد (YYYY-MM-DD)', dob) +
+    ocrField('ocr_out_nat', 'الجنسية', nationality) +
+    '</div>' +
+    '<div style="margin-top:10px;background:#fff8e1;border-radius:8px;padding:10px;font-size:0.8rem;color:#856404;">' +
+    '⚠️ راجع البيانات بعناية — دقة OCR تعتمد على جودة الصورة. يُنصح بالتحقق من رقم الهوية يدوياً.</div>' +
+    '<button onclick="ocrFillAdmForm()" style="margin-top:16px;width:100%;padding:12px;background:linear-gradient(135deg,#1A2A4A,#2a4a6a);color:#fff;border:none;border-radius:8px;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer;font-size:0.95rem;">✅ ملء استمارة القبول بهذه البيانات</button>' +
+    '</div>';
+}
+
+function ocrField(id, label, val) {
+  return '<div><label style="font-size:0.8rem;font-weight:700;color:#666;display:block;margin-bottom:4px;">' + label + '</label>' +
+    '<input type="text" id="' + id + '" value="' + (val||'').replace(/"/g,'&quot;') + '" style="width:100%;padding:8px;border:1.5px solid #e0e0e0;border-radius:6px;font-family:Cairo,sans-serif;box-sizing:border-box;font-size:0.88rem;"></div>';
+}
+
+function ocrFillAdmForm() {
+  var nameAr = (document.getElementById('ocr_out_nameAr') || {}).value || '';
+  var nameEn = (document.getElementById('ocr_out_nameEn') || {}).value || '';
+  var idNum  = (document.getElementById('ocr_out_idNum') || {}).value || '';
+  var dob    = (document.getElementById('ocr_out_dob') || {}).value || '';
+  var nat    = (document.getElementById('ocr_out_nat') || {}).value || '';
+  // انتقل لتبويب التسجيل وملء البيانات
+  switchAdmTab('new_student');
+  setTimeout(function() {
+    var fields = { adm_nameAr: nameAr, adm_nameEn: nameEn, adm_minId: idNum, adm_dob: dob, adm_nationality: nat };
+    Object.keys(fields).forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el && fields[id]) el.value = fields[id];
+    });
+    showToast('✅ تم ملء الاستمارة من الهوية — أكمل البيانات المتبقية', 'success');
+  }, 300);
+}
+
+// ── BULK IMPORT ────────────────────────────────────────────
+
+function renderAdmBulkImport() {
+  return '<div style="max-width:800px;margin:0 auto;">' +
+    '<div style="background:#fff;border-radius:16px;padding:28px;box-shadow:0 4px 20px rgba(0,0,0,0.08);border-top:4px solid #1A2A4A;">' +
+    '<h3 style="margin:0 0 8px;color:#1A2A4A;">📥 الاستيراد الدفعي من Excel</h3>' +
+    '<p style="color:#666;font-size:0.88rem;margin:0 0 20px;">ارفع ملف Excel يحتوي على بيانات الطلاب أو الموظفين لإضافتهم دفعةً واحدة</p>' +
+    // نموذج القالب
+    '<div style="background:#e8f4fd;border-radius:10px;padding:16px;margin-bottom:20px;border-right:4px solid #1A2A4A;">' +
+    '<h4 style="margin:0 0 10px;color:#1A2A4A;">📋 أعمدة ملف الطلاب المطلوبة:</h4>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;">' +
+    ['nameAr','nameEn','num','class','gender','parentPhone','nationality','dob'].map(function(c){ return '<span style="background:#1A2A4A;color:#C9A84C;padding:3px 10px;border-radius:20px;font-size:0.78rem;font-family:monospace;">'+c+'</span>'; }).join('') +
+    '</div>' +
+    '<button onclick="bulkDownloadTemplate(\x27students\x27)" style="margin-top:10px;padding:7px 16px;background:#C9A84C;color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:Cairo,sans-serif;font-size:0.82rem;">⬇️ تنزيل قالب الطلاب</button>' +
+    '</div>' +
+    '<div style="background:#e8f4fd;border-radius:10px;padding:16px;margin-bottom:24px;border-right:4px solid #C9A84C;">' +
+    '<h4 style="margin:0 0 10px;color:#1A2A4A;">📋 أعمدة ملف الموظفين المطلوبة:</h4>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;">' +
+    ['name_ar','name_en','email','phone','role','department'].map(function(c){ return '<span style="background:#C9A84C;color:#1A2A4A;padding:3px 10px;border-radius:20px;font-size:0.78rem;font-family:monospace;">'+c+'</span>'; }).join('') +
+    '</div>' +
+    '<button onclick="bulkDownloadTemplate(\x27staff\x27)" style="margin-top:10px;padding:7px 16px;background:#1A2A4A;color:#C9A84C;border:none;border-radius:6px;cursor:pointer;font-family:Cairo,sans-serif;font-size:0.82rem;">⬇️ تنزيل قالب الموظفين</button>' +
+    '</div>' +
+    // رفع الملف
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;">' +
+    '<div><label style="font-size:0.85rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">نوع الملف</label>' +
+    '<select id="bulk-type" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;">' +
+    '<option value="students">طلاب</option><option value="staff">موظفون</option></select></div>' +
+    '<div><label style="font-size:0.85rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">ملف Excel</label>' +
+    '<div onclick="document.getElementById(\x27bulk-file-input\x27).click()" style="border:2px dashed #C9A84C;border-radius:8px;padding:10px;cursor:pointer;text-align:center;background:#fffbf0;">' +
+    '<span id="bulk-file-label">📂 اختر ملف .xlsx</span></div>' +
+    '<input type="file" id="bulk-file-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="bulkLoadFile(this)"></div>' +
+    '</div>' +
+    '<div id="bulk-preview" style="display:none;margin-bottom:16px;"></div>' +
+    '<button onclick="bulkImportConfirm()" id="bulk-confirm-btn" style="display:none;width:100%;padding:14px;background:linear-gradient(135deg,#1A2A4A,#2a4a6a);color:#fff;border:none;border-radius:10px;font-family:Cairo,sans-serif;font-size:1rem;font-weight:700;cursor:pointer;">✅ استيراد الكل</button>' +
+    '</div></div>';
+}
+
+var _bulkData = [];
+
+function bulkLoadFile(input) {
+  var file = input.files[0];
+  if (!file) return;
+  document.getElementById('bulk-file-label').textContent = '📄 ' + file.name;
+  function doRead() {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        var wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var data = XLSX.utils.sheet_to_json(ws, {defval:''});
+        _bulkData = data;
+        bulkShowPreview(data);
+      } catch(err) {
+        showToast('خطأ في قراءة الملف: ' + err.message, 'warning');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+  if (typeof XLSX === 'undefined') {
+    var s = document.createElement('script');
+    s.src = 'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js';
+    s.onload = doRead; document.head.appendChild(s);
+  } else { doRead(); }
+}
+
+function bulkShowPreview(data) {
+  var preview = document.getElementById('bulk-preview');
+  var btn = document.getElementById('bulk-confirm-btn');
+  if (!preview) return;
+  if (!data || !data.length) { preview.innerHTML = '<p style="color:#e53e3e;">لا توجد بيانات في الملف</p>'; preview.style.display='block'; return; }
+  var keys = Object.keys(data[0]);
+  var sample = data.slice(0,5);
+  var rows = sample.map(function(row) {
+    return '<tr>' + keys.map(function(k){ return '<td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:0.82rem;">'+(row[k]||'')+'</td>'; }).join('') + '</tr>';
+  }).join('');
+  preview.style.display = 'block';
+  preview.innerHTML = '<div style="background:#f8f9fa;border-radius:10px;padding:14px;border:1px solid #e0e0e0;">' +
+    '<strong style="color:#1A2A4A;">معاينة أول 5 سجلات من أصل ' + data.length + ':</strong>' +
+    '<div style="overflow-x:auto;margin-top:10px;"><table style="width:100%;border-collapse:collapse;">' +
+    '<thead><tr style="background:#1A2A4A;color:#fff;">' + keys.map(function(k){ return '<th style="padding:6px 10px;text-align:right;font-size:0.82rem;white-space:nowrap;">'+k+'</th>'; }).join('') + '</tr></thead>' +
+    '<tbody>' + rows + '</tbody></table></div></div>';
+  if (btn) btn.style.display = 'block';
+}
+
+function bulkImportConfirm() {
+  var type = (document.getElementById('bulk-type') || {}).value || 'students';
+  var data = _bulkData;
+  if (!data || !data.length) { showToast('لا توجد بيانات للاستيراد', 'warning'); return; }
+  var ok = 0, skip = 0;
+  if (type === 'students') {
+    var extended = [];
+    try { extended = JSON.parse(localStorage.getItem('aljood_students_extended') || '[]'); } catch(e) {}
+    data.forEach(function(row) {
+      if (!row.nameAr && !row.name_ar) { skip++; return; }
+      extended.push({
+        nameAr: row.nameAr || row.name_ar || '',
+        nameEn: row.nameEn || row.name_en || '',
+        num: row.num || row.id || '',
+        class: row.class || row.grade || '',
+        gender: row.gender || '',
+        parentPhone: row.parentPhone || row.parent_phone || '',
+        nationality: row.nationality || '',
+        dob: row.dob || row.birthDate || '',
+        admission_date: new Date().toISOString().split('T')[0],
+        admission_status: 'active',
+        admitted_by: (typeof currentUser !== 'undefined' && currentUser) ? currentUser.email : 'bulk_import'
+      });
+      ok++;
+    });
+    localStorage.setItem('aljood_students_extended', JSON.stringify(extended));
+  } else {
+    var staffAdded = [];
+    try { staffAdded = JSON.parse(localStorage.getItem('aljood_staff_additions') || '[]'); } catch(e) {}
+    data.forEach(function(row) {
+      if (!row.name_ar && !row.nameAr) { skip++; return; }
+      staffAdded.push({
+        name_ar: row.name_ar || row.nameAr || '',
+        name_en: row.name_en || row.nameEn || '',
+        email: row.email || '',
+        phone: row.phone || '',
+        role: row.role || 'teacher',
+        department: row.department || '',
+        added_at: new Date().toISOString(),
+        added_by: (typeof currentUser !== 'undefined' && currentUser) ? currentUser.email : 'bulk_import'
+      });
+      ok++;
+    });
+    localStorage.setItem('aljood_staff_additions', JSON.stringify(staffAdded));
+  }
+  _bulkData = [];
+  var btn = document.getElementById('bulk-confirm-btn');
+  if (btn) btn.style.display = 'none';
+  var preview = document.getElementById('bulk-preview');
+  if (preview) {
+    preview.innerHTML = '<div style="background:#d4edda;border-radius:10px;padding:16px;text-align:center;">' +
+      '<div style="font-size:2rem;">✅</div>' +
+      '<strong style="color:#1A2A4A;">تم الاستيراد بنجاح!</strong><br>' +
+      '<span style="color:#444;">تم إضافة <strong>' + ok + '</strong> سجل — تم تخطي <strong>' + skip + '</strong></span></div>';
+  }
+  showToast('✅ تم استيراد ' + ok + ' سجل بنجاح', 'success');
+}
+
+function bulkDownloadTemplate(type) {
+  if (typeof XLSX === 'undefined') {
+    var s = document.createElement('script');
+    s.src = 'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js';
+    s.onload = function() { bulkDownloadTemplate(type); };
+    document.head.appendChild(s); return;
+  }
+  var cols, sample;
+  if (type === 'students') {
+    cols = ['nameAr','nameEn','num','class','gender','parentPhone','nationality','dob'];
+    sample = [{ nameAr:'فاطمة أحمد', nameEn:'Fatima Ahmed', num:'123456', class:'5A', gender:'أنثى', parentPhone:'0501234567', nationality:'إماراتي', dob:'2015-03-14' }];
+  } else {
+    cols = ['name_ar','name_en','email','phone','role','department'];
+    sample = [{ name_ar:'سارة محمد', name_en:'Sara Mohammed', email:'sara@moe.sch.ae', phone:'0509876543', role:'teacher', department:'اللغة العربية' }];
+  }
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.json_to_sheet(sample, {header: cols});
+  XLSX.utils.book_append_sheet(wb, ws, 'البيانات');
+  XLSX.writeFile(wb, 'template_' + type + '.xlsx');
 }
 
 // ═══════════════════════════════════════════════════════════
