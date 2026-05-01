@@ -20601,14 +20601,39 @@ function saveStaffPosition(safeId, email) {
 }
 
 function renewContract(empId) {
-  var newEnd = prompt('أدخل تاريخ انتهاء العقد الجديد (مثال: 2026-08-31):');
-  if (!newEnd) return;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(newEnd)) { showToast('صيغة التاريخ غير صحيحة — استخدم YYYY-MM-DD', 'warning'); return; }
+  // إزالة أي modal سابق
+  var old = document.getElementById('_renewContractModal');
+  if (old) old.remove();
+
+  // تحديد التاريخ الحالي + سنة كقيمة افتراضية
+  var defDate = new Date();
+  defDate.setFullYear(defDate.getFullYear() + 1);
+  var defStr = defDate.toISOString().slice(0, 10);
+
+  var modal = document.createElement('div');
+  modal.id = '_renewContractModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = '<div style="background:#fff;border-radius:16px;padding:28px;width:360px;max-width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);font-family:Cairo,sans-serif;direction:rtl;">' +
+    '<h3 style="color:#1A2A4A;margin:0 0 16px;font-size:1.1rem;border-bottom:2px solid #C9A84C;padding-bottom:10px;">🔄 تجديد العقد</h3>' +
+    '<label style="font-size:0.85rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">تاريخ انتهاء العقد الجديد</label>' +
+    '<input type="date" id="_renewDateInput" value="'+defStr+'" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;font-size:0.95rem;box-sizing:border-box;">' +
+    '<div style="display:flex;gap:10px;margin-top:18px;">' +
+    '<button onclick="doRenewContract(\x27'+empId+'\x27)" style="flex:1;background:#1A2A4A;color:#fff;border:none;border-radius:8px;padding:11px;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;">✅ تأكيد التجديد</button>' +
+    '<button onclick="document.getElementById(\x27_renewContractModal\x27).remove()" style="flex:1;background:#f0f0f0;color:#555;border:none;border-radius:8px;padding:11px;cursor:pointer;font-family:Cairo,sans-serif;">إلغاء</button>' +
+    '</div></div>';
+  document.body.appendChild(modal);
+  setTimeout(function(){ var inp = document.getElementById('_renewDateInput'); if(inp) inp.focus(); }, 100);
+}
+
+function doRenewContract(empId) {
+  var inp = document.getElementById('_renewDateInput');
+  var newEnd = inp ? inp.value.trim() : '';
+  if (!newEnd) { showToast('يرجى اختيار تاريخ', 'warning'); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(newEnd)) { showToast('صيغة التاريخ غير صحيحة', 'warning'); return; }
   var sam = getStaffAssignmentMap();
   if (!sam[empId]) sam[empId] = {};
   sam[empId].contract_end = newEnd;
   try { localStorage.setItem('aljood_staff_assignments', JSON.stringify(sam)); } catch(e){}
-  // Also update in added staff
   try {
     var arr = JSON.parse(localStorage.getItem('aljood_staff_additions') || '[]');
     arr = arr.map(function(s){
@@ -20617,6 +20642,8 @@ function renewContract(empId) {
     });
     localStorage.setItem('aljood_staff_additions', JSON.stringify(arr));
   } catch(e){}
+  var modal = document.getElementById('_renewContractModal');
+  if (modal) modal.remove();
   showToast('✅ تم تجديد العقد حتى ' + newEnd, 'success');
   renderHRContent('contracts');
 }
