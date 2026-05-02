@@ -1536,13 +1536,44 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     <input type="text" class="login-input" id="loginUsername"
       placeholder="👤 اسم المستخدم (للمفتاح الإداري فقط)"
       autocomplete="username"
-      style="margin-bottom:10px;direction:ltr;text-align:right;"
+      style="margin-bottom:10px;direction:ltr;text-align:right;display:none;"
       onkeypress="if(event.key==='Enter')doLogin()">
     <input type="password" class="login-input" id="loginPass" placeholder="كلمة المرور / Password" onkeypress="if(event.key==='Enter')doLogin()">
     <button class="login-btn" onclick="doLogin()"><i class="fas fa-sign-in-alt"></i> &nbsp; دخول</button>
     <div class="login-error" id="loginError">❌ كلمة المرور غير صحيحة</div>
     <div style="margin-top:20px;color:rgba(255,255,255,0.3);font-size:0.75rem;">
       تواصل مع إدارة المدرسة للحصول على كلمة المرور
+    </div>
+    <div style="margin-top:12px;text-align:center;">
+      <span id="masterKeyToggle" onclick="toggleMasterKeyField()" title="دخول إداري" style="cursor:pointer;opacity:0.18;font-size:0.7rem;color:rgba(255,255,255,0.5);user-select:none;transition:opacity 0.3s;" onmouseover="this.style.opacity='0.55'" onmouseout="this.style.opacity='0.18'">⚙</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MAINTENANCE SCREEN ===== -->
+<div id="maintenanceScreen" style="display:none;position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#0a1628 0%,#1A2A4A 50%,#0d1f3c 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Cairo',sans-serif;direction:rtl;">
+  <style>
+    @keyframes mntPulse{0%,100%{transform:scale(1);opacity:0.8}50%{transform:scale(1.08);opacity:1}}
+    @keyframes mntSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+    @keyframes mntFadeIn{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+    #maintenanceScreen{display:none}
+    #maintenanceScreen.show{display:flex!important}
+  </style>
+  <div style="animation:mntFadeIn 0.8s ease-out forwards;text-align:center;max-width:520px;padding:40px 30px;">
+    <div style="width:90px;height:90px;margin:0 auto 28px;background:rgba(201,168,76,0.12);border-radius:50%;display:flex;align-items:center;justify-content:center;animation:mntPulse 2.5s ease-in-out infinite;border:2px solid rgba(201,168,76,0.3);">
+      <i class="fas fa-tools" style="font-size:2.4rem;color:#C9A84C;"></i>
+    </div>
+    <h1 style="color:#C9A84C;font-size:1.8rem;font-weight:700;margin-bottom:10px;">البوابة تحت الصيانة</h1>
+    <p style="color:rgba(255,255,255,0.75);font-size:1rem;line-height:1.7;margin-bottom:6px;" id="mntMessage">نعمل على تحسين الخدمة — سنعود قريباً</p>
+    <p style="color:rgba(255,255,255,0.4);font-size:0.82rem;margin-bottom:30px;">للاستفسار تواصل مع إدارة المدرسة</p>
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:36px;">
+      <div style="width:10px;height:10px;border-radius:50%;background:#C9A84C;animation:mntPulse 1.2s ease-in-out infinite;animation-delay:0s;"></div>
+      <div style="width:10px;height:10px;border-radius:50%;background:#C9A84C;animation:mntPulse 1.2s ease-in-out infinite;animation-delay:0.3s;"></div>
+      <div style="width:10px;height:10px;border-radius:50%;background:#C9A84C;animation:mntPulse 1.2s ease-in-out infinite;animation-delay:0.6s;"></div>
+    </div>
+    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAABHNCSVQICAgIfAhkiAAAABl0RVh0U29mdHdhcmUAZ25vbWUtc2NyZWVuc2hvdADylbflAAAA" style="height:38px;opacity:0.25;margin-bottom:24px;" onerror="this.style.display='none'">
+    <div id="mntAdminAccess" style="margin-top:10px;">
+      <span onclick="showLoginFromMaintenance()" style="cursor:pointer;color:rgba(255,255,255,0.1);font-size:0.65rem;user-select:none;" onmouseover="this.style.color='rgba(255,255,255,0.3)'" onmouseout="this.style.color='rgba(255,255,255,0.1)'">●</span>
     </div>
   </div>
 </div>
@@ -6409,6 +6440,11 @@ document.addEventListener('DOMContentLoaded', async function() {
   if (loadingEl) loadingEl.style.display = 'flex';
   await loadPortalData();
   if (loadingEl) loadingEl.style.display = 'none';
+  // ─── فحص وضع الصيانة قبل أي شيء ─────────────────────────────────
+  if (MAINTENANCE_DATA && MAINTENANCE_DATA.global_maintenance) {
+    showMaintenancePage();
+    return; // لا تستعيد الجلسة — الصيانة تغلق الكل
+  }
   restoreSession();
 });
 // Fallback: ensure chat button is visible after full page load if session is active
@@ -6421,6 +6457,50 @@ window.addEventListener('load', function() {
 function setRole(r) {
   loginRole = r;
   document.querySelectorAll('.login-tab').forEach((t,i) => t.classList.toggle('active', ['admin','principal','teacher','admin_staff','parent'][i] === r));
+}
+
+// ─── مفتاح الإدارة الخفي — حقل username ──────────────────────────────
+function toggleMasterKeyField() {
+  var el = document.getElementById('loginUsername');
+  if (!el) return;
+  var isHidden = el.style.display === 'none';
+  el.style.display = isHidden ? 'block' : 'none';
+  if (isHidden) {
+    el.focus();
+    document.getElementById('masterKeyToggle').style.opacity = '0.7';
+  } else {
+    el.value = '';
+    document.getElementById('masterKeyToggle').style.opacity = '0.18';
+  }
+}
+
+// ─── شاشة الصيانة ──────────────────────────────────────────────────
+function showMaintenancePage() {
+  var mntScr = document.getElementById('maintenanceScreen');
+  var loginScr = document.getElementById('loginScreen');
+  if (mntScr) {
+    // تحديث الرسالة إن وجدت
+    if (MAINTENANCE_DATA && MAINTENANCE_DATA.message_ar) {
+      var msgEl = document.getElementById('mntMessage');
+      if (msgEl) msgEl.textContent = MAINTENANCE_DATA.message_ar;
+    }
+    mntScr.className = 'show';
+    mntScr.style.display = 'flex';
+  }
+  if (loginScr) loginScr.style.display = 'none';
+}
+
+function showLoginFromMaintenance() {
+  // المدير يستطيع الدخول دائماً من شاشة الصيانة
+  var mntScr = document.getElementById('maintenanceScreen');
+  var loginScr = document.getElementById('loginScreen');
+  if (mntScr) { mntScr.className = ''; mntScr.style.display = 'none'; }
+  if (loginScr) loginScr.style.display = '';
+  // إظهار حقل username تلقائياً (لأن المدير يحتاجه)
+  var usrField = document.getElementById('loginUsername');
+  if (usrField) usrField.style.display = 'block';
+  var toggle = document.getElementById('masterKeyToggle');
+  if (toggle) toggle.style.opacity = '0.7';
 }
 
 async function doLogin() {
