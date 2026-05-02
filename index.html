@@ -14030,9 +14030,28 @@ function sbAlgorithm(classes) {
     return true;
   }
 
+  function resolveTeacherName(tid) {
+    // Try staff.json first (ministry IDs like 569458)
+    const emp = emps.find(e => e.id == tid);
+    if (emp && emp.name_ar) return emp.name_ar;
+    // Fallback: teachers.json — TEACHER_ROSTER is an object { "Aayesha.Seedat": { teacherId:"T048", name_ar:"..." } }
+    if (typeof TEACHER_ROSTER !== 'undefined' && TEACHER_ROSTER && typeof TEACHER_ROSTER === 'object') {
+      // If it's an array
+      if (Array.isArray(TEACHER_ROSTER)) {
+        const tr = TEACHER_ROSTER.find(t => t.teacherId === tid || t.id === tid);
+        if (tr && tr.name_ar) return tr.name_ar;
+      } else {
+        // It's an object — search values
+        const entries = Object.values(TEACHER_ROSTER);
+        const tr = entries.find(t => t.teacherId === tid || t.id === tid);
+        if (tr && tr.name_ar) return tr.name_ar;
+      }
+    }
+    return tid;
+  }
+
   function doPlace(classId, tid, day, startP, size, subjectName) {
-    const teacher = emps.find(e => e.id == tid);
-    const tName = teacher ? teacher.name_ar : '';
+    const tName = resolveTeacherName(tid);
     for (let i = 0; i < size; i++) {
       schedule[classId][day][startP + i] = {
         subjectName,
@@ -14093,8 +14112,7 @@ function sbAlgorithm(classes) {
       if (placed) break;
     }
     if (!placed) {
-      const t = emps.find(e => e.id == task.teacherId);
-      const tName = t ? t.name_ar.split(' ').slice(0,2).join(' ') : task.teacherId;
+      const tName = resolveTeacherName(task.teacherId).split(' ').slice(0,2).join(' ');
       warnings.push(`"${task.subjectName}" (${tName}) — تعذّر إدراج ${task.size > 1 ? 'حصة ' + (task.size===2?'ثنائية':'ثلاثية') : 'حصة'}`);
     }
   });
