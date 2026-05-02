@@ -6254,6 +6254,7 @@ function buildPasswordsMap() {
 let STUDENTS_DATA = {};
 let currentStaff = null;
 let HOMEROOM_DB = {};
+let SOCIAL_WORKER_DB = []; // الأخصائيات الاجتماعية وتوزيعهن على الصفوف
 
 let STAFF_DB = [];
 let MAINTENANCE_DATA = { global_maintenance: false, locked_users: [], message_ar: '' };
@@ -6327,14 +6328,15 @@ function resetSessionTimer() {
 async function loadPortalData() {
   const base = (window.location.protocol === 'file:') ? '' : '';
   try {
-    const [sRes, stRes, tRes, schRes, uRes, mntRes, hrRes] = await Promise.all([
+    const [sRes, stRes, tRes, schRes, uRes, mntRes, hrRes, swRes] = await Promise.all([
       fetch('data/students.json'),
       fetch('data/staff.json?v=20260502'),
       fetch('data/teachers.json'),
       fetch('data/schedules.json'),
       fetch('data/users.json'),
       fetch('data/maintenance.json').catch(()=>null),
-      fetch('data/homeroom_teachers.json').catch(()=>null)
+      fetch('data/homeroom_teachers.json').catch(()=>null),
+      fetch('data/social_workers.json').catch(()=>null)
     ]);
     if (!sRes.ok || !stRes.ok || !tRes.ok || !schRes.ok || !uRes.ok) throw new Error('HTTP error');
     const [s, st, t, sch, u] = await Promise.all([sRes.json(), stRes.json(), tRes.json(), schRes.json(), uRes.json()]);
@@ -6350,12 +6352,13 @@ async function loadPortalData() {
           var autoAssign = {};
           Object.keys(HOMEROOM_DB).forEach(function(cls) {
             var t = HOMEROOM_DB[cls];
-            autoAssign[cls] = { teacherName: t.nameAr, teacherId: '', source: 'json' };
+            autoAssign[cls] = { teacherName: t.nameAr, teacherId: '', source: 'json', isSubstitute: !!t.isSubstitute };
           });
           localStorage.setItem('aljood_homeroom', JSON.stringify(autoAssign));
         }
       } catch(e){}
     }
+    if (swRes && swRes.ok) { try { var swJsonData = await swRes.json(); SOCIAL_WORKER_DB = swJsonData.workers || []; } catch(e){} }
     STUDENTS_DATA = s;
     STAFF_DB = st;
     TEACHER_ROSTER = t;
@@ -7539,7 +7542,9 @@ function renderStudents() {
         : (g <= 4 ? '<span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px;">ح.اولى</span>'
                   : '<span style="background:#e3f2fd;color:#1565c0;padding:2px 8px;border-radius:10px;font-size:11px;">ح.ثانية</span>');
       var hrTeacher = getHomeroomTeacher(s.class);
-      return '<tr><td style="color:#888;font-size:12px;">'+(i+1)+'</td><td style="font-weight:600;">'+s.nameAr+' '+getBehaviorBadgeHtml(s.id)+'</td><td style="font-size:12px;color:#666;">'+s.nameEn+'</td><td style="font-size:12px;font-family:monospace;">'+s.id+'</td><td><span style="background:var(--navy);color:var(--gold);padding:2px 10px;border-radius:10px;font-size:12px;font-weight:700;">'+gradeName+' / '+section+'</span>'+(hrTeacher?'<br><span style="font-size:10px;color:#888;"><i class="fas fa-chalkboard-teacher"></i> '+hrTeacher+'</span>':'')+'</td><td>'+cycleLabel+'</td></tr>';
+      var hrIsSubstitute = getHomeroomIsSubstitute(s.class);
+      var swTeacher = getSocialWorkerForClass(s.class);
+      return '<tr><td style="color:#888;font-size:12px;">'+(i+1)+'</td><td style="font-weight:600;">'+s.nameAr+' '+getBehaviorBadgeHtml(s.id)+'</td><td style="font-size:12px;color:#666;">'+s.nameEn+'</td><td style="font-size:12px;font-family:monospace;">'+s.id+'</td><td><span style="background:var(--navy);color:var(--gold);padding:2px 10px;border-radius:10px;font-size:12px;font-weight:700;">'+gradeName+' / '+section+'</span>'+(hrTeacher?'<br><span style="font-size:10px;color:#888;"><i class="fas fa-chalkboard-teacher"></i> '+hrTeacher+(hrIsSubstitute?'<span style="background:#fef3c7;color:#d97706;border-radius:6px;padding:1px 5px;font-size:9px;margin-right:4px;">احتياط</span>':'')+'</span>':'')+'</td><td>'+cycleLabel+'</td></tr>';
     }).join('');
   }
 
@@ -7560,7 +7565,7 @@ function renderStudents() {
         +'<span style="background:var(--navy);color:var(--gold);padding:2px 8px;border-radius:8px;font-size:11px;">'+s.class+'</span>'
         +'<span style="background:#f5f5f5;color:#555;padding:2px 8px;border-radius:8px;font-size:11px;">'+s.id+'</span>'
         +'<span style="background:'+cycleBg+';color:'+cycleClr+';padding:2px 8px;border-radius:8px;font-size:11px;">'+cycleTxt+'</span>'
-        +'</div>'+(getHomeroomTeacher(s.class)?'<div style="margin-top:6px;font-size:10px;color:#888;"><i class="fas fa-chalkboard-teacher" style="margin-left:3px;"></i> المربية: '+getHomeroomTeacher(s.class)+'</div>':'')+'</div>';
+        +'</div>'+(getHomeroomTeacher(s.class)?'<div style="margin-top:4px;font-size:10px;color:#555;"><i class="fas fa-chalkboard-teacher" style="margin-left:3px;color:#6366f1;"></i> المربية: '+getHomeroomTeacher(s.class)+(getHomeroomIsSubstitute(s.class)?'<span style="background:#fef3c7;color:#d97706;border-radius:8px;padding:1px 5px;font-size:9px;margin-right:4px;">احتياط</span>':'')+'</div>':'')+(getSocialWorkerForClass(s.class)?'<div style="margin-top:2px;font-size:10px;color:#555;"><i class="fas fa-hand-holding-heart" style="margin-left:3px;color:#ec4899;"></i> الأخصائية: '+getSocialWorkerForClass(s.class)+'</div>':'')+'</div>';
     }).join('');
   }
 }
@@ -9792,14 +9797,15 @@ document.getElementById('fillFormModal').addEventListener('click', function(e) {
       <label style="display:block;font-weight:700;color:var(--primary);margin-bottom:6px;">الصف والشعبة</label>
       <select id="homeroomClass" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;">
         <option value="">-- اختر الصف --</option>
-        <option>1A</option><option>1B</option><option>1C</option>
-        <option>2A</option><option>2B</option><option>2C</option>
-        <option>3A</option><option>3B</option><option>3C</option>
-        <option>4A</option><option>4B</option><option>4C</option>
-        <option>5A</option><option>5B</option><option>5C</option>
-        <option>6A</option><option>6B</option><option>6C</option>
-        <option>7A</option><option>7B</option><option>7C</option>
-        <option>8A</option><option>8B</option><option>8C</option>
+        <optgroup label="الروضة"><option>KG1A</option><option>KG1B</option><option>KG1C</option><option>KG2A</option><option>KG2B</option><option>KG2C</option></optgroup>
+        <optgroup label="الصف الأول"><option>1A</option><option>1B</option><option>1C</option><option>1D</option><option>1E</option><option>1F</option></optgroup>
+        <optgroup label="الصف الثاني"><option>2A</option><option>2B</option><option>2C</option><option>2D</option><option>2E</option><option>2F</option></optgroup>
+        <optgroup label="الصف الثالث"><option>3A</option><option>3B</option><option>3C</option><option>3D</option><option>3E</option></optgroup>
+        <optgroup label="الصف الرابع"><option>4A</option><option>4B</option><option>4C</option><option>4D</option><option>4E</option><option>4F</option></optgroup>
+        <optgroup label="الصف الخامس"><option>5A</option><option>5B</option><option>5C</option><option>5D</option></optgroup>
+        <optgroup label="الصف السادس"><option>6A</option><option>6B</option><option>6C</option></optgroup>
+        <optgroup label="الصف السابع"><option>7A</option><option>7B</option><option>7C</option></optgroup>
+        <optgroup label="الصف الثامن"><option>8A</option><option>8B</option><option>8C</option></optgroup>
       </select>
     </div>
     <div style="margin-bottom:16px;">
@@ -9809,6 +9815,12 @@ document.getElementById('fillFormModal').addEventListener('click', function(e) {
       </select>
     </div>
     <div id="homeroomCurrentList" style="margin-bottom:16px;background:#f8f9fa;border-radius:10px;padding:16px;min-height:60px;"></div>
+    <div style="margin-bottom:14px;background:#fff8e1;border-radius:10px;padding:12px 16px;border:1px solid #fbbf24;display:flex;align-items:center;gap:10px;">
+      <input type="checkbox" id="homeroomIsSubstitute" style="width:18px;height:18px;accent-color:#f59e0b;cursor:pointer;">
+      <label for="homeroomIsSubstitute" style="cursor:pointer;font-weight:700;color:#92400e;font-size:0.95rem;">
+        <i class="fas fa-user-clock" style="margin-left:6px;"></i>هذه المعلمة <strong>احتياط مؤقت</strong> (تحل محل المربية الأصلية)
+      </label>
+    </div>
     <button onclick="saveHomeroomAssignment()" style="background:var(--accent);color:var(--primary);font-weight:700;padding:12px 32px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.95rem;width:100%;">
       <i class="fas fa-save" style="margin-left:6px;"></i>حفظ التعيين
     </button>
@@ -11653,27 +11665,111 @@ function onLeaveSaved_triggerSubstitute(leave) {
   var emp = (STAFF_DB||[]).find(function(s){ return String(s.id)===String(leave.empId); });
   var name = emp ? (emp.name_ar||emp.name||'') : '';
   var empEmail = emp ? (emp.email||'') : '';
-  // LEAVE_TYPES قد تكون const — نحصل على التسمية
   var leaveLabel = (typeof LEAVE_TYPES !== 'undefined' && LEAVE_TYPES[leave.type]) ? LEAVE_TYPES[leave.type].label : leave.type;
-  // إشعار في الاحتياط الذكي
   showToast('📋 تم تسجيل ' + name + ' في قائمة الاحتياط تلقائياً — جاري إرسال الإشعار...', 'info');
-  // إرسال webhook للإدارة والبديلة
+  // ── فحص هل الإجازة طويلة ──
+  var longLeaveTypes = ['long_sick','maternity','unpaid'];
+  var isLongLeave = longLeaveTypes.indexOf(leave.type) !== -1;
+  if (!isLongLeave && leave.startDate && leave.endDate) {
+    var diffMs = new Date(leave.endDate) - new Date(leave.startDate);
+    if (diffMs >= 7 * 86400000) isLongLeave = true;
+  }
+  // ── فحص هل المعلمة مربية صف ──
+  var homeroomAssignments = getHomeroomAssignments();
+  var homeroomClass = null;
+  Object.keys(homeroomAssignments).forEach(function(cls) {
+    var a = homeroomAssignments[cls];
+    if (String(a.teacherId) === String(leave.empId) || a.teacherName === name) homeroomClass = cls;
+  });
+  // ── إرسال webhook عام ──
+  var webhookUrl = 'https://webhooks.tasklet.ai/v1/public/webhook?token=1f75fe6c88269f5e877ee2633934e304';
+  var payload = {
+    context: 'leave_notify',
+    sender: 'مدرسة الجود',
+    empId: leave.empId,
+    empName: name,
+    empEmail: empEmail,
+    leaveType: leaveLabel,
+    startDate: leave.startDate,
+    endDate: leave.endDate || leave.startDate,
+    isLongLeave: isLongLeave,
+    homeroomClass: homeroomClass || '',
+    message: 'إشعار إجازة: ' + name + ' (' + leaveLabel + ') من ' + leave.startDate + ' حتى ' + (leave.endDate || leave.startDate) + (homeroomClass ? ' — مربية صف ' + homeroomClass : '') + '. يرجى مراجعة الاحتياط في البوابة.'
+  };
+  try { fetch(webhookUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).catch(function(){}); } catch(e) {}
+  // ── إذا إجازة طويلة + مربية صف: عرض نافذة اختيار المربية البديلة ──
+  if (isLongLeave && homeroomClass) {
+    setTimeout(function(){ openHomeroomSubstituteModal(name, homeroomClass, leave.empId, leaveLabel); }, 600);
+  }
+}
+
+// نافذة اختيار المربية البديلة عند الإجازة الطويلة
+function openHomeroomSubstituteModal(absentName, classCode, absentId, leaveLabel) {
+  var suggestions = findHomeroomSubstituteSuggestion(classCode, absentId);
+  var suggestHtml = '';
+  if (suggestions.length > 0) {
+    suggestHtml = '<p style="color:#065f46;font-weight:700;margin-bottom:8px;"><i class="fas fa-magic" style="margin-left:6px;color:#10b981;"></i>اقتراح النظام (نصاب خفيف، تدرّس الصف):</p>';
+    suggestions.slice(0,3).forEach(function(s, i) {
+      var star = i === 0 ? '<span style="background:#d1fae5;color:#065f46;border-radius:8px;padding:2px 7px;font-size:0.8rem;margin-right:6px;">الأفضل ★</span>' : '';
+      suggestHtml += '<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:6px;background:'+(i===0?'#ecfdf5':'#f9fafb')+';border:1px solid '+(i===0?'#6ee7b7':'#e5e7eb')+';">' +
+        '<input type="radio" name="hrSubstitute" value="' + s.teacherId + '|' + s.teacherName + '" '+(i===0?'checked':'')+' style="accent-color:#10b981;">' +
+        star + s.teacherName + ' <span style="color:#9ca3af;font-size:0.8rem;">(نصاب '+s.periodCount+' حصة)</span></label>';
+    });
+    suggestHtml += '<p style="color:#6b7280;font-size:0.85rem;margin-top:6px;">أو اختر معلمة أخرى:</p>';
+  }
+  var teacherOptions = '<option value="">-- اختر المعلمة --</option>';
+  (STAFF_DB||[]).filter(function(s){ return s.role==='teacher'||s.category==='معلم'; }).forEach(function(s){
+    teacherOptions += '<option value="'+s.id+'|'+(s.name_ar||s.name||'')+'">'+( s.name_ar||s.name||'')+'</option>';
+  });
+  var modalHtml = '<div id="hrSubModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:99999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;" dir="rtl">' +
+    '<div style="background:white;border-radius:16px;padding:28px;max-width:560px;width:92%;margin:40px auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">' +
+    '<div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:10px;padding:14px 16px;margin-bottom:18px;border:1px solid #fbbf24;">' +
+    '<h3 style="margin:0 0 4px 0;color:#92400e;font-size:1.05rem;"><i class="fas fa-exclamation-triangle" style="margin-left:8px;"></i>إجازة طويلة — مربية صف ' + classCode + '</h3>' +
+    '<p style="margin:0;color:#78350f;font-size:0.9rem;"><strong>' + absentName + '</strong> (' + leaveLabel + ') مربية صف <strong>' + classCode + '</strong>. يجب تعيين مربية مؤقتة.</p>' +
+    '</div>' +
+    suggestHtml +
+    '<div style="margin-bottom:14px;">' +
+    '<label style="display:block;font-weight:700;color:#1A2A4A;margin-bottom:6px;">اختر المربية البديلة:</label>' +
+    '<select id="hrSubSelManual" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;">' + teacherOptions + '</select>' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;">' +
+    '<button onclick="confirmHomeroomSubstitute(\'' + classCode + '\')" style="flex:1;padding:12px;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-family:inherit;font-size:0.95rem;"><i class="fas fa-check" style="margin-left:6px;"></i>تعيين المربية البديلة</button>' +
+    '<button onclick="document.getElementById(\x27hrSubModal\x27).remove()" style="flex:1;padding:12px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;cursor:pointer;font-family:inherit;">تأجيل</button>' +
+    '</div>' +
+    '</div></div>';
+  var div = document.createElement('div');
+  div.innerHTML = modalHtml;
+  document.body.appendChild(div.firstChild);
+}
+
+function confirmHomeroomSubstitute(classCode) {
+  // اقرأ الاختيار من الراديو أو القائمة
+  var radioEl = document.querySelector('input[name="hrSubstitute"]:checked');
+  var manualSel = document.getElementById('hrSubSelManual');
+  var chosen = (radioEl && radioEl.value) || (manualSel && manualSel.value) || '';
+  if (!chosen) { showToast('يرجى اختيار المعلمة البديلة', 'warning'); return; }
+  var parts = chosen.split('|');
+  var tid = parts[0]; var tname = parts[1] || '';
+  if (!tid && manualSel && manualSel.value) {
+    var mparts = manualSel.value.split('|');
+    tid = mparts[0]; tname = mparts[1] || '';
+  }
+  if (!tid) { showToast('يرجى اختيار المعلمة البديلة', 'warning'); return; }
+  // حفظ التعيين
+  var assignments = getHomeroomAssignments();
+  assignments[classCode] = { teacherId: tid, teacherName: tname, isSubstitute: true };
+  localStorage.setItem('aljood_homeroom', JSON.stringify(assignments));
+  // إغلاق النافذة
+  var modal = document.getElementById('hrSubModal');
+  if (modal) modal.remove();
+  showToast('✅ تم تعيين ' + tname + ' مربية مؤقتة (احتياط) لصف ' + classCode, 'success');
+  // إشعار الإدارة عبر webhook
   var webhookUrl = 'https://webhooks.tasklet.ai/v1/public/webhook?token=1f75fe6c88269f5e877ee2633934e304';
   try {
-    fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        context: 'leave_notify',
-        sender: 'مدرسة الجود',
-        empId: leave.empId,
-        empName: name,
-        empEmail: empEmail,
-        leaveType: leaveLabel,
-        startDate: leave.startDate,
-        endDate: leave.endDate || leave.startDate,
-        message: 'إشعار إجازة: ' + name + ' (' + leaveLabel + ') من ' + leave.startDate + ' حتى ' + (leave.endDate || leave.startDate) + '. يرجى مراجعة الاحتياط في البوابة.'
-      })
+    fetch(webhookUrl, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ context:'homeroom_substitute_assigned', sender:'مدرسة الجود',
+        classCode: classCode, newHomeroom: tname, isSubstitute: true,
+        message: 'تم تعيين ' + tname + ' مربية مؤقتة (احتياط) لصف ' + classCode + '. يرجى إشعار الطاقم الإداري.' })
     }).catch(function(){});
   } catch(e) {}
 }
@@ -16746,6 +16842,45 @@ function getHomeroomTeacher(classCode) {
   if (typeof HOMEROOM_DB !== 'undefined' && HOMEROOM_DB[classCode]) return HOMEROOM_DB[classCode].nameAr || '';
   return '';
 }
+function getHomeroomIsSubstitute(classCode) {
+  if (!classCode) return false;
+  var assignments = getHomeroomAssignments();
+  if (assignments[classCode]) return !!assignments[classCode].isSubstitute;
+  if (typeof HOMEROOM_DB !== 'undefined' && HOMEROOM_DB[classCode]) return !!HOMEROOM_DB[classCode].isSubstitute;
+  return false;
+}
+function getSocialWorkerForClass(classCode) {
+  if (!classCode || !SOCIAL_WORKER_DB || !SOCIAL_WORKER_DB.length) return '';
+  var worker = SOCIAL_WORKER_DB.find(function(w){ return w.classes && w.classes.indexOf(classCode) !== -1; });
+  return worker ? worker.nameAr : '';
+}
+// إيجاد مربية بديلة مقترحة للصف عند إجازة المربية الأصلية
+function findHomeroomSubstituteSuggestion(classCode, excludeEmpId) {
+  var todayStr = new Date().toISOString().slice(0,10);
+  var leaves = (typeof getLeaves === 'function') ? getLeaves() : [];
+  var onLeaveIds = {};
+  leaves.forEach(function(l) {
+    if (l.startDate <= todayStr && (l.endDate || l.startDate) >= todayStr) onLeaveIds[String(l.empId)] = true;
+  });
+  var assignments = getHomeroomAssignments();
+  var suggestions = [];
+  var schData = (typeof DEFAULT_SCHEDULES !== 'undefined') ? DEFAULT_SCHEDULES : {};
+  if (schData && typeof schData === 'object') {
+    Object.keys(schData).forEach(function(tid) {
+      if (String(tid) === String(excludeEmpId)) return;
+      if (onLeaveIds[String(tid)]) return;
+      var sch = schData[tid];
+      var periods = Array.isArray(sch) ? sch : (sch && Array.isArray(sch.periods) ? sch.periods : (sch && Array.isArray(sch.schedule) ? sch.schedule : []));
+      var teachesClass = periods.some(function(p){ return String(p['class']||p.cls||p.className||'') === classCode; });
+      if (!teachesClass) return;
+      var teacher = (STAFF_DB||[]).find(function(s){ return String(s.id)===String(tid); });
+      var isAlreadyHR = Object.values(assignments).some(function(a){ return String(a.teacherId)===String(tid); });
+      suggestions.push({ teacherId: tid, teacherName: teacher ? (teacher.name_ar||teacher.name||'') : '', periodCount: periods.length, isAlreadyHomeroom: isAlreadyHR });
+    });
+  }
+  suggestions.sort(function(a,b){ if(a.isAlreadyHomeroom!==b.isAlreadyHomeroom) return a.isAlreadyHomeroom?1:-1; return a.periodCount-b.periodCount; });
+  return suggestions;
+}
 function openHomeroomModal() {
   var modal = document.getElementById('homeroomModal');
   if (!modal) return;
@@ -16777,8 +16912,9 @@ function renderHomeroomCurrentList() {
     entries.map(function(entry) {
       var cls = entry[0]; var data = entry[1];
       var teacher = STAFF_DB.find(function(s){ return s.id === data.teacherId; });
-      return '<div style="background:white;border-radius:8px;padding:10px;border:1px solid #e0e0e0;display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
-        '<div><strong>' + cls + '</strong> — ' + (teacher ? teacher.name_ar : (data.teacherName||'')) + '</div>' +
+      var isSubBadge = data.isSubstitute ? '<span style="background:#fef3c7;color:#d97706;border:1px solid #fbbf24;border-radius:12px;padding:2px 8px;font-size:0.75rem;margin-right:6px;font-weight:700;"><i class=\"fas fa-user-clock\" style=\"margin-left:3px;\"></i>احتياط</span>' : '';
+      return '<div style="background:white;border-radius:8px;padding:10px;border:1px solid ' + (data.isSubstitute ? '#fbbf24' : '#e0e0e0') + ';display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
+        '<div><strong>' + cls + '</strong> — ' + isSubBadge + (teacher ? teacher.name_ar : (data.teacherName||'')) + '</div>' +
         '<button onclick="removeHomeroomAssignment(\'' + cls + '\')" style="background:#fee2e2;color:#ef4444;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:0.8rem;flex-shrink:0;">✕</button>' +
         '</div>';
     }).join('') + '</div>';
@@ -16788,8 +16924,9 @@ function saveHomeroomAssignment() {
   var teacherId = (document.getElementById('homeroomTeacher') || {value:''}).value;
   if (!cls || !teacherId) { showToast('يرجى اختيار الصف والمعلمة', 'warning'); return; }
   var teacher = STAFF_DB.find(function(s){ return s.id === teacherId; });
+  var isSubstituteFlag = document.getElementById('homeroomIsSubstitute') ? document.getElementById('homeroomIsSubstitute').checked : false;
   var assignments = getHomeroomAssignments();
-  assignments[cls] = { teacherId: teacherId, teacherName: teacher ? teacher.name_ar : '' };
+  assignments[cls] = { teacherId: teacherId, teacherName: teacher ? teacher.name_ar : '', isSubstitute: isSubstituteFlag };
   localStorage.setItem('aljood_homeroom', JSON.stringify(assignments));
   if(typeof renderSchoolOrgChart==='function') setTimeout(renderSchoolOrgChart,50);
   showToast('تم تعيين ' + (teacher ? teacher.name_ar : '') + ' مربية لصف ' + cls + ' ✓', 'success');
