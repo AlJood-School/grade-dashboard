@@ -3503,6 +3503,17 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 
   <!-- TAB 1: Setup -->
   <div id="sb-panel-setup">
+    <!-- زر الاستيراد من الجدول الحالي -->
+    <div style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.25);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;">
+        <div style="color:var(--accent);font-weight:700;font-size:0.9rem;"><i class="fas fa-magic"></i> استيراد تلقائي من الجدول الحالي</div>
+        <div style="color:rgba(255,255,255,0.55);font-size:0.78rem;margin-top:3px;">يقرأ schedules.json ويملأ الصفوف والمواد والمعلمات تلقائياً</div>
+      </div>
+      <button onclick="sbImportFromSchedule()"
+        style="padding:9px 20px;background:linear-gradient(135deg,#C9A84C,#e8c96d);color:#1a1a2e;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-family:inherit;white-space:nowrap;">
+        <i class="fas fa-file-import"></i> استيراد الآن
+      </button>
+    </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
       <span style="color:rgba(255,255,255,0.6);font-size:0.85rem;">المرحلة:</span>
       <button class="sb-stage-btn" data-stage="روضة" onclick="sbFilterStage('روضة')"
@@ -13330,6 +13341,68 @@ let sbCurrentGenClassIdx = 0;
 let sbTeacherStageFilter = 'all';
 
 // ─── Section entry ───
+// ════════════════════════════════════
+//  استيراد من الجدول الحالي
+// ════════════════════════════════════
+function sbImportFromSchedule() {
+  if (!SCHEDULES_DB || Object.keys(SCHEDULES_DB).length === 0) {
+    showToast('لم يُحمَّل الجدول بعد — انتظر لحظة وأعد المحاولة', 'error'); return;
+  }
+
+  // خريطة الصفوف → المراحل
+  function getStage(cls) {
+    if (/^KG/i.test(cls)) return 'روضة';
+    const n = parseInt(cls.replace(/[^0-9]/g,''));
+    if (n >= 1 && n <= 4) return 'حلقة أولى';
+    return 'حلقة ثانية';
+  }
+
+  const existing = getSBClasses();
+  const existingNames = new Set(existing.map(c => c.name));
+  const newClasses = [];
+  let addedCount = 0, skippedCount = 0;
+
+  for (const [cls, slots] of Object.entries(SCHEDULES_DB)) {
+    if (existingNames.has(cls)) { skippedCount++; continue; }
+
+    // تجميع المواد: {subject → {teacherId, count}}
+    const subjectMap = {};
+    for (const slot of Object.values(slots)) {
+      if (!slot || !slot.subject) continue;
+      const key = slot.subject;
+      if (!subjectMap[key]) subjectMap[key] = { teacherId: slot.teacherId || null, count: 0 };
+      subjectMap[key].count++;
+    }
+
+    const subjects = Object.entries(subjectMap).map(([subj, info]) => ({
+      subject: subj,
+      teacherId: info.teacherId || null,
+      periodsWeek: info.count
+    }));
+
+    if (subjects.length === 0) continue;
+
+    newClasses.push({
+      id: 'cls_' + cls + '_' + Date.now(),
+      name: cls,
+      stage: getStage(cls),
+      subjects
+    });
+    addedCount++;
+  }
+
+  if (addedCount === 0) {
+    showToast(skippedCount > 0
+      ? `جميع الصفوف (${skippedCount}) مستوردة مسبقاً ✓`
+      : 'لا توجد بيانات للاستيراد', 'warning');
+    return;
+  }
+
+  saveSBClasses([...existing, ...newClasses]);
+  renderSBSetup();
+  showToast(`✅ تم استيراد ${addedCount} صف بنجاح${skippedCount > 0 ? ' (تجاوزنا '+skippedCount+' موجود)' : ''}`, 'success');
+}
+
 function renderSBSection() {
   sbSwitchTab('setup');
   renderSBSetup();
