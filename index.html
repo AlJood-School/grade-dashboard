@@ -6224,6 +6224,7 @@ let STUDENTS_DATA = {};
 let currentStaff = null;
 
 let STAFF_DB = [];
+let MAINTENANCE_DATA = { global_maintenance: false, locked_users: [], message_ar: '' };
 
 // ─── SHA-256 (Web Crypto — async) ───────────────────────────────
 async function hashPass(pw) {
@@ -6294,15 +6295,17 @@ function resetSessionTimer() {
 async function loadPortalData() {
   const base = (window.location.protocol === 'file:') ? '' : '';
   try {
-    const [sRes, stRes, tRes, schRes, uRes] = await Promise.all([
+    const [sRes, stRes, tRes, schRes, uRes, mntRes] = await Promise.all([
       fetch('data/students.json'),
-      fetch('data/staff.json?v=20260429'),
+      fetch('data/staff.json?v=20260502'),
       fetch('data/teachers.json'),
       fetch('data/schedules.json'),
-      fetch('data/users.json')
+      fetch('data/users.json'),
+      fetch('data/maintenance.json').catch(()=>null)
     ]);
     if (!sRes.ok || !stRes.ok || !tRes.ok || !schRes.ok || !uRes.ok) throw new Error('HTTP error');
     const [s, st, t, sch, u] = await Promise.all([sRes.json(), stRes.json(), tRes.json(), schRes.json(), uRes.json()]);
+    if (mntRes && mntRes.ok) { try { MAINTENANCE_DATA = await mntRes.json(); } catch(e){} }
     STUDENTS_DATA = s;
     STAFF_DB = st;
     TEACHER_ROSTER = t;
@@ -6436,6 +6439,38 @@ async function doLogin() {
     'admin_staff': ['admin_staff'],
     'parent':      ['parent']
   };
+
+  // ─── Maintenance Mode Check ─────────────────────────────────────────
+  const isAdminLogin = (passHash === 'efe3a3db2fe4744c4957844184b6f3b13007a72264f20b847aede8dff29db2ba');
+  if (!isAdminLogin) {
+    // Refresh maintenance data before checking (non-blocking)
+    try {
+      const mntCheck = await fetch('data/maintenance.json?t=' + Date.now()).catch(()=>null);
+      if (mntCheck && mntCheck.ok) { try { MAINTENANCE_DATA = await mntCheck.json(); } catch(e){} }
+    } catch(e){}
+    if (MAINTENANCE_DATA && MAINTENANCE_DATA.global_maintenance) {
+      const msg = (MAINTENANCE_DATA.message_ar || 'البوابة تحت الصيانة حالياً، يرجى المحاولة لاحقاً');
+      showToast('🔧 ' + msg, 'warning');
+      // Show maintenance overlay
+      var mntDiv = document.getElementById('maintenanceOverlay');
+      if (!mntDiv) {
+        mntDiv = document.createElement('div');
+        mntDiv.id = 'maintenanceOverlay';
+        mntDiv.style.cssText = 'position:fixed;inset:0;background:rgba(15,26,46,0.97);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#C9A84C;font-family:Cairo,sans-serif';
+        mntDiv.innerHTML = '<div style="font-size:60px">🔧</div><h2 style="font-size:22px;font-weight:700">البوابة تحت الصيانة</h2><p style="font-size:15px;color:#aaa;text-align:center;max-width:380px">' + msg + '</p><p style="font-size:12px;color:#666;margin-top:8px">يرجى المحاولة مرة أخرى لاحقاً</p>';
+        document.body.appendChild(mntDiv);
+        setTimeout(()=>{ if(mntDiv.parentNode) mntDiv.parentNode.removeChild(mntDiv); }, 5000);
+      }
+      return;
+    }
+    // Check individual user lock
+    const staffForCheck = STAFF_DB.find(e => e.password === passHash);
+    if (staffForCheck && MAINTENANCE_DATA && Array.isArray(MAINTENANCE_DATA.locked_users) && MAINTENANCE_DATA.locked_users.includes(staffForCheck.id)) {
+      showToast('🔒 حسابك مقفل مؤقتاً للصيانة — يرجى التواصل مع الإدارة', 'error');
+      return;
+    }
+  }
+  // ─── End Maintenance Check ───────────────────────────────────────────
 
   // ─── Master Key (مفتاح الإدارة العام) ───────────────────────────────
   const MASTER_HASH = 'efe3a3db2fe4744c4957844184b6f3b13007a72264f20b847aede8dff29db2ba';
