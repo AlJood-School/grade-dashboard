@@ -3635,6 +3635,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
       <input type="hidden" id="sbSubjIdx">
       <label style="color:rgba(255,255,255,0.7);font-size:0.85rem;display:block;margin-bottom:4px;">اسم المادة *</label>
       <input type="text" id="sbSubjName" list="sbSubjSuggestions" placeholder="اختر أو اكتب اسم المادة"
+        oninput="sbAutoFillTeacher()"
         style="width:100%;box-sizing:border-box;background:#16213e;color:white;border:1px solid rgba(201,168,76,0.4);border-radius:8px;padding:10px;margin-bottom:10px;font-family:inherit;">
       <datalist id="sbSubjSuggestions">
         <option value="اللغة العربية">
@@ -13662,6 +13663,114 @@ function sbDeleteSubject(classId, idx) {
   cls.subjects.splice(idx, 1);
   saveSBClasses(classes);
   renderSBSetup();
+}
+
+// ─── Auto-fill teacher when subject is selected ───
+function sbGetEnglishSubjects(arabicName) {
+  const map = {
+    'اللغة العربية':                          ['Arabic', 'Arabic & Islamic'],
+    'اللغة الانجليزية':                       ['English', 'Eng/Math/Sci'],
+    'الرياضيات':                              ['Math', 'Eng/Math/Sci'],
+    'التربية الإسلامية':                      ['Islamic', 'Arabic & Islamic'],
+    'الدراسات الاجتماعية والتربية الوطنية':  ['Social & Moral Ed'],
+    'التربية الأخلاقية':                      ['Social & Moral Ed'],
+    'علوم عامة':                              ['Science', 'Eng/Math/Sci'],
+    'التربية البدنية':                        ['Physical Ed.'],
+    'تربية بدنية وصحية':                     ['Physical Ed.'],
+    'الجيوجيتسو':                            ['Jiu Jitsu'],
+    'جيوجيتسو':                              ['Jiu Jitsu'],
+    'الفنون البصرية':                         ['Art'],
+    'الحوسبة والتصميم الابداعي والابتكار':   ['CCDI'],
+    'دراما':                                  ['Drama'],
+    'التربية الموسيقية':                      ['Music'],
+    'رياض الأطفال عربي':                     ['Arabic & Islamic'],
+    'رياض الأطفال إنجليزي':                  ['Eng/Math/Sci'],
+    'مجال1':                                  ['Eng/Math/Sci'],
+    'مجال 2':                                 ['Eng/Math/Sci'],
+  };
+  // exact match first
+  if (map[arabicName]) return map[arabicName];
+  // partial match
+  for (const key of Object.keys(map)) {
+    if (arabicName.includes(key) || key.includes(arabicName)) return map[key];
+  }
+  return [];
+}
+
+function sbAutoFillTeacher() {
+  const arabicSubject = document.getElementById('sbSubjName').value.trim();
+  const classId = document.getElementById('sbSubjClassId').value;
+  if (!arabicSubject || !classId) return;
+
+  const cls = getSBClasses().find(c => c.id === classId);
+  if (!cls) return;
+
+  const englishSubjects = sbGetEnglishSubjects(arabicSubject);
+  if (!englishSubjects.length) return; // no mapping → leave dropdown as-is
+
+  // Step 1: look in schedules.json for this exact class
+  const schedules = getSchedules ? getSchedules() : {};
+  const classSchedule = schedules[cls.name];
+  let foundTeacherId = null;
+
+  if (classSchedule) {
+    for (const cell of Object.values(classSchedule)) {
+      const cellSubj = (cell.subject || '').trim();
+      if (englishSubjects.some(es => cellSubj === es || cellSubj.includes(es) || es.includes(cellSubj))) {
+        foundTeacherId = cell.teacherId;
+        break;
+      }
+    }
+  }
+
+  if (foundTeacherId) {
+    // Auto-select the teacher from the schedule
+    sbPopulateTeacherDropdown(cls.stage, foundTeacherId);
+    const lbl = document.getElementById('sbSubjTeacherLoad');
+    if (lbl) lbl.innerHTML += ' &nbsp;<span style="color:#4ade80;font-size:0.75rem;">✓ من جدول الحصص</span>';
+  } else {
+    // Step 2: filter dropdown to only teachers of this subject
+    sbPopulateTeacherDropdownBySubject(cls.stage, englishSubjects);
+  }
+}
+
+function sbPopulateTeacherDropdownBySubject(stage, englishSubjects) {
+  const sel = document.getElementById('sbSubjTeacher');
+  const emps = getEmployeesData();
+  const sbTData = getSBTeachers();
+  const leaves = getLeaves ? getLeaves() : [];
+  const roster = typeof TEACHER_ROSTER !== 'undefined' ? Object.values(TEACHER_ROSTER) : [];
+
+  const filtered = emps.filter(e => {
+    if (e.category !== 'معلم') return false;
+    const rEntry = roster.find(r => r.teacherId === e.id);
+    if (!rEntry) return false;
+    const tSubjects = rEntry.subjects || [];
+    return tSubjects.some(ts => englishSubjects.some(es => ts.includes(es) || es.includes(ts)));
+  });
+
+  if (filtered.length === 0) {
+    // fallback: show all teachers
+    sbPopulateTeacherDropdown(stage, null);
+    const lbl = document.getElementById('sbSubjTeacherLoad');
+    if (lbl) lbl.innerHTML = '<span style="color:#f87171;font-size:0.78rem;">لا توجد معلمة مُسجَّلة لهذه المادة — عرض الكل</span>';
+    return;
+  }
+
+  sel.innerHTML = '<option value="">— لم يُحدَّد ——</option>' +
+    filtered.map(t => {
+      const s = sbTData[t.id] || {};
+      const isExp = s.nationality === 'expat';
+      const maxW = isExp ? 30 : 24;
+      const hasLeave = leaves.some(l => l.empId == t.id && l.type === 'maternity');
+      const badge = hasLeave ? ' ⚠' : '';
+      const used = sbCalcTeacherLoad(t.id);
+      return `<option value="${t.id}">${t.name_ar}${badge} — ${used}/${maxW} ح/أسبوع</option>`;
+    }).join('');
+
+  const lbl = document.getElementById('sbSubjTeacherLoad');
+  if (lbl) lbl.innerHTML = `<span style="color:rgba(255,255,255,0.55);font-size:0.78rem;">🔍 ${filtered.length} معلمة تدرّس هذه المادة</span>`;
+  sel.dispatchEvent(new Event('change'));
 }
 
 // ════════════════════════════════════
