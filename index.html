@@ -18383,6 +18383,30 @@ function laSaveSession(){
   if (badge) { badge.textContent = 'الحصة ' + session.period + ' — ' + session.subject; badge.style.display='inline'; }
   // استدعاء تحديث الاحتياط
   if (typeof onAttendanceChanged_triggerSubstitute === 'function') onAttendanceChanged_triggerSubstitute();
+  // B15: إرسال تقرير الحضور فوراً عبر Webhook
+  try {
+    var _absentList = Object.values(session.students).filter(function(s){return s.status==='absent';}).map(function(s){return s.name;});
+    var _lateList   = Object.values(session.students).filter(function(s){return s.status==='late';}).map(function(s){return s.name;});
+    var _attendPayload = {
+      event: 'lesson_attendance_saved',
+      class: session.class,
+      subject: session.subject,
+      period: session.period,
+      date: session.date,
+      teacher: session.teacherName || session.teacher,
+      present: present,
+      absent: _absentList.length,
+      late: _lateList.length,
+      excused: Object.values(session.students).filter(function(s){return s.status==='excused';}).length,
+      total: total,
+      absentStudents: _absentList,
+      lateStudents: _lateList
+    };
+    fetch('https://webhooks.tasklet.ai/v1/public/webhook?token=1f75fe6c88269f5e877ee2633934e304',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(_attendPayload)
+    }).catch(function(){});
+  } catch(e) {}
   showToast('تم حفظ سجل الحضور — حاضرات: '+present+'/'+total+' — الحصة '+session.period,'success');
   laCurrentSession=null;renderLessonAttendance();
 }
@@ -23902,17 +23926,52 @@ function generateFairDutySchedule(forceRegen) {
   var sortedTeachers = sortByHistory(teachers);
   var tIdx = 0;
 
+  // B6: قيود تلقائية — معلمة لها 6+ حصص في اليوم تُستثنى من المناوبة ذلك اليوم
+  var _teacherDayLoad = {};
+  var B6_MAX = 6;
+  try {
+    var _b6schs = (typeof getSchedules === 'function') ? getSchedules() : {};
+    Object.keys(_b6schs).forEach(function(cls) {
+      if (cls.startsWith('__')) return;
+      Object.keys(_b6schs[cls]).forEach(function(key) {
+        var parts = key.split('_');
+        if (parts.length < 2) return;
+        var dIdx = parseInt(parts[0]);
+        var tid = (_b6schs[cls][key] || {}).teacherId;
+        if (!tid || isNaN(dIdx)) return;
+        if (!_teacherDayLoad[tid]) _teacherDayLoad[tid] = {};
+        _teacherDayLoad[tid][dIdx] = (_teacherDayLoad[tid][dIdx] || 0) + 1;
+      });
+    });
+  } catch(e) {}
+
   days.forEach(function(day, di) {
-    schedule.days[day] = { zones: [], adminSupervision: [] };
+    // B6: استثناء تلقائي
+    var _dayExcluded = {};
+    sortedTeachers.forEach(function(t) {
+      if ((_teacherDayLoad[t.id] || {})[di] >= B6_MAX) _dayExcluded[t.id] = true;
+    });
+    schedule.days[day] = { zones: [], adminSupervision: [], autoConstraintsCount: Object.keys(_dayExcluded).length };
     SCHOOL_ZONES.forEach(function(zone) {
       var assigned = [];
-      for (var i=0; i<zone.teachersCount; i++) {
-        if (tIdx < sortedTeachers.length) {
-          var t = sortedTeachers[tIdx % sortedTeachers.length];
+      var _tried = 0; var _maxTry = sortedTeachers.length * 2 + zone.teachersCount;
+      while (assigned.length < zone.teachersCount && _tried < _maxTry) {
+        var t = sortedTeachers[tIdx % sortedTeachers.length];
+        tIdx++; _tried++;
+        if (!_dayExcluded[t.id] && !assigned.find(function(a){ return a.id === t.id; })) {
           assigned.push({ id:t.id, name:t.name_ar||t.name, subject:t.subject||'' });
           history[t.id] = (history[t.id]||0) + 1;
-          tIdx++;
         }
+      }
+      // احتياط: إذا لم تكتمل المناوبة رغم القيود
+      if (assigned.length < zone.teachersCount) {
+        sortedTeachers.forEach(function(t) {
+          if (assigned.length >= zone.teachersCount) return;
+          if (!assigned.find(function(a){ return a.id === t.id; })) {
+            assigned.push({ id:t.id, name:t.name_ar||t.name, subject:t.subject||'' });
+            history[t.id] = (history[t.id]||0) + 1;
+          }
+        });
       }
       schedule.days[day].zones.push({
         zone: zone,
