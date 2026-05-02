@@ -10764,6 +10764,102 @@ function renderMyProfile() {
      +'<br><span style="color:#888;font-size:0.8rem;">العام الدراسي ٢٠٢٥ – ٢٠٢٦</span>'
    +'</div>'
   +'</div>';
+
+  // ─── جدول المعلمة الشخصي ───
+  if (currentRole === 'teacher' && currentStaff) {
+    var schedDiv = document.createElement('div');
+    schedDiv.style.cssText = 'margin-top:20px;';
+    schedDiv.innerHTML = '<div style="font-size:1.1rem;font-weight:700;color:var(--primary);margin-bottom:12px;display:flex;align-items:center;gap:8px;">' +
+      '<i class="fas fa-calendar-alt" style="color:var(--accent);"></i> جدولي الأسبوعي</div>' +
+      '<div id="teacher-personal-schedule" style="background:white;border-radius:14px;padding:16px;box-shadow:0 2px 10px rgba(0,0,0,0.06);">' +
+      '<div style="text-align:center;color:#aaa;padding:24px;"><i class="fas fa-spinner fa-spin"></i> جاري التحميل...</div></div>';
+    container.insertBefore(schedDiv, container.querySelector('#extended-profile-sections') || null);
+    container.appendChild(schedDiv);
+
+    // Load and render teacher schedule
+    (function(){
+      var tName = currentStaff.name_ar || '';
+      var tId   = String(currentStaff.id || '');
+      var days  = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس'];
+      var periods= ['ح١','ح٢','ح٣','ح٤','ح٥','ح٦','ح٧','ح٨'];
+
+      function renderTeacherSched(schedData){
+        var el = document.getElementById('teacher-personal-schedule');
+        if(!el) return;
+        // Build teacher slot map: {day: [{period, classCode, subject}]}
+        var myMap = {};
+        days.forEach(function(d){ myMap[d] = []; });
+
+        Object.keys(schedData).forEach(function(cls){
+          var clsData = schedData[cls];
+          days.forEach(function(day){
+            if(!clsData[day]) return;
+            clsData[day].forEach(function(slot, idx){
+              if(!slot) return;
+              var tMatch = false;
+              if(slot.teacher) {
+                tMatch = (slot.teacher === tName || String(slot.teacherId||'') === tId);
+              }
+              if(tMatch && myMap[day]) {
+                myMap[day].push({period: slot.period || ('ح'+(idx+1)), classCode: cls, subject: slot.subject||''});
+              }
+            });
+          });
+        });
+
+        // Check if any slots found
+        var hasAny = days.some(function(d){ return myMap[d].length > 0; });
+        if(!hasAny){
+          el.innerHTML = '<div style="text-align:center;color:#aaa;padding:24px;"><i class="fas fa-calendar-times" style="font-size:2rem;display:block;margin-bottom:8px;"></i>لم يُعيَّن جدول بعد</div>';
+          return;
+        }
+
+        // Render table
+        var periodColors = {'ح١':'#f0f9ff','ح٢':'#fff7ed','ح٣':'#f0fdf4','ح٤':'#fef9c3','ح٥':'#fdf4ff','ح٦':'#fff1f2','ح٧':'#f0f9ff','ح٨':'#f0fdf4'};
+        var html2 = '<div style="overflow-x:auto;">' +
+          '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">' +
+          '<thead><tr style="background:var(--primary);color:var(--accent);">' +
+          '<th style="padding:8px 6px;text-align:center;border-radius:8px 0 0 0;">اليوم</th>';
+        periods.forEach(function(p){
+          html2 += '<th style="padding:8px 4px;text-align:center;">' + p + '</th>';
+        });
+        html2 += '</tr></thead><tbody>';
+
+        days.forEach(function(day, di){
+          html2 += '<tr style="' + (di%2===0?'background:#fafafa':'background:white') + '">' +
+            '<td style="padding:8px 6px;font-weight:700;color:var(--primary);white-space:nowrap;text-align:center;">' + day + '</td>';
+          periods.forEach(function(p){
+            var slot = myMap[day].find(function(s){ return s.period===p; });
+            if(slot){
+              html2 += '<td style="padding:6px 4px;text-align:center;background:' + (periodColors[p]||'#fafafa') + ';border-radius:6px;">' +
+                '<div style="font-weight:600;color:var(--primary);font-size:0.78rem;">' + slot.classCode + '</div>' +
+                '<div style="color:#666;font-size:0.72rem;">' + slot.subject + '</div></td>';
+            } else {
+              html2 += '<td style="padding:6px 4px;text-align:center;color:#ddd;">—</td>';
+            }
+          });
+          html2 += '</tr>';
+        });
+
+        html2 += '</tbody></table></div>';
+        el.innerHTML = html2;
+      }
+
+      // Try SCHEDULE_DB first, otherwise fetch
+      if(typeof SCHEDULE_DB !== 'undefined' && SCHEDULE_DB){
+        renderTeacherSched(SCHEDULE_DB);
+      } else {
+        fetch('data/schedules.json?v=' + Date.now())
+          .then(function(r){ return r.json(); })
+          .then(function(d){ window.SCHEDULE_DB = d; renderTeacherSched(d); })
+          .catch(function(){ 
+            var el2 = document.getElementById('teacher-personal-schedule');
+            if(el2) el2.innerHTML = '<div style="color:#aaa;text-align:center;padding:16px;">تعذّر تحميل الجدول</div>';
+          });
+      }
+    })();
+  }
+
   // Extended sections for staff
   if (currentRole !== 'parent') {
     var _xp = (typeof getProfileData === 'function') ? getProfileData(currentUsername) : {};
@@ -18561,7 +18657,7 @@ function tktUpdateGlobalBanner() {
       <div class="nav-item" onclick="showSection('tech_issues')" data-section="tech_issues" data-roles="admin,principal">
         <i class="fas fa-laptop-medical"></i><span>المشاكل التقنية</span>
       </div>
-      <div class="nav-item" onclick="showSection('duties')" data-section="duties" data-roles="admin,principal,admin_staff,vice_principal">
+      <div class="nav-item" onclick="showSection('duties')" data-section="duties" data-roles="admin,principal,admin_staff,vice_principal,teacher">
         <i class="fas fa-clipboard-list"></i><span>المناوبات</span>
       </div>
     <button onclick="showSection('tech_support')" style="padding:5px 14px;background:#dc2626;color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.82rem;font-family:inherit;font-weight:600;">عرض البلاغات</button>
