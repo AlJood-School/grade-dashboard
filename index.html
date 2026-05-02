@@ -6411,10 +6411,23 @@ async function loadPortalData() {
     DEFAULT_SCHEDULES = sch;
     initRoleData(u.roles || u);
     // Apply localStorage overrides (from data management panel)
+    // But invalidate if server version is newer
     try {
       var _ovS = localStorage.getItem('data_override_students'); if (_ovS) STUDENTS_DATA = JSON.parse(_ovS);
       var _ovSt = localStorage.getItem('data_override_staff'); if (_ovSt) STAFF_DB = JSON.parse(_ovSt);
-      var _ovT = localStorage.getItem('data_override_teachers'); if (_ovT) TEACHER_ROSTER = JSON.parse(_ovT);
+      var _ovT = localStorage.getItem('data_override_teachers');
+      if (_ovT) {
+        var _ovTParsed = JSON.parse(_ovT);
+        var _serverVer = t && t._version ? String(t._version) : null;
+        var _localVer  = _ovTParsed && _ovTParsed._version ? String(_ovTParsed._version) : null;
+        // Clear if: server has a version AND (local has no version OR local is older)
+        if (_serverVer && (!_localVer || _serverVer > _localVer)) {
+          console.info('🔄 teachers.json: server version (' + _serverVer + ') newer than local (' + _localVer + ') — clearing override');
+          localStorage.removeItem('data_override_teachers');
+        } else {
+          TEACHER_ROSTER = _ovTParsed;
+        }
+      }
     } catch(e) { console.warn('Override parse error:', e); }
     console.log('✅ Portal data loaded dynamically', {
       students: Object.keys(STUDENTS_DATA).reduce((a,k)=>a+STUDENTS_DATA[k].length,0),
