@@ -11632,15 +11632,30 @@ function onLeaveSaved_triggerSubstitute(leave) {
   if (!leave || !leave.empId) return;
   var emp = (STAFF_DB||[]).find(function(s){ return String(s.id)===String(leave.empId); });
   var name = emp ? (emp.name_ar||emp.name||'') : '';
-  // تسجيل في سجل الغياب
-  if (typeof recordAttendanceFromLeave === 'function') {
-    recordAttendanceFromLeave(leave.empId, leave.startDate, leave.endDate, leave.id, leave.type);
-  }
+  var empEmail = emp ? (emp.email||'') : '';
+  // LEAVE_TYPES قد تكون const — نحصل على التسمية
+  var leaveLabel = (typeof LEAVE_TYPES !== 'undefined' && LEAVE_TYPES[leave.type]) ? LEAVE_TYPES[leave.type].label : leave.type;
   // إشعار في الاحتياط الذكي
-  showToast('📋 تم تسجيل ' + name + ' في قائمة الاحتياط تلقائياً', 'info');
-  // إرسال SMS للمديرة (عبر webhook)
-  var msg = 'إشعار نظام الإجازات: ' + name + ' في إجازة اعتباراً من ' + leave.startDate + '. تم تفعيل الاحتياط الذكي تلقائياً.';
-  sendSmsNotification(msg, 'admin_leave_notify');
+  showToast('📋 تم تسجيل ' + name + ' في قائمة الاحتياط تلقائياً — جاري إرسال الإشعار...', 'info');
+  // إرسال webhook للإدارة والبديلة
+  var webhookUrl = 'https://webhooks.tasklet.ai/v1/public/webhook?token=1f75fe6c88269f5e877ee2633934e304';
+  try {
+    fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        context: 'leave_notify',
+        sender: 'مدرسة الجود',
+        empId: leave.empId,
+        empName: name,
+        empEmail: empEmail,
+        leaveType: leaveLabel,
+        startDate: leave.startDate,
+        endDate: leave.endDate || leave.startDate,
+        message: 'إشعار إجازة: ' + name + ' (' + leaveLabel + ') من ' + leave.startDate + ' حتى ' + (leave.endDate || leave.startDate) + '. يرجى مراجعة الاحتياط في البوابة.'
+      })
+    }).catch(function(){});
+  } catch(e) {}
 }
 
 let currentLeaveTab = 'all';
@@ -11908,9 +11923,13 @@ function saveLeaveRecord() {
     leaves.push({ id: leaveId, empId, type, startDate, endDate: finalEndDate, notes, nursingTiming });
   }
   saveLeaves(leaves);
-  // سجّل غياباً تلقائياً في نظام الحضور لأنواع الإجازات التي تستوجب الغياب
-  if (['maternity','sick_3','sick_long','nursing'].indexOf(type) >= 0) {
+  // سجّل غياباً تلقائياً في نظام الحضور لجميع أنواع الإجازات التي تستوجب الغياب (شامل unpaid)
+  if (['maternity','sick_3','sick_long','nursing','unpaid'].indexOf(type) >= 0) {
     recordAttendanceFromLeave(empId, startDate, finalEndDate, leaveId, type);
+  }
+  // ── إشعار الاحتياط + إرسال SMS للإدارة ──
+  if (!editId && typeof onLeaveSaved_triggerSubstitute === 'function') {
+    onLeaveSaved_triggerSubstitute({ id: leaveId, empId: empId, type: type, startDate: startDate, endDate: finalEndDate, notes: notes });
   }
   closeLeaveModal();
   renderLeavesSection();
