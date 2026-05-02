@@ -501,11 +501,16 @@ async function ghGetSha(path) {
   // نحتاج SHA لعملية الكتابة
   const token = getToken();
   if (!token) { toast('⚠️ أدخلي GitHub Token أولاً','err'); return null; }
-  const headers = {Authorization:'Bearer '+token};
-  const r = await fetch(GH_API+path, {headers});
-  if (!r.ok) return null;
-  const meta = await r.json();
-  return meta.sha;
+  try {
+    const headers = {Authorization:'Bearer '+token};
+    const r = await fetch(GH_API+path, {headers});
+    if (!r.ok) return null;
+    const meta = await r.json();
+    return meta.sha;
+  } catch(e) {
+    toast('❌ تعذّر الاتصال بـ GitHub','err');
+    return null;
+  }
 }
 
 async function ghPut(path, content, msg) {
@@ -513,23 +518,28 @@ async function ghPut(path, content, msg) {
   if (!token) { toast('⚠️ أدخلي GitHub Token أولاً','err'); showTokenModal(); return false; }
   const sha = await ghGetSha(path);
   if (!sha) { toast('❌ فشل الحصول على SHA — تحقق من الـ Token','err'); return false; }
-  const body = JSON.stringify({
-    message: msg,
-    content: b64enc(content),
-    sha: sha,
-    branch: GH_BRANCH
-  });
-  const r = await fetch(GH_API+path, {
-    method:'PUT',
-    headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-    body
-  });
-  if (!r.ok) {
-    const err = await r.json().catch(()=>({}));
-    toast('❌ فشل الرفع: '+(err.message||r.status),'err');
+  try {
+    const body = JSON.stringify({
+      message: msg,
+      content: b64enc(content),
+      sha: sha,
+      branch: GH_BRANCH
+    });
+    const r = await fetch(GH_API+path, {
+      method:'PUT',
+      headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(()=>({}));
+      toast('❌ فشل الرفع: '+(err.message||r.status),'err');
+      return false;
+    }
+    return true;
+  } catch(e) {
+    toast('❌ تعذّر الاتصال بـ GitHub','err');
     return false;
   }
-  return true;
 }
 
 async function ghPush(files, msg) {
