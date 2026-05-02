@@ -2737,11 +2737,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     <!-- Dynamic detail sections -->
     <div id="org-detail-sections"></div>
   </div>
-      <div id="administration-add-bar" class="crud-add-bar" style="display:none">
-        <button class="crud-add-btn" onclick="openModal('administration')"><i class="fas fa-plus"></i> إضافة فرد إداري</button>
-        <button class="crud-add-btn" onclick="openSpecialistModal()" style="background:var(--accent);color:var(--primary);margin-right:8px;" id="specialist-assign-btn"><i class="fas fa-user-tag"></i> تعيين الأخصائيين على الصفوف</button>
-      </div>
-      <div class="teachers-grid" id="administration-grid"></div>
+
 
       <div class="card" style="margin-top:20px;position:relative;">
         <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
@@ -7154,6 +7150,7 @@ const POSITION_EXTRA_ACCESS = {
 
 const CONTRACT_TYPES = { permanent:'دائم', temporary:'مؤقت', daily:'يومي بالحصة' };
 const POSITION_LABELS = {
+  principal:'مديرة', admin_director:'مدير',
   vice_principal:'نائبة مديرة', registrar:'مسؤولة التسجيل والقبول',
   dept_head:'رئيسة قسم', counselor:'أخصائية اجتماعية',
   lab_tech:'فني مختبر', regular:'معلمة/موظفة'
@@ -8752,7 +8749,7 @@ const GROUP_LABELS = {
   admin_tools:   'أدوات المدير'
 };
 
-const NAV_CONFIG_VERSION = '2026-05-02-v5';
+const NAV_CONFIG_VERSION = '2026-05-02-v6';
 function getNavConfig() {
   try {
     const savedVersion = localStorage.getItem('aljood_nav_version');
@@ -10591,6 +10588,8 @@ function renderStaffDirectory() {
   if (!grid) return;
   const allStaff = getStaffData();
   const search = staffSearchText.toLowerCase();
+  const normArSearch = t => (t||'').replace(/ة/g,'ه').replace(/ى/g,'ي').replace(/[أإآ]/g,'ا').toLowerCase();
+  const normQ = normArSearch(staffSearchText);
   let filtered = allStaff.filter(e => {
     let catMatch = true;
     if (staffFilter === 'معلم') catMatch = e.category === 'معلم';
@@ -10599,7 +10598,7 @@ function renderStaffDirectory() {
     else if (staffFilter === 'رياض الأطفال') catMatch = (e.grade||'').includes('رياض');
     else if (staffFilter === 'الحلقة الأولى') catMatch = (e.grade||'').includes('الأولى')||(e.grade||'').includes('أولى');
     else if (staffFilter === 'الحلقة الثانية') catMatch = (e.grade||'').includes('الثانية')||(e.grade||'').includes('ثانية');
-    let searchMatch = !search || e.name_ar.toLowerCase().includes(search) || (e.primary_job||'').toLowerCase().includes(search) || (e.subjects||[]).some(s=>s.toLowerCase().includes(search)) || (e.email||'').toLowerCase().includes(search);
+    let searchMatch = !normQ || normArSearch(e.name_ar).includes(normQ) || normArSearch(e.primary_job).includes(normQ) || (e.subjects||[]).some(s=>normArSearch(s).includes(normQ)) || normArSearch(e.email).includes(normQ);
     return catMatch && searchMatch;
   });
   if (countEl) countEl.textContent = 'عدد الموظفين: ' + filtered.length + ' من أصل ' + allStaff.length;
@@ -17479,6 +17478,7 @@ var BH_VIOLATION_TYPES = [
   {type:'التأخر المتكرر',degree:1},{type:'عدم إحضار الأدوات الدراسية',degree:1},
   {type:'الفوضى في الفصل',degree:1},{type:'عدم الانتباه في الحصة',degree:1},
   {type:'التكلم بدون إذن',degree:1},{type:'عدم أداء الواجب المنزلي',degree:1},
+  {type:'النوم في الحصة',degree:1},
   {type:'التنمر اللفظي',degree:2},{type:'عدم احترام المعلمة',degree:2},
   {type:'الغياب بدون إذن',degree:2},{type:'الغش في الامتحان',degree:2},
   {type:'استخدام الهاتف في الحصة',degree:2},{type:'الكذب والتحايل',degree:2},
@@ -21341,14 +21341,19 @@ function renderHRRoles() {
   var staff = (typeof STAFF_DB !== 'undefined') ? STAFF_DB : [];
   var rows = staff.map(function(s) {
     var assign = sam[s.email] || {};
-    var pos = assign.position || 'regular';
+    var pos = assign.position || (
+      s.role === 'principal' ? 'principal' :
+      s.role === 'admin' ? 'admin_director' :
+      s.role === 'vice_principal' ? 'vice_principal' :
+      s.role === 'specialist' ? 'counselor' : 'regular'
+    );
     var posOptions = Object.keys(POSITION_LABELS).map(function(p) {
       return '<option value="' + p + '"' + (pos === p ? ' selected' : '') + '>' + POSITION_LABELS[p] + '</option>';
     }).join('');
     var safeId = (s.email || s.id || '').replace(/[^a-zA-Z0-9]/g,'');
     return '<tr style="border-bottom:1px solid #f0f0f0;">' +
       '<td style="padding:10px 8px;font-size:0.85rem;">' + (s.name_ar || '') + '<br><small style="color:#888;">' + (s.email || '') + '</small></td>' +
-      '<td style="padding:8px;font-size:0.78rem;color:#555;">' + (s.role || 'teacher') + '</td>' +
+      '<td style="padding:8px;font-size:0.78rem;color:#555;">' + ({admin:'مدير',principal:'مديرة',vice_principal:'نائبة مديرة',teacher:'معلمة',admin_staff:'إداري',tech_staff:'فني/تقني',specialist:'أخصائية اجتماعية'}[s.role] || s.role || 'معلمة') + '</td>' +
       '<td style="padding:8px;"><select id="pos_' + safeId + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;font-family:Cairo,sans-serif;font-size:0.8rem;">' + posOptions + '</select></td>' +
       '<td style="padding:8px;text-align:center;"><button onclick="saveStaffPosition(\'' + safeId + '\',\'' + (s.email||'') + '\')" style="background:#1A2A4A;color:#fff;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:0.78rem;">حفظ</button></td>' +
       '</tr>';
