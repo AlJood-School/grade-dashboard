@@ -13385,9 +13385,10 @@ function renderSBClassCard(cls) {
   const emps = getEmployeesData();
   const totalPeriods = subjects.reduce((s, sub) => s + (sub.periodsWeek || 0), 0);
 
+  const unassigned = subjects.filter(s => !s.teacherId).length;
   const subjectsHtml = subjects.map((sub, idx) => {
     const teacher = emps.find(e => e.id == sub.teacherId);
-    const tName = teacher ? teacher.name_ar.split(' ').slice(0,2).join(' ') : '<span style="color:#f87171;">غير معيّن</span>';
+    const tName = teacher ? teacher.name_ar.split(' ').slice(0,2).join(' ') : '<span style="color:#f87171;font-weight:700;">⚠ غير معيّن</span>';
     const color = sbSubjectColor(sub.subjectName);
     const consLabel = sub.consecutiveSize == 2 ? '2 متجاورة' : sub.consecutiveSize == 3 ? '3 متجاورة' : '';
     return `<div style="display:flex;align-items:center;gap:8px;padding:8px;background:rgba(255,255,255,0.04);border-radius:6px;border-right:3px solid ${color};">
@@ -13405,6 +13406,7 @@ function renderSBClassCard(cls) {
       <h3 style="color:white;margin:0;font-size:1rem;">${cls.name}</h3>
       <span style="background:rgba(201,168,76,0.12);color:var(--accent);padding:2px 10px;border-radius:20px;font-size:0.78rem;">${cls.stage}</span>
       <span style="color:rgba(255,255,255,0.4);font-size:0.78rem;">${totalPeriods} حصة/أسبوع</span>
+      ${unassigned > 0 ? `<span style="background:rgba(239,68,68,0.15);color:#f87171;padding:2px 10px;border-radius:20px;font-size:0.75rem;"><i class="fas fa-user-times"></i> ${unassigned} بدون معلمة</span>` : '<span style="background:rgba(34,197,94,0.12);color:#4ade80;padding:2px 10px;border-radius:20px;font-size:0.75rem;"><i class="fas fa-check"></i> مكتمل</span>'}
       <div style="margin-right:auto;display:flex;gap:6px;">
         <button onclick="sbShowAddSubject('${cls.id}')" style="padding:5px 12px;background:rgba(34,197,94,0.12);color:#4ade80;border:1px solid rgba(34,197,94,0.25);border-radius:6px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-plus"></i> إضافة مادة</button>
         <button onclick="sbDeleteClass('${cls.id}')" style="padding:5px 12px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);border-radius:6px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-trash"></i></button>
@@ -13704,7 +13706,23 @@ function sbRunGenerate() {
         </div>
       </div>`;
 
-    if (warnings.length > 0) {
+    // Count subjects missing a teacher
+    const missingTeacher = classes.reduce((acc, c) => {
+      (c.subjects||[]).forEach(sub => {
+        if ((sub.periodsWeek||0) > 0 && !sub.teacherId) acc.push(`${c.name} — ${sub.subjectName}`);
+      });
+      return acc;
+    }, []);
+
+    if (totalCells === 0 && totalNeeded > 0) {
+      // All subjects have periods but no teachers assigned
+      document.getElementById('sb-gen-warnings').innerHTML =
+        `<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:14px;margin-bottom:12px;">
+          <div style="color:#f87171;font-weight:700;margin-bottom:8px;"><i class="fas fa-user-times"></i> لم يُولَّد أي جدول — المواد لا تحتوي معلمات معيَّنة</div>
+          <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;margin-bottom:10px;">يجب تعيين معلمة لكل مادة قبل التوليد. انتقلي إلى تبويب <b style="color:var(--accent);">الإعداد</b> وافتحي بطاقة كل صف لتعيين المعلمات.</div>
+          ${missingTeacher.length ? `<ul style="color:#fca5a5;font-size:0.78rem;margin:0;padding-right:18px;">${missingTeacher.map(m=>`<li>${m}</li>`).join('')}</ul>` : ''}
+        </div>`;
+    } else if (warnings.length > 0) {
       document.getElementById('sb-gen-warnings').innerHTML =
         `<div style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);border-radius:8px;padding:14px;margin-bottom:12px;">
           <div style="color:#fbbf24;font-weight:700;margin-bottom:8px;"><i class="fas fa-exclamation-triangle"></i> تنبيهات (${warnings.length})</div>
@@ -13712,7 +13730,7 @@ function sbRunGenerate() {
         </div>`;
     } else {
       document.getElementById('sb-gen-warnings').innerHTML =
-        '<div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:10px 14px;color:#4ade80;font-size:0.85rem;margin-bottom:12px;"><i class="fas fa-check-circle"></i> تم توزيع جميع الحصص بنجاح دون أي تعارض!</div>';
+        '<div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:10px 14px;color:#4ade80;font-size:0.85rem;margin-bottom:12px;"><i class="fas fa-check-circle"></i> تم توزيع جميع الحصص بنجاح دون أي تعارض! ✔</div>';
     }
 
     // Class navigation
