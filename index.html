@@ -13345,62 +13345,67 @@ let sbTeacherStageFilter = 'all';
 //  استيراد من الجدول الحالي
 // ════════════════════════════════════
 function sbImportFromSchedule() {
-  if (!SCHEDULES_DB || Object.keys(SCHEDULES_DB).length === 0) {
+  // الحصول على بيانات الجدول عبر الدالة الرسمية
+  var schedDB = (typeof getSchedules === 'function') ? getSchedules() : null;
+  if (!schedDB || Object.keys(schedDB).length === 0) {
     showToast('لم يُحمَّل الجدول بعد — انتظر لحظة وأعد المحاولة', 'error'); return;
   }
 
   // خريطة الصفوف → المراحل
-  function getStage(cls) {
+  function _getStage(cls) {
     if (/^KG/i.test(cls)) return 'روضة';
-    const n = parseInt(cls.replace(/[^0-9]/g,''));
+    var n = parseInt(cls.replace(/[^0-9]/g,''));
     if (n >= 1 && n <= 4) return 'حلقة أولى';
     return 'حلقة ثانية';
   }
 
-  const existing = getSBClasses();
-  const existingNames = new Set(existing.map(c => c.name));
-  const newClasses = [];
-  let addedCount = 0, skippedCount = 0;
+  var existing = getSBClasses();
+  var existingNames = new Set(existing.map(function(c){ return c.name; }));
+  var newClasses = [];
+  var addedCount = 0, skippedCount = 0;
 
-  for (const [cls, slots] of Object.entries(SCHEDULES_DB)) {
-    if (existingNames.has(cls)) { skippedCount++; continue; }
+  Object.entries(schedDB).forEach(function([cls, slots]) {
+    if (existingNames.has(cls)) { skippedCount++; return; }
 
-    // تجميع المواد: {subject → {teacherId, count}}
-    const subjectMap = {};
-    for (const slot of Object.values(slots)) {
-      if (!slot || !slot.subject) continue;
-      const key = slot.subject;
+    // تجميع المواد: subjectName → {teacherId, count}
+    var subjectMap = {};
+    Object.values(slots).forEach(function(slot) {
+      if (!slot || !slot.subject) return;
+      var key = slot.subject;
       if (!subjectMap[key]) subjectMap[key] = { teacherId: slot.teacherId || null, count: 0 };
       subjectMap[key].count++;
-    }
+    });
 
-    const subjects = Object.entries(subjectMap).map(([subj, info]) => ({
-      subject: subj,
-      teacherId: info.teacherId || null,
-      periodsWeek: info.count
-    }));
+    var subjects = Object.entries(subjectMap).map(function([subj, info]) {
+      return {
+        subjectName: subj,           // الحقل الصحيح المستخدم في المنشئ
+        teacherId: info.teacherId || null,
+        periodsWeek: info.count,
+        consecutiveSize: 1
+      };
+    });
 
-    if (subjects.length === 0) continue;
+    if (subjects.length === 0) return;
 
     newClasses.push({
-      id: 'cls_' + cls + '_' + Date.now(),
+      id: 'cls_' + cls + '_' + Date.now() + '_' + addedCount,
       name: cls,
-      stage: getStage(cls),
-      subjects
+      stage: _getStage(cls),
+      subjects: subjects
     });
     addedCount++;
-  }
+  });
 
   if (addedCount === 0) {
     showToast(skippedCount > 0
-      ? `جميع الصفوف (${skippedCount}) مستوردة مسبقاً ✓`
+      ? 'جميع الصفوف (' + skippedCount + ') مستوردة مسبقاً ✓'
       : 'لا توجد بيانات للاستيراد', 'warning');
     return;
   }
 
-  saveSBClasses([...existing, ...newClasses]);
+  saveSBClasses(existing.concat(newClasses));
   renderSBSetup();
-  showToast(`✅ تم استيراد ${addedCount} صف بنجاح${skippedCount > 0 ? ' (تجاوزنا '+skippedCount+' موجود)' : ''}`, 'success');
+  showToast('✅ تم استيراد ' + addedCount + ' صف بنجاح' + (skippedCount > 0 ? ' (تجاوزنا ' + skippedCount + ' موجود)' : ''), 'success');
 }
 
 function renderSBSection() {
