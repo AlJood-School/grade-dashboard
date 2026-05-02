@@ -24889,14 +24889,41 @@ function getClassNameAr(code) {
 
 function getClassSubjectTeachers(classCode) {
   // Extract unique subject→teacher from DEFAULT_SCHEDULES
-  var sch = (typeof DEFAULT_SCHEDULES !== 'undefined') ? DEFAULT_SCHEDULES : {};
+  // Try both DEFAULT_SCHEDULES and getSchedules() (localStorage override)
+  var sch = {};
+  try { sch = (typeof getSchedules === 'function') ? getSchedules() : (DEFAULT_SCHEDULES || {}); } catch(e) { sch = (typeof DEFAULT_SCHEDULES !== 'undefined') ? DEFAULT_SCHEDULES : {}; }
   var classData = sch[classCode];
+  if (!classData || !Object.keys(classData).length) {
+    // fallback to DEFAULT_SCHEDULES directly
+    classData = (typeof DEFAULT_SCHEDULES !== 'undefined' && DEFAULT_SCHEDULES[classCode]) ? DEFAULT_SCHEDULES[classCode] : null;
+  }
   if (!classData) return {};
   var subjects = {};
   Object.values(classData).forEach(function(p) {
-    if (p && p.subject && p.teacher) {
+    if (p && p.subject && (p.teacher || p.teacherId)) {
       if (!subjects[p.subject]) subjects[p.subject] = new Set();
-      subjects[p.subject].add(p.teacher);
+      // Look up Arabic name using teacherId or scheduleKey
+      var nameAr = p.teacher;
+      try {
+        if (typeof TEACHER_ROSTER !== 'undefined') {
+          var rosterVals = Object.values(TEACHER_ROSTER);
+          // 1. Match by teacherId (most reliable)
+          if (p.teacherId) {
+            var byId = rosterVals.find(function(t){ return t.teacherId === p.teacherId; });
+            if (byId && byId.name_ar) { nameAr = byId.name_ar; }
+          }
+          // 2. Match by scheduleKey (teacher short code like "Nashika.S")
+          if (nameAr === p.teacher && p.teacher) {
+            var byKey = rosterVals.find(function(t){ return t.scheduleKey === p.teacher; });
+            if (byKey && byKey.name_ar) { nameAr = byKey.name_ar; }
+          }
+          // 3. Direct key lookup
+          if (nameAr === p.teacher && p.teacher && TEACHER_ROSTER[p.teacher] && TEACHER_ROSTER[p.teacher].name_ar) {
+            nameAr = TEACHER_ROSTER[p.teacher].name_ar;
+          }
+        }
+      } catch(e) {}
+      subjects[p.subject].add(nameAr || p.teacher || p.teacherId || '—');
     }
   });
   var result = {};
