@@ -1234,6 +1234,35 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 .la-late{background:#FFF8E1;color:#C9A84C;}.la-late.la-sel{background:#C9A84C;color:white;}
 .la-absent{background:#FFEBEE;color:#C62828;}.la-absent.la-sel{background:#C62828;color:white;}
 .la-excused{background:#E3F2FD;color:#1565C0;}.la-excused.la-sel{background:#1565C0;color:white;}
+
+/* ===== Collapsible Nav Groups ===== */
+.nav-group { margin-bottom: 1px; }
+.nav-group-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 16px 4px 12px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: rgba(201,168,76,0.8);
+  transition: color 0.2s;
+}
+.nav-group-header:hover { color: var(--accent); }
+.nav-group-header .group-arrow {
+  font-size: 0.6rem;
+  transition: transform 0.22s ease;
+  color: rgba(201,168,76,0.45);
+  margin-right: 2px;
+}
+.nav-group.collapsed .group-arrow { transform: rotate(-90deg); }
+.nav-group-items {
+  overflow: hidden;
+  max-height: 2000px;
+  transition: max-height 0.28s ease;
+}
+.nav-group.collapsed .nav-group-items { max-height: 0; }
+
 </style>
 
 <style>
@@ -8723,7 +8752,7 @@ const GROUP_LABELS = {
   admin_tools:   'أدوات المدير'
 };
 
-const NAV_CONFIG_VERSION = '2026-05-02-v4';
+const NAV_CONFIG_VERSION = '2026-05-02-v5';
 function getNavConfig() {
   try {
     const savedVersion = localStorage.getItem('aljood_nav_version');
@@ -8753,12 +8782,9 @@ function renderNav() {
   if (!container) return;
   const config = getNavConfig();
   const access = currentRole === 'admin' ? config.map(s=>s.id) : getEffectiveAccess(currentRole);
-  // Group items
   const groups = {};
   const groupOrder = [];
-  // Normalize role for visibleTo check: admin_staff/tech_staff → 'staff', but also check the original role
   const visibleRole = (currentRole === 'admin_staff' || currentRole === 'tech_staff') ? 'staff' : currentRole;
-  // Get current user's position for position-based visibility
   let currentUserPosition = 'regular';
   try {
     const sess = JSON.parse(localStorage.getItem('aljood_session') || '{}');
@@ -8768,7 +8794,6 @@ function renderNav() {
   } catch(e) {}
   config.forEach(item => {
     const vt = item.visibleTo || [];
-    // Check both the normalized role ('staff') AND the actual role ('admin_staff'/'tech_staff')
     const canSeeByRole = vt.includes(visibleRole) || vt.includes(currentRole) || vt.includes(currentUserPosition);
     if (!canSeeByRole && currentRole !== 'admin') return;
     if (!access.includes(item.id)) return;
@@ -8776,29 +8801,45 @@ function renderNav() {
     if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
     groups[g].push(item);
   });
-  // Admin-only: exclude analysis
+  // Load collapsed state from localStorage
+  let collapsedState = {};
+  try { collapsedState = JSON.parse(localStorage.getItem('aljood_navgroups') || '{}'); } catch(e) {}
   let html = '';
   groupOrder.forEach(g => {
     const items = groups[g];
     if (!items || items.length === 0) return;
-    html += `<div class="nav-section-title">${GROUP_LABELS[g] || g}</div>`;
+    const isMain = (g === 'main');
+    const isCollapsed = !isMain && (collapsedState[g] === true);
+    html += `<div class="nav-group${isCollapsed ? ' collapsed' : ''}" id="navgroup-${g}">`;
+    if (isMain) {
+      html += `<div class="nav-section-title">${GROUP_LABELS[g] || g}</div>`;
+    } else {
+      html += `<div class="nav-group-header" onclick="toggleNavGroup('${g}')"><span>${GROUP_LABELS[g] || g}</span><i class="fas fa-chevron-down group-arrow"></i></div>`;
+    }
+    html += `<div class="nav-group-items">`;
     items.forEach(item => {
-      const badge = item.badge ? `<span class="badge" style="background:${item.badgeColor || 'var(--accent)'};">${item.badge}</span>` : '';
+      const badge = item.badge ? `<span class="badge" style="background:${item.badgeColor || 'var(--accent)'}">${item.badge}</span>` : '';
       const adminEdit = (currentRole === 'admin' && item.id !== 'home')
         ? `<span class="nav-edit-btn" onclick="event.stopPropagation();openNavEditModal('${item.id}')" title="تعديل"><i class="fas fa-pen" style="font-size:0.65rem;color:rgba(201,162,39,0.5);"></i></span>`
         : '';
-      html += `<div class="nav-item" data-section="${item.id}" onclick="showSection('${item.id}')" style="position:relative;">
-        <i class="fas ${item.icon}"></i><span>${item.label}</span>${badge}${adminEdit}
-      </div>`;
+      html += `<div class="nav-item" data-section="${item.id}" onclick="showSection('${item.id}')" style="position:relative;"><i class="fas ${item.icon}"></i><span>${item.label}</span>${badge}${adminEdit}</div>`;
     });
+    html += `</div></div>`;
   });
   container.innerHTML = html;
-  // Re-apply active state
   document.querySelectorAll('#dynamicNav .nav-item[data-section]').forEach(el => {
-    if (el.getAttribute('data-section') === (document.querySelector('.section.active') || {id:''}).id) {
-      el.classList.add('active');
-    }
+    const activeEl = document.querySelector('.section.active');
+    if (activeEl && el.getAttribute('data-section') === activeEl.id) el.classList.add('active');
   });
+}
+
+function toggleNavGroup(g) {
+  let collapsedState = {};
+  try { collapsedState = JSON.parse(localStorage.getItem('aljood_navgroups') || '{}'); } catch(e) {}
+  collapsedState[g] = !collapsedState[g];
+  localStorage.setItem('aljood_navgroups', JSON.stringify(collapsedState));
+  const el = document.getElementById('navgroup-' + g);
+  if (el) { el.classList.toggle('collapsed', collapsedState[g]); }
 }
 
 // ===== Nav Edit Modal =====
