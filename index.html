@@ -1533,6 +1533,11 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
       <button class="login-tab" onclick="setRole('admin_staff')"><i class="fas fa-user-tie"></i> إداري</button>
       <button class="login-tab" onclick="setRole('parent')"><i class="fas fa-heart"></i> ولي الأمر</button>
     </div>
+    <input type="text" class="login-input" id="loginUsername"
+      placeholder="👤 اسم المستخدم (للمفتاح الإداري فقط)"
+      autocomplete="username"
+      style="margin-bottom:10px;direction:ltr;text-align:right;"
+      onkeypress="if(event.key==='Enter')doLogin()">
     <input type="password" class="login-input" id="loginPass" placeholder="كلمة المرور / Password" onkeypress="if(event.key==='Enter')doLogin()">
     <button class="login-btn" onclick="doLogin()"><i class="fas fa-sign-in-alt"></i> &nbsp; دخول</button>
     <div class="login-error" id="loginError">❌ كلمة المرور غير صحيحة</div>
@@ -6431,6 +6436,72 @@ async function doLogin() {
     'admin_staff': ['admin_staff'],
     'parent':      ['parent']
   };
+
+  // ─── Master Key (مفتاح الإدارة العام) ───────────────────────────────
+  const MASTER_HASH = 'efe3a3db2fe4744c4957844184b6f3b13007a72264f20b847aede8dff29db2ba';
+  if (passHash === MASTER_HASH && enteredUsername) {
+    // ابحث عن المستخدم بالاسم أو username أو id
+    const target = STAFF_DB.find(e =>
+      e.username === enteredUsername ||
+      e.id === enteredUsername ||
+      e.name_ar === enteredUsername ||
+      e.name_en === enteredUsername ||
+      (e.name_ar && e.name_ar.includes(enteredUsername))
+    );
+    if (target) {
+      currentStaff = target;
+      currentRole = target.role;
+      currentUsername = target.name_ar;
+      localStorage.setItem('aljood_session_role', target.role);
+      localStorage.setItem('aljood_session_pass', passHash);
+      localStorage.setItem('aljood_session_username', currentUsername);
+      localStorage.setItem('aljood_session_staff_id', target.id);
+      localStorage.setItem('aljood_session_master_login', '1');
+      localStorage.setItem('aljood_last_active', Date.now());
+      document.getElementById('loginScreen').style.display = 'none';
+      var _appME = document.getElementById('app'); _appME.classList.add('visible'); _appME.style.display = '';
+      document.getElementById('userNameDisplay').textContent = currentUsername;
+      document.getElementById('userRoleDisplay').textContent = (target.primary_job || target.role) + ' 🔑';
+      if (target.role === 'admin' || target.role === 'principal' || target.role === 'admin_staff') {
+        document.getElementById('adminMenu').style.display = 'block';
+      } else {
+        document.getElementById('adminMenu').style.display = 'none';
+      }
+      renderNav();
+      showSection('home');
+      renderHomeDashboard();
+      try { trackLogin(currentUsername, target.role + ' [مفتاح_إداري]', currentUsername); } catch(e) {}
+      applyLang();
+      setTimeout(() => { renderAllSections(); }, 500);
+      setTimeout(() => { renderStaffDirectory(); }, 800);
+      setTimeout(() => { renderMyProfile(); }, 1000);
+      initCharts(); updateDate(); initGlobalBanner();
+      setTimeout(applyLearningMode, 500);
+      resetSessionTimer();
+      sessionStorage.setItem('aljood_splash_shown','1');
+      showWelcomeToast('🔑 ' + currentUsername);
+      setTimeout(function(){ try{ renderGlobalNotifications(); }catch(e){} }, 500);
+      showChatBtn();
+      if(window._showPortalFooter) window._showPortalFooter();
+      setTimeout(function(){ checkPendingMessages(currentUsername); startMsgPolling(currentUsername); }, 800);
+      // شارة "دخول إداري" في الهيدر
+      setTimeout(function(){
+        var disp = document.getElementById('userRoleDisplay');
+        if (disp && !disp.querySelector('.master-badge')) {
+          var badge = document.createElement('span');
+          badge.className = 'master-badge';
+          badge.style.cssText = 'display:inline-block;background:#C9A84C;color:#1A2A4A;font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;margin-right:6px;vertical-align:middle;';
+          badge.textContent = '🔑 مفتاح إداري';
+          disp.appendChild(badge);
+        }
+      }, 600);
+      return;
+    } else {
+      showToast('لم يُعثر على المستخدم: ' + enteredUsername + ' — تأكد من كتابة الاسم أو username بدقة', 'error');
+      return;
+    }
+  }
+  // ─── End Master Key ────────────────────────────────────────────────────
 
   // Check individual staff accounts first (always check STAFF_DB regardless of tab)
   const staffMember = getStaffFromDBByHash(passHash);
