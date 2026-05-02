@@ -6255,6 +6255,7 @@ let STUDENTS_DATA = {};
 let currentStaff = null;
 let HOMEROOM_DB = {};
 let SOCIAL_WORKER_DB = []; // الأخصائيات الاجتماعية وتوزيعهن على الصفوف
+let CLASS_LOCATIONS_DB = {}; // مواقع الصفوف في المبنى
 
 let STAFF_DB = [];
 let MAINTENANCE_DATA = { global_maintenance: false, locked_users: [], message_ar: '' };
@@ -6328,7 +6329,7 @@ function resetSessionTimer() {
 async function loadPortalData() {
   const base = (window.location.protocol === 'file:') ? '' : '';
   try {
-    const [sRes, stRes, tRes, schRes, uRes, mntRes, hrRes, swRes] = await Promise.all([
+    const [sRes, stRes, tRes, schRes, uRes, mntRes, hrRes, swRes, clRes] = await Promise.all([
       fetch('data/students.json'),
       fetch('data/staff.json?v=20260502'),
       fetch('data/teachers.json'),
@@ -6336,7 +6337,8 @@ async function loadPortalData() {
       fetch('data/users.json'),
       fetch('data/maintenance.json').catch(()=>null),
       fetch('data/homeroom_teachers.json').catch(()=>null),
-      fetch('data/social_workers.json').catch(()=>null)
+      fetch('data/social_workers.json').catch(()=>null),
+      fetch('data/class_locations.json').catch(()=>null)
     ]);
     if (!sRes.ok || !stRes.ok || !tRes.ok || !schRes.ok || !uRes.ok) throw new Error('HTTP error');
     const [s, st, t, sch, u] = await Promise.all([sRes.json(), stRes.json(), tRes.json(), schRes.json(), uRes.json()]);
@@ -6359,6 +6361,8 @@ async function loadPortalData() {
       } catch(e){}
     }
     if (swRes && swRes.ok) { try { var swJsonData = await swRes.json(); SOCIAL_WORKER_DB = swJsonData.workers || []; } catch(e){} }
+    if (clRes && clRes.ok) { try { CLASS_LOCATIONS_DB = await clRes.json(); } catch(e){} }
+    mergeClassLocationsFromStorage();
     STUDENTS_DATA = s;
     STAFF_DB = st;
     TEACHER_ROSTER = t;
@@ -6971,6 +6975,42 @@ function tiExportCSV() {
   };
 })();
 <\/script>
+
+<!-- ════════════════ CLASS CARD MODAL ════════════════ -->
+<div id="classCardModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;" onclick="if(event.target===this)closeClassCard()">
+  <div style="background:#fff;border-radius:18px;width:min(96vw,680px);max-height:88vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,0.25);direction:rtl;">
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#1A2A4A,#2d4a7a);padding:18px 22px;border-radius:18px 18px 0 0;display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="color:#C9A84C;font-size:11px;font-weight:600;margin-bottom:3px;">بطاقة الصف</div>
+        <h2 id="ccTitle" style="color:#fff;font-size:22px;font-weight:800;margin:0;font-family:'Cairo',sans-serif;"></h2>
+      </div>
+      <button onclick="closeClassCard()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>
+    </div>
+    <!-- Stats Row -->
+    <div id="ccStats" style="display:flex;gap:12px;padding:16px 22px 4px;flex-wrap:wrap;"></div>
+    <!-- Info Grid -->
+    <div style="padding:4px 22px 16px;display:grid;grid-template-columns:1fr 1fr;gap:10px;" id="ccInfoGrid"></div>
+    <!-- Subject Teachers -->
+    <div style="padding:0 22px 20px;">
+      <div style="font-weight:700;color:#1A2A4A;margin-bottom:10px;font-size:15px;display:flex;align-items:center;gap:6px;">
+        <i class="fas fa-book-open" style="color:#C9A84C;"></i> معلمات المواد
+      </div>
+      <div id="ccTeachers" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;"></div>
+    </div>
+    <!-- Location Edit (admin only) -->
+    <div id="ccLocationEdit" style="display:none;padding:0 22px 20px;">
+      <div style="font-weight:700;color:#1A2A4A;margin-bottom:8px;font-size:14px;"><i class="fas fa-edit" style="color:#6366f1;"></i> تعديل موقع الصف</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+        <div><label style="font-size:11px;color:#888;">المبنى</label><input id="ccLocBuilding" style="width:100%;border:1px solid #ddd;border-radius:8px;padding:6px 10px;font-family:Cairo;font-size:13px;"></div>
+        <div><label style="font-size:11px;color:#888;">الطابق</label><input id="ccLocFloor" style="width:100%;border:1px solid #ddd;border-radius:8px;padding:6px 10px;font-family:Cairo;font-size:13px;"></div>
+        <div><label style="font-size:11px;color:#888;">رقم الغرفة</label><input id="ccLocRoom" style="width:100%;border:1px solid #ddd;border-radius:8px;padding:6px 10px;font-family:Cairo;font-size:13px;"></div>
+      </div>
+      <button onclick="saveClassLocation(currentClassCardCode)" style="margin-top:8px;background:#1A2A4A;color:#C9A84C;border:none;border-radius:8px;padding:7px 18px;font-family:Cairo;font-size:13px;cursor:pointer;">💾 حفظ الموقع</button>
+    </div>
+  </div>
+</div>
+
 </body></html>`;
 
   const blob = new Blob([html], {type:'text/html;charset=utf-8'});
@@ -7544,7 +7584,7 @@ function renderStudents() {
       var hrTeacher = getHomeroomTeacher(s.class);
       var hrIsSubstitute = getHomeroomIsSubstitute(s.class);
       var swTeacher = getSocialWorkerForClass(s.class);
-      return '<tr><td style="color:#888;font-size:12px;">'+(i+1)+'</td><td style="font-weight:600;">'+s.nameAr+' '+getBehaviorBadgeHtml(s.id)+'</td><td style="font-size:12px;color:#666;">'+s.nameEn+'</td><td style="font-size:12px;font-family:monospace;">'+s.id+'</td><td><span style="background:var(--navy);color:var(--gold);padding:2px 10px;border-radius:10px;font-size:12px;font-weight:700;">'+gradeName+' / '+section+'</span>'+(hrTeacher?'<br><span style="font-size:10px;color:#888;"><i class="fas fa-chalkboard-teacher"></i> '+hrTeacher+(hrIsSubstitute?'<span style="background:#fef3c7;color:#d97706;border-radius:6px;padding:1px 5px;font-size:9px;margin-right:4px;">احتياط</span>':'')+'</span>':'')+'</td><td>'+cycleLabel+'</td></tr>';
+      return '<tr><td style="color:#888;font-size:12px;">'+(i+1)+'</td><td style="font-weight:600;">'+s.nameAr+' '+getBehaviorBadgeHtml(s.id)+'</td><td style="font-size:12px;color:#666;">'+s.nameEn+'</td><td style="font-size:12px;font-family:monospace;">'+s.id+'</td><td><span onclick="showClassCard(\x27'+s.class+'\x27)" style="background:var(--navy);color:var(--gold);padding:2px 10px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;" title="عرض بطاقة الصف">'+gradeName+' / '+section+'</span>'+(hrTeacher?'<br><span style="font-size:10px;color:#888;"><i class="fas fa-chalkboard-teacher"></i> '+hrTeacher+(hrIsSubstitute?'<span style="background:#fef3c7;color:#d97706;border-radius:6px;padding:1px 5px;font-size:9px;margin-right:4px;">احتياط</span>':'')+'</span>':'')+'</td><td>'+cycleLabel+'</td></tr>';
     }).join('');
   }
 
@@ -24683,6 +24723,168 @@ body.has-footer { padding-bottom: 32px; }
     }, 1200);
   });
 })();
+
+// ══════════════════════════════════════════════════════════
+// CLASS CARD SYSTEM — بطاقة الصف الشاملة
+// ══════════════════════════════════════════════════════════
+var currentClassCardCode = '';
+
+function getClassNameAr(code) {
+  if (!code) return '';
+  var gradeMap = {'KG1':'روضة أولى','KG2':'روضة ثانية','1':'الأول','2':'الثاني','3':'الثالث','4':'الرابع','5':'الخامس','6':'السادس','7':'السابع','8':'الثامن'};
+  var sectionMap = {'A':'أ','B':'ب','C':'ج','D':'د','E':'هـ','F':'و'};
+  var m = code.match(/^(KG[12]|[1-8])([A-F])$/);
+  if (!m) return code;
+  return 'الصف ' + (gradeMap[m[1]] || m[1]) + ' / ' + (sectionMap[m[2]] || m[2]);
+}
+
+function getClassSubjectTeachers(classCode) {
+  // Extract unique subject→teacher from DEFAULT_SCHEDULES
+  var sch = (typeof DEFAULT_SCHEDULES !== 'undefined') ? DEFAULT_SCHEDULES : {};
+  var classData = sch[classCode];
+  if (!classData) return {};
+  var subjects = {};
+  Object.values(classData).forEach(function(p) {
+    if (p && p.subject && p.teacher) {
+      if (!subjects[p.subject]) subjects[p.subject] = new Set();
+      subjects[p.subject].add(p.teacher);
+    }
+  });
+  var result = {};
+  Object.keys(subjects).forEach(function(s){ result[s] = Array.from(subjects[s]).join(', '); });
+  return result;
+}
+
+function getClassStudentCount(classCode) {
+  if (!classCode || typeof STUDENTS_DATA === 'undefined' || !STUDENTS_DATA[classCode]) return 0;
+  return STUDENTS_DATA[classCode].length;
+}
+
+function getClassTodayAttendance(classCode) {
+  try {
+    var LA_KEY = 'aljood_lesson_attendance_v1';
+    var data = JSON.parse(localStorage.getItem(LA_KEY) || '{}');
+    var sessions = data.sessions || [];
+    var today = new Date().toISOString().split('T')[0];
+    var todaySessions = sessions.filter(function(s){ return s.class === classCode && s.date === today; });
+    if (!todaySessions.length) return null;
+    var totalPresent = 0, totalStudents = 0;
+    todaySessions.forEach(function(s){
+      var studs = s.students ? Object.values(s.students) : [];
+      totalStudents += studs.length;
+      totalPresent += studs.filter(function(st){ return st.status === 'present'; }).length;
+    });
+    if (!totalStudents) return null;
+    return Math.round(totalPresent / totalStudents * 100);
+  } catch(e) { return null; }
+}
+
+function showClassCard(classCode) {
+  if (!classCode) return;
+  currentClassCardCode = classCode;
+  
+  // Title
+  document.getElementById('ccTitle').textContent = getClassNameAr(classCode) || classCode;
+  
+  // Stats
+  var studentCount = getClassStudentCount(classCode);
+  var attendPct = getClassTodayAttendance(classCode);
+  var statsHtml = '';
+  statsHtml += '<div style="background:#f0f4ff;border-radius:12px;padding:10px 16px;text-align:center;flex:1;min-width:80px;">' +
+    '<div style="font-size:22px;font-weight:800;color:#1A2A4A;">' + (studentCount || '—') + '</div>' +
+    '<div style="font-size:11px;color:#666;">طالبة</div></div>';
+  
+  if (attendPct !== null) {
+    var aColor = attendPct >= 90 ? '#16a34a' : attendPct >= 75 ? '#d97706' : '#dc2626';
+    statsHtml += '<div style="background:#f0fdf4;border-radius:12px;padding:10px 16px;text-align:center;flex:1;min-width:80px;">' +
+      '<div style="font-size:22px;font-weight:800;color:' + aColor + ';">' + attendPct + '%</div>' +
+      '<div style="font-size:11px;color:#666;">حضور اليوم</div></div>';
+  } else {
+    statsHtml += '<div style="background:#f9fafb;border-radius:12px;padding:10px 16px;text-align:center;flex:1;min-width:80px;">' +
+      '<div style="font-size:22px;font-weight:800;color:#9ca3af;">—</div>' +
+      '<div style="font-size:11px;color:#666;">لا يوجد حضور اليوم</div></div>';
+  }
+  document.getElementById('ccStats').innerHTML = statsHtml;
+  
+  // Info Grid
+  var hrTeacher = getHomeroomTeacher(classCode) || '—';
+  var hrIsSubst = getHomeroomIsSubstitute(classCode);
+  var swTeacher = getSocialWorkerForClass(classCode) || '—';
+  var loc = (CLASS_LOCATIONS_DB && CLASS_LOCATIONS_DB[classCode]) ? CLASS_LOCATIONS_DB[classCode] : {};
+  var locText = [loc.building, loc.floor, loc.room ? 'غرفة '+loc.room : ''].filter(Boolean).join(' — ') || 'لم يُحدَّد بعد';
+  
+  var infoCards = [
+    {icon:'fa-map-marker-alt', color:'#ef4444', label:'الموقع', value: locText},
+    {icon:'fa-chalkboard-teacher', color:'#6366f1', label:'المربية', value: hrTeacher + (hrIsSubst ? ' <span style="background:#fef3c7;color:#d97706;border-radius:6px;padding:1px 6px;font-size:10px;">احتياط</span>' : '')},
+    {icon:'fa-hand-holding-heart', color:'#ec4899', label:'الأخصائية', value: swTeacher},
+  ];
+  
+  var gridHtml = infoCards.map(function(c){
+    return '<div style="background:#f8fafc;border-radius:12px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;">' +
+      '<i class="fas ' + c.icon + '" style="color:' + c.color + ';margin-top:2px;font-size:16px;"></i>' +
+      '<div><div style="font-size:10px;color:#888;margin-bottom:2px;">' + c.label + '</div>' +
+      '<div style="font-weight:600;color:#1A2A4A;font-size:14px;">' + c.value + '</div></div></div>';
+  }).join('');
+  document.getElementById('ccInfoGrid').innerHTML = gridHtml;
+  
+  // Subject Teachers
+  var subjects = getClassSubjectTeachers(classCode);
+  var subjectColors = ['#dbeafe','#fce7f3','#dcfce7','#fef3c7','#f3e8ff','#ffedd5','#e0f2fe','#fdf4ff'];
+  var teachHtml = Object.keys(subjects).map(function(subj, i){
+    var bg = subjectColors[i % subjectColors.length];
+    return '<div style="background:' + bg + ';border-radius:10px;padding:8px 12px;">' +
+      '<div style="font-size:10px;color:#555;margin-bottom:2px;">' + subj + '</div>' +
+      '<div style="font-weight:700;color:#1A2A4A;font-size:13px;">' + subjects[subj] + '</div></div>';
+  }).join('');
+  document.getElementById('ccTeachers').innerHTML = teachHtml || '<div style="color:#aaa;font-size:13px;">لا يوجد جدول لهذا الصف</div>';
+  
+  // Show location edit for admin/principal
+  var locEdit = document.getElementById('ccLocationEdit');
+  var r = (typeof role !== 'undefined') ? role : '';
+  if (r === 'admin' || r === 'principal') {
+    locEdit.style.display = '';
+    document.getElementById('ccLocBuilding').value = loc.building || '';
+    document.getElementById('ccLocFloor').value = loc.floor || '';
+    document.getElementById('ccLocRoom').value = loc.room || '';
+  } else {
+    locEdit.style.display = 'none';
+  }
+  
+  // Show modal
+  var modal = document.getElementById('classCardModal');
+  modal.style.display = 'flex';
+}
+
+function closeClassCard() {
+  document.getElementById('classCardModal').style.display = 'none';
+  currentClassCardCode = '';
+}
+
+function saveClassLocation(classCode) {
+  if (!classCode) return;
+  if (!CLASS_LOCATIONS_DB) CLASS_LOCATIONS_DB = {};
+  CLASS_LOCATIONS_DB[classCode] = {
+    building: document.getElementById('ccLocBuilding').value.trim(),
+    floor: document.getElementById('ccLocFloor').value.trim(),
+    room: document.getElementById('ccLocRoom').value.trim()
+  };
+  // Save to localStorage
+  try { localStorage.setItem('aljood_class_locations', JSON.stringify(CLASS_LOCATIONS_DB)); } catch(e) {}
+  showToast('✅ تم حفظ موقع الصف ' + (getClassNameAr(classCode) || classCode));
+  // Re-render class card
+  showClassCard(classCode);
+}
+
+// Load saved locations from localStorage on top of JSON defaults
+function mergeClassLocationsFromStorage() {
+  try {
+    var saved = JSON.parse(localStorage.getItem('aljood_class_locations') || '{}');
+    if (saved && Object.keys(saved).length) {
+      Object.assign(CLASS_LOCATIONS_DB, saved);
+    }
+  } catch(e) {}
+}
+
 </script>
 
 </body>
