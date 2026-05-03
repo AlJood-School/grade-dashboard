@@ -7887,57 +7887,19 @@ function buildAttendanceOverviewHtml() {
     if (rec.date === today) absentToday[rec.empId] = rec.status;
   });
 
-  // تصنيف المعلمات حسب الحلقة من schedules
-  var schedData = (typeof getSchedules === 'function') ? getSchedules() : {};
-  var tidCycles = {};
-  Object.keys(schedData).forEach(function(cls){
-    var gn = parseInt(cls.replace(/[A-Za-z]/g,'')) || 0;
-    var grp = cls.startsWith('KG') ? 'kg' : (gn >= 1 && gn <= 4 ? 'c1' : 'c2');
-    var periods = schedData[cls];
-    if (periods && typeof periods === 'object') {
-      Object.values(periods).forEach(function(slot){
-        if (slot && slot.teacherId) {
-          if (!tidCycles[slot.teacherId]) tidCycles[slot.teacherId] = {};
-          tidCycles[slot.teacherId][grp] = true;
-        }
-      });
-    }
-  });
-
+  // تصنيف الموظفات مباشرةً من حقل grade في STAFF_DB
   var stf = { kg:{t:0,ab:0}, c1:{t:0,ab:0}, c2:{t:0,ab:0}, admin:{t:0,ab:0}, all:{t:0,ab:0} };
   if (typeof STAFF_DB !== 'undefined') {
-    // بناء خريطة empId → teacherId
-    var empToTid = {};
-    if (typeof TEACHER_ROSTER !== 'undefined') {
-      Object.values(TEACHER_ROSTER).forEach(function(tr){
-        if (tr && tr.teacherId) {
-          // نربط عبر اسم المستخدم أو الرقم الوزاري
-          if (tr.empId) empToTid[tr.empId] = tr.teacherId;
-        }
-      });
-      // ربط إضافي عبر STAFF_DB
-      STAFF_DB.forEach(function(emp){
-        var rosterEntry = Object.values(TEACHER_ROSTER).find(function(tr){
-          return tr && tr.name_ar && emp.name && tr.name_ar === emp.name;
-        });
-        if (rosterEntry && !empToTid[emp.id]) empToTid[emp.id] = rosterEntry.teacherId;
-      });
-    }
-
     STAFF_DB.forEach(function(emp){
       stf.all.t++;
       var isAbs = !!absentToday[emp.id];
       if (isAbs) stf.all.ab++;
 
-      var tid = empToTid[emp.id];
-      var cycles = tid ? tidCycles[tid] : null;
-      var grp = 'admin';
-      if (cycles) {
-        if (cycles.kg) grp = 'kg';
-        else if (cycles.c1 && cycles.c2) grp = 'c1';
-        else if (cycles.c1) grp = 'c1';
-        else if (cycles.c2) grp = 'c2';
-      }
+      var gr = emp.grade || '';
+      var grp = gr === 'رياض الأطفال'  ? 'kg'
+              : gr === 'الحلقة الأولى' ? 'c1'
+              : gr === 'الحلقة الثانية'? 'c2'
+              : 'admin';
       stf[grp].t++;
       if (isAbs) stf[grp].ab++;
     });
