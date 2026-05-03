@@ -1674,6 +1674,10 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     <button id="hamburger-btn" onclick="toggleMobileSidebar()" title="القائمة" style="display:none;background:none;border:none;cursor:pointer;padding:6px 10px;margin-left:8px;color:#1A2A4A;font-size:1.4rem;line-height:1;">&#9776;</button>
     <div class="topbar-title" id="topbarTitle">🏠 الصفحة الرئيسية</div>
     <div class="topbar-date" id="topbarDate"></div>
+    <div id="notif-bell-wrap" onclick="laGoToObjNotif()" title="اعتراضات أولياء الأمور" style="display:none;position:relative;cursor:pointer;padding:6px 10px;border-radius:10px;transition:background 0.2s;" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background='transparent'">
+      <i class="fas fa-bell" style="font-size:1.25rem;color:#1A2A4A;"></i>
+      <span id="notif-bell-count" style="position:absolute;top:-2px;left:-2px;background:#dc2626;color:white;border-radius:50%;min-width:18px;height:18px;font-size:0.68rem;display:flex;align-items:center;justify-content:center;font-weight:800;padding:0 3px;line-height:1;">0</span>
+    </div>
   </div>
   <div id="sidebar-overlay" onclick="toggleMobileSidebar()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:998;"></div>
 
@@ -19050,33 +19054,89 @@ function laCheckConfirmations(showFeedback) {
     var url = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/parent_confirmations.json?t=' + Date.now();
     fetch(url).then(function(r){ return r.json(); }).then(function(confirmed) {
       if (!Array.isArray(confirmed) || !confirmed.length) {
-        if (showFeedback) showToast('لا توجد تأكيدات جديدة', 'info');
+        if (showFeedback) showToast('لا توجد تحديثات جديدة', 'info');
+        laUpdateBell();
         return;
       }
-      var confirmedTokens = confirmed.map(function(c){ return c.token; });
       var surveys = JSON.parse(localStorage.getItem('aljood_parent_surveys') || '[]');
-      var updated = 0;
+      var updatedConfirm = 0, updatedObj = 0;
       surveys = surveys.map(function(s){
-        if (!s.parentConfirmed && s.confirmToken && confirmedTokens.indexOf(s.confirmToken) > -1) {
+        var match = confirmed.find(function(c){ return c.token === s.confirmToken; });
+        if (!match) return s;
+        // تأكيد
+        if (match.action === 'confirmed' && !s.parentConfirmed) {
           s.parentConfirmed = true;
-          var match = confirmed.find(function(c){ return c.token === s.confirmToken; });
-          if (match) s.confirmedAt = match.confirmedAt;
-          updated++;
+          s.confirmedAt = match.confirmedAt || match.created_at;
+          updatedConfirm++;
+        }
+        // اعتراض
+        if (match.action === 'objected' && !s.parentObjected) {
+          s.parentObjected = true;
+          s.objectionText = match.objection_text || '';
+          s.objectionRef = match.objection_ref || '';
+          s.objectedAt = match.objected_at || match.created_at;
+          updatedObj++;
         }
         return s;
       });
-      if (updated > 0) {
+      if (updatedConfirm > 0 || updatedObj > 0) {
         localStorage.setItem('aljood_parent_surveys', JSON.stringify(surveys));
         var sel = document.getElementById('la-surveys');
         if (sel && sel.style.display !== 'none') sel.innerHTML = laSurveysView();
-        showToast('تم تأكيد ' + updated + ' استبيان من قِبَل ولي الأمر ✅', 'success');
+        if (updatedConfirm > 0) showToast('✅ أكّد ' + updatedConfirm + ' ولي أمر استلام التواصل', 'success');
+        if (updatedObj > 0) showToast('🔴 ' + updatedObj + ' اعتراض جديد من ولي الأمر — راجعي تبويب التوثيق', 'warning');
       } else {
-        if (showFeedback) showToast('لا توجد تأكيدات جديدة', 'info');
+        if (showFeedback) showToast('لا توجد تحديثات جديدة', 'info');
       }
+      laUpdateBell();
     }).catch(function(){
       if (showFeedback) showToast('تعذّر الاتصال بالخادم', 'warning');
     });
   } catch(e) {}
+}
+
+// ══ جرس الإشعارات ══
+function laUpdateBell() {
+  try {
+    var role = (window.CURRENT_USER||{}).role || '';
+    var wrap = document.getElementById('notif-bell-wrap');
+    if (!wrap) return;
+    if (role !== 'admin' && role !== 'principal') { wrap.style.display = 'none'; return; }
+    var surveys = JSON.parse(localStorage.getItem('aljood_parent_surveys') || '[]');
+    var count = surveys.filter(function(s){ return s.parentObjected && !s.objectionResolved; }).length;
+    var badge = document.getElementById('notif-bell-count');
+    if (count > 0) {
+      wrap.style.display = 'block';
+      if (badge) badge.textContent = count;
+    } else {
+      // أخفِ العدد إن كان صفراً لكن أبقِ الجرس ظاهراً للمدير/المديرة
+      wrap.style.display = 'block';
+      if (badge) { badge.textContent = '0'; badge.style.display = 'none'; }
+    }
+  } catch(e) {}
+}
+
+function laGoToObjNotif() {
+  showSection('lesson_attendance');
+  setTimeout(function(){ laShowTab('la-surveys'); }, 300);
+}
+
+function laResolveObjection(tokenOrRef) {
+  showConfirm('هل تأكدين من إغلاق ملف الاعتراض؟ (سيُسجَّل كـ "تم الحل")', function() {
+    var surveys = JSON.parse(localStorage.getItem('aljood_parent_surveys') || '[]');
+    surveys = surveys.map(function(s){
+      if (s.confirmToken === tokenOrRef || s.objectionRef === tokenOrRef) {
+        s.objectionResolved = true;
+        s.resolvedAt = new Date().toISOString();
+      }
+      return s;
+    });
+    localStorage.setItem('aljood_parent_surveys', JSON.stringify(surveys));
+    laUpdateBell();
+    var sel = document.getElementById('la-surveys');
+    if (sel) sel.innerHTML = laSurveysView();
+    showToast('✅ تم إغلاق ملف الاعتراض بنجاح', 'success');
+  });
 }
 
 function laResendConfirm(confirmUrl, phone, studentName) {
