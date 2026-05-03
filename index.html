@@ -18759,6 +18759,8 @@ const TKT_STATUS = {
 };
 
 function laSurveysView() {
+  // تحقق من التأكيدات الجديدة في الخلفية
+  laCheckConfirmations(false);
   var surveys = JSON.parse(localStorage.getItem('aljood_parent_surveys') || '[]');
   var html = '<div style="background:white;border-radius:16px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.07);">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
@@ -18768,7 +18770,6 @@ function laSurveysView() {
   if (!surveys.length) {
     html += '<div style="text-align:center;padding:40px;color:#9ca3af;"><i class="fas fa-inbox" style="font-size:2rem;display:block;margin-bottom:10px;"></i>لا توجد استبيانات مسجّلة بعد</div>';
   } else {
-    // جدول
     html += '<div style="overflow-x:auto;">';
     html += '<table style="width:100%;border-collapse:collapse;font-size:0.83rem;">';
     html += '<thead><tr style="background:#f0f4ff;color:#1a2a4a;">';
@@ -18779,6 +18780,7 @@ function laSurveysView() {
     html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">السبب</th>';
     html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">العلم المسبق</th>';
     html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">الإجراء</th>';
+    html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">تأكيد ولي الأمر</th>';
     html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">ملاحظة</th>';
     html += '</tr></thead><tbody>';
     var sorted = surveys.slice().sort(function(a,b){ return new Date(b.submittedAt)-new Date(a.submittedAt); });
@@ -18794,12 +18796,25 @@ function laSurveysView() {
       html += '<td style="padding:9px 8px;"><span style="color:'+q1Color+';font-weight:700;font-size:0.8rem;">'+s.q1+'</span></td>';
       var q2Color = (s.q2==='تمت المعالجة'||s.q2==='سأتواصل مع المعلمة') ? '#059669' : s.q2==='أحتاج مساعدة' ? '#dc2626' : '#1a2a4a';
       html += '<td style="padding:9px 8px;"><span style="color:'+q2Color+';font-size:0.8rem;">'+s.q2+'</span></td>';
+      // عمود تأكيد ولي الأمر
+      if (s.parentConfirmed) {
+        html += '<td style="padding:9px 8px;"><span style="background:#d1fae5;color:#059669;border-radius:20px;padding:3px 10px;font-size:0.78rem;font-weight:700;">✅ تم التأكيد</span></td>';
+      } else if (s.confirmUrl) {
+        html += '<td style="padding:9px 8px;">'
+          + '<span style="background:#fff3cd;color:#d97706;border-radius:20px;padding:3px 10px;font-size:0.78rem;font-weight:700;display:block;margin-bottom:4px;">⏳ في الانتظار</span>'
+          + '<button onclick="laResendConfirm(\'' + (s.confirmUrl||'').replace(/'/g,\"&apos;\") + '\',\'' + (s.phone||'').replace(/'/g,\"&apos;\") + '\',\'' + s.studentName.replace(/'/g,\"&apos;\") + '\')" '
+          + 'style="font-size:0.72rem;background:#25D366;color:white;border:none;border-radius:6px;padding:3px 8px;cursor:pointer;font-family:Cairo,sans-serif;">'
+          + '<i class=\"fab fa-whatsapp\" style=\"margin-left:3px;\"></i>إرسال الرابط</button>'
+          + '</td>';
+      } else {
+        html += '<td style="padding:9px 8px;color:#9ca3af;font-size:0.78rem;">— بدون رقم</td>';
+      }
       html += '<td style="padding:9px 8px;color:#6b7280;font-size:0.8rem;">'+s.q3+'</td>';
       html += '</tr>';
     });
     html += '</tbody></table></div>';
-    // زر تصدير
-    html += '<div style="margin-top:14px;text-align:left;">';
+    html += '<div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end;">';
+    html += '<button onclick="laCheckConfirmations(true)" style="background:#e0ecff;color:#1a2a4a;border:none;border-radius:8px;padding:7px 16px;cursor:pointer;font-size:0.8rem;font-family:Cairo,sans-serif;"><i class=\"fas fa-sync-alt\"></i> تحديث حالة التأكيدات</button>';
     html += '<button onclick="laClearSurveys()" style="background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:7px 16px;cursor:pointer;font-size:0.8rem;font-family:Cairo,sans-serif;"><i class=\"fas fa-trash\"></i> مسح السجل</button>';
     html += '</div>';
   }
@@ -18936,6 +18951,11 @@ function laContactParent(studentId, studentName, cls) {
     + '<label style="display:flex;align-items:center;gap:5px;font-size:0.85rem;cursor:pointer;"><input type="radio" name="laQ2" value="سأتواصل مع المعلمة"> سأتواصل مع المعلمة</label>'
     + '<label style="display:flex;align-items:center;gap:5px;font-size:0.85rem;cursor:pointer;"><input type="radio" name="laQ2" value="أحتاج مساعدة"> أحتاج مساعدة</label>'
     + '</div></div>'
+    + '<div style="margin-bottom:14px;">'
+    + '<label style="font-size:0.82rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">&#128241; رقم ولي الأمر <span style="font-weight:400;color:#9ca3af;">(لإرسال رابط التأكيد)</span></label>'
+    + '<input type="tel" id="laParentPhone" placeholder="0501234567" style="width:100%;padding:9px;border:1.5px solid #e0e0e0;border-radius:9px;font-family:Cairo,sans-serif;box-sizing:border-box;direction:ltr;">'
+    + '<div style="font-size:0.73rem;color:#9ca3af;margin-top:3px;">سيصل رابط تأكيد التواصل عبر واتساب لولي الأمر تلقائياً</div>'
+    + '</div>'
     + '<div style="margin-bottom:18px;">'
     + '<label style="font-size:0.82rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">ملاحظة (اختياري)</label>'
     + '<textarea id="laContactNote" style="width:100%;padding:9px;border:1.5px solid #e0e0e0;border-radius:9px;height:60px;resize:vertical;font-family:Cairo,sans-serif;box-sizing:border-box;" placeholder="أي ملاحظات إضافية..."></textarea>'
@@ -18962,18 +18982,59 @@ function laSubmitContactSurvey(studentId, studentName, cls, dateISO, dateStr) {
   var q1 = (document.querySelector('input[name="laQ1"]:checked') || {}).value || '';
   var q2 = (document.querySelector('input[name="laQ2"]:checked') || {}).value || '';
   var q3 = (document.getElementById('laContactNote') || {}).value || '';
+  var phone = ((document.getElementById('laParentPhone') || {}).value || '').trim();
+  // توليد رمز تأكيد فريد
+  var token = 'LA' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2,4).toUpperCase();
+  // رابط التأكيد
+  var confirmUrl = 'https://aljood-school.github.io/grade-dashboard/parent_confirm.html'
+    + '?token=' + encodeURIComponent(token)
+    + '&name=' + encodeURIComponent(studentName)
+    + '&cls=' + encodeURIComponent(cls)
+    + '&date=' + encodeURIComponent(dateStr)
+    + '&reason=' + encodeURIComponent(reason);
   var surveys = JSON.parse(localStorage.getItem('aljood_parent_surveys') || '[]');
   surveys.unshift({
     studentId: studentId, studentName: studentName, cls: cls,
     dateISO: dateISO, dateStr: dateStr, reason: reason,
     q1: q1, q2: q2, q3: q3,
+    phone: phone,
+    confirmToken: token,
+    confirmUrl: confirmUrl,
+    parentConfirmed: false,
     recordedBy: currentUsername,
     submittedAt: new Date().toISOString()
   });
   localStorage.setItem('aljood_parent_surveys', JSON.stringify(surveys));
+  // بناء رسالة واتساب
+  var waText = 'مدرسة الجود 🌸\n\nأولياء أمور الطالبة: ' + studentName
+    + '\nالصف: ' + cls + ' | التاريخ: ' + dateStr
+    + '\n\nتواصلت معكم إدارة المدرسة بشأن: ' + reason
+    + '\n\nلتأكيد استلام هذا التواصل يرجى الضغط على الرابط:\n' + confirmUrl
+    + '\n\nشكراً لتعاونكم 🤝';
+  var phoneE164 = phone.replace(/^0/, '971').replace(/\D/g,'');
+  var waLink = phone ? ('https://wa.me/' + phoneE164 + '?text=' + encodeURIComponent(waText)) : '';
+  // عرض خطوة المشاركة
   var modal = document.getElementById('laContactModal');
-  if (modal) modal.remove();
-  showToast('تم تسجيل استبيان ولي الأمر بنجاح ✅', 'success');
+  if (modal) {
+    modal.innerHTML = '<div style="max-width:460px;width:96%;background:white;border-radius:18px;padding:28px;text-align:center;" dir="rtl">'
+      + '<div style="font-size:3rem;margin-bottom:10px;">✅</div>'
+      + '<h3 style="color:#059669;font-size:1.1rem;margin-bottom:6px;">تم الحفظ بنجاح</h3>'
+      + '<p style="color:#555;font-size:0.88rem;margin-bottom:20px;">الخطوة التالية: أرسل رابط التأكيد لولي الأمر<br><span style="font-size:0.78rem;color:#9ca3af;">بمجرد ضغط ولي الأمر على الرابط يُسجَّل التأكيد تلقائياً</span></p>'
+      + '<div style="background:#f8f9ff;border-radius:12px;padding:14px;margin-bottom:16px;font-size:0.82rem;text-align:right;">'
+      + '<b>الطالبة:</b> ' + studentName + ' — <b>الصف:</b> ' + cls + '<br>'
+      + '<b>السبب:</b> ' + reason
+      + '</div>'
+      + (waLink ? '<a href="' + waLink + '" target="_blank" style="display:block;margin-bottom:10px;">'
+        + '<button style="width:100%;background:#25D366;color:white;border:none;border-radius:10px;padding:12px;cursor:pointer;font-size:0.9rem;font-weight:700;font-family:Cairo,sans-serif;">'
+        + '<i class=\"fab fa-whatsapp\" style=\"margin-left:6px;\"></i>فتح واتساب وإرسال الرابط</button></a>'
+        : '<div style="background:#fff3cd;border-radius:8px;padding:10px;margin-bottom:10px;font-size:0.82rem;color:#d97706;">⚠️ لم يُدخَل رقم ولي الأمر — يمكنك نسخ الرابط يدوياً</div>')
+      + '<button onclick="try{navigator.clipboard.writeText(\'' + confirmUrl.replace(/'/g, "\'") + '\')}catch(e){} showToast(\'تم نسخ الرابط ✅\',\'success\');" '
+      + 'style="width:100%;background:#e0ecff;color:#1a2a4a;border:none;border-radius:10px;padding:10px;cursor:pointer;font-size:0.85rem;font-weight:700;font-family:Cairo,sans-serif;margin-bottom:10px;">'
+      + '&#128203; نسخ رابط التأكيد</button>'
+      + '<button onclick="document.getElementById(\'laContactModal\').remove()" '
+      + 'style="width:100%;background:#f0f0f0;color:#666;border:none;border-radius:10px;padding:9px;cursor:pointer;font-size:0.85rem;font-family:Cairo,sans-serif;">إغلاق</button>'
+      + '</div>';
+  }
   // Refresh today view if visible
   var el = document.getElementById('la-today');
   if (el && el.style.display !== 'none') el.innerHTML = laTodayView();
@@ -18981,6 +19042,55 @@ function laSubmitContactSurvey(studentId, studentName, cls, dateISO, dateStr) {
   var sel = document.getElementById('la-surveys');
   if (sel && sel.style.display !== 'none') sel.innerHTML = laSurveysView();
 }
+
+
+// ── تأكيدات أولياء الأمور ─────────────────────────────────────────────────────
+function laCheckConfirmations(showFeedback) {
+  try {
+    var url = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/parent_confirmations.json?t=' + Date.now();
+    fetch(url).then(function(r){ return r.json(); }).then(function(confirmed) {
+      if (!Array.isArray(confirmed) || !confirmed.length) {
+        if (showFeedback) showToast('لا توجد تأكيدات جديدة', 'info');
+        return;
+      }
+      var confirmedTokens = confirmed.map(function(c){ return c.token; });
+      var surveys = JSON.parse(localStorage.getItem('aljood_parent_surveys') || '[]');
+      var updated = 0;
+      surveys = surveys.map(function(s){
+        if (!s.parentConfirmed && s.confirmToken && confirmedTokens.indexOf(s.confirmToken) > -1) {
+          s.parentConfirmed = true;
+          var match = confirmed.find(function(c){ return c.token === s.confirmToken; });
+          if (match) s.confirmedAt = match.confirmedAt;
+          updated++;
+        }
+        return s;
+      });
+      if (updated > 0) {
+        localStorage.setItem('aljood_parent_surveys', JSON.stringify(surveys));
+        var sel = document.getElementById('la-surveys');
+        if (sel && sel.style.display !== 'none') sel.innerHTML = laSurveysView();
+        showToast('تم تأكيد ' + updated + ' استبيان من قِبَل ولي الأمر ✅', 'success');
+      } else {
+        if (showFeedback) showToast('لا توجد تأكيدات جديدة', 'info');
+      }
+    }).catch(function(){
+      if (showFeedback) showToast('تعذّر الاتصال بالخادم', 'warning');
+    });
+  } catch(e) {}
+}
+
+function laResendConfirm(confirmUrl, phone, studentName) {
+  if (!confirmUrl) return;
+  var waText = 'مدرسة الجود 🌸\nأولياء أمور الطالبة: ' + studentName + '\n\nيرجى تأكيد استلام التواصل بالضغط على الرابط:\n' + confirmUrl;
+  var phoneE164 = (phone||'').replace(/^0/, '971').replace(/\D/g,'');
+  if (phoneE164.length > 5) {
+    window.open('https://wa.me/' + phoneE164 + '?text=' + encodeURIComponent(waText), '_blank');
+  } else {
+    try { navigator.clipboard.writeText(confirmUrl); } catch(e){}
+    showToast('تم نسخ رابط التأكيد ✅', 'success');
+  }
+}
+// ── نهاية تأكيدات أولياء الأمور ──────────────────────────────────────────────
 
 function updateAttendanceBadge() {
   try {
