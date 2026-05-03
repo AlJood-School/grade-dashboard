@@ -18835,11 +18835,16 @@ function laSurveysView() {
   // تحقق من التأكيدات الجديدة في الخلفية
   laCheckConfirmations(false);
   var surveys = JSON.parse(localStorage.getItem('aljood_parent_surveys') || '[]');
+  var pendingCount = surveys.filter(function(s){ return (s.parentObjected || s.status === 'pending') && !s.objectionResolved; }).length;
   var html = '<div style="background:white;border-radius:16px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.07);">';
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">';
   html += '<h3 style="color:#1a2a4a;font-size:1rem;font-weight:800;">&#128203; توثيق استبيانات أولياء الأمور</h3>';
+  html += '<div style="display:flex;gap:6px;">';
   html += '<span style="font-size:0.8rem;background:#e0ecff;color:#1a2a4a;padding:4px 12px;border-radius:20px;font-weight:700;">'+surveys.length+' استبيان</span>';
-  html += '</div>';
+  if (pendingCount > 0) {
+    html += '<span style="font-size:0.8rem;background:#fee2e2;color:#dc2626;padding:4px 12px;border-radius:20px;font-weight:700;">🔴 '+pendingCount+' اعتراض معلق</span>';
+  }
+  html += '</div></div>';
   if (!surveys.length) {
     html += '<div style="text-align:center;padding:40px;color:#9ca3af;"><i class="fas fa-inbox" style="font-size:2rem;display:block;margin-bottom:10px;"></i>لا توجد استبيانات مسجّلة بعد</div>';
   } else {
@@ -18854,35 +18859,69 @@ function laSurveysView() {
     html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">العلم المسبق</th>';
     html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">الإجراء</th>';
     html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">تأكيد ولي الأمر</th>';
-    html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">ملاحظة</th>';
+    html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">الحالة</th>';
+    html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">الرقم المرجعي</th>';
     html += '</tr></thead><tbody>';
-    var sorted = surveys.slice().sort(function(a,b){ return new Date(b.submittedAt)-new Date(a.submittedAt); });
+    // فرز: الاعتراضات المعلقة أولاً ثم الأحدث
+    var sorted = surveys.slice().sort(function(a,b){
+      var aPending = (a.parentObjected || a.status==='pending') && !a.objectionResolved ? 1 : 0;
+      var bPending = (b.parentObjected || b.status==='pending') && !b.objectionResolved ? 1 : 0;
+      if (bPending !== aPending) return bPending - aPending;
+      return new Date(b.submittedAt||b.dateStr||b.date) - new Date(a.submittedAt||a.dateStr||a.date);
+    });
     sorted.forEach(function(s, i) {
-      var rowBg = i%2===0 ? 'white' : '#fafbff';
-      html += '<tr style="background:'+rowBg+';border-bottom:1px solid #eef2ff;">';
+      var isObjPending = (s.parentObjected || s.status==='pending') && !s.objectionResolved;
+      var isResolved   = s.objectionResolved || s.status==='resolved';
+      var rowBg = isObjPending ? 'rgba(254,226,226,0.5)' : (i%2===0 ? 'white' : '#fafbff');
+      var rowBorder = isObjPending ? '2px solid #fca5a5' : '1px solid #eef2ff';
+      html += '<tr style="background:'+rowBg+';border-bottom:'+rowBorder+';">';
       html += '<td style="padding:9px 8px;color:#9ca3af;font-weight:700;">'+(i+1)+'</td>';
       html += '<td style="padding:9px 8px;font-weight:700;color:#1a2a4a;">'+s.studentName+'</td>';
-      html += '<td style="padding:9px 8px;"><span style="background:#e0ecff;color:#1a2a4a;border-radius:8px;padding:3px 10px;font-weight:700;font-size:0.78rem;">'+s.cls+'</span></td>';
+      var clsVal = s.cls || s.grade || s.class || '—';
+      html += '<td style="padding:9px 8px;"><span style="background:#e0ecff;color:#1a2a4a;border-radius:8px;padding:3px 10px;font-weight:700;font-size:0.78rem;">'+clsVal+'</span></td>';
       html += '<td style="padding:9px 8px;color:#555;font-size:0.8rem;">'+(s.dateStr||s.date||'—')+'</td>';
-      html += '<td style="padding:9px 8px;color:#374151;">'+s.reason+'</td>';
-      var q1Color = s.q1==='نعم، كنت على علم' ? '#059669' : s.q1==='لا، علمت الآن' ? '#dc2626' : '#d97706';
-      html += '<td style="padding:9px 8px;"><span style="color:'+q1Color+';font-weight:700;font-size:0.8rem;">'+s.q1+'</span></td>';
-      var q2Color = (s.q2==='تمت المعالجة'||s.q2==='سأتواصل مع المعلمة') ? '#059669' : s.q2==='أحتاج مساعدة' ? '#dc2626' : '#1a2a4a';
-      html += '<td style="padding:9px 8px;"><span style="color:'+q2Color+';font-size:0.8rem;">'+s.q2+'</span></td>';
+      html += '<td style="padding:9px 8px;color:#374151;">'+(s.reason||'—')+'</td>';
+      var q1Color = '#d97706';
+      if (s.q1 && (s.q1.includes('علم')||s.q1==='نعم')) q1Color = '#059669';
+      else if (s.q1 && (s.q1.includes('لا')||s.q1==='لا')) q1Color = '#dc2626';
+      html += '<td style="padding:9px 8px;"><span style="color:'+q1Color+';font-weight:700;font-size:0.8rem;">'+(s.q1||'—')+'</span></td>';
+      var q2Color = '#1a2a4a';
+      if (s.q2 && (s.q2.includes('تم')||s.q2.includes('معالجة')||s.q2.includes('تواصل'))) q2Color = '#059669';
+      else if (s.q2 && s.q2.includes('مساعدة')) q2Color = '#dc2626';
+      html += '<td style="padding:9px 8px;"><span style="color:'+q2Color+';font-size:0.8rem;">'+(s.q2||'—')+'</span></td>';
       // عمود تأكيد ولي الأمر
-      if (s.parentConfirmed) {
+      if (s.parentConfirmed || s.status==='confirmed') {
         html += '<td style="padding:9px 8px;"><span style="background:#d1fae5;color:#059669;border-radius:20px;padding:3px 10px;font-size:0.78rem;font-weight:700;">✅ تم التأكيد</span></td>';
       } else if (s.confirmUrl) {
+        var idx = i;
         html += '<td style="padding:9px 8px;">'
           + '<span style="background:#fff3cd;color:#d97706;border-radius:20px;padding:3px 10px;font-size:0.78rem;font-weight:700;display:block;margin-bottom:4px;">⏳ في الانتظار</span>'
-          + '<button onclick="laResendConfirmByIdx(' + i + ')" '
+          + '<button data-idx="'+idx+'" onclick="laResendConfirmByIdx(this.getAttribute(\'data-idx\')*1)" '
           + 'style="font-size:0.72rem;background:#25D366;color:white;border:none;border-radius:6px;padding:3px 8px;cursor:pointer;font-family:Cairo,sans-serif;">'
           + '<i class=\"fab fa-whatsapp\" style=\"margin-left:3px;\"></i>إرسال الرابط</button>'
           + '</td>';
       } else {
-        html += '<td style="padding:9px 8px;color:#9ca3af;font-size:0.78rem;">— بدون رقم</td>';
+        html += '<td style="padding:9px 8px;color:#9ca3af;font-size:0.78rem;">— بانتظار الإرسال</td>';
       }
-      html += '<td style="padding:9px 8px;color:#6b7280;font-size:0.8rem;">'+s.q3+'</td>';
+      // عمود الحالة
+      if (isObjPending) {
+        var resolveKey = s.confirmToken || s.objectionRef || s.token || '';
+        html += '<td style="padding:9px 8px;">'
+          + '<span style="background:#fee2e2;color:#dc2626;border-radius:20px;padding:3px 10px;font-size:0.78rem;font-weight:700;display:block;margin-bottom:5px;">🔴 اعتراض معلق</span>'
+          + '<button data-rkey="'+resolveKey+'" onclick="laResolveObjection(this.getAttribute(\'data-rkey\'))" '
+          + 'style="font-size:0.72rem;background:#059669;color:white;border:none;border-radius:6px;padding:3px 10px;cursor:pointer;font-family:Cairo,sans-serif;">'
+          + '✅ تم الحل — إغلاق الملف</button>'
+          + '</td>';
+      } else if (isResolved) {
+        html += '<td style="padding:9px 8px;"><span style="background:#d1fae5;color:#059669;border-radius:20px;padding:3px 10px;font-size:0.78rem;font-weight:700;">✅ تم الحل</span></td>';
+      } else if (s.parentConfirmed || s.status==='confirmed') {
+        html += '<td style="padding:9px 8px;"><span style="background:#d1fae5;color:#059669;border-radius:20px;padding:3px 10px;font-size:0.78rem;font-weight:700;">✅ مؤكَّد</span></td>';
+      } else {
+        html += '<td style="padding:9px 8px;"><span style="background:#f0f4ff;color:#6b7280;border-radius:20px;padding:3px 10px;font-size:0.78rem;">⏳ معلق</span></td>';
+      }
+      // عمود الرقم المرجعي
+      var refNum = s.refId || s.objectionRef || s.confirmToken || s.token || '—';
+      html += '<td style="padding:9px 8px;color:#6b7280;font-size:0.75rem;font-family:monospace;">'+refNum+'</td>';
       html += '</tr>';
     });
     html += '</tbody></table></div>';
