@@ -14082,7 +14082,7 @@ function sbRunGenerate() {
   setTimeout(() => {
     // Run algorithm up to 5 times, pick best result (fewest warnings)
     let best = null;
-    for (let _attempt = 0; _attempt < 5; _attempt++) {
+    for (let _attempt = 0; _attempt < 10; _attempt++) {
       const res = sbAlgorithm(classes);
       if (!best || res.warnings.length < best.warnings.length) best = res;
       if (best.warnings.length === 0) break;
@@ -14415,12 +14415,18 @@ function sbAlgorithm(classes) {
     });
   });
 
-  // Sort: consecutive-block tasks first, then by teacher weekly limit (most constrained first)
+  // Sort: consecutive-block tasks first, then by constraint ratio (most constrained teacher first)
+  // Constraint ratio = total tasks for teacher / available slots — higher ratio = harder to place
+  const _teacherTaskCount = {};
+  tasks.forEach(t => { _teacherTaskCount[t.teacherId] = (_teacherTaskCount[t.teacherId] || 0) + t.size; });
+  const _maxSlots = SB_TOTAL_SLOTS * 5; // max slots per teacher per week
   tasks.sort((a, b) => {
     if (b.size !== a.size) return b.size - a.size;
-    const lA = getTeacherLimits(a.teacherId).maxWeekly;
-    const lB = getTeacherLimits(b.teacherId).maxWeekly;
-    return lA - lB;
+    const availA = Math.min(getTeacherLimits(a.teacherId).maxWeekly, _maxSlots);
+    const availB = Math.min(getTeacherLimits(b.teacherId).maxWeekly, _maxSlots);
+    const ratioA = (_teacherTaskCount[a.teacherId] || 0) / availA;
+    const ratioB = (_teacherTaskCount[b.teacherId] || 0) / availB;
+    return ratioB - ratioA; // Most constrained first
   });
 
   const warnings = [];
@@ -17945,39 +17951,7 @@ function filterSpecialistClasses() {
   } catch(e) {}
 }
 
-// Specialist modal functions
-function openSpecialistModal() {
-  // Populate specialist dropdown from staff data
-  const modal = document.getElementById('specialistModal');
-  if (!modal) return;
-  const select = document.getElementById('specialistSelect');
-  if (select) {
-    select.innerHTML = '<option value="">-- اختر --</option>';
-    try {
-      const staff = (typeof getStaffData === 'function') ? getStaffData() : [];
-      const admStaff = Array.isArray(staff) ? staff.filter(s => 
-        s.primary_job && (s.primary_job.includes('أخصائي') || s.primary_job.includes('اجتماعي') || s.position === 'أخصائية') ||
-        s.role === 'counselor'
-      ) : [];
-      admStaff.forEach(s => {
-        const opt = document.createElement('option');
-        opt.value = s.username || s.name;
-        opt.textContent = s.name || s.username;
-        select.appendChild(opt);
-      });
-    } catch(e) {}
-  }
-  // Build class checkboxes grid
-  const grid = document.getElementById('specialistClassGrid');
-  if (grid) {
-    const classes = ['KG1','KG2','1A','1B','1C','2A','2B','2C','3A','3B','3C','4A','4B','4C','5A','5B','5C','6A','6B','6C','7A','7B','7C','8A','8B','8C'];
-    grid.innerHTML = classes.map(c => `
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.9rem;cursor:pointer;padding:6px;border:1px solid #e0e0e0;border-radius:6px;">
-        <input type="checkbox" value="${c}" class="specialist-class-cb" style="accent-color:var(--accent);">
-        <span>${c}</span>
-      </label>
-    `).join('');
-  }
+// openSpecialistModal — merged into newer dynamic version below
   modal.style.display = 'block';
 }
 
