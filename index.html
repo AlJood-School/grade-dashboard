@@ -7850,6 +7850,174 @@ function getTeacherTopSubject(uname, schedules) {
   return subjects[0];
 }
 
+// ── Attendance Overview Widget (admin/principal) ────────
+function buildAttendanceOverviewHtml() {
+  var today = new Date().toISOString().slice(0,10);
+
+  // ── حضور الطالبات ──
+  var laRaw = {};
+  try { laRaw = JSON.parse(localStorage.getItem('aljood_lesson_attendance_v1') || '{}'); } catch(e) {}
+  var sessions = (laRaw.sessions || []).filter(function(s){ return s.date === today; });
+
+  // آخر جلسة لكل فصل
+  var classSessions = {};
+  sessions.forEach(function(s){
+    if (!classSessions[s.class] || s.savedAt > classSessions[s.class].savedAt)
+      classSessions[s.class] = s;
+  });
+
+  var sg = { kg:{p:0,t:0}, c1:{p:0,t:0}, c2:{p:0,t:0}, all:{p:0,t:0} };
+  Object.values(classSessions).forEach(function(s){
+    var cls = s.class || '';
+    var gn = parseInt(cls.replace(/[A-Za-z]/g,'')) || 0;
+    var students = Object.values(s.students || {});
+    var p = students.filter(function(x){ return x.status==='present'; }).length;
+    var t = students.length;
+    var grp = cls.startsWith('KG') ? 'kg' : (gn <= 4 ? 'c1' : 'c2');
+    sg[grp].p += p; sg[grp].t += t;
+    sg.all.p += p; sg.all.t += t;
+  });
+  var hasStudData = sg.all.t > 0;
+
+  // ── حضور الموظفات ──
+  var attRaw = {};
+  try { attRaw = JSON.parse(localStorage.getItem('aljood_teacher_attendance') || '{}'); } catch(e) {}
+  var absentToday = {};
+  Object.values(attRaw).forEach(function(rec){
+    if (rec.date === today) absentToday[rec.empId] = rec.status;
+  });
+
+  // تصنيف المعلمات حسب الحلقة من schedules
+  var schedData = (typeof getSchedules === 'function') ? getSchedules() : {};
+  var tidCycles = {};
+  Object.keys(schedData).forEach(function(cls){
+    var gn = parseInt(cls.replace(/[A-Za-z]/g,'')) || 0;
+    var grp = cls.startsWith('KG') ? 'kg' : (gn >= 1 && gn <= 4 ? 'c1' : 'c2');
+    var periods = schedData[cls];
+    if (periods && typeof periods === 'object') {
+      Object.values(periods).forEach(function(slot){
+        if (slot && slot.teacherId) {
+          if (!tidCycles[slot.teacherId]) tidCycles[slot.teacherId] = {};
+          tidCycles[slot.teacherId][grp] = true;
+        }
+      });
+    }
+  });
+
+  var stf = { kg:{t:0,ab:0}, c1:{t:0,ab:0}, c2:{t:0,ab:0}, admin:{t:0,ab:0}, all:{t:0,ab:0} };
+  if (typeof STAFF_DB !== 'undefined') {
+    // بناء خريطة empId → teacherId
+    var empToTid = {};
+    if (typeof TEACHER_ROSTER !== 'undefined') {
+      Object.values(TEACHER_ROSTER).forEach(function(tr){
+        if (tr && tr.teacherId) {
+          // نربط عبر اسم المستخدم أو الرقم الوزاري
+          if (tr.empId) empToTid[tr.empId] = tr.teacherId;
+        }
+      });
+      // ربط إضافي عبر STAFF_DB
+      STAFF_DB.forEach(function(emp){
+        var rosterEntry = Object.values(TEACHER_ROSTER).find(function(tr){
+          return tr && tr.name_ar && emp.name && tr.name_ar === emp.name;
+        });
+        if (rosterEntry && !empToTid[emp.id]) empToTid[emp.id] = rosterEntry.teacherId;
+      });
+    }
+
+    STAFF_DB.forEach(function(emp){
+      stf.all.t++;
+      var isAbs = !!absentToday[emp.id];
+      if (isAbs) stf.all.ab++;
+
+      var tid = empToTid[emp.id];
+      var cycles = tid ? tidCycles[tid] : null;
+      var grp = 'admin';
+      if (cycles) {
+        if (cycles.kg) grp = 'kg';
+        else if (cycles.c1 && cycles.c2) grp = 'c1';
+        else if (cycles.c1) grp = 'c1';
+        else if (cycles.c2) grp = 'c2';
+      }
+      stf[grp].t++;
+      if (isAbs) stf[grp].ab++;
+    });
+  }
+
+  // ── دوال مساعدة ──
+  function rate(p, t) { return t ? Math.round(p/t*100) : null; }
+  function barClr(r) { return r === null ? '#9ca3af' : r >= 90 ? '#10b981' : r >= 75 ? '#f59e0b' : '#ef4444'; }
+
+  function miniCard(label, icon, p, t, bg) {
+    var r = rate(p, t);
+    var clr = barClr(r);
+    var rStr = r !== null ? r+'%' : '—';
+    var sub = t > 0 ? '<div style="font-size:0.73rem;color:#888;margin-top:4px;">'+p+' / '+t+'</div>' : '<div style="font-size:0.73rem;color:#bbb;margin-top:4px;">لا بيانات</div>';
+    var barW = r !== null ? r : 0;
+    return '<div style="background:'+(bg||'#f8faff')+';border-radius:12px;padding:13px 15px;border:1px solid rgba(201,168,76,0.18);">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">'
+      + '<span style="font-size:0.84rem;font-weight:600;color:#1A2A4A;">'+icon+' '+label+'</span>'
+      + '<span style="font-size:1.05rem;font-weight:800;color:'+clr+';">'+rStr+'</span>'
+      + '</div>'
+      + '<div style="background:#e5e7eb;border-radius:5px;height:6px;overflow:hidden;">'
+      + '<div style="background:'+clr+';height:100%;width:'+barW+'%;border-radius:5px;transition:width 0.7s ease;"></div>'
+      + '</div>'
+      + sub + '</div>';
+  }
+
+  function overallBadge(p, t, label) {
+    var r = rate(p, t);
+    var clr = barClr(r);
+    var rStr = r !== null ? r+'%' : '—';
+    return '<div style="display:flex;align-items:center;gap:10px;">'
+      + '<span style="font-size:0.95rem;font-weight:700;color:#1A2A4A;">'+label+'</span>'
+      + '<span style="font-size:1.25rem;font-weight:900;color:'+clr+';background:'+(r!==null?'rgba('+( r>=90?'16,185,129':r>=75?'245,158,11':'239,68,68')+',0.1)':'#f3f4f6')+';padding:2px 12px;border-radius:20px;">'+rStr+'</span>'
+      + '</div>';
+  }
+
+  var studGrid = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:10px;">'
+    + miniCard('الروضة', '🌸', sg.kg.p, sg.kg.t, '#fdf4ff')
+    + miniCard('الحلقة الأولى (1–4)', '📗', sg.c1.p, sg.c1.t, '#f0fdf4')
+    + miniCard('الحلقة الثانية (5–8)', '📘', sg.c2.p, sg.c2.t, '#eff6ff')
+    + '</div>';
+
+  var spKg = stf.kg.t - stf.kg.ab;
+  var spC1 = stf.c1.t - stf.c1.ab;
+  var spC2 = stf.c2.t - stf.c2.ab;
+  var spAdm = stf.admin.t - stf.admin.ab;
+  var spAll = stf.all.t - stf.all.ab;
+
+  var staffGrid = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:10px;">'
+    + miniCard('معلمات الروضة', '🌸', spKg, stf.kg.t, '#fdf4ff')
+    + miniCard('الحلقة الأولى', '📗', spC1, stf.c1.t, '#f0fdf4')
+    + miniCard('الحلقة الثانية', '📘', spC2, stf.c2.t, '#eff6ff')
+    + miniCard('الإداريات', '🏛️', spAdm, stf.admin.t, '#fefce8')
+    + '</div>';
+
+  return '<div class="card" style="margin-top:18px;border:1px solid rgba(201,168,76,0.3);padding:20px 24px;">'
+    // Header
+    + '<div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid rgba(201,168,76,0.2);padding-bottom:12px;margin-bottom:18px;">'
+    + '<div style="display:flex;align-items:center;gap:10px;"><i class="fas fa-chart-pie" style="color:#C9A84C;font-size:1.15rem;"></i><span style="font-weight:700;color:#1A2A4A;font-size:1.05rem;">نسب الحضور اليوم</span></div>'
+    + '<span style="font-size:0.78rem;color:#9ca3af;background:#f3f4f6;padding:3px 12px;border-radius:10px;font-family:monospace;">'+today+'</span>'
+    + '</div>'
+    // طالبات
+    + '<div style="margin-bottom:18px;">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'
+    + overallBadge(sg.all.p, sg.all.t, '👩‍🎓 حضور الطالبات')
+    + (!hasStudData ? '<span style="font-size:0.78rem;color:#f59e0b;background:#fefce8;padding:2px 10px;border-radius:8px;">لا توجد بيانات لليوم</span>' : '')
+    + '</div>'
+    + studGrid
+    + '</div>'
+    // موظفات
+    + '<div style="border-top:1px solid rgba(201,168,76,0.15);padding-top:16px;">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'
+    + overallBadge(spAll, stf.all.t, '👩‍💼 حضور الموظفات')
+    + (stf.all.t === 0 ? '<span style="font-size:0.78rem;color:#9ca3af;">لا توجد بيانات</span>' : '')
+    + '</div>'
+    + staffGrid
+    + '</div>'
+    + '</div>';
+}
+
 // ── Home Dashboard ──────────────────────────────────────
 function renderHomeDashboard() {
   const role = currentRole;
@@ -7929,6 +8097,7 @@ ${isAdmin ? '<button class="btn" onclick="window.open(\'https://aljood-school.gi
     +'<div class="stat-card"><div class="stat-icon gold"><i class="fas fa-chart-line"></i></div><div><div class="stat-value">83.9%</div><div class="stat-label">المعدل العام — الفصل 2</div></div></div>'
     +'<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-check-circle"></i></div><div><div class="stat-value">100%</div><div class="stat-label">نسبة النجاح</div></div></div>'
     +'</div>'
+    +((isAdmin||isPrincipal) ? buildAttendanceOverviewHtml() : '')
     +'<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-top:16px;">'
     +'<div class="card"><div class="card-title"><i class="fas fa-list-ol"></i> توزيع الطلاب حسب الصف</div>'
     +'<table class="data-table"><thead><tr><th>الصف</th><th>الحلقة</th><th>الشعب</th><th>عدد الطلاب</th></tr></thead><tbody>'
