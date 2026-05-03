@@ -15675,27 +15675,137 @@ function prToggleOther(el) {
 
 function _renderParentNotifications(el) {
   let reqs = JSON.parse(localStorage.getItem('aljood_parent_requests') || '[]');
+  const surveys = JSON.parse(localStorage.getItem('aljood_parent_surveys') || '[]');
   const pending = reqs.filter(r => r.status === 'pending' || r.status === 'seen');
-  let html = '<div style="padding:20px;"><h2 style="color:var(--accent);margin-bottom:16px;">&#128222; إشعارات الاستدعاء</h2>';
+  const DAY_AR = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  let html = '<div style="padding:20px;">';
+  html += '<h2 style="color:var(--accent);margin-bottom:16px;">&#128222; إشعارات الاستدعاء</h2>';
   if (!pending.length) {
     html += '<div style="color:rgba(255,255,255,0.5);text-align:center;padding:40px;">لا توجد طلبات استدعاء معلقة</div>';
   } else {
     pending.forEach((req, i) => {
-      html += '<div class="pr-notif-card">' +
-        '<div class="pr-notif-title">&#128276; استدعاء من المدرسة</div>' +
-        '<div style="color:rgba(255,255,255,0.8);font-size:0.88rem;margin-bottom:6px;">' +
-        '<strong>الطالب:</strong> '+((req.students||[]).join('، '))+'<br>' +
-        '<strong>السبب:</strong> '+req.reason+'<br>' +
-        '<strong>التاريخ:</strong> '+(req.createdAt ? new Date(req.createdAt).toLocaleDateString('ar-AE') : '—')+'<br>' +
-        '<strong>الموعد المقترح:</strong> '+(req.meetDate||'—')+' الساعة '+(req.meetTime||'—')+'<br>' +
-        '<strong>المرسل:</strong> '+(req.createdBy||'—')+'</div>' +
-        (req.details ? '<div style="color:rgba(255,255,255,0.6);font-size:0.82rem;margin-bottom:8px;">'+req.details+'</div>' : '') +
-        (req.status === 'pending' ? '<button class="pr-confirm-btn" onclick="prConfirmReceipt('+i+')">&#10003; تأكيد الاستلام</button>' : '<span style="color:#60a5fa;font-size:0.82rem;">&#10003; تم الاستلام</span>') +
-        '</div>';
+      const d = req.createdAt ? new Date(req.createdAt) : new Date();
+      const dayName = DAY_AR[d.getDay()];
+      const dateStr = d.toLocaleDateString('ar-AE');
+      const studentName = (req.students||[]).join('، ');
+      const surveyDone = surveys.some(s => s.reqId === req.id);
+      html += '<div class="pr-notif-card">';
+      html += '<div class="pr-notif-title">&#128276; استدعاء من مدرسة الجود</div>';
+      // ── معلومات مملوءة تلقائياً
+      html += '<div style="background:rgba(255,255,255,0.07);border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:0.88rem;color:rgba(255,255,255,0.85);line-height:2;">';
+      html += '&#128100; <strong>الطالبة:</strong> '+studentName+'<br>';
+      html += '&#127979; <strong>الصف:</strong> '+(req.studentClass||'—')+'<br>';
+      html += '&#128197; <strong>اليوم والتاريخ:</strong> '+dayName+' '+dateStr+'<br>';
+      html += '&#128221; <strong>سبب الاستدعاء:</strong> '+req.reason+'</div>';
+      if (req.meetDate||req.meetTime) {
+        html += '<div style="font-size:0.8rem;color:#fbbf24;margin-bottom:8px;">&#128336; الموعد المقترح: '+(req.meetDate||'—')+' — '+(req.meetTime||'—')+'</div>';
+      }
+      // ── زر الاستبيان أو حالة الإنجاز
+      if (surveyDone) {
+        html += '<div style="display:flex;align-items:center;gap:8px;">';
+        html += '<span style="color:#34d399;font-size:0.85rem;">&#10003; تم الاستلام وإرسال الاستبيان</span>';
+        html += '</div>';
+      } else if (req.status === 'pending') {
+        html += '<button class="pr-confirm-btn" onclick="prOpenSurvey('+i+')">&#128203; استلام والرد على الاستبيان</button>';
+      } else {
+        html += '<button class="pr-confirm-btn" style="background:rgba(255,255,255,0.15);" onclick="prOpenSurvey('+i+')">&#128203; إرسال الاستبيان</button>';
+      }
+      html += '</div>';
     });
   }
   html += '</div>';
   el.innerHTML = html;
+}
+
+function prOpenSurvey(idx) {
+  let reqs = JSON.parse(localStorage.getItem('aljood_parent_requests') || '[]');
+  const pending = reqs.filter(r => r.status === 'pending' || r.status === 'seen');
+  const req = pending[idx];
+  if (!req) return;
+  const DAY_AR = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  const d = req.createdAt ? new Date(req.createdAt) : new Date();
+  const dayName = DAY_AR[d.getDay()];
+  const dateStr = d.toLocaleDateString('ar-AE');
+  const studentName = (req.students||[]).join('، ');
+  const cls = req.studentClass || '—';
+  const reason = req.reason || '—';
+
+  showModal({
+    title: '&#128203; استبيان ولي الأمر',
+    body: `
+      <div style="font-family:Cairo,sans-serif;direction:rtl;">
+        <div style="background:#f0f7ff;border-radius:12px;padding:14px;margin-bottom:16px;font-size:0.88rem;line-height:2;color:#1a2a4a;">
+          <div>&#128100; <strong>الطالبة:</strong> ${studentName}</div>
+          <div>&#127979; <strong>الصف:</strong> ${cls}</div>
+          <div>&#128197; <strong>اليوم:</strong> ${dayName} ${dateStr}</div>
+          <div>&#128221; <strong>السبب:</strong> ${reason}</div>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <div style="font-weight:700;color:#1a2a4a;margin-bottom:8px;font-size:0.88rem;">1. هل علمت بهذا الأمر مسبقاً؟</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;" id="sv-q1">
+            <label class="sv-opt"><input type="radio" name="sq1" value="نعم، كنت على علم"> نعم، كنت على علم</label>
+            <label class="sv-opt"><input type="radio" name="sq1" value="لا، علمت الآن"> لا، علمت الآن</label>
+            <label class="sv-opt"><input type="radio" name="sq1" value="على علم جزئي"> على علم جزئي</label>
+          </div>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <div style="font-weight:700;color:#1a2a4a;margin-bottom:8px;font-size:0.88rem;">2. ما إجراءك؟</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;" id="sv-q2">
+            <label class="sv-opt"><input type="radio" name="sq2" value="سأحضر للمدرسة"> سأحضر للمدرسة</label>
+            <label class="sv-opt"><input type="radio" name="sq2" value="سأتواصل مع المعلمة"> سأتواصل مع المعلمة</label>
+            <label class="sv-opt"><input type="radio" name="sq2" value="تمت المعالجة"> تمت المعالجة</label>
+            <label class="sv-opt"><input type="radio" name="sq2" value="أحتاج مساعدة"> أحتاج مساعدة</label>
+          </div>
+        </div>
+
+        <div style="margin-bottom:8px;">
+          <div style="font-weight:700;color:#1a2a4a;margin-bottom:8px;font-size:0.88rem;">3. ملاحظة إضافية (اختياري)</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;" id="sv-q3">
+            <label class="sv-opt"><input type="radio" name="sq3" value="كل شيء بخير"> كل شيء بخير</label>
+            <label class="sv-opt"><input type="radio" name="sq3" value="عذر صحي"> عذر صحي</label>
+            <label class="sv-opt"><input type="radio" name="sq3" value="ظرف طارئ"> ظرف طارئ</label>
+            <label class="sv-opt"><input type="radio" name="sq3" value="لا يوجد"> لا يوجد</label>
+          </div>
+        </div>
+
+        <style>
+          .sv-opt { display:flex;align-items:center;gap:6px;background:#f8faff;border:1.5px solid #dde6f7;border-radius:10px;padding:7px 14px;cursor:pointer;font-size:0.83rem;color:#1a2a4a;transition:all 0.15s; }
+          .sv-opt:has(input:checked) { background:#e0ecff;border-color:#1a2a4a;font-weight:700; }
+          .sv-opt input { accent-color:#1a2a4a; }
+        </style>
+      </div>`,
+    confirmText: '&#10003; إرسال الاستبيان',
+    onConfirm: () => prSubmitSurvey(idx, req, studentName, cls, dayName+' '+dateStr, reason)
+  });
+}
+
+function prSubmitSurvey(idx, req, studentName, cls, dateStr, reason) {
+  const q1 = (document.querySelector('input[name="sq1"]:checked') || {}).value || '—';
+  const q2 = (document.querySelector('input[name="sq2"]:checked') || {}).value || '—';
+  const q3 = (document.querySelector('input[name="sq3"]:checked') || {}).value || '—';
+
+  // تسجيل الاستبيان
+  const surveys = JSON.parse(localStorage.getItem('aljood_parent_surveys') || '[]');
+  surveys.push({
+    id: 'SRV-' + Date.now(),
+    reqId: req.id,
+    studentName, cls, dateStr, reason,
+    q1, q2, q3,
+    submittedAt: new Date().toISOString()
+  });
+  localStorage.setItem('aljood_parent_surveys', JSON.stringify(surveys));
+
+  // تحديث حالة الطلب
+  let reqs = JSON.parse(localStorage.getItem('aljood_parent_requests') || '[]');
+  const mainIdx = reqs.findIndex(r => r.id === req.id);
+  if (mainIdx !== -1) reqs[mainIdx].status = 'survey_done';
+  localStorage.setItem('aljood_parent_requests', JSON.stringify(reqs));
+
+  closeModal();
+  showToast('✅ تم إرسال الاستبيان وتسجيله بنجاح', 'success');
+  renderParentRequestsSection();
 }
 
 function prSearchStudents() {
@@ -15816,8 +15926,8 @@ function prRenderRequests() {
     el.innerHTML = '<div style="color:rgba(255,255,255,0.5);text-align:center;padding:30px;font-size:0.85rem;">لا توجد طلبات حتى الآن</div>';
     return;
   }
-  const statusMap = {pending:'&#9203; معلق', seen:'&#128065; تمت المشاهدة', done:'&#10003; مكتمل'};
-  const statusClass = {pending:'pr-status-pending', seen:'pr-status-seen', done:'pr-status-done'};
+  const statusMap = {pending:'&#9203; معلق', seen:'&#128065; تمت المشاهدة', done:'&#10003; مكتمل', survey_done:'&#128203; تم الاستبيان'};
+  const statusClass = {pending:'pr-status-pending', seen:'pr-status-seen', done:'pr-status-done', survey_done:'pr-status-seen'};
   el.innerHTML = reqs.map((r,i) =>
     '<div class="pr-card">' +
     '<div class="pr-card-top"><div class="pr-card-name">'+((r.students||[]).join('، '))+'</div>' +
@@ -18417,13 +18527,15 @@ function renderLessonAttendance(){
     +'<button onclick="laShowTab(\'la-new\')" id="laBtnNew" class="bh-tab-btn bh-active">\u062a\u0633\u062c\u064a\u0644 \u062d\u0635\u0629 \u062c\u062f\u064a\u062f\u0629</button>'
     +'<button onclick="laShowTab(\'la-history\')" id="laBtnHist" class="bh-tab-btn">\u0633\u062c\u0644 \u0627\u0644\u062d\u0635\u0635</button>'
     +(role==='admin'||role==='principal'?'<button onclick="laShowTab(\'la-stats\')" id="laBtnStats" class="bh-tab-btn">\u0625\u062d\u0635\u0627\u0621\u0627\u062a \u0627\u0644\u062d\u0636\u0648\u0631</button>':'')
+    +(role==='admin'||role==='principal'?'<button onclick="laShowTab(\'la-surveys\')" id="laBtnSurveys" class="bh-tab-btn">\u128203; \u062a\u0648\u062b\u064a\u0642 \u0627\u0644\u0627\u0633\u062a\u0628\u064a\u0627\u0646\u0627\u062a</button>':'')
     +'</div>'
     +'<div id="la-new">'+laNewSessionForm()+'</div>'
     +'<div id="la-history" style="display:none;">'+laSessionHistory()+'</div>'
-    +(role==='admin'||role==='principal'?'<div id="la-stats" style="display:none;">'+laStatsView()+'</div>':'');
+    +(role==='admin'||role==='principal'?'<div id="la-stats" style="display:none;">'+laStatsView()+'</div>':'')
+    +(role==='admin'||role==='principal'?'<div id="la-surveys" style="display:none;">'+laSurveysView()+'</div>':'');
   container.innerHTML=html;
 }
-function laShowTab(t){['la-new','la-history','la-stats'].forEach(function(x){var el=document.getElementById(x);if(el)el.style.display=x===t?'block':'none';});if(t==='la-history'){var el=document.getElementById('la-history');if(el)el.innerHTML=laSessionHistory();}if(t==='la-stats'){var el=document.getElementById('la-stats');if(el)el.innerHTML=laStatsView();}['laBtnNew','laBtnHist','laBtnStats'].forEach(function(b){var btn=document.getElementById(b);if(btn){if((b==='laBtnNew'&&t==='la-new')||(b==='laBtnHist'&&t==='la-history')||(b==='laBtnStats'&&t==='la-stats'))btn.classList.add('bh-active');else btn.classList.remove('bh-active');}});}
+function laShowTab(t){['la-new','la-history','la-stats','la-surveys'].forEach(function(x){var el=document.getElementById(x);if(el)el.style.display=x===t?'block':'none';});if(t==='la-history'){var el=document.getElementById('la-history');if(el)el.innerHTML=laSessionHistory();}if(t==='la-stats'){var el=document.getElementById('la-stats');if(el)el.innerHTML=laStatsView();}if(t==='la-surveys'){var el=document.getElementById('la-surveys');if(el)el.innerHTML=laSurveysView();}['laBtnNew','laBtnHist','laBtnStats','laBtnSurveys'].forEach(function(b){var btn=document.getElementById(b);if(btn){if((b==='laBtnNew'&&t==='la-new')||(b==='laBtnHist'&&t==='la-history')||(b==='laBtnStats'&&t==='la-stats')||(b==='laBtnSurveys'&&t==='la-surveys'))btn.classList.add('bh-active');else btn.classList.remove('bh-active');}});}
 function laNewSessionForm(){
   var allStudents=[];Object.values(STUDENTS_DATA||{}).forEach(function(a){allStudents=allStudents.concat(a);});
   var classes=[...new Set(allStudents.map(function(s){return s.class;}))].sort();
@@ -18651,6 +18763,64 @@ const TKT_STATUS = {
   resolved:    {label:'مكتمل',         cls:'tkt-status-resolved',    icon:'fa-check-circle'},
   closed:      {label:'مغلق',          cls:'tkt-status-closed',      icon:'fa-lock'}
 };
+
+function laSurveysView() {
+  var surveys = JSON.parse(localStorage.getItem('aljood_parent_surveys') || '[]');
+  var html = '<div style="background:white;border-radius:16px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.07);">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+  html += '<h3 style="color:#1a2a4a;font-size:1rem;font-weight:800;">&#128203; توثيق استبيانات أولياء الأمور</h3>';
+  html += '<span style="font-size:0.8rem;background:#e0ecff;color:#1a2a4a;padding:4px 12px;border-radius:20px;font-weight:700;">'+surveys.length+' استبيان</span>';
+  html += '</div>';
+  if (!surveys.length) {
+    html += '<div style="text-align:center;padding:40px;color:#9ca3af;"><i class="fas fa-inbox" style="font-size:2rem;display:block;margin-bottom:10px;"></i>لا توجد استبيانات مسجّلة بعد</div>';
+  } else {
+    // جدول
+    html += '<div style="overflow-x:auto;">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.83rem;">';
+    html += '<thead><tr style="background:#f0f4ff;color:#1a2a4a;">';
+    html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">#</th>';
+    html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">الطالبة</th>';
+    html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">الصف</th>';
+    html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">التاريخ</th>';
+    html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">السبب</th>';
+    html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">العلم المسبق</th>';
+    html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">الإجراء</th>';
+    html += '<th style="padding:10px 8px;text-align:right;border-bottom:2px solid #dde6f7;">ملاحظة</th>';
+    html += '</tr></thead><tbody>';
+    var sorted = surveys.slice().sort(function(a,b){ return new Date(b.submittedAt)-new Date(a.submittedAt); });
+    sorted.forEach(function(s, i) {
+      var rowBg = i%2===0 ? 'white' : '#fafbff';
+      html += '<tr style="background:'+rowBg+';border-bottom:1px solid #eef2ff;">';
+      html += '<td style="padding:9px 8px;color:#9ca3af;font-weight:700;">'+(i+1)+'</td>';
+      html += '<td style="padding:9px 8px;font-weight:700;color:#1a2a4a;">'+s.studentName+'</td>';
+      html += '<td style="padding:9px 8px;"><span style="background:#e0ecff;color:#1a2a4a;border-radius:8px;padding:3px 10px;font-weight:700;font-size:0.78rem;">'+s.cls+'</span></td>';
+      html += '<td style="padding:9px 8px;color:#555;font-size:0.8rem;">'+s.dateStr+'</td>';
+      html += '<td style="padding:9px 8px;color:#374151;">'+s.reason+'</td>';
+      var q1Color = s.q1==='نعم، كنت على علم' ? '#059669' : s.q1==='لا، علمت الآن' ? '#dc2626' : '#d97706';
+      html += '<td style="padding:9px 8px;"><span style="color:'+q1Color+';font-weight:700;font-size:0.8rem;">'+s.q1+'</span></td>';
+      var q2Color = (s.q2==='تمت المعالجة'||s.q2==='سأتواصل مع المعلمة') ? '#059669' : s.q2==='أحتاج مساعدة' ? '#dc2626' : '#1a2a4a';
+      html += '<td style="padding:9px 8px;"><span style="color:'+q2Color+';font-size:0.8rem;">'+s.q2+'</span></td>';
+      html += '<td style="padding:9px 8px;color:#6b7280;font-size:0.8rem;">'+s.q3+'</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    // زر تصدير
+    html += '<div style="margin-top:14px;text-align:left;">';
+    html += '<button onclick="laClearSurveys()" style="background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:7px 16px;cursor:pointer;font-size:0.8rem;font-family:Cairo,sans-serif;"><i class=\"fas fa-trash\"></i> مسح السجل</button>';
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function laClearSurveys() {
+  showConfirm('هل أنت متأكد من مسح جميع سجلات الاستبيانات؟', function() {
+    localStorage.removeItem('aljood_parent_surveys');
+    var el = document.getElementById('la-surveys');
+    if (el) el.innerHTML = laSurveysView();
+    showToast('تم مسح السجل', 'info');
+  });
+}
 
 function getTktId() {
   const tickets = getTkts();
