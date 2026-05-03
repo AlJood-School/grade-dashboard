@@ -18502,19 +18502,22 @@ function renderLessonAttendance(){
   var container=document.getElementById('la-container');if(!container)return;
   var role=currentRole;
   if(role!=='teacher'&&role!=='admin'&&role!=='principal'&&role!=='admin_staff'){container.innerHTML='<div style="text-align:center;padding:50px;color:#9ca3af;background:white;border-radius:16px;"><i class="fas fa-lock" style="font-size:2rem;display:block;margin-bottom:10px;"></i>\u0647\u0630\u0627 \u0627\u0644\u0642\u0633\u0645 \u0644\u0644\u0645\u0639\u0644\u0645\u0627\u062a \u0641\u0642\u0637</div>';return;}
+  var isAdminRole = (role==='admin'||role==='principal'||role==='admin_staff');
   var html='<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">'
     +'<button onclick="laShowTab(\'la-new\')" id="laBtnNew" class="bh-tab-btn bh-active">\u062a\u0633\u062c\u064a\u0644 \u062d\u0635\u0629 \u062c\u062f\u064a\u062f\u0629</button>'
+    +(isAdminRole?'<button onclick="laShowTab(\'la-today\')" id="laBtnToday" class="bh-tab-btn">\u1f4ca \u063a\u0627\u0626\u0628\u0627\u062a \u0627\u0644\u064a\u0648\u0645</button>':'')
     +'<button onclick="laShowTab(\'la-history\')" id="laBtnHist" class="bh-tab-btn">\u0633\u062c\u0644 \u0627\u0644\u062d\u0635\u0635</button>'
     +(role==='admin'||role==='principal'?'<button onclick="laShowTab(\'la-stats\')" id="laBtnStats" class="bh-tab-btn">\u0625\u062d\u0635\u0627\u0621\u0627\u062a \u0627\u0644\u062d\u0636\u0648\u0631</button>':'')
     +(role==='admin'||role==='principal'?'<button onclick="laShowTab(\'la-surveys\')" id="laBtnSurveys" class="bh-tab-btn">\u128203; \u062a\u0648\u062b\u064a\u0642 \u0627\u0644\u0627\u0633\u062a\u0628\u064a\u0627\u0646\u0627\u062a</button>':'')
     +'</div>'
     +'<div id="la-new">'+laNewSessionForm()+'</div>'
+    +(isAdminRole?'<div id="la-today" style="display:none;">'+laTodayView()+'</div>':'')
     +'<div id="la-history" style="display:none;">'+laSessionHistory()+'</div>'
     +(role==='admin'||role==='principal'?'<div id="la-stats" style="display:none;">'+laStatsView()+'</div>':'')
     +(role==='admin'||role==='principal'?'<div id="la-surveys" style="display:none;">'+laSurveysView()+'</div>':'');
   container.innerHTML=html;
 }
-function laShowTab(t){['la-new','la-history','la-stats','la-surveys'].forEach(function(x){var el=document.getElementById(x);if(el)el.style.display=x===t?'block':'none';});if(t==='la-history'){var el=document.getElementById('la-history');if(el)el.innerHTML=laSessionHistory();}if(t==='la-stats'){var el=document.getElementById('la-stats');if(el)el.innerHTML=laStatsView();}if(t==='la-surveys'){var el=document.getElementById('la-surveys');if(el)el.innerHTML=laSurveysView();}['laBtnNew','laBtnHist','laBtnStats','laBtnSurveys'].forEach(function(b){var btn=document.getElementById(b);if(btn){if((b==='laBtnNew'&&t==='la-new')||(b==='laBtnHist'&&t==='la-history')||(b==='laBtnStats'&&t==='la-stats')||(b==='laBtnSurveys'&&t==='la-surveys'))btn.classList.add('bh-active');else btn.classList.remove('bh-active');}});}
+function laShowTab(t){['la-new','la-today','la-history','la-stats','la-surveys'].forEach(function(x){var el=document.getElementById(x);if(el)el.style.display=x===t?'block':'none';});if(t==='la-today'){var el=document.getElementById('la-today');if(el)el.innerHTML=laTodayView();}if(t==='la-history'){var el=document.getElementById('la-history');if(el)el.innerHTML=laSessionHistory();}if(t==='la-stats'){var el=document.getElementById('la-stats');if(el)el.innerHTML=laStatsView();}if(t==='la-surveys'){var el=document.getElementById('la-surveys');if(el)el.innerHTML=laSurveysView();}['laBtnNew','laBtnToday','laBtnHist','laBtnStats','laBtnSurveys'].forEach(function(b){var btn=document.getElementById(b);if(btn){if((b==='laBtnNew'&&t==='la-new')||(b==='laBtnToday'&&t==='la-today')||(b==='laBtnHist'&&t==='la-history')||(b==='laBtnStats'&&t==='la-stats')||(b==='laBtnSurveys'&&t==='la-surveys'))btn.classList.add('bh-active');else btn.classList.remove('bh-active');}});}
 function laNewSessionForm(){
   var allStudents=[];Object.values(STUDENTS_DATA||{}).forEach(function(a){allStudents=allStudents.concat(a);});
   var classes=[...new Set(allStudents.map(function(s){return s.class;}))].sort();
@@ -18680,6 +18683,11 @@ function laSaveSession(){
     }).catch(function(){});
   } catch(e) {}
   showToast('تم حفظ سجل الحضور — حاضرات: '+present+'/'+total+' — الحصة '+session.period,'success');
+  // تحديث badge الغائبات في الشريط الجانبي
+  updateAttendanceBadge();
+  // تحديث تبويب غائبات اليوم إن كان مفتوحاً
+  var todayEl = document.getElementById('la-today');
+  if (todayEl && todayEl.style.display !== 'none') todayEl.innerHTML = laTodayView();
   laCurrentSession=null;renderLessonAttendance();
 }
 function laSessionHistory(){
@@ -18800,6 +18808,204 @@ function laClearSurveys() {
     showToast('تم مسح السجل', 'info');
   });
 }
+// ══════════════════════════════════════════════════════════
+// INTEGRATED ATTENDANCE SYSTEM — غائبات اليوم + إشعارات
+// ══════════════════════════════════════════════════════════
+
+function laTodayView() {
+  var today = new Date().toISOString().slice(0, 10);
+  var data = laGetData();
+  var sessions = (data.sessions || []).filter(function(s){ return s.date === today; });
+  if (!sessions.length) {
+    return '<div style="text-align:center;padding:40px;color:#9ca3af;background:white;border-radius:16px;">'
+      + '<i class="fas fa-check-circle" style="font-size:2.5rem;color:#4ade80;display:block;margin-bottom:10px;"></i>'
+      + '<div style="font-weight:700;color:#1a2a4a;margin-bottom:4px;">لا يوجد سجل حضور لليوم</div>'
+      + '<div style="font-size:0.85rem;color:#9ca3af;">سيظهر هنا تلقائياً عند تسجيل حصص اليوم</div>'
+      + '</div>';
+  }
+  // Collect absent students per class
+  var absentByClass = {};
+  sessions.forEach(function(s) {
+    Object.values(s.students || {}).forEach(function(st) {
+      if (st.status === 'absent' || st.status === 'late') {
+        if (!absentByClass[s.class]) absentByClass[s.class] = {};
+        if (!absentByClass[s.class][st.id || st.name]) {
+          absentByClass[s.class][st.id || st.name] = {
+            name: st.name, status: st.status, cls: s.class,
+            id: st.id || st.name
+          };
+        } else if (st.status === 'absent') {
+          absentByClass[s.class][st.id || st.name].status = 'absent'; // upgrade late→absent
+        }
+      }
+    });
+  });
+  var totalAbsent = 0;
+  Object.values(absentByClass).forEach(function(cls) {
+    totalAbsent += Object.values(cls).filter(function(s){ return s.status === 'absent'; }).length;
+  });
+  var html = '<div style="background:white;border-radius:16px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.07);">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+  html += '<h3 style="color:#1a2a4a;font-size:1rem;font-weight:800;"><i class="fas fa-user-times" style="color:#ef4444;margin-left:6px;"></i>غائبات اليوم — ' + today + '</h3>';
+  html += '<span style="font-size:0.85rem;background:#fee2e2;color:#dc2626;padding:5px 14px;border-radius:20px;font-weight:700;">' + totalAbsent + ' غائبة</span>';
+  html += '</div>';
+  if (!totalAbsent && Object.keys(absentByClass).length > 0) {
+    html += '<div style="text-align:center;padding:30px;color:#4ade80;font-weight:700;font-size:1rem;"><i class="fas fa-check-circle"></i> جميع الطالبات حاضرات ✅</div>';
+  } else {
+    var classes = Object.keys(absentByClass).sort();
+    classes.forEach(function(cls) {
+      var students = Object.values(absentByClass[cls]);
+      var absentCount = students.filter(function(s){ return s.status === 'absent'; }).length;
+      var lateCount   = students.filter(function(s){ return s.status === 'late'; }).length;
+      if (!students.length) return;
+      html += '<div style="background:#fafafa;border:1px solid #f0f0f0;border-radius:12px;padding:14px;margin-bottom:12px;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+      html += '<div style="font-weight:800;color:#1a2a4a;font-size:0.95rem;">' + cls + '</div>';
+      html += '<div style="display:flex;gap:6px;">';
+      if (absentCount) html += '<span style="background:#fee2e2;color:#dc2626;border-radius:8px;padding:3px 10px;font-size:0.78rem;font-weight:700;">' + absentCount + ' غياب</span>';
+      if (lateCount)   html += '<span style="background:#fef3c7;color:#d97706;border-radius:8px;padding:3px 10px;font-size:0.78rem;font-weight:700;">' + lateCount + ' تأخر</span>';
+      html += '</div></div>';
+      html += '<div style="display:flex;flex-direction:column;gap:7px;">';
+      students.forEach(function(st) {
+        var isAbsent = st.status === 'absent';
+        var statusColor = isAbsent ? '#dc2626' : '#d97706';
+        var statusBg    = isAbsent ? '#fee2e2' : '#fef3c7';
+        var statusLabel = isAbsent ? 'غياب' : 'تأخر';
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;background:white;border:1px solid #f0f0f0;border-radius:8px;padding:8px 12px;">';
+        html += '<div style="display:flex;align-items:center;gap:8px;">';
+        html += '<span style="background:' + statusBg + ';color:' + statusColor + ';border-radius:6px;padding:2px 8px;font-size:0.75rem;font-weight:700;">' + statusLabel + '</span>';
+        html += '<span style="font-size:0.88rem;font-weight:600;color:#1a2a4a;">' + st.name + '</span>';
+        html += '</div>';
+        // Contact button
+        if (isAbsent && (currentRole === 'admin' || currentRole === 'principal' || currentRole === 'admin_staff')) {
+          html += '<button onclick="laContactParent(\'' + (st.id||st.name).replace(/'/g,"&#39;") + '\',\'' + st.name.replace(/'/g,"&#39;") + '\',\'' + cls + '\')" '
+            + 'style="background:linear-gradient(135deg,#1a2a4a,#2d4a8a);color:white;border:none;border-radius:7px;padding:5px 12px;cursor:pointer;font-size:0.78rem;font-family:Cairo,sans-serif;">'
+            + '<i class="fas fa-phone-alt" style="margin-left:4px;"></i>استدعاء ولي الأمر</button>';
+        }
+        html += '</div>';
+      });
+      html += '</div></div>';
+    });
+  }
+  html += '</div>';
+  return html;
+}
+
+function laContactParent(studentId, studentName, cls) {
+  var today = new Date();
+  var dateStr = today.toLocaleDateString('ar-AE', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+  var html = '<div style="max-width:500px;width:96%;background:white;border-radius:18px;padding:24px;max-height:90vh;overflow-y:auto;" dir="rtl">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">'
+    + '<h3 style="margin:0;color:#1a2a4a;font-size:1rem;"><i class="fas fa-phone-alt" style="color:#C9A84C;margin-left:6px;"></i>استدعاء ولي الأمر</h3>'
+    + '<button onclick="document.getElementById(\'laContactModal\').remove()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#666;">&times;</button>'
+    + '</div>'
+    + '<div style="background:#f0f4ff;border-radius:12px;padding:14px;margin-bottom:16px;font-size:0.88rem;">'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
+    + '<div><span style="color:#9ca3af;font-size:0.78rem;">الطالبة</span><div style="font-weight:700;color:#1a2a4a;">' + studentName + '</div></div>'
+    + '<div><span style="color:#9ca3af;font-size:0.78rem;">الصف</span><div style="font-weight:700;color:#1a2a4a;">' + cls + '</div></div>'
+    + '<div><span style="color:#9ca3af;font-size:0.78rem;">التاريخ</span><div style="font-weight:600;color:#1a2a4a;font-size:0.82rem;">' + dateStr + '</div></div>'
+    + '</div></div>'
+    + '<div style="margin-bottom:14px;">'
+    + '<label style="font-size:0.82rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">سبب الاستدعاء</label>'
+    + '<select id="laContactReason" style="width:100%;padding:9px;border:1.5px solid #e0e0e0;border-radius:9px;font-family:Cairo,sans-serif;">'
+    + '<option value="غياب متكرر">غياب متكرر</option>'
+    + '<option value="غياب بدون إشعار">غياب بدون إشعار</option>'
+    + '<option value="تأخر متكرر">تأخر متكرر</option>'
+    + '<option value="مخالفة سلوكية">مخالفة سلوكية</option>'
+    + '<option value="متابعة أكاديمية">متابعة أكاديمية</option>'
+    + '<option value="أخرى">أخرى</option>'
+    + '</select></div>'
+    + '<div style="margin-bottom:14px;">'
+    + '<label style="font-size:0.82rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">هل كان ولي الأمر على علم؟</label>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+    + '<label style="display:flex;align-items:center;gap:5px;font-size:0.85rem;cursor:pointer;"><input type="radio" name="laQ1" value="نعم، كنت على علم" checked> نعم، كنت على علم</label>'
+    + '<label style="display:flex;align-items:center;gap:5px;font-size:0.85rem;cursor:pointer;"><input type="radio" name="laQ1" value="لا، علمت الآن"> لا، علمت الآن</label>'
+    + '<label style="display:flex;align-items:center;gap:5px;font-size:0.85rem;cursor:pointer;"><input type="radio" name="laQ1" value="كان على علم جزئي"> كان على علم جزئي</label>'
+    + '</div></div>'
+    + '<div style="margin-bottom:14px;">'
+    + '<label style="font-size:0.82rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">الإجراء المتخذ</label>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+    + '<label style="display:flex;align-items:center;gap:5px;font-size:0.85rem;cursor:pointer;"><input type="radio" name="laQ2" value="تمت المعالجة" checked> تمت المعالجة</label>'
+    + '<label style="display:flex;align-items:center;gap:5px;font-size:0.85rem;cursor:pointer;"><input type="radio" name="laQ2" value="سأتواصل مع المعلمة"> سأتواصل مع المعلمة</label>'
+    + '<label style="display:flex;align-items:center;gap:5px;font-size:0.85rem;cursor:pointer;"><input type="radio" name="laQ2" value="أحتاج مساعدة"> أحتاج مساعدة</label>'
+    + '</div></div>'
+    + '<div style="margin-bottom:18px;">'
+    + '<label style="font-size:0.82rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">ملاحظة (اختياري)</label>'
+    + '<textarea id="laContactNote" style="width:100%;padding:9px;border:1.5px solid #e0e0e0;border-radius:9px;height:60px;resize:vertical;font-family:Cairo,sans-serif;box-sizing:border-box;" placeholder="أي ملاحظات إضافية..."></textarea>'
+    + '</div>'
+    + '<div style="text-align:center;">'
+    + '<button onclick="laSubmitContactSurvey(\'' + (studentId||studentName).replace(/'/g,"&#39;") + '\',\'' + studentName.replace(/'/g,"&#39;") + '\',\'' + cls + '\',\'' + today.toISOString().slice(0,10) + '\',\'' + dateStr.replace(/'/g,"&#39;") + '\')" '
+    + 'style="background:linear-gradient(135deg,#1a2a4a,#2d4a8a);color:white;border:none;border-radius:10px;padding:12px 28px;cursor:pointer;font-size:0.9rem;font-weight:700;font-family:Cairo,sans-serif;">'
+    + '<i class="fas fa-check" style="margin-left:6px;"></i>تسجيل وحفظ</button>'
+    + '</div></div>';
+  var modal = document.getElementById('laContactModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'laContactModal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;';
+    modal.onclick = function(e){ if(e.target===modal) modal.remove(); };
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = html;
+  modal.style.display = 'flex';
+}
+
+function laSubmitContactSurvey(studentId, studentName, cls, dateISO, dateStr) {
+  var reason = (document.getElementById('laContactReason') || {}).value || 'غياب';
+  var q1 = (document.querySelector('input[name="laQ1"]:checked') || {}).value || '';
+  var q2 = (document.querySelector('input[name="laQ2"]:checked') || {}).value || '';
+  var q3 = (document.getElementById('laContactNote') || {}).value || '';
+  var surveys = JSON.parse(localStorage.getItem('aljood_parent_surveys') || '[]');
+  surveys.unshift({
+    studentId: studentId, studentName: studentName, cls: cls,
+    dateISO: dateISO, dateStr: dateStr, reason: reason,
+    q1: q1, q2: q2, q3: q3,
+    recordedBy: currentUsername,
+    submittedAt: new Date().toISOString()
+  });
+  localStorage.setItem('aljood_parent_surveys', JSON.stringify(surveys));
+  var modal = document.getElementById('laContactModal');
+  if (modal) modal.remove();
+  showToast('تم تسجيل استبيان ولي الأمر بنجاح ✅', 'success');
+  // Refresh today view if visible
+  var el = document.getElementById('la-today');
+  if (el && el.style.display !== 'none') el.innerHTML = laTodayView();
+  // Refresh surveys tab
+  var sel = document.getElementById('la-surveys');
+  if (sel && sel.style.display !== 'none') sel.innerHTML = laSurveysView();
+}
+
+function updateAttendanceBadge() {
+  try {
+    var today = new Date().toISOString().slice(0, 10);
+    var data = laGetData();
+    var todaySessions = (data.sessions || []).filter(function(s){ return s.date === today; });
+    var absentIds = {};
+    todaySessions.forEach(function(s) {
+      Object.values(s.students || {}).forEach(function(st) {
+        if (st.status === 'absent') absentIds[st.id || st.name] = true;
+      });
+    });
+    var count = Object.keys(absentIds).length;
+    // Update nav badge on lesson_attendance item
+    var navItem = document.querySelector('[data-section="lesson_attendance"]');
+    if (navItem) {
+      var badge = navItem.querySelector('.la-absent-badge');
+      if (!badge && count > 0) {
+        badge = document.createElement('span');
+        badge.className = 'la-absent-badge badge';
+        badge.style.cssText = 'background:#ef4444;color:white;border-radius:10px;padding:1px 7px;font-size:0.68rem;font-weight:700;margin-right:auto;';
+        navItem.appendChild(badge);
+      }
+      if (badge) {
+        if (count > 0) { badge.textContent = count; badge.style.display = ''; }
+        else badge.style.display = 'none';
+      }
+    }
+  } catch(e) {}
+}
+
+
 
 function getTktId() {
   const tickets = getTkts();
