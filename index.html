@@ -3498,12 +3498,23 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
       </div>
     </div>
     <!-- Row 3: العرض -->
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;flex-wrap:wrap;">
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid rgba(201,168,76,0.15);flex-wrap:wrap;">
       <span style="color:#1A2A4A;font-weight:700;font-size:0.81rem;min-width:78px;white-space:nowrap;"><i class="fas fa-eye" style="color:var(--accent);margin-left:5px;"></i>العرض</span>
       <div style="display:flex;gap:6px;">
         <button class="sched-view-btn" data-view="class" onclick="switchSchedView('class')" style="padding:5px 13px;background:var(--accent);color:#1a1a2e;border:none;border-radius:6px;cursor:pointer;font-size:0.81rem;font-weight:700;font-family:inherit;"><i class="fas fa-chalkboard"></i> حسب الصف</button>
         <button class="sched-view-btn" data-view="teacher" onclick="switchSchedView('teacher')" style="padding:5px 13px;background:rgba(26,42,74,0.06);color:#1A2A4A;border:1px solid rgba(26,42,74,0.2);border-radius:6px;cursor:pointer;font-size:0.81rem;font-family:inherit;"><i class="fas fa-user-tie"></i> حسب المعلم</button>
       </div>
+    </div>
+    <!-- Row 4: الطباعة -->
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;flex-wrap:wrap;background:rgba(201,168,76,0.03);">
+      <span style="color:#1A2A4A;font-weight:700;font-size:0.81rem;min-width:78px;white-space:nowrap;"><i class="fas fa-print" style="color:var(--accent);margin-left:5px;"></i>طباعة</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button onclick="printAllSchedules('all')" style="padding:5px 14px;background:#1A2A4A;color:#C9A84C;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.81rem;font-family:inherit;display:flex;align-items:center;gap:6px;"><i class="fas fa-print"></i> طباعة جميع الصفوف</button>
+        <button onclick="printAllSchedules('C1')" style="padding:5px 13px;background:rgba(26,42,74,0.06);color:#1A2A4A;border:1px solid rgba(26,42,74,0.2);border-radius:6px;cursor:pointer;font-size:0.81rem;font-family:inherit;font-weight:700;"><i class="fas fa-print"></i> الحلقة الأولى فقط</button>
+        <button onclick="printAllSchedules('C2')" style="padding:5px 13px;background:rgba(26,42,74,0.06);color:#1A2A4A;border:1px solid rgba(26,42,74,0.2);border-radius:6px;cursor:pointer;font-size:0.81rem;font-family:inherit;font-weight:700;"><i class="fas fa-print"></i> الحلقة الثانية فقط</button>
+        <button onclick="printSingleClassSched()" style="padding:5px 13px;background:rgba(26,42,74,0.06);color:#1A2A4A;border:1px solid rgba(26,42,74,0.2);border-radius:6px;cursor:pointer;font-size:0.81rem;font-family:inherit;font-weight:700;"><i class="fas fa-print"></i> طباعة الصف الحالي</button>
+      </div>
+      <span style="font-size:0.74rem;color:#888;margin-right:auto;">📄 صفحة مستقلة لكل صف — A4 أفقي</span>
     </div>
   </div>
   <div id="sched-class-panel">
@@ -7528,8 +7539,8 @@ function applyLearningMode() {
   var badgeMain = document.getElementById('ds-mode-badge-main');
   var platform  = document.getElementById('ds-mode-platform');
   var dates     = document.getElementById('ds-mode-dates');
-  if (btnLabel)  btnLabel.textContent = m.mode;
-  if (btnIcon)   { btnIcon.className = 'fas ' + m.icon; }
+  if (btnLabel)  btnLabel.textContent = 'التعلم عن بعد';
+  if (btnIcon)   { btnIcon.className = 'fas fa-laptop-house'; }
   if (badgeMain) { badgeMain.textContent = m.mode; badgeMain.className = 'ds-badge ' + m.badge; }
   if (platform)  platform.textContent = m.platform;
   if (dates)     dates.textContent = m.dates;
@@ -11405,6 +11416,225 @@ function renderScheduleSection() {
   if (currentSchedView === 'teacher') renderTeacherSched();
   else renderClassSched();
 }
+
+// ==================== PRINT SCHEDULES ====================
+function printSingleClassSched() {
+  const classId = document.getElementById('classSelect')?.value;
+  if (!classId) { showToast('اختري الصف أولاً من القائمة', 'warning'); return; }
+  printAllSchedules('single', classId);
+}
+
+function printAllSchedules(filter, singleClassId) {
+  const schedules = getSchedules();
+  const classes = getSchedules ? Object.keys(schedules).filter(k => !k.startsWith('__')) : [];
+  const isDistMode = currentSchedMode === 'distance';
+  const modeName = isDistMode ? 'التعلم عن بُعد' : (currentSchedMode === 'ramadan' ? 'رمضان' : 'الاعتيادي');
+
+  // Sort classes
+  const sortedClasses = classes.sort((a, b) => {
+    const na = parseInt(a) || 0, nb = parseInt(b) || 0;
+    if (na !== nb) return na - nb;
+    return a.localeCompare(b);
+  });
+
+  // Filter classes
+  let filteredClasses = sortedClasses;
+  if (filter === 'C1') filteredClasses = sortedClasses.filter(c => { const n = parseInt(c)||0; return n >= 1 && n <= 4; });
+  else if (filter === 'C2') filteredClasses = sortedClasses.filter(c => { const n = parseInt(c)||0; return n >= 5; });
+  else if (filter === 'single') filteredClasses = [singleClassId];
+
+  if (!filteredClasses.length) { showToast('لا توجد بيانات للطباعة', 'warning'); return; }
+
+  const SUBJ_COLORS = {
+    'Eng/Math/Sci':'#3b82f6','English':'#3b82f6','Math':'#f97316','Science':'#06b6d4',
+    'Arabic':'#ef4444','Arabic & Islamic':'#ef4444','Islamic':'#dc2626','Art':'#ec4899',
+    'Physical Ed':'#10b981','Physical Ed.':'#10b981','CCDI':'#8b5cf6','Jiu Jitsu':'#dc2626',
+    'Drama':'#f59e0b','Music':'#6366f1','Computer':'#14b8a6','Social':'#84cc16','Moral Ed':'#64748b','Sharia':'#e11d48'
+  };
+  function getSubjColor(s) {
+    if (!s) return '#94a3b8';
+    for (const [k,v] of Object.entries(SUBJ_COLORS)) { if (s.toLowerCase().includes(k.toLowerCase())) return v; }
+    let h=0; for (let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))&0xffff;
+    return ['#3b82f6','#ef4444','#10b981','#f97316','#8b5cf6','#ec4899','#06b6d4','#84cc16'][h%8];
+  }
+
+  const DAYS = ['الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+  const DAYS_SHORT = ['الاثنين','الثلاثاء','الأربعاء','الخميس'];
+
+  function getPeriodsForClass(classId, isFri) {
+    const n = parseInt(classId)||0;
+    const isC2Upper = n >= 7;
+    const isC2 = n >= 5;
+    if (isDistMode) {
+      if (isFri) return isC2
+        ? [{key:'P1',label:'P1',time:'8:00–8:40',pi:0},{key:'P2',label:'P2',time:'8:40–9:20',pi:1},{key:'BRK',label:'استراحة',time:'9:20–10:00',isBreak:true},{key:'P3',label:'P3',time:'10:00–10:40',pi:2}]
+        : [{key:'P1',label:'P1',time:'10:30–11:05',pi:0},{key:'P2',label:'P2',time:'11:05–11:40',pi:1},{key:'BRK',label:'استراحة',time:'11:40–12:00',isBreak:true},{key:'P3',label:'P3',time:'12:00–12:35',pi:2}];
+      return isC2
+        ? [{key:'P1',label:'P1',time:'8:00–8:40',pi:0},{key:'P2',label:'P2',time:'8:40–9:20',pi:1},{key:'BRK',label:'استراحة',time:'9:20–10:00',isBreak:true},{key:'P3',label:'P3',time:'10:00–10:40',pi:2},{key:'P4',label:'P4',time:'10:40–11:20',pi:3},{key:'P5',label:'P5',time:'11:20–12:00',pi:4},{key:'P6',label:'P6',time:'12:00–12:40',pi:5}]
+        : [{key:'P1',label:'P1',time:'10:30–11:05',pi:0},{key:'P2',label:'P2',time:'11:05–11:40',pi:1},{key:'BRK',label:'استراحة',time:'11:40–12:00',isBreak:true},{key:'P3',label:'P3',time:'12:00–12:35',pi:2},{key:'P4',label:'P4',time:'12:35–13:10',pi:3},{key:'P5',label:'P5',time:'13:10–13:45',pi:4}];
+    }
+    if (isFri) {
+      if (isC2Upper) return [{key:'P1',label:'P1',time:'7:10–7:55',pi:0},{key:'P2',label:'P2',time:'8:00–8:45',pi:1},{key:'BRK',label:'استراحة',time:'9:35–10:00',isBreak:true},{key:'P3',label:'P3',time:'10:00–10:45',pi:2},{key:'P4',label:'P4',time:'10:50–11:35',pi:3}];
+      if (isC2) return [{key:'P1',label:'P1',time:'8:00–8:45',pi:1},{key:'P2',label:'P2',time:'8:50–9:35',pi:2},{key:'BRK',label:'استراحة',time:'9:35–10:00',isBreak:true},{key:'P3',label:'P3',time:'10:00–10:45',pi:3},{key:'P4',label:'P4',time:'10:50–11:35',pi:4}];
+      return [{key:'P1',label:'P1',time:'7:10–7:55',pi:0},{key:'P2',label:'P2',time:'8:00–8:45',pi:1},{key:'BRK',label:'استراحة',time:'9:35–10:00',isBreak:true},{key:'P3',label:'P3',time:'10:00–10:45',pi:2},{key:'P4',label:'P4',time:'10:50–11:35',pi:3}];
+    }
+    if (isC2Upper) return [{key:'P1',label:'P1',time:'7:10–7:55',pi:0},{key:'P2',label:'P2',time:'8:00–8:45',pi:1},{key:'P3',label:'P3',time:'8:50–9:35',pi:2},{key:'BRK1',label:'استراحة',time:'9:35–10:00',isBreak:true},{key:'P4',label:'P4',time:'10:00–10:45',pi:3},{key:'P5',label:'P5',time:'10:50–11:35',pi:4},{key:'P6',label:'P6',time:'11:35–12:20',pi:5},{key:'P7',label:'P7',time:'12:20–13:05',pi:6},{key:'PRY',label:'صلاة الظهر',time:'13:05–13:15',isBreak:true},{key:'P8',label:'P8',time:'13:15–14:00',pi:7}];
+    if (isC2) return [{key:'P1',label:'P1',time:'8:00–8:45',pi:1},{key:'P2',label:'P2',time:'8:50–9:35',pi:2},{key:'BRK1',label:'استراحة',time:'9:35–10:00',isBreak:true},{key:'P3',label:'P3',time:'10:00–10:45',pi:3},{key:'P4',label:'P4',time:'10:50–11:35',pi:4},{key:'P5',label:'P5',time:'11:35–12:20',pi:5},{key:'P6',label:'P6',time:'12:20–13:05',pi:6}];
+    return [{key:'P1',label:'P1',time:'7:10–7:55',pi:0},{key:'P2',label:'P2',time:'8:00–8:45',pi:1},{key:'P3',label:'P3',time:'8:50–9:35',pi:2},{key:'BRK1',label:'استراحة',time:'9:35–10:00',isBreak:true},{key:'P4',label:'P4',time:'10:00–10:45',pi:3},{key:'P5',label:'P5',time:'10:50–11:35',pi:4},{key:'BRK2',label:'استراحة',time:'11:35–11:50',isBreak:true},{key:'P6',label:'P6',time:'11:50–12:35',pi:5},{key:'P7',label:'P7',time:'12:40–13:25',pi:6}];
+  }
+
+  function buildClassPage(classId) {
+    const clsSched = isDistMode ? ((schedules['__mode_distance']||{})[classId]||{}) : (schedules[classId]||{});
+    const periods = getPeriodsForClass(classId, false);
+    const friPeriods = getPeriodsForClass(classId, true);
+    const cycleLbl = (parseInt(classId)||0) >= 5 ? 'الحلقة الثانية' : 'الحلقة الأولى';
+
+    // Main table (Mon–Thu)
+    let tHead = '<tr><th style="min-width:60px;background:#1A2A4A;color:#C9A84C;font-size:0.75rem;">اليوم</th>';
+    if (!isDistMode) tHead += '<th style="background:#1A2A4A;color:#C9A84C;font-size:0.72rem;">🚩 طابور</th>';
+    periods.forEach(p => {
+      if (p.isBreak) tHead += `<th style="background:#f5f0e0;color:#8B6914;font-size:0.72rem;border:1px dashed #C9A84C;">☕ ${p.label}<br><span style="font-size:0.6rem;">${p.time}</span></th>`;
+      else tHead += `<th style="background:#1A2A4A;color:#C9A84C;font-size:0.75rem;">${p.label}<br><span style="font-size:0.62rem;color:#aaa;">${p.time}</span></th>`;
+    });
+    tHead += '</tr>';
+
+    let tBody = '';
+    DAYS_SHORT.forEach((dayName, di) => {
+      tBody += `<tr><td style="background:#f8f4ec;font-weight:700;color:#1A2A4A;font-size:0.8rem;text-align:center;">${dayName}</td>`;
+      if (!isDistMode) tBody += '<td style="background:#f8f4ec;font-size:0.7rem;color:#888;text-align:center;">7:00</td>';
+      periods.forEach(p => {
+        if (p.isBreak) { tBody += '<td style="background:#faf6e8;"></td>'; return; }
+        const cell = clsSched[`${di}_${p.pi}`];
+        if (cell && cell.subject) {
+          const color = getSubjColor(cell.subject);
+          tBody += `<td style="background:${color}15;border-right:3px solid ${color};padding:4px 6px;"><div style="color:${color};font-weight:700;font-size:0.73rem;">${cell.subject}</div><div style="color:#555;font-size:0.62rem;margin-top:2px;">${cell.teacher||''}</div></td>`;
+        } else {
+          tBody += '<td style="background:#f9f9f9;color:#ccc;text-align:center;font-size:0.7rem;">—</td>';
+        }
+      });
+      tBody += '</tr>';
+    });
+
+    // Friday row
+    let friRow = `<tr style="border-top:2px solid #C9A84C;"><td style="background:#fff8e6;font-weight:700;color:#C9A84C;font-size:0.8rem;text-align:center;">الجمعة</td>`;
+    if (!isDistMode) friRow += '<td style="background:#fff8e6;font-size:0.7rem;color:#888;text-align:center;">7:00</td>';
+    // Pad Friday to match columns
+    const mainCols = periods.length + (isDistMode ? 0 : 1);
+    const friCols = friPeriods.length + (isDistMode ? 0 : 1);
+    let friCellsHtml = '';
+    if (!isDistMode) friCellsHtml = ''; // already added above
+    friPeriods.forEach(p => {
+      if (p.isBreak) { friRow += '<td style="background:#faf6e8;"></td>'; return; }
+      const cell = clsSched[`4_${p.pi}`];
+      if (cell && cell.subject) {
+        const color = getSubjColor(cell.subject);
+        friRow += `<td style="background:${color}15;border-right:3px solid ${color};padding:4px 6px;"><div style="color:${color};font-weight:700;font-size:0.73rem;">${cell.subject}</div><div style="color:#555;font-size:0.62rem;margin-top:2px;">${cell.teacher||''}</div></td>`;
+      } else {
+        friRow += '<td style="background:#f9f9f9;color:#ccc;text-align:center;font-size:0.7rem;">—</td>';
+      }
+    });
+    // Colspan for remaining columns
+    const remaining = mainCols - friCols - (isDistMode ? 0 : 0);
+    if (remaining > 0) friRow += `<td colspan="${remaining}" style="background:#fff8e6;"></td>`;
+    friRow += '</tr>';
+
+    return `
+    <div class="class-page">
+      <div class="page-header">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <img src="https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/assets/logo_aljood_school.png" style="height:52px;width:auto;" onerror="this.style.display='none'"/>
+          <div>
+            <div style="font-size:1.3rem;font-weight:900;color:#1A2A4A;">مدرسة الجود للتعليم الأساسي</div>
+            <div style="font-size:0.85rem;color:#666;margin-top:2px;">الجدول الدراسي — ${modeName}</div>
+          </div>
+        </div>
+        <div style="text-align:left;">
+          <div style="font-size:2rem;font-weight:900;color:#1A2A4A;">${classId}</div>
+          <div style="font-size:0.8rem;color:#888;">${cycleLbl}</div>
+          <div style="font-size:0.72rem;color:#aaa;margin-top:2px;">العام الدراسي 2025–2026</div>
+        </div>
+      </div>
+      <table class="sched-print-table" dir="rtl">
+        <thead>${tHead}</thead>
+        <tbody>${tBody}${friRow}</tbody>
+      </table>
+      <div style="margin-top:8px;font-size:0.7rem;color:#aaa;text-align:center;">
+        طُبع من بوابة مدرسة الجود الإدارية — ${new Date().toLocaleDateString('ar-AE')}
+      </div>
+    </div>`;
+  }
+
+  const allPages = filteredClasses.map(buildClassPage).join('');
+
+  const printWin = window.open('', '_blank', 'width=1100,height=800');
+  if (!printWin) { showToast('يرجى السماح بالنوافذ المنبثقة للطباعة', 'warning'); return; }
+
+  printWin.document.write(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<title>جداول مدرسة الجود — ${modeName}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Tajawal', Arial, sans-serif; background: #fff; color: #1A2A4A; }
+  .class-page {
+    width: 100%;
+    padding: 18px 22px 14px;
+    page-break-after: always;
+    break-after: page;
+    min-height: 90vh;
+  }
+  .class-page:last-child { page-break-after: avoid; break-after: avoid; }
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 3px solid #C9A84C;
+    padding-bottom: 10px;
+    margin-bottom: 14px;
+  }
+  .sched-print-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Tajawal', Arial, sans-serif;
+    font-size: 0.8rem;
+  }
+  .sched-print-table th, .sched-print-table td {
+    border: 1px solid #e2e2e2;
+    padding: 5px 7px;
+    vertical-align: middle;
+    text-align: center;
+  }
+  .sched-print-table thead th { font-size: 0.75rem; }
+  @media print {
+    @page { size: A4 landscape; margin: 10mm 12mm; }
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .class-page { page-break-after: always; break-after: page; padding: 6px 8px; }
+    .class-page:last-child { page-break-after: avoid; }
+  }
+  .print-btn {
+    position: fixed; bottom: 20px; left: 20px; right: 20px;
+    background: #1A2A4A; color: #C9A84C;
+    border: none; border-radius: 10px; padding: 14px;
+    font-size: 1rem; font-weight: 700; cursor: pointer;
+    font-family: 'Tajawal', Arial, sans-serif;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    z-index: 999;
+  }
+  @media print { .print-btn { display: none; } }
+</style>
+</head>
+<body>
+${allPages}
+<button class="print-btn" onclick="window.print()">🖨️ طباعة جميع الصفوف (${filteredClasses.length} صف)</button>
+</body>
+</html>`);
+
+  printWin.document.close();
+  showToast(`✅ جاهز للطباعة — ${filteredClasses.length} صف`, 'success');
+}
+// ==================== END PRINT ====================
 
 function switchSchedMode(mode) {
   currentSchedMode = mode;
