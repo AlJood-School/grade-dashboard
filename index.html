@@ -5934,15 +5934,6 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
           <label class="dlp-field-label"><i class="fas fa-chalkboard" style="color:var(--accent);margin-left:4px;"></i>الصف والشعبة</label>
           <select id="dlp-class" onchange="dlpOnClassChange()" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-family:inherit;font-size:0.92rem;">
             <option value="">اختر الصف</option>
-            <option>KG1</option><option>KG2</option>
-            <option>1A</option><option>1B</option><option>1C</option>
-            <option>2A</option><option>2B</option><option>2C</option>
-            <option>3A</option><option>3B</option><option>3C</option>
-            <option>4A</option><option>4B</option><option>4C</option>
-            <option>5A</option><option>5B</option><option>5C</option>
-            <option>6A</option><option>6B</option><option>6C</option>
-            <option>7A</option><option>7B</option><option>7C</option>
-            <option>8A</option><option>8B</option><option>8C</option>
           </select>
         </div>
         <div>
@@ -17521,13 +17512,37 @@ function dlpOnClassChange() {
   } catch(e) { initDlpSubjectOptions(); }
 }
 
+function initDlpClassOptions() {
+  var sel = document.getElementById('dlp-class');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">اختر الصف</option>';
+  var classes = [];
+  // المعلمة: فقط صفوفها من schedules.json
+  if (currentRole === 'teacher' && currentStaff) {
+    classes = getTeacherClasses(currentStaff.id);
+    // fallback: إن لم يوجد في schedules، عرض كل الصفوف
+    if (!classes || classes.length === 0) {
+      classes = getAllClasses ? getAllClasses() : [];
+    }
+  } else {
+    // المدير/المديرة/النائبة: كل الصفوف
+    classes = ['KG1A','KG1B','KG1C','KG2A','KG2B','KG2C'];
+    for (var g = 1; g <= 8; g++) ['A','B','C'].forEach(function(l){ classes.push(g+l); });
+  }
+  classes.forEach(function(cls){
+    var op = document.createElement('option');
+    op.value = cls; op.textContent = cls;
+    sel.appendChild(op);
+  });
+}
+
 function initDlpSubjectOptions() {
   var sel = document.getElementById('dlp-subject');
   if (!sel) return;
   sel.innerHTML = '<option value="">-- اختر المادة --</option>';
   // Auto-detect teacher subjects from STAFF_DB
   var staffEntry = STAFF_DB.find(function(s){
-    return s.name_ar === currentUser || s.email === currentUser;
+    return s.name_ar === currentUsername || s.email === currentUsername || (typeof currentUser !== 'undefined' && currentUser && (s.name_ar === currentUser || s.email === currentUser));
   });
   var subjects = [];
   if (staffEntry && staffEntry.subjects && staffEntry.subjects.length > 0) {
@@ -17732,7 +17747,9 @@ function renderDailyLessonPlansSection() {
   if (av) av.style.display = isAdmin ? '' : 'none';
   if (isTeacher) {
     renderDlpMyPlans();
-    setTimeout(initDlpSubjectOptions, 50);
+    setTimeout(function(){ initDlpClassOptions(); initDlpSubjectOptions(); }, 50);
+  } else {
+    setTimeout(function(){ initDlpClassOptions(); }, 50);
   }
 }
 
