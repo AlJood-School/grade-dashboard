@@ -6615,7 +6615,7 @@ function restoreSession() {
   _app.style.display = '';
   document.getElementById('userNameDisplay').textContent = currentUsername;
   document.getElementById('userRoleDisplay').textContent = roleLabel;
-  if (currentRole === 'admin' || currentRole === 'principal') document.getElementById('adminMenu').style.display = 'block';
+  if (currentRole === 'admin' || currentRole === 'principal' || currentRole === 'vice_principal') document.getElementById('adminMenu').style.display = 'block';
   else document.getElementById('adminMenu').style.display = 'none';
   const credBtnR = document.getElementById('credentialsBtn');
   if (credBtnR) credBtnR.style.display = currentRole === 'admin' ? '' : 'none';
@@ -6718,7 +6718,7 @@ async function doLogin() {
   // vice-principals (admin_staff) may use principal tab
   const TAB_ROLE_MAP = {
     'admin':       ['admin'],
-    'principal':   ['principal', 'admin_staff'],
+    'principal':   ['principal', 'admin_staff', 'vice_principal'],
     'teacher':     ['teacher'],
     'admin_staff': ['admin_staff'],
     'parent':      ['parent']
@@ -6786,7 +6786,7 @@ async function doLogin() {
       var _appME = document.getElementById('app'); _appME.classList.add('visible'); _appME.style.display = '';
       document.getElementById('userNameDisplay').textContent = currentUsername;
       document.getElementById('userRoleDisplay').textContent = (target.primary_job || target.role) + ' 🔑';
-      if (target.role === 'admin' || target.role === 'principal' || target.role === 'admin_staff') {
+      if (target.role === 'admin' || target.role === 'principal' || target.role === 'admin_staff' || target.role === 'vice_principal') {
         document.getElementById('adminMenu').style.display = 'block';
       } else {
         document.getElementById('adminMenu').style.display = 'none';
@@ -6860,7 +6860,7 @@ async function doLogin() {
     var _appEl = document.getElementById('app'); _appEl.classList.add('visible'); _appEl.style.display = '';
     document.getElementById('userNameDisplay').textContent = currentUsername;
     document.getElementById('userRoleDisplay').textContent = staffMember.primary_job || roleLabel;
-    document.getElementById('adminMenu').style.display = 'none';
+    document.getElementById('adminMenu').style.display = (staffMember.role === 'admin' || staffMember.role === 'principal' || staffMember.role === 'vice_principal') ? 'block' : 'none';
     renderNav();
     showSection('home');
     renderHomeDashboard();
@@ -6905,7 +6905,7 @@ async function doLogin() {
     currentRole = user.role;
     document.getElementById('userNameDisplay').textContent = uname;
     document.getElementById('userRoleDisplay').textContent = user.roleLabel;
-    if (user.role === 'admin' || user.role === 'principal') document.getElementById('adminMenu').style.display = 'block';
+    if (user.role === 'admin' || user.role === 'principal' || user.role === 'vice_principal') document.getElementById('adminMenu').style.display = 'block';
     const credBtn = document.getElementById('credentialsBtn');
     if (credBtn) credBtn.style.display = user.role === 'admin' ? '' : 'none';
     const expBtn = document.getElementById('exportDataBtn'); if (expBtn) expBtn.style.display = user.role === 'admin' ? '' : 'none';
@@ -8944,6 +8944,12 @@ const DEFAULT_ACCESS = {
   principal:     ['home','analysis','students','admin_section','distance','resources','projects','events','achievements','documents','parents','forms','templates','staff_directory','school_schedule','kg_schedules','substitute_scheduler','schedule_builder','leaves','meetings','weekly_plan','daily_plans','behavior_log','reports','parent_requests','digital_safety','my_profile','tech_support','credentials_center','lms_credentials','hr_management','student_admission','prof_development','conferences','login_analytics','smart_report','roles_permissions','data_analytics'],
   teacher:       ['home','analysis','students','distance','resources','projects','events','achievements','forms','templates','prof_development','staff_directory','my_profile','school_schedule','meetings','weekly_plan','daily_plans','behavior_log','reports','parent_requests','digital_safety','tech_support','smart_report','lesson_attendance'],
   staff:         ['home','analysis','events','achievements','documents','forms','templates','staff_directory','my_profile','school_schedule','meetings','resources','weekly_plan','daily_plans','behavior_log','reports','parent_requests','specialist_inbox','digital_safety','tech_support','prof_development','student_admission'],
+  vice_principal:['home','my_profile','substitute_scheduler','hr_management','prof_development',
+                  'conferences','meetings','behavior_log','parent_requests','admin_section',
+                  'staff_directory','students','reports','weekly_plan','daily_plans','analysis',
+                  'leaves','student_admission','forms','templates','documents','social_worker',
+                  'lesson_attendance','school_schedule','kg_schedules','digital_safety',
+                  'tech_support','events','achievements','projects','distance','resources'],
   parent:        ['parents','reports','resources','lms_credentials','prof_development']
 };
 
@@ -9100,8 +9106,10 @@ function renderNav() {
   config.forEach(item => {
     const vt = item.visibleTo || [];
     const canSeeByRole = vt.includes(visibleRole) || vt.includes(currentRole) || vt.includes(currentUserPosition);
-    if (!canSeeByRole && currentRole !== 'admin') return;
-    if (!access.includes(item.id)) return;
+    const hasExplicitAccess = access.includes(item.id);
+    // إذا كان الدور لديه صلاحية صريحة للقسم → أظهره في القائمة بغض النظر عن visibleTo
+    if (!hasExplicitAccess) return;
+    if (!canSeeByRole && !hasExplicitAccess && currentRole !== 'admin') return;
     const g = item.group || 'content';
     if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
     groups[g].push(item);
