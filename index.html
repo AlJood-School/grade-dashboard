@@ -21832,10 +21832,16 @@ function isScheduleExcluded(s) {
   return false;
 }
 // ─────────────────────────────────────────────────────────────────────
+// معرّفات فريق الدعم التقني — مستثنون من نظام الاحتياط كلياً
+var TECH_SUPPORT_TEACHER_IDS = ['T053','T029','T054','T028','T061','T045','T036'];
+// T053 خلود الكعبي | T029 منيرة المري | T054 كليثم العرياني
+// T028 شيخة الكعبي | T061 هاجرة حسين | T045 هدى الشامسي | T036 ابتسام القاسمي
+
 function getSubTeachers() {
-  // كل المعلمات من STAFF_DB — مع استثناء المديرة والوكيلتين
+  // كل المعلمات من STAFF_DB — مع استثناء المديرة والوكيلتين وفريق الدعم التقني
   return (STAFF_DB || []).filter(function(s) {
     if (isScheduleExcluded(s)) return false;
+    if (TECH_SUPPORT_TEACHER_IDS.indexOf(s.teacherId || s.id || '') !== -1) return false; // فريق الدعم التقني
     return s.category === 'معلم' || s.role === 'teacher' || s.category === 'معلمة';
   });
 }
@@ -21929,6 +21935,14 @@ function generateSubstituteSchedule() {
   var schedules = getSchedules();
   var allStaff = STAFF_DB || [];
   var allTeachers = getSubTeachers();
+
+  // ── فريق الدعم التقني — مستثنون من الاحتياط نهائياً ──────────────
+  // (لا يُعطَون حصص احتياط ولا يحتاجون احتياطاً عبر النظام)
+  var TECH_SUPPORT_IDS = (typeof TECH_SUPPORT_TEACHER_IDS !== 'undefined') ? TECH_SUPPORT_TEACHER_IDS
+    : ['T053','T029','T054','T028','T061','T045','T036'];
+  // T053 خلود الكعبي | T029 منيرة المري | T054 كليثم العرياني
+  // T028 شيخة الكعبي | T061 هاجرة حسين | T045 هدى الشامسي | T036 ابتسام القاسمي
+  // ─────────────────────────────────────────────────────────────────
 
   // ── وضع الجدول النشط ──────────────────────────────────────────────
   var _currentMode = (typeof currentSchedMode !== 'undefined') ? currentSchedMode : 'normal';
@@ -22056,6 +22070,7 @@ function generateSubstituteSchedule() {
       var cell = classSchedule[key];
       if (!cell || !cell.teacher) return;
       var tname = cell.teacher;
+      if (TECH_SUPPORT_IDS.indexOf(tname) !== -1) return; // فريق الدعم التقني مستثنى
       if (!teacherPeriodsToday[tname]) teacherPeriodsToday[tname] = [];
       teacherPeriodsToday[tname].push(p);
 
@@ -22088,6 +22103,7 @@ function generateSubstituteSchedule() {
   // ── بناء قائمة البدلاء الكاملة (معلمات + إداريات + أخصائيات) ──
     var allCandidateStaff = allStaff.filter(function(s) {
     if (isScheduleExcluded(s)) return false; // استثناء المديرة والوكيلتين
+    if (TECH_SUPPORT_IDS.indexOf(s.teacherId || s.id || '') !== -1) return false; // فريق الدعم التقني مستثنى
     var role = (s.role || s.category || '').toLowerCase();
     var job = (s.primary_job || '').toLowerCase();
     return (role.includes('معلم') || role === 'teacher' ||
