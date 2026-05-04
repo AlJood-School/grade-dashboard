@@ -7442,7 +7442,7 @@ function showSection(name) {
   if (name === 'events') { try { renderEvents(); renderUpcoming(); } catch(e) {} }
   if (name === 'projects') { try { renderProjects(); } catch(e) {} }
   if (name === 'digital_safety') { setTimeout(applyLearningMode, 100); }
-  if (name === 'substitute_scheduler') { try { renderSubstituteScheduler(); } catch(e) {} }
+  if (name === 'substitute_scheduler') { try { renderSubstituteScheduler(); setTimeout(renderSubstituteCalendar, 300); } catch(e) {} }
   if (name === 'tech_support') { setTimeout(function(){ try{ if(typeof renderTktSection==='function') renderTktSection(); }catch(e){} }, 120); }
   if (name === 'behavior_log') { setTimeout(function(){ try{ if(typeof renderBehaviorLog==='function') renderBehaviorLog(); }catch(e){} }, 120); }
         if (name === 'social_worker') { setTimeout(function(){ try{ if(typeof renderSocialWorker==='function') renderSocialWorker(); }catch(e){} }, 120); }
@@ -20299,6 +20299,24 @@ function renderLoginAnalytics() {
     <div id="sub-drag-swap-container"></div>
     <div id="sub-stats" style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;"></div>
   </div>
+
+  <!-- ─── سجل الاحتياط — كالندر ─── -->
+  <div style="margin-top:24px;background:rgba(255,255,255,0.04);border-radius:14px;padding:18px 16px;border:1px solid rgba(201,168,76,0.2);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+      <h4 style="color:#C9A84C;margin:0;font-size:1rem;font-family:Tajawal,sans-serif;">
+        <i class="fas fa-calendar-alt" style="margin-left:8px;"></i>سجل الاحتياط
+      </h4>
+      <button onclick="renderSubstituteCalendar()" style="background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.3);color:#C9A84C;border-radius:7px;padding:5px 14px;font-family:Tajawal,sans-serif;font-size:0.78rem;cursor:pointer;">
+        <i class="fas fa-sync-alt" style="margin-left:4px;"></i>تحديث
+      </button>
+    </div>
+    <div id="sub-calendar-container">
+      <div style="text-align:center;color:rgba(255,255,255,0.3);padding:30px;font-size:0.85rem;font-family:Tajawal,sans-serif;">
+        <i class="fas fa-calendar-alt" style="font-size:2rem;margin-bottom:10px;display:block;"></i>
+        لا توجد بيانات احتياط بعد — ستظهر هنا بعد تأكيد أول جدول احتياط
+      </div>
+    </div>
+  </div>
 </div>
 
 
@@ -22083,7 +22101,7 @@ function confirmSubstituteSchedule() {
     return;
   }
   addSubAssignmentsThisWeek(map);
-  showToast('✅ تم حفظ الاحتياط — جاري الإرسال...', 'info');
+  showToast('✅ تم حفظ الاحتياط — جاري الإرسال للنائبتين...', 'info');
   renderSubTeachersGrid();
 
   // ── إرسال جدول الاحتياط عبر webhook ──
@@ -22094,7 +22112,27 @@ function confirmSubstituteSchedule() {
   });
   var today = new Date();
   var dateStr = today.toLocaleDateString('ar-AE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  var dateKey = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
   var phones = JSON.parse(localStorage.getItem('aljood_staff_phones') || '{}');
+
+  // ── استخراج الغائبات ──
+  var absentTeachers = [];
+  coverData.forEach(function(r) {
+    if (r.absentTeacher && absentTeachers.indexOf(r.absentTeacher) === -1) absentTeachers.push(r.absentTeacher);
+  });
+
+  // ── حفظ في سجل الاحتياط (localStorage) ──
+  var record = {
+    dateKey: dateKey,
+    dateStr: dateStr,
+    absentTeachers: absentTeachers,
+    coverResults: coverData,
+    assignments: map,
+    confirmedAt: new Date().toISOString(),
+    teacherAcks: []
+  };
+  saveSubstituteDay(record);
+  setTimeout(renderSubstituteCalendar, 400);
 
   fetch('https://webhooks.tasklet.ai/v1/public/webhook?token=1f75fe6c88269f5e877ee2633934e304', {
     method: 'POST',
@@ -22102,17 +22140,235 @@ function confirmSubstituteSchedule() {
     body: JSON.stringify({
       context: 'substitute_confirm',
       date: dateStr,
+      dateKey: dateKey,
       assignments: map,
       coverResults: coverData,
+      absentTeachers: absentTeachers,
       staffPhones: phones
     })
   }).then(function(res) {
-    if (res.ok) showToast('?? تم إرسال جدول الاحتياط للمديرة', 'success');
+    if (res.ok) showToast('📧 تم إرسال جدول الاحتياط للنائبتين', 'success');
     else showToast('⚠️ تم الحفظ لكن تأخر الإرسال', 'warning');
   }).catch(function() {
     showToast('⚠️ تم الحفظ — الإرسال سيُعاد لاحقاً', 'warning');
   });
 }
+
+// ═══════════════ SUBSTITUTE HISTORY CALENDAR ═══════════════
+
+function getSubstituteLog() {
+  try { return JSON.parse(localStorage.getItem('aljood_substitute_log') || '[]'); }
+  catch(e) { return []; }
+}
+
+function saveSubstituteDay(record) {
+  var log = getSubstituteLog();
+  var idx = -1;
+  for (var i = 0; i < log.length; i++) { if (log[i].dateKey === record.dateKey) { idx = i; break; } }
+  if (idx >= 0) log[idx] = Object.assign({}, log[idx], record);
+  else log.unshift(record);
+  log = log.slice(0, 90);
+  localStorage.setItem('aljood_substitute_log', JSON.stringify(log));
+}
+
+window._subCalYear  = null;
+window._subCalMonth = null;
+
+function renderSubstituteCalendar() {
+  var container = document.getElementById('sub-calendar-container');
+  if (!container) return;
+  var log = getSubstituteLog();
+
+  // Fetch ack data from GitHub Pages (same origin)
+  var fetchUrl = '/grade-dashboard/data/teacher_acks.json?_=' + Date.now();
+  fetch(fetchUrl).then(function(r){ return r.ok ? r.json() : []; })
+  .catch(function(){ return []; })
+  .then(function(acks) {
+    _renderCalendarWithAcks(log, acks, container);
+  });
+}
+
+function _renderCalendarWithAcks(log, acks, container) {
+  var now = new Date();
+  if (window._subCalYear === null)  window._subCalYear  = now.getFullYear();
+  if (window._subCalMonth === null) window._subCalMonth = now.getMonth();
+  var year  = window._subCalYear;
+  var month = window._subCalMonth;
+
+  var monthDate = new Date(year, month, 1);
+  var monthName = monthDate.toLocaleDateString('ar-AE', { month: 'long', year: 'numeric' });
+  var firstDow  = monthDate.getDay();
+  var lastDate  = new Date(year, month + 1, 0).getDate();
+  var todayKey  = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+
+  // Build date index from log
+  var dateMap = {};
+  log.forEach(function(r) { dateMap[r.dateKey] = r; });
+
+  // Build ack index: { "YYYY-MM-DD_teacherName": {status, time} }
+  var ackMap = {};
+  (acks || []).forEach(function(a) {
+    var k = (a.dateKey || '') + '_' + (a.teacherName || '');
+    ackMap[k] = a;
+  });
+
+  var html = '<div style="font-family:Tajawal,sans-serif;direction:rtl;">';
+  // Header
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">';
+  html += '<button onclick="subCalNav(-1)" style="background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.3);color:#C9A84C;border-radius:7px;padding:5px 12px;cursor:pointer;font-family:Tajawal,sans-serif;font-size:0.88rem;">◀ السابق</button>';
+  html += '<div style="color:#C9A84C;font-size:1rem;font-weight:700;">' + monthName + '</div>';
+  html += '<button onclick="subCalNav(1)" style="background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.3);color:#C9A84C;border-radius:7px;padding:5px 12px;cursor:pointer;font-family:Tajawal,sans-serif;font-size:0.88rem;">التالي ▶</button>';
+  html += '</div>';
+
+  // Day headers
+  var dayNames = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:6px;">';
+  dayNames.forEach(function(d) {
+    html += '<div style="text-align:center;font-size:0.68rem;color:rgba(255,255,255,0.45);padding:3px 0;">' + d + '</div>';
+  });
+  html += '</div>';
+
+  // Grid
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">';
+  for (var e = 0; e < firstDow; e++) html += '<div style="min-height:50px;"></div>';
+
+  for (var d = 1; d <= lastDate; d++) {
+    var dk = year + '-' + String(month+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    var rec = dateMap[dk];
+    var isToday = dk === todayKey;
+    var dow = new Date(year, month, d).getDay();
+    var isWeekend = (dow === 5 || dow === 6);
+
+    var cellBg     = isToday ? 'rgba(201,168,76,0.18)' : 'rgba(255,255,255,0.04)';
+    var cellBorder = isToday ? '1.5px solid rgba(201,168,76,0.6)' : '1px solid rgba(255,255,255,0.07)';
+    var dayColor   = isWeekend ? 'rgba(255,255,255,0.2)' : (isToday ? '#C9A84C' : 'rgba(255,255,255,0.7)');
+
+    var badge = '';
+    if (rec) {
+      var absCnt = (rec.absentTeachers || []).length;
+      // Compute ack status
+      var subs = [];
+      (rec.coverResults || []).forEach(function(r) {
+        if (r.substitute && r.substitute !== '⚠️ لا يوجد بديل' && subs.indexOf(r.substitute) === -1) subs.push(r.substitute);
+      });
+      var allConfirmed = subs.length > 0 && subs.every(function(n) {
+        var a = ackMap[dk + '_' + n];
+        return a && a.status === 'confirmed';
+      });
+      var anyOpened = subs.some(function(n) {
+        var a = ackMap[dk + '_' + n];
+        return a && (a.status === 'opened' || a.status === 'confirmed');
+      });
+      var badgeColor = allConfirmed ? '#22c55e' : (anyOpened ? '#f59e0b' : '#f97316');
+      badge = '<div style="background:' + badgeColor + ';color:#fff;border-radius:10px;padding:1px 6px;font-size:0.65rem;font-weight:700;display:inline-block;min-width:18px;text-align:center;margin-top:2px;">' + absCnt + '</div>';
+    }
+
+    var clickStyle = rec ? 'cursor:pointer;' : '';
+    var clickAttr  = rec ? 'onclick="openSubCalDay(\'' + dk + '\')"' : '';
+    html += '<div ' + clickAttr + ' style="min-height:52px;background:' + cellBg + ';border:' + cellBorder + ';border-radius:8px;padding:5px 4px;text-align:center;' + clickStyle + (isWeekend ? 'opacity:0.35;' : '') + '">';
+    html += '<div style="font-size:0.82rem;color:' + dayColor + ';font-weight:' + (isToday ? '700' : '400') + ';">' + d + '</div>';
+    html += badge;
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Legend
+  html += '<div style="display:flex;gap:14px;margin-top:12px;flex-wrap:wrap;">';
+  html += '<div style="display:flex;align-items:center;gap:5px;font-size:0.7rem;color:rgba(255,255,255,0.45);"><div style="width:10px;height:10px;background:#22c55e;border-radius:50%;"></div>أكّدت جميعهن</div>';
+  html += '<div style="display:flex;align-items:center;gap:5px;font-size:0.7rem;color:rgba(255,255,255,0.45);"><div style="width:10px;height:10px;background:#f59e0b;border-radius:50%;"></div>فتحت (لم تؤكد)</div>';
+  html += '<div style="display:flex;align-items:center;gap:5px;font-size:0.7rem;color:rgba(255,255,255,0.45);"><div style="width:10px;height:10px;background:#f97316;border-radius:50%;"></div>لم تستجب</div>';
+  html += '</div>';
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+function subCalNav(dir) {
+  if (window._subCalMonth === null) { var n = new Date(); window._subCalYear = n.getFullYear(); window._subCalMonth = n.getMonth(); }
+  window._subCalMonth += dir;
+  if (window._subCalMonth < 0)  { window._subCalMonth = 11; window._subCalYear--; }
+  if (window._subCalMonth > 11) { window._subCalMonth = 0;  window._subCalYear++; }
+  renderSubstituteCalendar();
+}
+
+function openSubCalDay(dateKey) {
+  var log  = getSubstituteLog();
+  var rec  = null;
+  for (var i = 0; i < log.length; i++) { if (log[i].dateKey === dateKey) { rec = log[i]; break; } }
+  if (!rec) return;
+
+  // Fetch fresh acks then show modal
+  fetch('/grade-dashboard/data/teacher_acks.json?_=' + Date.now())
+  .then(function(r){ return r.ok ? r.json() : []; })
+  .catch(function(){ return []; })
+  .then(function(acks) { _showSubCalModal(rec, acks); });
+}
+
+function _showSubCalModal(rec, acks) {
+  var ackMap = {};
+  (acks || []).forEach(function(a) {
+    var k = (a.dateKey || '') + '_' + (a.teacherName || '');
+    ackMap[k] = a;
+  });
+
+  var absent = (rec.absentTeachers || []).join(' ، ') || '—';
+
+  // Group coverResults by substitute
+  var subGroups = {};
+  (rec.coverResults || []).forEach(function(r) {
+    var s = r.substitute || '⚠️ لا يوجد بديل';
+    if (!subGroups[s]) subGroups[s] = [];
+    subGroups[s].push(r);
+  });
+
+  var subHtml = '';
+  Object.keys(subGroups).forEach(function(name) {
+    var noSub = name === '⚠️ لا يوجد بديل';
+    var ack   = ackMap[(rec.dateKey || '') + '_' + name];
+    var statusIcon, statusText, statusColor;
+    if (noSub) { statusIcon = '⚠️'; statusText = 'لا يوجد بديل'; statusColor = '#f97316'; }
+    else if (ack && ack.status === 'confirmed') { statusIcon = '✅'; statusText = 'أكّدت ' + (ack.time || ''); statusColor = '#22c55e'; }
+    else if (ack && ack.status === 'opened')    { statusIcon = '👁️'; statusText = 'فتحت ' + (ack.time || ''); statusColor = '#f59e0b'; }
+    else { statusIcon = '❌'; statusText = 'لم تستجب'; statusColor = '#f97316'; }
+
+    subHtml += '<div style="background:#f8faff;border-radius:10px;padding:12px 14px;margin-bottom:10px;border-right:4px solid ' + statusColor + ';">';
+    subHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">';
+    subHtml += '<span style="font-weight:700;color:#1A2A4A;font-size:0.95rem;">' + name + '</span>';
+    subHtml += '<span style="font-size:0.78rem;color:' + statusColor + ';font-weight:700;">' + statusIcon + ' ' + statusText + '</span>';
+    subHtml += '</div>';
+    subGroups[name].forEach(function(r) {
+      subHtml += '<div style="font-size:0.8rem;color:#555;padding-right:8px;">• ح' + r.period + ' — الصف ' + r.cls + ' — ' + (r.subject||'') + ' (بدل: ' + (r.absentTeacher||'') + ')</div>';
+    });
+    subHtml += '</div>';
+  });
+
+  var confirmedAt = rec.confirmedAt ? new Date(rec.confirmedAt).toLocaleTimeString('ar-AE', {hour:'2-digit',minute:'2-digit'}) : '—';
+  var totalPeriods = (rec.coverResults || []).length;
+  var covered = (rec.coverResults || []).filter(function(r){ return r.substitute && r.substitute !== '⚠️ لا يوجد بديل'; }).length;
+
+  var modalBody = '<div style="padding:6px 0;direction:rtl;font-family:Tajawal,sans-serif;">'
+    + '<p style="color:#888;font-size:0.8rem;margin:0 0 14px;">تأكيد الجدول: ' + confirmedAt + ' | ' + covered + '/' + totalPeriods + ' حصة مُغطَّاة</p>'
+    + '<div style="background:#fff3f3;border-radius:8px;padding:10px 14px;margin-bottom:14px;border-right:4px solid #ef4444;">'
+    + '<span style="font-weight:700;color:#c0392b;margin-left:6px;">👩‍🏫 الغائبات:</span><span style="color:#555;">' + absent + '</span></div>'
+    + subHtml + '</div>';
+
+  // Show in a simple overlay
+  var overlay = document.createElement('div');
+  overlay.id = 'subCalOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = '<div style="background:white;border-radius:18px;max-width:520px;width:100%;max-height:85vh;overflow-y:auto;direction:rtl;font-family:Tajawal,sans-serif;">'
+    + '<div style="background:linear-gradient(135deg,#1A2A4A,#2d4a7a);padding:18px 20px;border-radius:18px 18px 0 0;display:flex;justify-content:space-between;align-items:center;">'
+    + '<h3 style="color:#C9A84C;margin:0;font-size:1rem;">' + rec.dateStr + '</h3>'
+    + '<button onclick="document.getElementById(\'subCalOverlay\').remove()" style="background:rgba(255,255,255,0.15);border:none;color:white;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:1rem;">✕</button>'
+    + '</div>'
+    + '<div style="padding:18px 20px;">' + modalBody + '</div>'
+    + '</div>';
+  overlay.addEventListener('click', function(e){ if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+// ═══════════════ END SUBSTITUTE CALENDAR ═══════════════
+
 // ─────────────────────────────────────────────────────────────────────
 
 
