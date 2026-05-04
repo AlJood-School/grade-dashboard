@@ -20450,6 +20450,7 @@ function renderLoginAnalytics() {
     <button class="hr-tab" onclick="switchHRTab('roles')" id="hrTab-roles" style="padding:12px 20px;border:none;background:none;cursor:pointer;font-family:Cairo,sans-serif;font-size:0.9rem;color:#666;white-space:nowrap;">🔄 الأدوار والمناصب</button>
     <button class="hr-tab" onclick="switchHRTab('contracts')" id="hrTab-contracts" style="padding:12px 20px;border:none;background:none;cursor:pointer;font-family:Cairo,sans-serif;font-size:0.9rem;color:#666;white-space:nowrap;">📄 العقود</button>
     <button class="hr-tab" onclick="switchHRTab('clearance')" id="hrTab-clearance" style="padding:12px 20px;border:none;background:none;cursor:pointer;font-family:Cairo,sans-serif;font-size:0.9rem;color:#ff4444;white-space:nowrap;">🗑️ إخلاء طرف</button>
+    <button class="hr-tab" onclick="switchHRTab('phones')" id="hrTab-phones" style="padding:12px 20px;border:none;background:none;cursor:pointer;font-family:Cairo,sans-serif;font-size:0.9rem;color:#666;white-space:nowrap;">📱 أرقام الهواتف</button>
   </div>
   <div id="hrContent" style="padding:20px;"></div>
 </section>
@@ -22078,15 +22079,112 @@ function resetSubDragTable() {
 function confirmSubstituteSchedule() {
   var map = window._lastSubAssignments;
   if (!map || Object.keys(map).length === 0) {
-    showToast('\u0644\u0645 \u064a\u062a\u0645 \u062a\u0648\u0644\u064a\u062f \u062c\u062f\u0648\u0644 \u0628\u0639\u062f', 'warning');
+    showToast('لم يتم توليد جدول بعد', 'warning');
     return;
   }
   addSubAssignmentsThisWeek(map);
-  showToast('\u2705 \u062a\u0645 \u062d\u0641\u0638 \u0623\u062d\u0645\u0627\u0644 \u0627\u0644\u0627\u062d\u062a\u064a\u0627\u0637 \u0644\u0647\u0630\u0627 \u0627\u0644\u0623\u0633\u0628\u0648\u0639', 'success');
-  // Refresh grid to update load bars
+  showToast('✅ تم حفظ الاحتياط — جاري الإرسال...', 'info');
   renderSubTeachersGrid();
+
+  // ── إرسال جدول الاحتياط عبر webhook ──
+  var coverData = (window._lastCoverResults || []).map(function(r) {
+    return { period: r.period, cls: r.cls, subject: r.subject,
+             absentTeacher: r.absentTeacher, substitute: r.substitute,
+             substituteType: r.substituteType || '' };
+  });
+  var today = new Date();
+  var dateStr = today.toLocaleDateString('ar-AE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  var phones = JSON.parse(localStorage.getItem('aljood_staff_phones') || '{}');
+
+  fetch('https://webhooks.tasklet.ai/v1/public/webhook?token=1f75fe6c88269f5e877ee2633934e304', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      context: 'substitute_confirm',
+      date: dateStr,
+      assignments: map,
+      coverResults: coverData,
+      staffPhones: phones
+    })
+  }).then(function(res) {
+    if (res.ok) showToast('?? تم إرسال جدول الاحتياط للمديرة', 'success');
+    else showToast('⚠️ تم الحفظ لكن تأخر الإرسال', 'warning');
+  }).catch(function() {
+    showToast('⚠️ تم الحفظ — الإرسال سيُعاد لاحقاً', 'warning');
+  });
 }
 // ─────────────────────────────────────────────────────────────────────
+
+
+// ═══════════════ PHONE MANAGEMENT ═══════════════
+function renderHRPhones() {
+  var phones = JSON.parse(localStorage.getItem('aljood_staff_phones') || '{}');
+  var allStaff = (typeof STAFF_DATA !== 'undefined') ? STAFF_DATA : [];
+  var teacherArr = (typeof TEACHER_ROSTER !== 'undefined') ? Object.values(TEACHER_ROSTER) : [];
+  var combined = [];
+  allStaff.forEach(function(s) {
+    combined.push({ id: s.id, name: s.name_ar || s.name, role: s.role || '' });
+  });
+  teacherArr.forEach(function(t) {
+    if (!combined.find(function(x){ return x.id === t.id; })) {
+      combined.push({ id: t.id, name: t.name_ar, role: 'teacher' });
+    }
+  });
+  var html = '<div style="padding:20px;font-family:Tajawal,sans-serif;">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">';
+  html += '<h3 style="margin:0;color:#1A2A4A;font-size:1.1rem;"><i class="fas fa-mobile-alt" style="margin-left:8px;color:#C9A84C;"></i>أرقام هواتف الموظفات</h3>';
+  html += '<button onclick="pushPhonesToGitHub()" style="background:linear-gradient(135deg,#1A2A4A,#2a3f6f);color:white;border:none;border-radius:8px;padding:8px 18px;font-family:Tajawal,sans-serif;font-size:0.88rem;cursor:pointer;font-weight:700;"><i class="fas fa-cloud-upload-alt" style="margin-left:6px;"></i>حفظ وتحديث</button>';
+  html += '</div>';
+  html += '<p style="color:#666;font-size:0.82rem;margin:0 0 16px;">أدخلي أرقام الهواتف بصيغة دولية (+971XXXXXXXX) — تُستخدم لإرسال إشعارات الاحتياط بعد تفعيل البوابة.</p>';
+  html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.88rem;">';
+  html += '<thead><tr style="background:#1A2A4A;">';
+  html += '<th style="padding:10px 14px;color:#C9A84C;text-align:right;">الاسم</th>';
+  html += '<th style="padding:10px 14px;color:#C9A84C;text-align:right;">المعرّف</th>';
+  html += '<th style="padding:10px 14px;color:#C9A84C;text-align:right;">رقم الهاتف</th>';
+  html += '<th style="padding:10px 14px;color:#C9A84C;text-align:center;">حفظ</th>';
+  html += '</tr></thead><tbody>';
+  combined.forEach(function(s, i) {
+    var bg = i % 2 === 0 ? '#fff' : '#f8faff';
+    var ph = phones[s.id] || '';
+    var sid = s.id ? s.id.replace(/[^a-zA-Z0-9_]/g, '_') : 'x'+i;
+    html += '<tr style="background:'+bg+';border-bottom:1px solid #e8ecf0;">';
+    html += '<td style="padding:8px 14px;font-weight:600;color:#1A2A4A;">'+(s.name||'—')+'</td>';
+    html += '<td style="padding:8px 14px;color:#666;font-size:0.8rem;font-family:monospace;">'+(s.id||'—')+'</td>';
+    html += '<td style="padding:8px 14px;"><input type="tel" id="phone_'+sid+'" value="'+ph+'" placeholder="+971XXXXXXXX"';
+    html += ' style="border:1px solid #ddd;border-radius:6px;padding:5px 10px;font-size:0.85rem;width:160px;direction:ltr;" /></td>';
+    html += '<td style="padding:8px 14px;text-align:center;"><button data-sid="'+s.id+'" data-input="phone_'+sid+'" onclick="saveStaffPhoneBtn(this)" style="background:#C9A84C;color:#1A2A4A;border:none;border-radius:6px;padding:4px 14px;cursor:pointer;font-weight:700;font-size:0.82rem;">??</button></td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div></div>';
+  return html;
+}
+
+function saveStaffPhoneBtn(btn) {
+  var sid = btn.getAttribute('data-sid');
+  var inputId = btn.getAttribute('data-input');
+  var phone = document.getElementById(inputId) ? document.getElementById(inputId).value.trim() : '';
+  if (!sid) return;
+  var phones = JSON.parse(localStorage.getItem('aljood_staff_phones') || '{}');
+  if (phone) phones[sid] = phone; else delete phones[sid];
+  localStorage.setItem('aljood_staff_phones', JSON.stringify(phones));
+  showToast('✅ تم حفظ الرقم محلياً — اضغطي "حفظ وتحديث" لرفعه', 'success');
+}
+
+function pushPhonesToGitHub() {
+  var phones = JSON.parse(localStorage.getItem('aljood_staff_phones') || '{}');
+  showToast('⏳ جاري رفع الأرقام...', 'info');
+  fetch('https://webhooks.tasklet.ai/v1/public/webhook?token=1f75fe6c88269f5e877ee2633934e304', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ context: 'update_phones', phones: phones })
+  }).then(function(res) {
+    if (res.ok) showToast('✅ تم رفع أرقام الهواتف بنجاح', 'success');
+    else showToast('⚠️ فشل رفع الأرقام — حاولي مجدداً', 'warning');
+  }).catch(function() {
+    showToast('⚠️ خطأ في الاتصال', 'warning');
+  });
+}
+// ═══════════════ END PHONE MANAGEMENT ═══════════════
 
 // ═══════════════════ END SUBSTITUTE SCHEDULER ═══════════════════
 
@@ -22139,6 +22237,7 @@ function renderHRContent(tab) {
   else if (tab === 'roles') el.innerHTML = renderHRRoles();
   else if (tab === 'contracts') el.innerHTML = renderHRContracts();
   else if (tab === 'clearance') el.innerHTML = renderHRClearance();
+  else if (tab === 'phones') el.innerHTML = renderHRPhones();
 }
 
 function renderHRAssignments() {
