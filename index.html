@@ -22445,33 +22445,90 @@ function renderHRPhones() {
       combined.push({ id: t.id, name: t.name_ar, role: 'teacher' });
     }
   });
+  combined.sort(function(a,b){ return (a.name||'').localeCompare(b.name||'','ar'); });
+
+  var totalCount   = combined.length;
+  var filledCount  = combined.filter(function(s){ return !!phones[s.id]; }).length;
+  var missingCount = totalCount - filledCount;
+
   var html = '<div style="padding:20px;font-family:Tajawal,sans-serif;">';
-  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">';
+
+  // ── Header ──
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">';
   html += '<h3 style="margin:0;color:#1A2A4A;font-size:1.1rem;"><i class="fas fa-mobile-alt" style="margin-left:8px;color:#C9A84C;"></i>أرقام هواتف الموظفات</h3>';
-  html += '<button onclick="pushPhonesToGitHub()" style="background:linear-gradient(135deg,#1A2A4A,#2a3f6f);color:white;border:none;border-radius:8px;padding:8px 18px;font-family:Tajawal,sans-serif;font-size:0.88rem;cursor:pointer;font-weight:700;"><i class="fas fa-cloud-upload-alt" style="margin-left:6px;"></i>حفظ وتحديث</button>';
+  html += '<button onclick="pushPhonesToGitHub()" style="background:linear-gradient(135deg,#1A2A4A,#2a3f6f);color:white;border:none;border-radius:8px;padding:8px 18px;font-family:Tajawal,sans-serif;font-size:0.88rem;cursor:pointer;font-weight:700;"><i class="fas fa-cloud-upload-alt" style="margin-left:6px;"></i>حفظ وتحديث GitHub</button>';
   html += '</div>';
-  html += '<p style="color:#666;font-size:0.82rem;margin:0 0 16px;">أدخلي أرقام الهواتف بصيغة دولية (+971XXXXXXXX) — تُستخدم لإرسال إشعارات الاحتياط بعد تفعيل البوابة.</p>';
-  html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.88rem;">';
+
+  // ── Stats bar ──
+  html += '<div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;">';
+  html += '<div style="background:#f0fff4;border:1px solid #b7f0c8;border-radius:8px;padding:8px 16px;font-size:0.85rem;color:#1a6b34;"><strong>'+filledCount+'</strong> لديهن رقم ✅</div>';
+  html += '<div style="background:#fff8f0;border:1px solid #ffd6a5;border-radius:8px;padding:8px 16px;font-size:0.85rem;color:#92400e;"><strong>'+missingCount+'</strong> بدون رقم ⏳</div>';
+  html += '<div style="background:#f0f4ff;border:1px solid #c3d4ff;border-radius:8px;padding:8px 16px;font-size:0.85rem;color:#1a2a4a;"><strong>'+totalCount+'</strong> إجمالي</div>';
+  html += '</div>';
+
+  // ── Filter + Search ──
+  html += '<div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">';
+  html += '<input type="text" id="phoneSearchInput" oninput="filterPhonesTable()" placeholder="🔍 بحث بالاسم أو المعرّف..." style="border:1px solid #ddd;border-radius:8px;padding:7px 12px;font-family:Tajawal,sans-serif;font-size:0.87rem;flex:1;min-width:180px;direction:rtl;" />';
+  html += '<select id="phoneRoleFilter" onchange="filterPhonesTable()" style="border:1px solid #ddd;border-radius:8px;padding:7px 12px;font-family:Tajawal,sans-serif;font-size:0.87rem;background:#fff;">';
+  html += '<option value="">كل الأدوار</option>';
+  html += '<option value="teacher">معلمات فقط</option>';
+  html += '<option value="missing">بدون رقم فقط</option>';
+  html += '</select>';
+  html += '</div>';
+
+  html += '<p style="color:#888;font-size:0.78rem;margin:0 0 14px;">أدخلي الأرقام بصيغة دولية (+971XXXXXXXX) — تُستخدم لإرسال إشعارات الاحتياط بعد تفعيل البوابة.</p>';
+
+  // ── Table ──
+  html += '<div style="overflow-x:auto;"><table id="phonesTable" style="width:100%;border-collapse:collapse;font-size:0.88rem;">';
   html += '<thead><tr style="background:#1A2A4A;">';
+  html += '<th style="padding:10px 14px;color:#C9A84C;text-align:right;">#</th>';
   html += '<th style="padding:10px 14px;color:#C9A84C;text-align:right;">الاسم</th>';
   html += '<th style="padding:10px 14px;color:#C9A84C;text-align:right;">المعرّف</th>';
   html += '<th style="padding:10px 14px;color:#C9A84C;text-align:right;">رقم الهاتف</th>';
   html += '<th style="padding:10px 14px;color:#C9A84C;text-align:center;">حفظ</th>';
-  html += '</tr></thead><tbody>';
+  html += '</tr></thead><tbody id="phonesTbody">';
   combined.forEach(function(s, i) {
-    var bg = i % 2 === 0 ? '#fff' : '#f8faff';
-    var ph = phones[s.id] || '';
+    var ph  = phones[s.id] || '';
     var sid = s.id ? s.id.replace(/[^a-zA-Z0-9_]/g, '_') : 'x'+i;
-    html += '<tr style="background:'+bg+';border-bottom:1px solid #e8ecf0;">';
-    html += '<td style="padding:8px 14px;font-weight:600;color:#1A2A4A;">'+(s.name||'—')+'</td>';
-    html += '<td style="padding:8px 14px;color:#666;font-size:0.8rem;font-family:monospace;">'+(s.id||'—')+'</td>';
+    var hasPh = ph ? 'yes' : 'no';
+    var roleLabel = s.role === 'teacher' ? 'معلمة' : (s.role || '');
+    var bg  = ph ? '#f0fff4' : (i % 2 === 0 ? '#fff' : '#f8faff');
+    var phIndicator = ph ? ' <span style="color:#22c55e;font-size:0.75rem;">✅</span>' : ' <span style="color:#aaa;font-size:0.75rem;">—</span>';
+    html += '<tr data-role="'+(s.role||'')+'" data-has-phone="'+hasPh+'" data-name="'+(s.name||'')+'" data-id="'+(s.id||'')+'" style="background:'+bg+';border-bottom:1px solid #e8ecf0;">';
+    html += '<td style="padding:8px 14px;color:#999;font-size:0.8rem;">'+(i+1)+'</td>';
+    html += '<td style="padding:8px 14px;font-weight:600;color:#1A2A4A;">'+(s.name||'—')+phIndicator+'</td>';
+    html += '<td style="padding:8px 14px;color:#666;font-size:0.78rem;font-family:monospace;">'+(s.id||'—')+'</td>';
     html += '<td style="padding:8px 14px;"><input type="tel" id="phone_'+sid+'" value="'+ph+'" placeholder="+971XXXXXXXX"';
-    html += ' style="border:1px solid #ddd;border-radius:6px;padding:5px 10px;font-size:0.85rem;width:160px;direction:ltr;" /></td>';
-    html += '<td style="padding:8px 14px;text-align:center;"><button data-sid="'+s.id+'" data-input="phone_'+sid+'" onclick="saveStaffPhoneBtn(this)" style="background:#C9A84C;color:#1A2A4A;border:none;border-radius:6px;padding:4px 14px;cursor:pointer;font-weight:700;font-size:0.82rem;">??</button></td>';
+    html += ' onchange="autoSavePhone(\''+s.id+'\',\'phone_'+sid+'\')"';
+    html += ' style="border:1px solid #ddd;border-radius:6px;padding:5px 10px;font-size:0.85rem;width:170px;direction:ltr;" /></td>';
+    html += '<td style="padding:8px 14px;text-align:center;"><button data-sid="'+s.id+'" data-input="phone_'+sid+'" onclick="saveStaffPhoneBtn(this)" style="background:#C9A84C;color:#1A2A4A;border:none;border-radius:6px;padding:4px 14px;cursor:pointer;font-weight:700;font-size:0.82rem;">حفظ</button></td>';
     html += '</tr>';
   });
   html += '</tbody></table></div></div>';
   return html;
+}
+
+function autoSavePhone(sid, inputId) {
+  var phone = document.getElementById(inputId) ? document.getElementById(inputId).value.trim() : '';
+  if (!phone) return;
+  var phones = JSON.parse(localStorage.getItem('aljood_staff_phones') || '{}');
+  if (phone) phones[sid] = phone; else delete phones[sid];
+  localStorage.setItem('aljood_staff_phones', JSON.stringify(phones));
+}
+
+function filterPhonesTable() {
+  var q      = (document.getElementById('phoneSearchInput') ? document.getElementById('phoneSearchInput').value : '').trim().toLowerCase();
+  var role   = document.getElementById('phoneRoleFilter') ? document.getElementById('phoneRoleFilter').value : '';
+  var rows   = document.querySelectorAll('#phonesTbody tr');
+  rows.forEach(function(row) {
+    var name   = (row.getAttribute('data-name') || '').toLowerCase();
+    var id     = (row.getAttribute('data-id') || '').toLowerCase();
+    var rRole  = row.getAttribute('data-role') || '';
+    var hasPh  = row.getAttribute('data-has-phone') || '';
+    var matchQ = !q || name.includes(q) || id.includes(q);
+    var matchR = !role || (role === 'teacher' ? rRole === 'teacher' : role === 'missing' ? hasPh === 'no' : true);
+    row.style.display = (matchQ && matchR) ? '' : 'none';
+  });
 }
 
 function saveStaffPhoneBtn(btn) {
