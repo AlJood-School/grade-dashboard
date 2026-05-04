@@ -21930,6 +21930,29 @@ function generateSubstituteSchedule() {
   var allStaff = STAFF_DB || [];
   var allTeachers = getSubTeachers();
 
+  // ── وضع الجدول النشط ──────────────────────────────────────────────
+  var _currentMode = (typeof currentSchedMode !== 'undefined') ? currentSchedMode : 'normal';
+  var _isDistMode  = _currentMode === 'distance';
+  var _isRamMode   = _currentMode === 'ramadan';
+
+  // الجدول الفعّال بناءً على الوضع
+  var activeSchedules;
+  if (_isDistMode) {
+    activeSchedules = schedules['__mode_distance'] || {};
+  } else {
+    // رمضان والاعتيادي يستخدمان نفس بيانات الجدول الأساسي
+    activeSchedules = schedules;
+  }
+
+  // الحد الأقصى لمؤشر الحصة بناءً على الوضع والحلقة
+  function _maxPeriodIdx(cls) {
+    var grade = parseInt((cls.toString().match(/\d+/) || ['0'])[0]);
+    var isC2 = (grade >= 5 && grade <= 8);
+    if (_isDistMode) return isC2 ? 5 : 4;   // C2: حصص 1–6 (pi0-5) ، C1: حصص 1–5 (pi0-4)
+    if (_isRamMode)  return isC2 ? 6 : 5;   // C2: حصص 1–7 (pi0-6) ، C1: حصص 1–6 (pi0-5)
+    return 99; // الاعتيادي: بدون حد
+  }
+
   // ── مصطلحات الأدوار للتسلسل الهرمي ──
   function _staffPriority(s) {
     var job = (s.primary_job || s.position || '').toLowerCase();
@@ -21955,13 +21978,16 @@ function generateSubstituteSchedule() {
     return 0;
   }
 
-  // ── حلقة المعلمة من الجدول ──
+  // ── حلقة المعلمة من الجدول (بناءً على الوضع النشط) ──
   var teacherCycleMap = {}; // schedKey → dominant cycle
-  Object.keys(schedules).forEach(function(cls) {
+  Object.keys(activeSchedules).forEach(function(cls) {
     if (cls.startsWith('__')) return;
     var cyc = _classCycle(cls);
-    var classSchedule = schedules[cls];
+    var classSchedule = activeSchedules[cls];
+    var maxPi = _maxPeriodIdx(cls);
     Object.keys(classSchedule).forEach(function(key) {
+      var parts = key.split('_');
+      if (parts.length === 2 && parseInt(parts[1]) > maxPi) return;
       var cell = classSchedule[key];
       if (!cell || !cell.teacher) return;
       if (!teacherCycleMap[cell.teacher]) teacherCycleMap[cell.teacher] = {c1:0, c2:0};
@@ -22017,14 +22043,16 @@ function generateSubstituteSchedule() {
   var teacherPeriodsToday = {};
   var needCover = [];
 
-  Object.keys(schedules).forEach(function(cls) {
+  Object.keys(activeSchedules).forEach(function(cls) {
     if (cls.startsWith('__')) return;
-    var classSchedule = schedules[cls];
+    var classSchedule = activeSchedules[cls];
+    var maxPi = _maxPeriodIdx(cls);
     Object.keys(classSchedule).forEach(function(key) {
       var parts = key.split('_');
       if (parts.length !== 2) return;
       var d = parseInt(parts[0]), p = parseInt(parts[1]);
       if (d !== dayIdx) return;
+      if (p > maxPi) return; // الحصة غير موجودة في الوضع النشط
       var cell = classSchedule[key];
       if (!cell || !cell.teacher) return;
       var tname = cell.teacher;
@@ -22068,12 +22096,15 @@ function generateSubstituteSchedule() {
             job.includes('رئيس'));
   });
 
-  // ── مسبق: حساب الأحمال الفعلية من الجدول ──
+  // ── مسبق: حساب الأحمال الفعلية من الجدول النشط ──
   var _teacherActualPeriods = {}; // schedKey → count
-  Object.keys(schedules).forEach(function(cls) {
+  Object.keys(activeSchedules).forEach(function(cls) {
     if (cls.startsWith('__')) return;
-    var clsSched = schedules[cls];
+    var clsSched = activeSchedules[cls];
+    var maxPi = _maxPeriodIdx(cls);
     Object.keys(clsSched).forEach(function(key) {
+      var parts = key.split('_');
+      if (parts.length === 2 && parseInt(parts[1]) > maxPi) return;
       var cell = clsSched[key];
       if (cell && cell.teacher) {
         _teacherActualPeriods[cell.teacher] = (_teacherActualPeriods[cell.teacher] || 0) + 1;
@@ -22255,6 +22286,28 @@ function renderSubResults(coverResults, dayIdx, substituteAssignments) {
   container.scrollIntoView({behavior:'smooth', block:'start'});
 
   var dayNames = ['\u0627\u0644\u0627\u062b\u0646\u064a\u0646','\u0627\u0644\u062b\u0644\u0627\u062b\u0627\u0621','\u0627\u0644\u0623\u0631\u0628\u0639\u0627\u0621','\u0627\u0644\u062e\u0645\u064a\u0633','\u0627\u0644\u062c\u0645\u0639\u0629'];
+
+  // ── بانر الوضع النشط ──
+  var _rMode = (typeof currentSchedMode !== 'undefined') ? currentSchedMode : 'normal';
+  var _modeBanners = {
+    normal:   { icon:'📅', label:'الجدول الاعتيادي',     color:'#1A2A4A', bg:'rgba(26,42,74,0.12)',  border:'rgba(26,42,74,0.3)'  },
+    ramadan:  { icon:'🌙', label:'جدول رمضان',            color:'#7c3aed', bg:'rgba(124,58,237,0.1)', border:'rgba(124,58,237,0.3)' },
+    distance: { icon:'💻', label:'التعلم عن بُعد',        color:'#0369a1', bg:'rgba(3,105,161,0.1)',  border:'rgba(3,105,161,0.3)'  }
+  };
+  var _mb = _modeBanners[_rMode] || _modeBanners.normal;
+  var modeBannerHtml = (_rMode !== 'normal')
+    ? '<div style="background:'+_mb.bg+';border:1px solid '+_mb.border+';border-radius:10px;padding:8px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">'
+      + '<span style="font-size:1.2rem;">'+_mb.icon+'</span>'
+      + '<span style="font-weight:700;color:'+_mb.color+';font-size:0.9rem;">الاحتياط مُولَّد وفق: '+_mb.label+'</span>'
+      + '<span style="font-size:0.78rem;color:#666;margin-right:auto;">عدد الحصص والمعلمات الفارغة محسوبة على هذا الوضع</span>'
+      + '</div>'
+    : '';
+  tableDiv.insertAdjacentHTML('beforebegin', '<div id="sub-mode-banner">'+modeBannerHtml+'</div>');
+  // إزالة البانر القديم إن وُجد
+  var oldBanner = document.getElementById('sub-mode-banner');
+  if (oldBanner && oldBanner.previousElementSibling && oldBanner.previousElementSibling.id === 'sub-mode-banner') {
+    oldBanner.previousElementSibling.remove();
+  }
 
   var html = '<table style="width:100%;border-collapse:collapse;font-family:Tajawal,sans-serif;font-size:0.88rem;">';
   html += '<thead><tr style="background:#1A2A4A;">';
