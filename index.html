@@ -4434,6 +4434,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     <button class="ds-tab" onclick="dsTab('materials')"><i class="fas fa-folder-open" style="margin-left:5px;"></i>المواد التعليمية</button>
     <button class="ds-tab" onclick="dsTab('incidents')"><i class="fas fa-exclamation-triangle" style="margin-left:5px;"></i>بلاغات المخالفات</button>
     <button class="ds-tab" onclick="dsTab('surveys')"><i class="fas fa-poll" style="margin-left:5px;"></i>استبيانات الوعي</button>
+    <button class="ds-tab" onclick="dsTab('techissues')"><i class="fas fa-tools" style="margin-left:5px;"></i>المشاكل التقنية</button>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════
@@ -5117,6 +5118,51 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     <div id="surveyAnalytics" style="margin-top:24px;"></div>
   </div>
 
+<!-- ════════════════════════════════════════════════════
+     PANE: TECH ISSUES — المشاكل التقنية للتعلم عن بعد
+═════════════════════════════════════════════════════════ -->
+  <div class="ds-pane" id="ds-pane-techissues">
+
+    <!-- Stats Row -->
+    <div class="inc-stats-grid" id="tiStatsGrid"></div>
+
+    <!-- Toolbar -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px;">
+      <button onclick="openTechIssueModal()" style="padding:9px 18px;background:var(--accent);color:#1A2A4A;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:0.88rem;font-weight:700;display:flex;align-items:center;gap:6px;">
+        <i class="fas fa-plus"></i> مشكلة جديدة
+      </button>
+      <select id="tiFilterStatus" onchange="renderTechIssues()" style="background:#16213e;color:white;border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:8px 12px;font-family:inherit;font-size:0.85rem;">
+        <option value="">كل الحالات</option>
+        <option value="جديدة">جديدة</option>
+        <option value="قيد الحل">قيد الحل</option>
+        <option value="تم الحل">تم الحل</option>
+        <option value="مغلقة">مغلقة</option>
+      </select>
+      <select id="tiFilterType" onchange="renderTechIssues()" style="background:#16213e;color:white;border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:8px 12px;font-family:inherit;font-size:0.85rem;">
+        <option value="">كل الأنواع</option>
+        <option>مشكلة في الاتصال</option>
+        <option>عدم القدرة على الدخول</option>
+        <option>مشكلة في الصوت/الصورة</option>
+        <option>خلل في المنصة</option>
+        <option>عطل في الجهاز</option>
+        <option>مشكلة في المحتوى الرقمي</option>
+        <option>أخرى</option>
+      </select>
+      <button onclick="exportTechIssuesCSV()" style="padding:9px 14px;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.15);border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.82rem;margin-right:auto;">
+        <i class="fas fa-download" style="margin-left:5px;"></i>تصدير Excel
+      </button>
+    </div>
+
+    <!-- Info banner for distance learning mode -->
+    <div id="tiModeBanner" style="display:none;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;color:#93c5fd;font-size:0.85rem;">
+      <i class="fas fa-info-circle" style="margin-left:7px;"></i>
+      وضع <strong>التعلم عن بعد</strong> مفعَّل — المشاكل المسجَّلة ترتبط بالفترة الحالية تلقائياً
+    </div>
+
+    <!-- Issues List -->
+    <div id="techIssuesList"></div>
+  </div>
+
 <!-- ══ INCIDENT MODAL ══ -->
   <div id="incidentModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:10000;overflow-y:auto;padding:20px;box-sizing:border-box;">
     <div style="background:#1e2d4a;border-radius:16px;padding:28px;max-width:750px;margin:0 auto;border:1px solid rgba(201,168,76,0.3);">
@@ -5254,6 +5300,132 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     <img id="incLightboxImg" style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 0 40px rgba(201,168,76,0.4);">
   </div>
 
+  <!-- ══ TECH ISSUE MODAL ══ -->
+  <div id="techIssueModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:10000;overflow-y:auto;padding:20px;box-sizing:border-box;">
+    <div style="background:#1e2d4a;border-radius:16px;padding:28px;max-width:700px;margin:0 auto;border:1px solid rgba(59,130,246,0.35);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <h3 style="color:#60a5fa;margin:0;font-size:1.1rem;"><i class="fas fa-tools" style="margin-left:8px;"></i>تسجيل مشكلة تقنية — التعلم عن بعد</h3>
+        <button onclick="closeTechIssueModal()" style="background:rgba(255,255,255,0.1);color:white;border:none;border-radius:8px;width:34px;height:34px;cursor:pointer;font-size:1.1rem;">&times;</button>
+      </div>
+      <input type="hidden" id="tiEditId">
+
+      <!-- Row 1: Class + Period -->
+      <div class="ds-form-grid" style="margin-bottom:12px;">
+        <div class="ds-field">
+          <label><i class="fas fa-school" style="margin-left:4px;"></i>الصف والشعبة *</label>
+          <input type="text" id="tiClass" placeholder="مثال: 6A">
+        </div>
+        <div class="ds-field">
+          <label><i class="fas fa-clock" style="margin-left:4px;"></i>الحصة</label>
+          <select id="tiPeriod">
+            <option value="">-- اختر --</option>
+            <option>الحصة الأولى</option>
+            <option>الحصة الثانية</option>
+            <option>الحصة الثالثة</option>
+            <option>الحصة الرابعة</option>
+            <option>الحصة الخامسة</option>
+            <option>الحصة السادسة</option>
+            <option>الحصة السابعة</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Row 2: Student + Platform -->
+      <div class="ds-form-grid" style="margin-bottom:12px;">
+        <div class="ds-field">
+          <label><i class="fas fa-user-graduate" style="margin-left:4px;"></i>اسم الطالب/ة (اختياري)</label>
+          <input type="text" id="tiStudent" placeholder="اتركه فارغاً إذا كانت مشكلة جماعية">
+        </div>
+        <div class="ds-field">
+          <label><i class="fas fa-globe" style="margin-left:4px;"></i>المنصة *</label>
+          <select id="tiPlatform">
+            <option value="">-- اختر --</option>
+            <option>Microsoft Teams</option>
+            <option>Zoom</option>
+            <option>Google Classroom</option>
+            <option>ClassDojo</option>
+            <option>منصة مدرستي</option>
+            <option>أخرى</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Row 3: Issue type + Priority -->
+      <div class="ds-form-grid" style="margin-bottom:12px;">
+        <div class="ds-field">
+          <label><i class="fas fa-tag" style="margin-left:4px;"></i>نوع المشكلة *</label>
+          <select id="tiType">
+            <option value="">-- اختر --</option>
+            <option>مشكلة في الاتصال</option>
+            <option>عدم القدرة على الدخول</option>
+            <option>مشكلة في الصوت/الصورة</option>
+            <option>خلل في المنصة</option>
+            <option>عطل في الجهاز</option>
+            <option>مشكلة في المحتوى الرقمي</option>
+            <option>أخرى</option>
+          </select>
+        </div>
+        <div class="ds-field">
+          <label><i class="fas fa-exclamation-circle" style="margin-left:4px;"></i>الأولوية *</label>
+          <select id="tiPriority">
+            <option value="">-- اختر --</option>
+            <option>عاجل — يوقف الحصة</option>
+            <option>عادي</option>
+            <option>منخفض</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Description -->
+      <div class="ds-field ds-form-grid full" style="margin-bottom:12px;">
+        <div>
+          <label><i class="fas fa-align-right" style="margin-left:4px;"></i>وصف المشكلة *</label>
+          <textarea id="tiDesc" rows="3" placeholder="صفي المشكلة بالتفصيل..."></textarea>
+        </div>
+      </div>
+
+      <!-- Assigned + Status -->
+      <div class="ds-form-grid" style="margin-bottom:12px;">
+        <div class="ds-field">
+          <label><i class="fas fa-user-cog" style="margin-left:4px;"></i>تحويل إلى فريق الدعم</label>
+          <select id="tiAssigned">
+            <option value="">غير محدد</option>
+            <option>خلود الكعبي</option>
+            <option>منيرة المري</option>
+            <option>كليثم العرياني</option>
+            <option>هاجرة حسين</option>
+            <option>هدى الشامسي</option>
+            <option>ابتسام القاسمي</option>
+            <option>مريم الشامسي</option>
+            <option>نجاة الكثيري</option>
+          </select>
+        </div>
+        <div class="ds-field">
+          <label><i class="fas fa-info-circle" style="margin-left:4px;"></i>الحالة</label>
+          <select id="tiStatus">
+            <option value="جديدة">جديدة</option>
+            <option value="قيد الحل">قيد الحل</option>
+            <option value="تم الحل">تم الحل</option>
+            <option value="مغلقة">مغلقة</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div class="ds-field ds-form-grid full" style="margin-bottom:16px;">
+        <div>
+          <label><i class="fas fa-sticky-note" style="margin-left:4px;"></i>ملاحظات / الإجراء المتخذ</label>
+          <textarea id="tiNotes" rows="2" placeholder="ماذا فعلتِ لحل المشكلة؟ أو أي ملاحظة إضافية..."></textarea>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button onclick="closeTechIssueModal()" style="padding:10px 20px;background:rgba(255,255,255,0.1);color:white;border:none;border-radius:9px;cursor:pointer;font-family:inherit;">إلغاء</button>
+        <button onclick="saveTechIssue()" style="padding:10px 24px;background:#3b82f6;color:white;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-weight:700;"><i class="fas fa-save" style="margin-left:6px;"></i>حفظ المشكلة</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Meeting Modal -->
   <div id="dsMinModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:9999;align-items:center;justify-content:center;">
     <div style="background:#1e2d4a;border-radius:12px;padding:24px;width:600px;max-width:95vw;border:1px solid rgba(201,168,39,0.3);max-height:90vh;overflow-y:auto;">
@@ -5306,7 +5478,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
   // ═══ DS MODULE ════════════════════════════════════════════════════════════
   function dsTab(name) {
     document.querySelectorAll('.ds-tab').forEach((t,i) => {
-      const panes = ['overview','team','roadmap','opplan','minutes','aqdar','materials','incidents','surveys'];
+      const panes = ['overview','team','roadmap','opplan','minutes','aqdar','materials','incidents','surveys','techissues'];
       t.classList.toggle('active', panes[i] === name);
     });
     document.querySelectorAll('.ds-pane').forEach(p => p.classList.remove('active'));
@@ -5317,6 +5489,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     if (name === 'overview') dsUpdateOverviewPct();
     if (name === 'incidents') { renderIncidentStats(); renderIncidents(); }
     if (name === 'surveys') { showSurvey(currentSurveyType || 'student'); }
+    if (name === 'techissues') { renderTechIssueStats(); renderTechIssues(); }
     if (name === 'materials') dsRenderTasks();
   }
 
@@ -16706,9 +16879,237 @@ document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
     renderIncidentStats();
     renderIncidents();
+    renderTechIssueStats();
+    renderTechIssues();
     showSurveyIfParam();
+    // Show distance learning banner if mode active
+    const tiMode = document.getElementById('tiModeBanner');
+    if (tiMode && window.currentLearningMode === 'distance') tiMode.style.display = 'block';
   }, 500);
 });
+
+// ════════════════════════════════
+//  TECH ISSUES — المشاكل التقنية
+// ════════════════════════════════
+
+const TI_KEY = 'aljood_tech_issues_v1';
+
+function getTechIssues() {
+  const stored = localStorage.getItem(TI_KEY);
+  return stored ? JSON.parse(stored) : [];
+}
+function saveTechIssues(arr) {
+  localStorage.setItem(TI_KEY, JSON.stringify(arr));
+}
+
+function openTechIssueModal(id) {
+  const modal = document.getElementById('techIssueModal');
+  if (!modal) return;
+  document.getElementById('tiEditId').value = id || '';
+  if (id) {
+    const ti = getTechIssues().find(t => t.id === id);
+    if (!ti) return;
+    document.getElementById('tiClass').value = ti.classGrade || '';
+    document.getElementById('tiPeriod').value = ti.period || '';
+    document.getElementById('tiStudent').value = ti.student || '';
+    document.getElementById('tiPlatform').value = ti.platform || '';
+    document.getElementById('tiType').value = ti.type || '';
+    document.getElementById('tiPriority').value = ti.priority || '';
+    document.getElementById('tiDesc').value = ti.description || '';
+    document.getElementById('tiAssigned').value = ti.assigned || '';
+    document.getElementById('tiStatus').value = ti.status || 'جديدة';
+    document.getElementById('tiNotes').value = ti.notes || '';
+  } else {
+    document.getElementById('tiClass').value = '';
+    document.getElementById('tiPeriod').value = '';
+    document.getElementById('tiStudent').value = '';
+    document.getElementById('tiPlatform').value = '';
+    document.getElementById('tiType').value = '';
+    document.getElementById('tiPriority').value = '';
+    document.getElementById('tiDesc').value = '';
+    document.getElementById('tiAssigned').value = '';
+    document.getElementById('tiStatus').value = 'جديدة';
+    document.getElementById('tiNotes').value = '';
+  }
+  modal.style.display = 'block';
+}
+
+function closeTechIssueModal() {
+  const modal = document.getElementById('techIssueModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function saveTechIssue() {
+  const id = document.getElementById('tiEditId').value;
+  const classGrade = document.getElementById('tiClass').value.trim();
+  const period = document.getElementById('tiPeriod').value;
+  const student = document.getElementById('tiStudent').value.trim();
+  const platform = document.getElementById('tiPlatform').value;
+  const type = document.getElementById('tiType').value;
+  const priority = document.getElementById('tiPriority').value;
+  const description = document.getElementById('tiDesc').value.trim();
+  const assigned = document.getElementById('tiAssigned').value;
+  const status = document.getElementById('tiStatus').value;
+  const notes = document.getElementById('tiNotes').value.trim();
+
+  if (!classGrade || !type || !platform || !description) {
+    showToast('يرجى ملء الحقول المطلوبة (الصف، النوع، المنصة، الوصف)', 'warning');
+    return;
+  }
+
+  const issues = getTechIssues();
+  const now = new Date().toISOString();
+  const reporter = (window.currentUserNameAr || window.currentUsername || localStorage.getItem('aljood_session_username') || 'غير محدد');
+  const todayDate = now.split('T')[0];
+
+  if (id) {
+    const idx = issues.findIndex(t => t.id === id);
+    if (idx !== -1) {
+      issues[idx] = { ...issues[idx], classGrade, period, student, platform, type, priority, description, assigned, status, notes, updatedAt: now };
+    }
+  } else {
+    issues.unshift({
+      id: 'TI' + Date.now(),
+      classGrade, period, student, platform, type, priority, description, assigned, status, notes,
+      reporter,
+      date: todayDate,
+      createdAt: now,
+      updatedAt: now
+    });
+  }
+  saveTechIssues(issues);
+  closeTechIssueModal();
+  renderTechIssues();
+  renderTechIssueStats();
+  showToast(id ? 'تم تعديل المشكلة بنجاح' : 'تم تسجيل المشكلة بنجاح ✅', 'success');
+
+  // Alert if urgent
+  if (!id && priority === 'عاجل — يوقف الحصة') {
+    showToast('⚠️ تم تسجيل مشكلة عاجلة — يُرجى التواصل مع فريق الدعم التقني فوراً', 'warning');
+  }
+}
+
+function deleteTechIssue(id) {
+  if (!confirm('هل أنتِ متأكدة من حذف هذه المشكلة؟')) return;
+  const issues = getTechIssues().filter(t => t.id !== id);
+  saveTechIssues(issues);
+  renderTechIssues();
+  renderTechIssueStats();
+  showToast('تم حذف المشكلة', 'info');
+}
+
+function getTiPriorityClass(p) {
+  if (!p) return 'sev-low';
+  if (p.includes('عاجل')) return 'sev-crit';
+  if (p.includes('عادي')) return 'sev-med';
+  return 'sev-low';
+}
+function getTiStatusClass(s) {
+  return s==='جديدة'?'st-new':s==='قيد الحل'?'st-prog':s==='تم الحل'?'st-done':'st-closed';
+}
+
+function renderTechIssueStats() {
+  const grid = document.getElementById('tiStatsGrid');
+  if (!grid) return;
+  const issues = getTechIssues();
+  const total = issues.length;
+  const urgent = issues.filter(t => t.priority && t.priority.includes('عاجل')).length;
+  const pending = issues.filter(t => t.status === 'جديدة' || t.status === 'قيد الحل').length;
+  const resolved = issues.filter(t => t.status === 'تم الحل' || t.status === 'مغلقة').length;
+
+  grid.innerHTML = `
+    <div style="background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.25);border-radius:10px;padding:14px;text-align:center;">
+      <div style="font-size:1.8rem;font-weight:700;color:#60a5fa;">${total}</div>
+      <div style="color:rgba(255,255,255,0.7);font-size:0.78rem;margin-top:4px;">إجمالي المشاكل</div>
+    </div>
+    <div style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);border-radius:10px;padding:14px;text-align:center;">
+      <div style="font-size:1.8rem;font-weight:700;color:#f87171;">${urgent}</div>
+      <div style="color:rgba(255,255,255,0.7);font-size:0.78rem;margin-top:4px;">عاجلة</div>
+    </div>
+    <div style="background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.25);border-radius:10px;padding:14px;text-align:center;">
+      <div style="font-size:1.8rem;font-weight:700;color:#fbbf24;">${pending}</div>
+      <div style="color:rgba(255,255,255,0.7);font-size:0.78rem;margin-top:4px;">قيد الحل</div>
+    </div>
+    <div style="background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.25);border-radius:10px;padding:14px;text-align:center;">
+      <div style="font-size:1.8rem;font-weight:700;color:#34d399;">${resolved}</div>
+      <div style="color:rgba(255,255,255,0.7);font-size:0.78rem;margin-top:4px;">تم الحل</div>
+    </div>
+  `;
+}
+
+function renderTechIssues() {
+  const list = document.getElementById('techIssuesList');
+  if (!list) return;
+  const role = localStorage.getItem('currentRole') || '';
+  if (!role) return;
+  const isAdmin = role === 'admin';
+  const isPrincipal = role === 'principal';
+  const isVP = role === 'vice_principal';
+  const userName = window.currentUserNameAr || window.currentUsername || localStorage.getItem('aljood_session_username') || '';
+
+  let issues = getTechIssues();
+
+  // Filters
+  const statusF = document.getElementById('tiFilterStatus');
+  const typeF = document.getElementById('tiFilterType');
+  if (statusF && statusF.value) issues = issues.filter(t => t.status === statusF.value);
+  if (typeF && typeF.value) issues = issues.filter(t => t.type === typeF.value);
+
+  // Non-admin sees own issues only
+  if (!isAdmin && !isPrincipal && !isVP) {
+    issues = issues.filter(t => t.reporter === userName || t.assigned === userName);
+  }
+
+  if (!issues.length) {
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.4);"><i class="fas fa-check-circle" style="font-size:2rem;margin-bottom:12px;display:block;color:rgba(52,211,153,0.4);"></i>لا توجد مشاكل تقنية مسجَّلة</div>';
+    return;
+  }
+
+  list.innerHTML = issues.map(ti => `
+    <div class="inc-card" style="border-color:${ti.priority&&ti.priority.includes('عاجل')?'rgba(239,68,68,0.35)':'rgba(59,130,246,0.18)'};">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+        <div>
+          <strong style="color:white;font-size:0.95rem;">
+            <i class="fas fa-school" style="color:#60a5fa;margin-left:5px;font-size:0.85rem;"></i>${escHtml(ti.classGrade || '—')}
+            ${ti.period ? `<span style="color:rgba(255,255,255,0.45);font-size:0.8rem;margin-right:8px;">${escHtml(ti.period)}</span>` : ''}
+          </strong>
+          <span class="ds-sev-badge ${getTiPriorityClass(ti.priority)}" style="margin-right:6px;">${ti.priority||'—'}</span>
+          <span class="ds-sev-badge ${getTiStatusClass(ti.status)}">${ti.status}</span>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span style="color:rgba(255,255,255,0.45);font-size:0.78rem;">${ti.date||''}</span>
+          ${(isAdmin || isPrincipal || isVP || ti.reporter === userName) ? `
+            <button onclick="openTechIssueModal('${ti.id}')" style="background:rgba(59,130,246,0.15);color:#60a5fa;border:none;border-radius:7px;padding:5px 10px;cursor:pointer;font-size:0.8rem;">تعديل</button>
+            ${(isAdmin||isPrincipal) ? `<button onclick="deleteTechIssue('${ti.id}')" style="background:rgba(239,68,68,0.15);color:#f87171;border:none;border-radius:7px;padding:5px 10px;cursor:pointer;font-size:0.8rem;">حذف</button>` : ''}
+          ` : ''}
+        </div>
+      </div>
+      <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;margin-bottom:5px;">
+        <span style="color:#60a5fa;">النوع:</span> ${escHtml(ti.type||'—')}
+        ${ti.platform ? `<span style="margin-right:14px;"><span style="color:#60a5fa;">المنصة:</span> ${escHtml(ti.platform)}</span>` : ''}
+        ${ti.student ? `<span style="margin-right:14px;"><span style="color:#60a5fa;">الطالب/ة:</span> ${escHtml(ti.student)}</span>` : ''}
+      </div>
+      <div style="color:rgba(255,255,255,0.85);font-size:0.88rem;line-height:1.5;margin-bottom:6px;">${escHtml(ti.description||'')}</div>
+      ${ti.assigned ? `<div style="color:rgba(255,255,255,0.55);font-size:0.81rem;"><i class="fas fa-user-cog" style="margin-left:5px;color:#60a5fa;"></i>محوَّلة إلى: <strong style="color:#93c5fd;">${escHtml(ti.assigned)}</strong></div>` : ''}
+      ${ti.notes ? `<div style="color:rgba(255,255,255,0.55);font-size:0.81rem;margin-top:4px;"><i class="fas fa-check" style="margin-left:5px;color:#34d399;"></i>${escHtml(ti.notes)}</div>` : ''}
+      <div style="color:rgba(255,255,255,0.3);font-size:0.74rem;margin-top:8px;">المُسجِّلة: ${escHtml(ti.reporter||'—')} | ${new Date(ti.createdAt).toLocaleDateString('ar-AE')}</div>
+    </div>
+  `).join('');
+}
+
+function exportTechIssuesCSV() {
+  const issues = getTechIssues();
+  if (!issues.length) { showToast('لا توجد مشاكل للتصدير', 'info'); return; }
+  const header = ['رقم','الصف','الحصة','الطالب','المنصة','النوع','الأولوية','الحالة','الوصف','محوَّلة إلى','ملاحظات','المُسجِّلة','التاريخ'];
+  const rows = issues.map(t => [t.id,t.classGrade,t.period,t.student,t.platform,t.type,t.priority,t.status,t.description,t.assigned,t.notes,t.reporter,t.date].map(v => `"${(v||'').replace(/"/g,'""')}"`));
+  const csv = '\uFEFF' + [header, ...rows].map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'tech_issues_' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+  showToast('تم تصدير الملف بنجاح', 'success');
+}
 
 // ════════════════════════════════
 //  DIGITAL AWARENESS SURVEYS
