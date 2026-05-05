@@ -1712,6 +1712,13 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
       <i class="fas fa-user-clock" style="font-size:1.25rem;color:#f97316;"></i>
       <span id="absence-bell-count" style="position:absolute;top:-2px;left:-2px;background:#f97316;color:white;border-radius:50%;min-width:18px;height:18px;font-size:0.68rem;display:none;align-items:center;justify-content:center;font-weight:800;padding:0 3px;line-height:1;">0</span>
     </div>
+    <!-- ===== جرس التنبيهات الداخلية ===== -->
+    <div id="sys-notif-bell-wrap" style="display:none;position:relative;cursor:pointer;padding:6px 10px;border-radius:10px;transition:background 0.2s;margin-right:4px;" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background='transparent'" title="التنبيهات">
+      <i class="fas fa-bell" style="font-size:1.25rem;color:#6366f1;" onclick="toggleNotifPanel()"></i>
+      <span id="sys-notif-count" style="position:absolute;top:-2px;left:-2px;background:#6366f1;color:white;border-radius:50%;min-width:18px;height:18px;font-size:0.68rem;display:none;align-items:center;justify-content:center;font-weight:800;padding:0 3px;line-height:1;">0</span>
+      <!-- Dropdown Panel -->
+      <div id="sys-notif-panel" onclick="event.stopPropagation()" style="display:none;position:absolute;top:calc(100% + 8px);left:-260px;width:320px;background:#fff;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.18);border:1px solid #e8e8e8;z-index:9999;opacity:0;transform:translateY(-10px);transition:opacity 0.2s,transform 0.2s;direction:rtl;overflow:hidden;font-family:Cairo,sans-serif;"></div>
+    </div>
   </div>
   <div id="sidebar-overlay" onclick="toggleMobileSidebar()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:998;"></div>
 
@@ -28745,6 +28752,362 @@ function showAbsenceAlertPanel() {
     </div>
   </div>
 </div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// INTERNAL NOTIFICATIONS SYSTEM v1 — نظام التنبيهات الداخلية
+// يدعم: تعيين مربية / أخصائية / رئيسة قسم / نائبة / إضافة طالب
+//        تغيير حالة البلاغات الرقمية والمشاكل التقنية
+// ═══════════════════════════════════════════════════════════════════════
+
+var NOTIF_KEY = 'aljood_sys_notifs_v1';
+
+function sysNotifGetAll() {
+  try { return JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]'); } catch(e) { return []; }
+}
+function sysNotifSaveAll(arr) {
+  localStorage.setItem(NOTIF_KEY, JSON.stringify(arr));
+}
+
+function pushNotif(recipientUsername, icon, title, message, type) {
+  if (!recipientUsername) return;
+  var notifs = sysNotifGetAll();
+  notifs.unshift({
+    id: 'n_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+    recipientUsername: String(recipientUsername),
+    icon: icon || '🔔',
+    title: title || 'تنبيه',
+    message: message || '',
+    type: type || 'general',
+    timestamp: new Date().toISOString(),
+    read: false
+  });
+  if (notifs.length > 300) notifs = notifs.slice(0, 300);
+  sysNotifSaveAll(notifs);
+  var uname = _sysCurrentUsername();
+  if (uname && String(uname) === String(recipientUsername)) updateSysNotifBell();
+}
+
+function pushNotifMulti(recipients, icon, title, message, type) {
+  if (!recipients || !recipients.length) return;
+  (recipients || []).forEach(function(r) { if (r) pushNotif(r, icon, title, message, type); });
+}
+
+function _sysCurrentUsername() {
+  try {
+    return (typeof currentUsername !== 'undefined' && currentUsername)
+      ? currentUsername
+      : (JSON.parse(localStorage.getItem('aljood_session') || '{}').username || localStorage.getItem('aljood_session_username') || '');
+  } catch(e) { return ''; }
+}
+
+function getMyNotifs() {
+  var uname = _sysCurrentUsername();
+  if (!uname) return [];
+  return sysNotifGetAll().filter(function(n) { return n.recipientUsername === uname; });
+}
+
+function getMyUnreadCount() {
+  return getMyNotifs().filter(function(n) { return !n.read; }).length;
+}
+
+function markNotifRead(id) {
+  var notifs = sysNotifGetAll();
+  var n = notifs.find(function(x) { return x.id === id; });
+  if (n) { n.read = true; sysNotifSaveAll(notifs); }
+  renderNotifDropdown();
+  updateSysNotifBell();
+}
+
+function markAllNotifsRead() {
+  var uname = _sysCurrentUsername();
+  var notifs = sysNotifGetAll();
+  notifs.forEach(function(n) { if (n.recipientUsername === uname) n.read = true; });
+  sysNotifSaveAll(notifs);
+  renderNotifDropdown();
+  updateSysNotifBell();
+}
+
+function updateSysNotifBell() {
+  var count = getMyUnreadCount();
+  var badge = document.getElementById('sys-notif-count');
+  var wrap = document.getElementById('sys-notif-bell-wrap');
+  if (!wrap) return;
+  if (badge) {
+    badge.textContent = count > 99 ? '99+' : String(count);
+    badge.style.display = count > 0 ? 'flex' : 'none';
+  }
+}
+
+function toggleNotifPanel(e) {
+  if (e) e.stopPropagation();
+  var panel = document.getElementById('sys-notif-panel');
+  if (!panel) return;
+  var isOpen = panel.style.display === 'block';
+  if (!isOpen) {
+    renderNotifDropdown();
+    panel.style.display = 'block';
+    setTimeout(function() { panel.style.opacity = '1'; panel.style.transform = 'translateY(0)'; }, 10);
+  } else {
+    panel.style.opacity = '0';
+    panel.style.transform = 'translateY(-10px)';
+    setTimeout(function() { if(panel) panel.style.display = 'none'; }, 200);
+  }
+}
+
+function _sysNotifTimeAgo(iso) {
+  try {
+    var diff = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (diff < 60) return 'الآن';
+    if (diff < 3600) return Math.floor(diff/60) + ' د';
+    if (diff < 86400) return Math.floor(diff/3600) + ' س';
+    return Math.floor(diff/86400) + ' يوم';
+  } catch(e) { return ''; }
+}
+
+function renderNotifDropdown() {
+  var panel = document.getElementById('sys-notif-panel');
+  if (!panel) return;
+  var notifs = getMyNotifs().slice(0, 40);
+  var unread = notifs.filter(function(n) { return !n.read; }).length;
+
+  var items = notifs.length ? notifs.map(function(n) {
+    var bg = n.read ? '#fff' : '#f0f4ff';
+    var fw = n.read ? '500' : '700';
+    return '<div onclick="markNotifRead(\'' + n.id + '\')" style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid #f0f0f0;cursor:pointer;background:' + bg + ';transition:background 0.15s;" onmouseover="this.style.background=\'#f8faff\'" onmouseout="this.style.background=\'' + bg + '\'">'
+      + '<span style="font-size:1.2rem;flex-shrink:0;margin-top:2px;">' + (n.icon||'🔔') + '</span>'
+      + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-weight:' + fw + ';font-size:0.82rem;color:#1A2A4A;line-height:1.3;">' + (n.title||'') + '</div>'
+        + '<div style="font-size:0.76rem;color:#555;margin-top:2px;line-height:1.4;">' + (n.message||'') + '</div>'
+        + '<div style="font-size:0.69rem;color:#aaa;margin-top:3px;">' + _sysNotifTimeAgo(n.timestamp) + '</div>'
+      + '</div>'
+      + (!n.read ? '<div style="width:7px;height:7px;border-radius:50%;background:#6366f1;flex-shrink:0;margin-top:7px;"></div>' : '')
+    + '</div>';
+  }).join('')
+  : '<div style="text-align:center;padding:32px 16px;color:#aaa;"><div style="font-size:2.5rem;margin-bottom:8px;">🔕</div><div style="font-size:0.85rem;">لا توجد تنبيهات</div></div>';
+
+  panel.innerHTML =
+    '<div style="padding:12px 14px;border-bottom:1px solid #e8e8e8;display:flex;justify-content:space-between;align-items:center;">'
+      + '<div style="font-weight:700;color:#1A2A4A;font-size:0.88rem;">🔔 التنبيهات'
+        + (unread > 0 ? ' <span style="background:#6366f1;color:white;border-radius:10px;padding:1px 7px;font-size:0.7rem;font-weight:700;">' + unread + '</span>' : '')
+      + '</div>'
+      + (unread > 0 ? '<button onclick="markAllNotifsRead()" style="background:none;border:none;color:#6366f1;font-size:0.77rem;cursor:pointer;font-family:inherit;">قراءة الكل ✓</button>' : '')
+    + '</div>'
+    + '<div style="overflow-y:auto;max-height:380px;">' + items + '</div>';
+}
+
+function initSysNotifBell() {
+  var wrap = document.getElementById('sys-notif-bell-wrap');
+  if (wrap) {
+    wrap.style.display = 'flex';
+    wrap.style.alignItems = 'center';
+    wrap.onclick = function(e) { toggleNotifPanel(e); };
+    updateSysNotifBell();
+  }
+  document.addEventListener('click', function(e) {
+    var panel = document.getElementById('sys-notif-panel');
+    var wrap2 = document.getElementById('sys-notif-bell-wrap');
+    if (panel && panel.style.display === 'block' && wrap2 && !wrap2.contains(e.target)) {
+      panel.style.opacity = '0';
+      panel.style.transform = 'translateY(-10px)';
+      setTimeout(function() { if(panel) panel.style.display = 'none'; }, 200);
+    }
+  }, true);
+}
+
+// ─── مساعدات ──────────────────────────────────────────────────
+function _notifFindUsernameByTCode(tCode) {
+  var roster = (typeof TEACHER_ROSTER !== 'undefined') ? TEACHER_ROSTER : {};
+  for (var uname in roster) {
+    if (roster[uname] && roster[uname].teacherId === tCode) return uname;
+  }
+  return null;
+}
+
+function _notifGetSubjectTeachersForClass(classCode) {
+  try {
+    var schedules = (typeof getSchedules === 'function') ? getSchedules() : {};
+    var classSchedule = schedules[classCode];
+    if (!classSchedule) return [];
+    var tCodes = {};
+    Object.values(classSchedule).forEach(function(slot) {
+      if (!slot || typeof slot !== 'object') return;
+      var items = Array.isArray(slot) ? slot : [slot];
+      items.forEach(function(p) { if (p && p.teacherId) tCodes[p.teacherId] = true; });
+    });
+    var usernames = [];
+    Object.keys(tCodes).forEach(function(tc) {
+      var u = _notifFindUsernameByTCode(tc);
+      if (u && !usernames.includes(u)) usernames.push(u);
+    });
+    return usernames;
+  } catch(e) { return []; }
+}
+
+function _notifGetSWUsernameForClass(classCode) {
+  try {
+    var a = JSON.parse(localStorage.getItem('aljood_class_specialist') || '{}');
+    return a[classCode] || null;
+  } catch(e) { return null; }
+}
+
+// ─── Hook 1: تعيين مربية صف ──────────────────────────────────
+(function() {
+  var _orig = window.saveHomeroomAssignment;
+  if (typeof _orig !== 'function') return;
+  window.saveHomeroomAssignment = function() {
+    var teacherId = ((document.getElementById('homeroomTeacher') || {}).value || '');
+    var cls = ((document.getElementById('homeroomClass') || {}).value || '');
+    _orig.apply(this, arguments);
+    if (!teacherId || !cls) return;
+    var uname = _notifFindUsernameByTCode(teacherId);
+    if (!uname) {
+      var staff = (typeof getStaffData === 'function') ? getStaffData() : [];
+      var sm = staff.find(function(s) { return String(s.id) === String(teacherId); });
+      if (sm) uname = sm.username || sm.email || null;
+    }
+    if (uname) pushNotif(uname, '🏫', 'تعيين مربية صف', 'تم تعيينكِ مربية للصف ' + cls, 'homeroom_assigned');
+  };
+})();
+
+// ─── Hook 2: تعيين أخصائية (نموذج مودال) ────────────────────
+(function() {
+  var _orig = window.saveSpecialistAssignment;
+  if (typeof _orig !== 'function') return;
+  window.saveSpecialistAssignment = function() {
+    var select = document.getElementById('specialistSelect');
+    var specUsername = select ? select.value : null;
+    var checked = Array.from(document.querySelectorAll('.specialist-class-cb:checked')).map(function(cb){ return cb.value; });
+    _orig.apply(this, arguments);
+    if (specUsername && checked.length)
+      pushNotif(specUsername, '👩‍💼', 'تعيين أخصائية اجتماعية', 'تم تعيينكِ أخصائية للصفوف: ' + checked.join('، '), 'specialist_assigned');
+  };
+})();
+
+// ─── Hook 3: تعيين أخصائية (جدول الصفوف) ────────────────────
+(function() {
+  var _orig = window.saveSpecialistAssignments;
+  if (typeof _orig !== 'function') return;
+  window.saveSpecialistAssignments = function() {
+    var allCls = (typeof STUDENTS_DATA !== 'undefined') ? Object.keys(STUDENTS_DATA) : [];
+    var pending = {};
+    allCls.forEach(function(cls) {
+      var sel = document.getElementById('spec_' + cls);
+      if (sel && sel.value) {
+        if (!pending[sel.value]) pending[sel.value] = [];
+        pending[sel.value].push(cls);
+      }
+    });
+    _orig.apply(this, arguments);
+    Object.keys(pending).forEach(function(email) {
+      pushNotif(email, '👩‍💼', 'تعيين أخصائية اجتماعية', 'تم تعيينكِ أخصائية للصفوف: ' + pending[email].join('، '), 'specialist_assigned');
+    });
+  };
+})();
+
+// ─── Hook 4: حل مشكلة تقنية ────────────────────────────────
+(function() {
+  var _orig = window.saveResolve;
+  if (typeof _orig !== 'function') return;
+  window.saveResolve = function(id) {
+    var issue = null;
+    try { issue = (getTechIssues ? getTechIssues() : []).find(function(t){ return t.id===id; }); } catch(e){}
+    var reporter = issue ? (issue.reporterUsername || issue.reporter || null) : null;
+    _orig.apply(this, [id]);
+    if (reporter) pushNotif(reporter, '✅', 'تم حل مشكلتكِ التقنية', 'الصف ' + (issue.classGrade||'') + ' — ' + (issue.type||'') + ' — تم إغلاق البلاغ.', 'tech_resolved');
+  };
+})();
+
+// ─── Hook 5: استلام مشكلة تقنية ────────────────────────────
+(function() {
+  var _orig = window.claimTechIssue;
+  if (typeof _orig !== 'function') return;
+  window.claimTechIssue = function(id) {
+    var issue = null;
+    try { issue = (getTechIssues ? getTechIssues() : []).find(function(t){ return t.id===id; }); } catch(e){}
+    var reporter = issue ? (issue.reporterUsername || issue.reporter || null) : null;
+    var claimer = (typeof currentUserNameAr !== 'undefined' && currentUserNameAr) ? currentUserNameAr : _sysCurrentUsername();
+    _orig.apply(this, [id]);
+    if (reporter) pushNotif(reporter, '🔵', 'جارٍ معالجة مشكلتكِ التقنية', 'الصف ' + (issue.classGrade||'') + ' — استلم البلاغ: ' + claimer, 'tech_claimed');
+  };
+})();
+
+// ─── Hook 6: تغيير حالة البلاغ الرقمي ──────────────────────
+(function() {
+  var _orig = window.saveIncident;
+  if (typeof _orig !== 'function') return;
+  window.saveIncident = function() {
+    var id = ((document.getElementById('incEditId') || {}).value || '');
+    var newStatus = ((document.getElementById('incStatus') || {}).value || '');
+    var oldStatus = null, reporter = null;
+    if (id) {
+      try {
+        var inc = (getIncidents ? getIncidents() : []).find(function(i){ return i.id===id; });
+        if (inc) { oldStatus = inc.status; reporter = inc.reporterUsername || inc.reporter; }
+      } catch(e) {}
+    }
+    _orig.apply(this, arguments);
+    if (id && reporter && newStatus && newStatus !== oldStatus)
+      pushNotif(reporter, '🛡️', 'تحديث حالة البلاغ الرقمي', 'تم تغيير حالة بلاغك من «' + (oldStatus||'—') + '» إلى «' + newStatus + '»', 'violation_status');
+  };
+})();
+
+// ─── Hook 7: إضافة طالبة جديدة ─────────────────────────────
+(function() {
+  var _orig = window.submitStudentAdmission;
+  if (typeof _orig !== 'function') return;
+  window.submitStudentAdmission = function() {
+    var nameAr = ((document.getElementById('adm_nameAr') || {}).value || '').trim();
+    var cls = ((document.getElementById('adm_class') || {}).value || '');
+    _orig.apply(this, arguments);
+    if (!cls || !nameAr) return;
+    setTimeout(function() {
+      var recipients = [];
+      var hrAssigns = (typeof getHomeroomAssignments === 'function') ? getHomeroomAssignments() : {};
+      var hrEntry = hrAssigns[cls];
+      if (hrEntry && hrEntry.teacherId) {
+        var hrUname = _notifFindUsernameByTCode(hrEntry.teacherId);
+        if (hrUname) recipients.push(hrUname);
+      }
+      var swU = _notifGetSWUsernameForClass(cls);
+      if (swU && !recipients.includes(swU)) recipients.push(swU);
+      _notifGetSubjectTeachersForClass(cls).forEach(function(u) {
+        if (!recipients.includes(u)) recipients.push(u);
+      });
+      pushNotifMulti(recipients, '🎓', 'طالبة جديدة في صفك', 'تمت إضافة «' + nameAr + '» إلى الصف ' + cls, 'student_added');
+    }, 300);
+  };
+})();
+
+// ─── Hook 8: تغيير دور الموظف ───────────────────────────────
+(function() {
+  var _orig = window.saveStaffEdit;
+  if (typeof _orig !== 'function') return;
+  window.saveStaffEdit = function(empId) {
+    var oldEntry = (typeof getStaffData === 'function' ? getStaffData() : []).find(function(s){ return String(s.id)===String(empId); });
+    var oldRole = oldEntry ? (oldEntry.role || '') : '';
+    _orig.apply(this, [empId]);
+    setTimeout(function() {
+      var entry = (typeof getStaffData === 'function' ? getStaffData() : []).find(function(s){ return String(s.id)===String(empId); });
+      if (!entry || entry.role === oldRole) return;
+      var uname = entry.username || entry.email;
+      if (!uname) return;
+      var roleLabels = { vice_principal:'نائبة مديرة', dept_head:'رئيسة قسم', teacher:'معلمة', admin_staff:'إداري', principal:'مديرة', social_worker:'أخصائية اجتماعية' };
+      pushNotif(uname, '📋', 'تحديث المسمى الوظيفي', 'تم تعيينكِ بمسمى: ' + (roleLabels[entry.role] || entry.role), 'role_changed');
+    }, 200);
+  };
+})();
+
+// ─── تهيئة الجرس عند renderNav ──────────────────────────────
+(function(){
+  var _origRN = window.renderNav;
+  if (typeof _origRN !== 'function') return;
+  window.renderNav = function() {
+    _origRN.apply(this, arguments);
+    setTimeout(initSysNotifBell, 150);
+  };
+})();
+</script>
 
 </body>
 </html>
