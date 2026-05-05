@@ -28400,13 +28400,30 @@ function _isTeacherAssignedToClass(cls) {
     var hrFirst = hrName.split(' ')[0].toLowerCase();
     if (staffAr.includes(hrFirst) || staffEn.includes(hrFirst)) return true;
   }
-  // هل لها في جدول هذا الصف؟
+  // هل لها حصص في جدول هذا الصف؟ (مطابقة بـ T-code من TEACHER_ROSTER)
   try {
     var schedules = typeof getSchedules === 'function' ? getSchedules() : (typeof SCHEDULES_DB !== 'undefined' ? SCHEDULES_DB : {});
     var clsSch = schedules[cls];
     if (clsSch) {
+      // استخراج T-code من TEACHER_ROSTER بالـ username
+      var teacherTCode = null;
+      if (typeof TEACHER_ROSTER !== 'undefined' && TEACHER_ROSTER && currentStaff.username) {
+        var uname = (currentStaff.username || '').toLowerCase();
+        for (var rKey in TEACHER_ROSTER) {
+          if (rKey.toLowerCase() === uname) {
+            teacherTCode = TEACHER_ROSTER[rKey].teacherId;
+            break;
+          }
+        }
+      }
       var staffId = currentStaff.id;
-      if (Object.values(clsSch).some(function(cell) { return cell && cell.teacherId === staffId; })) return true;
+      var cells = Object.values(clsSch);
+      for (var ci = 0; ci < cells.length; ci++) {
+        var cell = cells[ci];
+        if (!cell) continue;
+        if (teacherTCode && cell.teacherId === teacherTCode) return true;
+        if (cell.teacherId === staffId) return true;
+      }
     }
   } catch(e) {}
   return false;
