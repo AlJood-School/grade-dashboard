@@ -17049,6 +17049,66 @@ function closeTechIssueModal() {
   if (modal) modal.style.display = 'none';
 }
 
+// ── Resolve Modal ──────────────────────────────────────────
+function openResolveModal(id) {
+  const ti = getTechIssues().find(t => t.id === id);
+  if (!ti) return;
+  // inject modal if not exists
+  let m = document.getElementById('tiResolveModal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'tiResolveModal';
+    m.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    m.innerHTML = `
+      <div style="background:#16213e;border:1px solid rgba(201,168,76,0.3);border-radius:16px;padding:28px;width:90%;max-width:480px;direction:rtl;">
+        <h3 style="color:#c9a84c;margin:0 0 6px;font-size:1.1rem;">✅ تسجيل الحل</h3>
+        <p id="tiResolveInfo" style="color:rgba(255,255,255,0.55);font-size:0.82rem;margin:0 0 16px;"></p>
+        <textarea id="tiResolveNotes" rows="4" placeholder="صِف الحل الذي تم تطبيقه..." style="width:100%;box-sizing:border-box;background:#0d1b2a;color:white;border:1px solid rgba(201,168,76,0.25);border-radius:10px;padding:10px 12px;font-family:inherit;font-size:0.88rem;resize:vertical;"></textarea>
+        <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end;">
+          <button onclick="document.getElementById('tiResolveModal').style.display='none'" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.6);border:none;border-radius:9px;padding:9px 18px;cursor:pointer;font-family:inherit;">إلغاء</button>
+          <button id="tiResolveSaveBtn" style="background:#34d399;color:#0d1b2a;border:none;border-radius:9px;padding:9px 20px;cursor:pointer;font-family:inherit;font-weight:700;">إغلاق البلاغ ✅</button>
+        </div>
+      </div>`;
+    document.body.appendChild(m);
+  }
+  document.getElementById('tiResolveInfo').textContent = `الصف: ${ti.classGrade} | الطالب/ة: ${ti.student} | ${ti.type}`;
+  document.getElementById('tiResolveNotes').value = ti.notes || '';
+  document.getElementById('tiResolveSaveBtn').onclick = () => saveResolve(id);
+  m.style.display = 'flex';
+}
+
+function saveResolve(id) {
+  const notes = document.getElementById('tiResolveNotes').value.trim();
+  if (!notes) { showToast('يرجى كتابة ملاحظات الحل أولاً', 'warning'); return; }
+  const issues = getTechIssues();
+  const idx = issues.findIndex(t => t.id === id);
+  if (idx === -1) return;
+  issues[idx].status = 'تم الحل';
+  issues[idx].notes = notes;
+  issues[idx].resolvedAt = new Date().toISOString();
+  const resolver = (window.currentUserNameAr || window.currentUsername || localStorage.getItem('aljood_session_username') || '');
+  if (resolver) issues[idx].resolvedBy = resolver;
+  saveTechIssues(issues);
+  document.getElementById('tiResolveModal').style.display = 'none';
+  renderTechIssues();
+  renderTechIssueStats();
+  showToast('تم إغلاق البلاغ بنجاح ✅', 'success');
+}
+
+function claimTechIssue(id) {
+  const issues = getTechIssues();
+  const idx = issues.findIndex(t => t.id === id);
+  if (idx === -1) return;
+  const name = window.currentUserNameAr || window.currentUsername || localStorage.getItem('aljood_session_username') || '';
+  issues[idx].status = 'قيد الحل';
+  issues[idx].assigned = name;
+  issues[idx].claimedAt = new Date().toISOString();
+  saveTechIssues(issues);
+  renderTechIssues();
+  renderTechIssueStats();
+  showToast('تم استلام البلاغ — الحالة: قيد الحل', 'success');
+}
+
 function saveTechIssue() {
   const id = document.getElementById('tiEditId').value;
   const classGrade = document.getElementById('tiClass').value.trim();
@@ -17156,6 +17216,8 @@ function renderTechIssues() {
   const isPrincipal = role === 'principal';
   const isVP = role === 'vice_principal';
   const userName = (typeof currentUsername !== 'undefined' && currentUsername) ? currentUsername : (localStorage.getItem('aljood_session_username') || '');
+  const staffId = localStorage.getItem('aljood_session_staff_id') || '';
+  const isTechSupport = (typeof TECH_SUPPORT_TEACHER_IDS !== 'undefined') && TECH_SUPPORT_TEACHER_IDS.indexOf(staffId) !== -1;
 
   let issues = getTechIssues();
 
@@ -17165,8 +17227,8 @@ function renderTechIssues() {
   if (statusF && statusF.value) issues = issues.filter(t => t.status === statusF.value);
   if (typeF && typeF.value) issues = issues.filter(t => t.type === typeF.value);
 
-  // Non-admin sees own issues only
-  if (!isAdmin && !isPrincipal && !isVP) {
+  // معلمة عادية: تُشاهد مشاكلها فقط — فريق الدعم والإدارة: يُشاهدون الكل
+  if (!isAdmin && !isPrincipal && !isVP && !isTechSupport) {
     issues = issues.filter(t => t.reporter === userName || t.assigned === userName);
   }
 
@@ -17175,8 +17237,32 @@ function renderTechIssues() {
     return;
   }
 
-  list.innerHTML = issues.map(ti => `
-    <div class="inc-card" style="border-color:${ti.priority&&ti.priority.includes('عاجل')?'rgba(239,68,68,0.35)':'rgba(59,130,246,0.18)'};">
+  list.innerHTML = issues.map(ti => {
+    // ── أزرار العمل حسب الدور ──────────────────────────────
+    let actionBtns = '';
+    if (isTechSupport) {
+      if (ti.status === 'جديدة') {
+        actionBtns = `<button onclick="claimTechIssue('${ti.id}')" style="background:rgba(59,130,246,0.18);color:#60a5fa;border:1px solid rgba(59,130,246,0.3);border-radius:8px;padding:5px 14px;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:600;">🔵 استلام</button>`;
+      } else if (ti.status === 'قيد الحل') {
+        actionBtns = `<button onclick="openResolveModal('${ti.id}')" style="background:rgba(52,211,153,0.18);color:#34d399;border:1px solid rgba(52,211,153,0.3);border-radius:8px;padding:5px 14px;cursor:pointer;font-family:inherit;font-size:0.82rem;font-weight:600;">✅ تسجيل الحل</button>`;
+      }
+    } else if (isAdmin || isPrincipal || isVP) {
+      actionBtns = `
+        <button onclick="openTechIssueModal('${ti.id}')" style="background:rgba(59,130,246,0.15);color:#60a5fa;border:none;border-radius:7px;padding:5px 10px;cursor:pointer;font-size:0.8rem;">تعديل</button>
+        <button onclick="deleteTechIssue('${ti.id}')" style="background:rgba(239,68,68,0.15);color:#f87171;border:none;border-radius:7px;padding:5px 10px;cursor:pointer;font-size:0.8rem;">حذف</button>`;
+    }
+    // المعلمة العادية: قراءة فقط — لا أزرار
+
+    // ── معلومات الحل (إن وجدت) ───────────────────────────
+    const resolveSection = ti.status === 'تم الحل' && ti.notes ? `
+      <div style="background:rgba(52,211,153,0.07);border:1px solid rgba(52,211,153,0.2);border-radius:9px;padding:9px 13px;margin-top:10px;">
+        <div style="color:#34d399;font-size:0.8rem;font-weight:600;margin-bottom:4px;"><i class="fas fa-check-circle" style="margin-left:5px;"></i>الحل المُطبَّق</div>
+        <div style="color:rgba(255,255,255,0.8);font-size:0.85rem;">${escHtml(ti.notes)}</div>
+        ${ti.resolvedBy ? `<div style="color:rgba(255,255,255,0.35);font-size:0.76rem;margin-top:5px;">أُغلق بواسطة: ${escHtml(ti.resolvedBy)}${ti.resolvedAt ? ' | ' + new Date(ti.resolvedAt).toLocaleString('ar-AE',{hour:'2-digit',minute:'2-digit',year:'numeric',month:'numeric',day:'numeric'}) : ''}</div>` : ''}
+      </div>` : '';
+
+    return `
+    <div class="inc-card" style="border-color:${ti.priority&&ti.priority.includes('عاجل')?'rgba(239,68,68,0.35)':ti.status==='تم الحل'?'rgba(52,211,153,0.25)':'rgba(59,130,246,0.18)'};">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
         <div>
           <strong style="color:white;font-size:0.95rem;">
@@ -17186,12 +17272,9 @@ function renderTechIssues() {
           <span class="ds-sev-badge ${getTiPriorityClass(ti.priority)}" style="margin-right:6px;">${ti.priority||'—'}</span>
           <span class="ds-sev-badge ${getTiStatusClass(ti.status)}">${ti.status}</span>
         </div>
-        <div style="display:flex;gap:6px;align-items:center;">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
           <span style="color:rgba(255,255,255,0.45);font-size:0.78rem;">${ti.date||''}</span>
-          ${(isAdmin || isPrincipal || isVP || ti.reporter === userName) ? `
-            <button onclick="openTechIssueModal('${ti.id}')" style="background:rgba(59,130,246,0.15);color:#60a5fa;border:none;border-radius:7px;padding:5px 10px;cursor:pointer;font-size:0.8rem;">تعديل</button>
-            ${(isAdmin||isPrincipal) ? `<button onclick="deleteTechIssue('${ti.id}')" style="background:rgba(239,68,68,0.15);color:#f87171;border:none;border-radius:7px;padding:5px 10px;cursor:pointer;font-size:0.8rem;">حذف</button>` : ''}
-          ` : ''}
+          ${actionBtns}
         </div>
       </div>
       <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;margin-bottom:5px;">
@@ -17200,11 +17283,11 @@ function renderTechIssues() {
         ${ti.student ? `<span style="margin-right:14px;"><span style="color:#60a5fa;">الطالب/ة:</span> ${escHtml(ti.student)}</span>` : ''}
       </div>
       <div style="color:rgba(255,255,255,0.85);font-size:0.88rem;line-height:1.5;margin-bottom:6px;">${escHtml(ti.description||'')}</div>
-      ${ti.assigned ? `<div style="color:rgba(255,255,255,0.55);font-size:0.81rem;"><i class="fas fa-user-cog" style="margin-left:5px;color:#60a5fa;"></i>محوَّلة إلى: <strong style="color:#93c5fd;">${escHtml(ti.assigned)}</strong></div>` : ''}
-      ${ti.notes ? `<div style="color:rgba(255,255,255,0.55);font-size:0.81rem;margin-top:4px;"><i class="fas fa-check" style="margin-left:5px;color:#34d399;"></i>${escHtml(ti.notes)}</div>` : ''}
+      ${ti.assigned && ti.status !== 'تم الحل' ? `<div style="color:rgba(255,255,255,0.55);font-size:0.81rem;"><i class="fas fa-user-cog" style="margin-left:5px;color:#60a5fa;"></i>قيد المعالجة بواسطة: <strong style="color:#93c5fd;">${escHtml(ti.assigned)}</strong></div>` : ''}
+      ${resolveSection}
       <div style="color:rgba(255,255,255,0.3);font-size:0.74rem;margin-top:8px;">المُسجِّلة: ${escHtml(ti.reporter||'—')} | ${new Date(ti.createdAt).toLocaleDateString('ar-AE')}</div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 function exportTechIssuesCSV() {
