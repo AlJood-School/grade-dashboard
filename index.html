@@ -5313,7 +5313,9 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
       <div class="ds-form-grid" style="margin-bottom:12px;">
         <div class="ds-field">
           <label><i class="fas fa-school" style="margin-left:4px;"></i>الصف والشعبة *</label>
-          <input type="text" id="tiClass" placeholder="مثال: 6A">
+          <select id="tiClass" onchange="tiPopulateStudents()" style="background:#16213e;color:white;border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:8px 12px;font-family:inherit;width:100%;">
+            <option value="">-- اختر الصف --</option>
+          </select>
         </div>
         <div class="ds-field">
           <label><i class="fas fa-clock" style="margin-left:4px;"></i>الحصة</label>
@@ -5333,8 +5335,10 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
       <!-- Row 2: Student + Platform -->
       <div class="ds-form-grid" style="margin-bottom:12px;">
         <div class="ds-field">
-          <label><i class="fas fa-user-graduate" style="margin-left:4px;"></i>اسم الطالب/ة (اختياري)</label>
-          <input type="text" id="tiStudent" placeholder="اتركه فارغاً إذا كانت مشكلة جماعية">
+          <label><i class="fas fa-user-graduate" style="margin-left:4px;"></i>اسم الطالب/ة *</label>
+          <select id="tiStudent" style="background:#16213e;color:white;border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:8px 12px;font-family:inherit;width:100%;">
+            <option value="">-- اختر الصف أولاً --</option>
+          </select>
         </div>
         <div class="ds-field">
           <label><i class="fas fa-globe" style="margin-left:4px;"></i>المنصة *</label>
@@ -16902,16 +16906,67 @@ function saveTechIssues(arr) {
   localStorage.setItem(TI_KEY, JSON.stringify(arr));
 }
 
+function tiPopulateClassSelect() {
+  var sel = document.getElementById('tiClass');
+  if (!sel) return;
+  var current = sel.value;
+  sel.innerHTML = '<option value="">-- اختر الصف --</option>';
+  if (typeof STUDENTS_DATA === 'undefined') return;
+  var classes = Object.keys(STUDENTS_DATA).sort(function(a,b){
+    var numA = parseInt(a), numB = parseInt(b);
+    if (numA !== numB) return numA - numB;
+    return a.localeCompare(b);
+  });
+  classes.forEach(function(cls) {
+    var opt = document.createElement('option');
+    opt.value = cls;
+    opt.textContent = 'الصف ' + cls + ' (' + STUDENTS_DATA[cls].length + ' طالب/ة)';
+    sel.appendChild(opt);
+  });
+  if (current) sel.value = current;
+}
+
+function tiPopulateStudents() {
+  var cls = document.getElementById('tiClass').value;
+  var sel = document.getElementById('tiStudent');
+  if (!sel) return;
+  sel.innerHTML = '';
+  if (!cls || typeof STUDENTS_DATA === 'undefined' || !STUDENTS_DATA[cls]) {
+    sel.innerHTML = '<option value="">-- اختر الصف أولاً --</option>';
+    return;
+  }
+  var opt0 = document.createElement('option');
+  opt0.value = '';
+  opt0.textContent = '-- اختر الطالب/ة --';
+  sel.appendChild(opt0);
+  // خيار "مشكلة جماعية"
+  var optAll = document.createElement('option');
+  optAll.value = 'مشكلة جماعية';
+  optAll.textContent = '👥 مشكلة جماعية (جميع الطلاب)';
+  sel.appendChild(optAll);
+  var students = STUDENTS_DATA[cls].slice().sort(function(a,b){
+    return (a.name||'').localeCompare(b.name||'', 'ar');
+  });
+  students.forEach(function(s) {
+    var opt = document.createElement('option');
+    opt.value = s.name || (s.id || '');
+    opt.textContent = s.name || s.id || '';
+    sel.appendChild(opt);
+  });
+}
+
 function openTechIssueModal(id) {
   const modal = document.getElementById('techIssueModal');
   if (!modal) return;
+  tiPopulateClassSelect();
   document.getElementById('tiEditId').value = id || '';
   if (id) {
     const ti = getTechIssues().find(t => t.id === id);
     if (!ti) return;
     document.getElementById('tiClass').value = ti.classGrade || '';
-    document.getElementById('tiPeriod').value = ti.period || '';
+    tiPopulateStudents();
     document.getElementById('tiStudent').value = ti.student || '';
+    document.getElementById('tiPeriod').value = ti.period || '';
     document.getElementById('tiPlatform').value = ti.platform || '';
     document.getElementById('tiType').value = ti.type || '';
     document.getElementById('tiPriority').value = ti.priority || '';
@@ -16921,8 +16976,8 @@ function openTechIssueModal(id) {
     document.getElementById('tiNotes').value = ti.notes || '';
   } else {
     document.getElementById('tiClass').value = '';
+    tiPopulateStudents();
     document.getElementById('tiPeriod').value = '';
-    document.getElementById('tiStudent').value = '';
     document.getElementById('tiPlatform').value = '';
     document.getElementById('tiType').value = '';
     document.getElementById('tiPriority').value = '';
@@ -16952,8 +17007,8 @@ function saveTechIssue() {
   const status = document.getElementById('tiStatus').value;
   const notes = document.getElementById('tiNotes').value.trim();
 
-  if (!classGrade || !type || !platform || !description) {
-    showToast('يرجى ملء الحقول المطلوبة (الصف، النوع، المنصة، الوصف)', 'warning');
+  if (!classGrade || !student || !type || !platform || !description) {
+    showToast('يرجى ملء الحقول المطلوبة (الصف، الطالب/ة، النوع، المنصة، الوصف)', 'warning');
     return;
   }
 
