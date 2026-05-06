@@ -3348,6 +3348,9 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
           <button onclick="loadBackupLog()" style="padding:8px 18px;background:#f0f4ff;border:1.5px solid #c3d4ff;border-radius:8px;cursor:pointer;font-size:0.85rem;color:#3b82f6;font-weight:600;font-family:inherit;">
             <i class="fas fa-sync-alt"></i> تحديث
           </button>
+          <button onclick="triggerManualBackup()" id="manualBackupBtn" style="padding:8px 18px;background:linear-gradient(135deg,#c9a227,#f0c040);color:#1a1a2e;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:0.85rem;font-family:inherit;display:inline-flex;align-items:center;gap:7px;" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+            <i class="fas fa-save"></i> حفظ نسخة الآن
+          </button>
           <a href="https://drive.google.com/drive/folders/1zLdcVj9_bs_DboblrIYO3Gt0b4AyIuLe" target="_blank" style="padding:8px 18px;background:linear-gradient(135deg,#c9a227,#e8c547);border:none;border-radius:8px;font-size:0.85rem;font-weight:700;color:#1a1a2e;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
             <i class="fas fa-folder-open"></i> مجلد Drive
           </a>
@@ -8953,12 +8956,15 @@ ${isAdmin ? '<button class="btn" onclick="window.open(\'https://aljood-school.gi
     +'<p style="margin:10px 0 0;color:#a0b4cc;font-size:12px;">العين، أبوظبي | 2025-2026</p>'
     +'</div></div>'
     
-    +'</div>';
+    +'</div>'
+    +'<div id="homeCalendarPlaceholder" style="margin-top:24px;"></div>';
   // Start live clock after DOM update
   setTimeout(startHomeClock, 100);
   setTimeout(initSmartBanner, 250);
   // Ensure attendance banner stays visible after dashboard renders
   setTimeout(initGlobalBanner, 150);
+  // Home calendar
+  setTimeout(initHomeCalendar, 350);
   // Homeroom card: مطوية تلقائياً عند كل فتح للصفحة
   setTimeout(function() {
     var body = document.getElementById('homeroom-body');
@@ -9162,6 +9168,261 @@ function switchEvTab(tab) {
     upBtn.style.borderBottomColor = tab === 'upcoming' ? 'var(--accent)' : 'transparent';
   }
 }
+
+
+// ===== HOME CALENDAR =====
+let calCurrentMonth = new Date().getMonth();
+let calCurrentYear = new Date().getFullYear();
+
+const UAE_NATIONAL_DAYS = [
+  { date: '12-02', title: '🇦🇪 يوم الشهيد الإماراتي', color: '#8B0000', type: 'national' },
+  { date: '12-03', title: '🇦🇪 اليوم الوطني الإماراتي', color: '#006400', type: 'national' },
+  { date: '11-03', title: '🇦🇪 يوم الشهداء', color: '#8B0000', type: 'national' },
+  { date: '08-09', title: '🇦🇪 يوم العلم الإماراتي', color: '#c9a227', type: 'national' },
+  { date: '03-20', title: '🌿 يوم الاستدامة الإماراتي', color: '#2e7d32', type: 'national' },
+  { date: '04-18', title: '🇦🇪 يوم الثقافة الإماراتي', color: '#1565c0', type: 'national' },
+  { date: '11-15', title: '👧 يوم الطفل الإماراتي', color: '#e91e63', type: 'national' },
+  { date: '07-14', title: '🇦🇪 يوم أبوظبي', color: '#006400', type: 'national' },
+  { date: '10-05', title: '👩‍🏫 يوم المعلم العالمي', color: '#7b1fa2', type: 'international' },
+  { date: '11-20', title: '👧 يوم الطفل العالمي', color: '#f44336', type: 'international' },
+  { date: '03-08', title: '👩 يوم المرأة العالمي', color: '#e91e63', type: 'international' },
+  { date: '04-22', title: '🌍 يوم الأرض', color: '#2e7d32', type: 'international' },
+  { date: '06-05', title: '🌱 يوم البيئة العالمي', color: '#388e3c', type: 'international' },
+  { date: '01-01', title: '🎆 رأس السنة الميلادية', color: '#c9a227', type: 'international' },
+  { date: '09-08', title: '📚 يوم محو الأمية العالمي', color: '#1565c0', type: 'international' },
+  { date: '04-02', title: '💙 يوم التوحد العالمي', color: '#1565c0', type: 'international' },
+  { date: '10-10', title: '🧠 يوم الصحة النفسية العالمي', color: '#6a4a9a', type: 'international' },
+  { date: '03-22', title: '💧 يوم الماء العالمي', color: '#0277bd', type: 'international' },
+  { date: '04-07', title: '❤️ يوم الصحة العالمي', color: '#c62828', type: 'international' },
+  { date: '12-18', title: '🌐 يوم اللغة العربية العالمي', color: '#1a6b2e', type: 'international' },
+  { date: '02-21', title: '🗣️ يوم اللغة الأم العالمي', color: '#0277bd', type: 'international' },
+  { date: '04-23', title: '📖 يوم الكتاب العالمي', color: '#4a148c', type: 'international' },
+  { date: '11-14', title: '💉 اليوم العالمي للسكري', color: '#0288d1', type: 'international' },
+  { date: '10-16', title: '🌾 يوم الغذاء العالمي', color: '#f9a825', type: 'international' },
+  { date: '05-15', title: '👨‍👩‍👧 اليوم الدولي للأسرة', color: '#e91e63', type: 'international' },
+  { date: '05-31', title: '🚭 اليوم العالمي للامتناع عن التدخين', color: '#d84315', type: 'international' },
+  { date: '06-26', title: '🚫 اليوم العالمي لمكافحة المخدرات', color: '#1a237e', type: 'international' },
+];
+
+function getHijriDate(gDate) {
+  try {
+    return new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', {
+      year: 'numeric', month: 'long', day: 'numeric'
+    }).format(gDate);
+  } catch(e) { return ''; }
+}
+
+function initHomeCalendar() {
+  var ph = document.getElementById('homeCalendarPlaceholder');
+  if (!ph) return;
+  ph.innerHTML = '<div id="homeCalendarWidget" style="background:rgba(255,255,255,0.04);border:1px solid rgba(201,168,76,0.25);border-radius:18px;padding:24px;">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">'
+    + '<div style="display:flex;align-items:center;gap:12px;">'
+    + '<div style="width:44px;height:44px;background:linear-gradient(135deg,#c9a227,#f0c040);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">📅</div>'
+    + '<div><div style="font-size:1.15rem;font-weight:800;color:#fff;">التقويم المدرسي</div>'
+    + '<div id="calTodayHijri" style="font-size:0.78rem;color:rgba(255,255,255,0.55);margin-top:2px;"></div></div></div>'
+    + '<div style="display:flex;gap:8px;align-items:center;">'
+    + '<button onclick="calPrevMonth()" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(201,168,76,0.4);background:transparent;color:#c9a227;cursor:pointer;font-size:1.1rem;">‹</button>'
+    + '<span id="calMonthLabel" style="color:#fff;font-weight:700;font-size:0.95rem;min-width:140px;text-align:center;"></span>'
+    + '<button onclick="calNextMonth()" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(201,168,76,0.4);background:transparent;color:#c9a227;cursor:pointer;font-size:1.1rem;">›</button>'
+    + '</div></div>'
+    + '<div id="calGrid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;"></div>'
+    + '<div style="margin-top:20px;border-top:1px solid rgba(255,255,255,0.1);padding-top:16px;">'
+    + '<div style="font-size:0.88rem;font-weight:700;color:#c9a227;margin-bottom:12px;">📌 الأحداث القادمة (30 يوماً)</div>'
+    + '<div id="calUpcomingList" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;"></div>'
+    + '</div></div>'
+    + '<div id="calEventModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:99999;align-items:center;justify-content:center;" onclick="if(event.target===this)closeCalModal()">'
+    + '<div style="background:#1a1a2e;border:1px solid rgba(201,168,76,0.4);border-radius:16px;padding:28px;max-width:460px;width:90%;position:relative;max-height:80vh;overflow-y:auto;">'
+    + '<button onclick="closeCalModal()" style="position:absolute;top:14px;left:14px;background:rgba(255,255,255,0.1);border:none;color:#fff;border-radius:50%;width:30px;height:30px;cursor:pointer;font-size:1rem;">✕</button>'
+    + '<div id="calModalContent"></div>'
+    + '</div></div>';
+
+  updateCalTodayHijri();
+  renderCalendar();
+  renderCalUpcoming();
+}
+
+function updateCalTodayHijri() {
+  var el = document.getElementById('calTodayHijri');
+  if (!el) return;
+  var today = new Date();
+  var greg = today.toLocaleDateString('ar-AE', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  var hijri = getHijriDate(today);
+  el.textContent = greg + (hijri ? ' — ' + hijri : '');
+}
+
+function calPrevMonth() {
+  calCurrentMonth--;
+  if (calCurrentMonth < 0) { calCurrentMonth = 11; calCurrentYear--; }
+  renderCalendar();
+}
+function calNextMonth() {
+  calCurrentMonth++;
+  if (calCurrentMonth > 11) { calCurrentMonth = 0; calCurrentYear++; }
+  renderCalendar();
+}
+
+function getAllCalEvents() {
+  var events = [];
+  // School events
+  try { (JSON.parse(localStorage.getItem('aljood_events')||'[]')).forEach(function(e){ if(e.date) events.push({date:e.date,title:e.title,desc:e.desc||'',color:'#c9a227',type:'event',icon:'🌟'}); }); } catch(x){}
+  // Upcoming events
+  try { (JSON.parse(localStorage.getItem('aljood_upcoming')||'[]')).forEach(function(e){ if(e.date) events.push({date:e.date,title:e.title,desc:e.desc||'',color:'#4ade80',type:'upcoming',icon:'📌'}); }); } catch(x){}
+  // PD Programs
+  try { (JSON.parse(localStorage.getItem('aljood_pd_programs')||'[]')).forEach(function(p){ if(p.date) events.push({date:p.date,title:'🎓 '+(p.title||'تنمية مهنية'),desc:(p.type==='ministry'?'وزاري':'داخلي')+(p.cycle&&p.cycle!=='all'?' — '+(p.cycle==='C1'?'الحلقة الأولى':'الحلقة الثانية'):''),color:'#a78bfa',type:'pd',icon:'🎓'}); }); } catch(x){}
+  // Meetings
+  try {
+    var isPrivViewer = currentRole==='admin'||currentRole==='principal';
+    var userRole = (currentRole==='admin_staff'||currentRole==='tech_staff')?'staff':(currentRole||'teacher');
+    (JSON.parse(localStorage.getItem('aljood_meetings')||'[]')).forEach(function(m){
+      if(!m.date||m.status==='cancelled') return;
+      var canSee = isPrivViewer || m.createdBy===currentUsername ||
+        !m.audience || m.audience.length===0 || m.audience.indexOf('all')>=0 ||
+        m.audience.indexOf(userRole)>=0 || m.audience.indexOf(currentRole)>=0;
+      if(canSee) events.push({date:m.date,title:'🤝 '+(m.title||'اجتماع'),desc:m.notes||'',color:'#60a5fa',type:'meeting',icon:'🤝'});
+    });
+  } catch(x){}
+  // UAE & International days
+  [calCurrentYear, calCurrentYear+1].forEach(function(yr){
+    UAE_NATIONAL_DAYS.forEach(function(d){
+      events.push({date:yr+'-'+d.date,title:d.title,desc:'',color:d.color,type:d.type,icon:d.type==='national'?'🇦🇪':'🌍'});
+    });
+  });
+  return events;
+}
+
+function renderCalendar() {
+  var grid = document.getElementById('calGrid');
+  var label = document.getElementById('calMonthLabel');
+  if (!grid || !label) return;
+  var today = new Date();
+  var monthNames = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  var dayNames = ['أحد','اثنين','ثلاث','أربع','خميس','جمعة','سبت'];
+  label.textContent = monthNames[calCurrentMonth] + ' ' + calCurrentYear;
+  var allEvents = getAllCalEvents();
+  var eventMap = {};
+  allEvents.forEach(function(e){ if(!e.date) return; if(!eventMap[e.date]) eventMap[e.date]=[]; eventMap[e.date].push(e); });
+  var html = dayNames.map(function(d){ return '<div style="text-align:center;font-size:0.72rem;color:rgba(255,255,255,0.4);padding:4px 0;font-weight:600;">'+d+'</div>'; }).join('');
+  var firstDay = new Date(calCurrentYear, calCurrentMonth, 1).getDay();
+  var daysInMonth = new Date(calCurrentYear, calCurrentMonth+1, 0).getDate();
+  for(var i=0;i<firstDay;i++) html += '<div style="min-height:52px;"></div>';
+  for(var day=1;day<=daysInMonth;day++){
+    var dateStr = calCurrentYear+'-'+String(calCurrentMonth+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+    var isToday = today.getDate()===day && today.getMonth()===calCurrentMonth && today.getFullYear()===calCurrentYear;
+    var dayEvents = eventMap[dateStr]||[];
+    var hasEvent = dayEvents.length>0;
+    var gDate = new Date(calCurrentYear,calCurrentMonth,day);
+    var hijriDay = '';
+    try { hijriDay = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura',{day:'numeric'}).format(gDate); } catch(e){}
+    var dotColors = [];
+    dayEvents.slice(0,3).forEach(function(e){ if(dotColors.indexOf(e.color)<0) dotColors.push(e.color); });
+    var dots = dotColors.map(function(c){ return '<span style="width:5px;height:5px;border-radius:50%;background:'+c+';display:inline-block;"></span>'; }).join('');
+    var bg = isToday?'rgba(201,168,76,0.25)':hasEvent?'rgba(255,255,255,0.05)':'transparent';
+    var border = isToday?'1.5px solid #c9a227':hasEvent?'1px solid rgba(255,255,255,0.12)':'1px solid transparent';
+    html += '<div onclick="'+(hasEvent?'showCalDayEvents(\''+dateStr+'\')':'')+'" '
+      +'style="min-height:52px;border-radius:8px;padding:4px;cursor:'+(hasEvent?'pointer':'default')+';'
+      +'background:'+bg+';border:'+border+';transition:.15s;" '
+      +'onmouseover="if('+hasEvent+')this.style.background=\'rgba(201,168,76,0.12)\'" '
+      +'onmouseout="this.style.background=\''+bg+'\'">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+      +'<span style="font-size:0.85rem;font-weight:'+(isToday?'800':'500')+';color:'+(isToday?'#f0c040':'rgba(255,255,255,0.85)')+';">'+day+'</span>'
+      +(hijriDay?'<span style="font-size:0.6rem;color:rgba(255,255,255,0.3);">'+hijriDay+'</span>':'')
+      +'</div>'
+      +(dots?'<div style="margin-top:3px;display:flex;gap:2px;flex-wrap:wrap;">'+dots+'</div>':'')
+      +(hasEvent?'<div style="font-size:0.58rem;color:rgba(255,255,255,0.4);margin-top:2px;">'+dayEvents.length+' حدث</div>':'')
+      +'</div>';
+  }
+  grid.innerHTML = html;
+}
+
+function renderCalUpcoming() {
+  var el = document.getElementById('calUpcomingList');
+  if (!el) return;
+  var today = new Date(); today.setHours(0,0,0,0);
+  var in30 = new Date(today); in30.setDate(in30.getDate()+30);
+  var allEvents = getAllCalEvents();
+  var upcoming = allEvents.filter(function(e){ var d=new Date(e.date); return d>=today && d<=in30; });
+  upcoming.sort(function(a,b){ return new Date(a.date)-new Date(b.date); });
+  if(upcoming.length===0){
+    el.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,0.35);font-size:0.82rem;padding:16px;">لا أحداث قادمة خلال 30 يوماً</div>';
+    return;
+  }
+  el.innerHTML = upcoming.slice(0,15).map(function(e){
+    var d = new Date(e.date);
+    var diff = Math.round((d-today)/(1000*60*60*24));
+    var diffLabel = diff===0?'اليوم':diff===1?'غداً':'خلال '+diff+' يوم';
+    var greg = d.toLocaleDateString('ar-AE',{month:'short',day:'numeric'});
+    var hijri = getHijriDate(d);
+    var eJson = JSON.stringify(e).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return '<div onclick="showCalEventDetail(\''+eJson+'\')" '
+      +'style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:rgba(255,255,255,0.04);border-radius:10px;cursor:pointer;border:1px solid rgba(255,255,255,0.07);transition:.15s;" '
+      +'onmouseover="this.style.background=\'rgba(201,168,76,0.1)\';this.style.borderColor=\'rgba(201,168,76,0.3)\'" '
+      +'onmouseout="this.style.background=\'rgba(255,255,255,0.04)\';this.style.borderColor=\'rgba(255,255,255,0.07)\'">'
+      +'<div style="width:36px;height:36px;border-radius:8px;background:'+e.color+'22;border:1px solid '+e.color+'55;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;">'+(e.icon||'📅')+'</div>'
+      +'<div style="flex:1;min-width:0;">'
+      +'<div style="font-size:0.83rem;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+e.title+'</div>'
+      +'<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);margin-top:2px;">'+greg+(hijri?' — '+hijri:'')+'</div>'
+      +'</div>'
+      +'<div style="font-size:0.72rem;font-weight:700;color:'+e.color+';white-space:nowrap;background:'+e.color+'22;padding:3px 8px;border-radius:6px;">'+diffLabel+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function showCalDayEvents(dateStr) {
+  var allEvents = getAllCalEvents();
+  var dayEvents = allEvents.filter(function(e){ return e.date===dateStr; });
+  if(!dayEvents.length) return;
+  var d = new Date(dateStr);
+  var greg = d.toLocaleDateString('ar-AE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  var hijri = getHijriDate(d);
+  var modal = document.getElementById('calEventModal');
+  var content = document.getElementById('calModalContent');
+  if(!modal||!content) return;
+  content.innerHTML = '<div style="margin-bottom:16px;">'
+    +'<div style="font-size:1.1rem;font-weight:800;color:#fff;margin-bottom:4px;">'+greg+'</div>'
+    +(hijri?'<div style="font-size:0.8rem;color:rgba(255,255,255,0.45);">'+hijri+'</div>':'')
+    +'</div>'
+    +'<div style="display:flex;flex-direction:column;gap:10px;">'
+    +dayEvents.map(function(e){
+      var typeLabel = e.type==='national'?'وطني':e.type==='international'?'دولي':e.type==='meeting'?'اجتماع':e.type==='pd'?'تنمية مهنية':'فعالية';
+      return '<div style="padding:12px;background:rgba(255,255,255,0.05);border-radius:10px;border-right:3px solid '+e.color+';">'
+        +'<div style="font-size:0.9rem;font-weight:700;color:#fff;margin-bottom:4px;">'+e.title+'</div>'
+        +(e.desc?'<div style="font-size:0.78rem;color:rgba(255,255,255,0.55);">'+e.desc+'</div>':'')
+        +'<div style="margin-top:6px;"><span style="background:'+e.color+'33;color:'+e.color+';font-size:0.7rem;padding:2px 8px;border-radius:6px;">'+typeLabel+'</span></div>'
+        +'</div>';
+    }).join('')
+    +'</div>';
+  modal.style.display = 'flex';
+}
+
+function showCalEventDetail(eStr) {
+  var e;
+  try { e = typeof eStr==='string' ? JSON.parse(eStr) : eStr; } catch(x){ return; }
+  var d = new Date(e.date);
+  var greg = d.toLocaleDateString('ar-AE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  var hijri = getHijriDate(d);
+  var typeLabel = e.type==='national'?'🇦🇪 يوم وطني':e.type==='international'?'🌍 يوم دولي':e.type==='meeting'?'🤝 اجتماع':e.type==='pd'?'🎓 تنمية مهنية':e.type==='event'?'🌟 فعالية':'📌 حدث قادم';
+  var modal = document.getElementById('calEventModal');
+  var content = document.getElementById('calModalContent');
+  if(!modal||!content) return;
+  content.innerHTML = '<div style="text-align:center;margin-bottom:20px;">'
+    +'<div style="font-size:2.5rem;margin-bottom:8px;">'+(e.icon||'📅')+'</div>'
+    +'<div style="font-size:1.1rem;font-weight:800;color:#fff;">'+e.title+'</div>'
+    +'<div style="font-size:0.8rem;color:rgba(255,255,255,0.5);margin-top:6px;">'+greg+'</div>'
+    +(hijri?'<div style="font-size:0.75rem;color:rgba(255,255,255,0.35);">'+hijri+'</div>':'')
+    +'</div>'
+    +(e.desc?'<div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:14px;font-size:0.85rem;color:rgba(255,255,255,0.7);line-height:1.7;">'+e.desc+'</div>':'')
+    +'<div style="margin-top:14px;text-align:center;">'
+    +'<span style="background:'+e.color+'33;color:'+e.color+';font-size:0.75rem;padding:4px 12px;border-radius:8px;font-weight:700;">'+typeLabel+'</span>'
+    +'</div>';
+  modal.style.display = 'flex';
+}
+
+function closeCalModal() {
+  var modal = document.getElementById('calEventModal');
+  if(modal) modal.style.display = 'none';
+}
+// ===== END HOME CALENDAR =====
 
 function renderEvents() {
   const data = loadData('events');
@@ -9724,6 +9985,29 @@ function resetNavConfig() {
   renderNav();
   renderWebsiteManager();
   showToast('↩️ تم إعادة تعيين القائمة');
+}
+
+
+async function triggerManualBackup() {
+  var btn = document.getElementById('manualBackupBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جارٍ الحفظ...'; }
+  try {
+    var res = await fetch('https://webhooks.tasklet.ai/v1/public/webhook?token=1f75fe6c88269f5e877ee2633934e304', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ type: 'manual_backup', triggeredBy: currentUsername || 'admin', timestamp: new Date().toISOString() })
+    });
+    if (res.ok) {
+      showToast('✅ طلب الحفظ أُرسِل — ستظهر النسخة في السجل خلال دقيقتين');
+      setTimeout(function(){ loadBackupLog(); }, 130000);
+    } else {
+      showToast('⚠️ تعذّر إرسال الطلب — حاول مرة أخرى');
+    }
+  } catch(e) {
+    showToast('⚠️ خطأ في الاتصال بالخادم');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> حفظ نسخة الآن'; }
+  }
 }
 
 // ===== BACKUP LOG =====
