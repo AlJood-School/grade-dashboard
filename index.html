@@ -3317,6 +3317,53 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
       </div>
 
       <!-- ===== BACKUP LOG PANEL ===== -->
+
+<!-- ===== RESTORE CONFIRM MODAL ===== -->
+<div id="restoreConfirmModal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.75);align-items:center;justify-content:center;direction:rtl;">
+  <div style="background:#fff;border-radius:20px;max-width:500px;width:92%;padding:36px 32px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;">
+    <div style="font-size:3.5rem;margin-bottom:8px;">♻️</div>
+    <h2 style="color:#1a1a2e;margin:0 0 6px;font-size:1.3rem;">تأكيد استعادة النسخة الاحتياطية</h2>
+    <p id="restoreModalDateLabel" style="color:#666;font-size:0.9rem;margin:0 0 20px;"></p>
+
+    <div style="background:#fff8e1;border:2px solid #ffc107;border-radius:12px;padding:16px 20px;text-align:right;margin-bottom:20px;">
+      <div style="font-weight:800;color:#856404;margin-bottom:10px;font-size:0.95rem;">⚠️ ماذا سيحدث:</div>
+      <div style="display:flex;flex-direction:column;gap:8px;font-size:0.88rem;color:#555;">
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <span style="color:#28a745;font-weight:800;flex-shrink:0;">① 🛡️</span>
+          <span>سيتم <strong>حفظ نسخة طوارئ فورية</strong> من البوابة الحالية أولاً قبل أي تغيير</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <span style="color:#c9a227;font-weight:800;flex-shrink:0;">② 🔄</span>
+          <span>سيتم <strong>استبدال البوابة الحية الحالية بالكامل</strong> بالنسخة المحددة</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <span style="color:#dc3545;font-weight:800;flex-shrink:0;">③ 👥</span>
+          <span>التغيير يطال <strong>جميع المستخدمين</strong> فور إعادة تحميل البوابة</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <span style="color:#3b82f6;font-weight:800;flex-shrink:0;">④ ⏱️</span>
+          <span>تستغرق العملية <strong>دقيقتين تقريباً</strong> — ستصلك رسالة بريد عند الاكتمال</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="restoreProgressMsg" style="display:none;background:#e8f5e9;border-radius:10px;padding:14px;margin-bottom:16px;color:#28a745;font-weight:700;font-size:0.9rem;">
+      <i class="fas fa-spinner fa-spin"></i> جارٍ الاستعادة... يُرجى الانتظار
+    </div>
+
+    <div id="restoreActionBtns" style="display:flex;gap:12px;justify-content:center;">
+      <button onclick="confirmRestore()" id="confirmRestoreBtn"
+        style="padding:12px 28px;background:linear-gradient(135deg,#ee5a24,#ff6b6b);color:#fff;border:none;border-radius:10px;cursor:pointer;font-weight:800;font-size:0.95rem;font-family:inherit;display:inline-flex;align-items:center;gap:8px;">
+        ✅ تأكيد الاستعادة
+      </button>
+      <button onclick="closeRestoreModal()"
+        style="padding:12px 28px;background:#f0f0f0;color:#555;border:none;border-radius:10px;cursor:pointer;font-weight:700;font-size:0.95rem;font-family:inherit;">
+        ❌ إلغاء
+      </button>
+    </div>
+  </div>
+</div>
+<!-- ===== END RESTORE MODAL ===== -->
       <div class="card" id="backupLogCard">
         <div class="card-title"><i class="fas fa-archive" style="color:#c9a227;"></i> 💾 النسخ الاحتياطية للبوابة</div>
         <p style="color:#666;font-size:0.85rem;margin:0 0 16px;">نسخ تلقائية كل 3 أيام — محفوظة في Google Drive</p>
@@ -3337,7 +3384,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
         <div style="overflow-x:auto;">
           <table class="data-table" id="backupLogTable">
             <thead>
-              <tr><th>#</th><th>التاريخ والوقت</th><th>اسم الملف</th><th>الحالة</th><th>رابط Drive</th></tr>
+              <tr><th>#</th><th>التاريخ والوقت</th><th>اسم الملف</th><th>الحالة</th><th>رابط Drive</th><th>استعادة</th></tr>
             </thead>
             <tbody id="backupLogTableBody">
               <tr><td colspan="5" style="text-align:center;color:#aaa;padding:24px;"><i class="fas fa-spinner fa-spin"></i> جارٍ تحميل السجل...</td></tr>
@@ -10017,7 +10064,7 @@ async function loadBackupLog() {
   const lastDateEl = document.getElementById('backupLastDate');
   const nextDateEl = document.getElementById('backupNextDate');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#aaa;padding:24px;"><i class="fas fa-spinner fa-spin"></i> جارٍ التحميل...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:24px;"><i class="fas fa-spinner fa-spin"></i> جارٍ التحميل...</td></tr>';
   try {
     const url = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/backup_log.json?t=' + Date.now();
     const res = await fetch(url);
@@ -10025,7 +10072,7 @@ async function loadBackupLog() {
     const logs = await res.json();
     if (totalEl) totalEl.textContent = logs.length;
     if (logs.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#aaa;padding:24px;">📭 لا توجد نسخ احتياطية بعد — ستبدأ النسخة الأولى في 9 مايو 2026</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:24px;">📭 لا توجد نسخ احتياطية بعد — ستبدأ النسخة الأولى في 9 مايو 2026</td></tr>';
       if (lastDateEl) lastDateEl.textContent = 'لم تُسجَّل بعد';
       if (nextDateEl) nextDateEl.textContent = '9 مايو 2026 — 3:00 صباحاً';
       return;
@@ -10038,25 +10085,95 @@ async function loadBackupLog() {
       nextDateEl.textContent = nextD.toLocaleDateString('ar-AE', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
     }
     tbody.innerHTML = logs.map((entry, i) => {
-      const badge = entry.status === 'success'
-        ? '<span style="background:#e8f5e9;color:#28a745;border-radius:6px;padding:3px 10px;font-size:0.78rem;font-weight:700;">✅ ناجحة</span>'
-        : '<span style="background:#ffeaea;color:#dc3545;border-radius:6px;padding:3px 10px;font-size:0.78rem;font-weight:700;">❌ فشلت</span>';
+      let badge;
+      if (entry.status === 'emergency') {
+        badge = '<span style="background:#fff3cd;color:#856404;border-radius:6px;padding:3px 10px;font-size:0.78rem;font-weight:700;">🛡️ طوارئ</span>';
+      } else if (entry.restored) {
+        badge = '<span style="background:#e8f5e9;color:#28a745;border-radius:6px;padding:3px 10px;font-size:0.78rem;font-weight:700;">✅ مُستعادة</span>';
+      } else if (entry.status === 'success') {
+        badge = '<span style="background:#e8f5e9;color:#28a745;border-radius:6px;padding:3px 10px;font-size:0.78rem;font-weight:700;">✅ ناجحة</span>';
+      } else {
+        badge = '<span style="background:#ffeaea;color:#dc3545;border-radius:6px;padding:3px 10px;font-size:0.78rem;font-weight:700;">❌ فشلت</span>';
+      }
       const link = entry.driveLink
         ? `<a href="${entry.driveLink}" target="_blank" style="color:#c9a227;font-weight:600;text-decoration:none;font-size:0.85rem;">🔗 فتح</a>`
         : '—';
-      return `<tr>
+      const restoreBtn = entry.driveFileId && entry.status !== 'emergency'
+        ? `<button onclick="openRestoreModal('${entry.filename||''}','${entry.driveFileId}','${entry.datetime||entry.date}')" style="padding:4px 12px;background:linear-gradient(135deg,#ff6b6b,#ee5a24);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:700;font-family:inherit;">♻️ استعادة</button>`
+        : '<span style="color:#ccc;font-size:0.8rem;">—</span>';
+      return `<tr style="${entry.restored ? 'background:#f0fff4;' : ''}">
         <td style="color:#aaa;font-size:0.82rem;">${logs.length - i}</td>
         <td style="font-weight:600;font-size:0.88rem;">${entry.datetime || entry.date}</td>
         <td style="font-size:0.8rem;color:#555;direction:ltr;text-align:left;">${entry.filename || '—'}</td>
         <td>${badge}</td>
         <td>${link}</td>
+        <td>${restoreBtn}</td>
       </tr>`;
     }).join('');
   } catch(e) {
-    if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#dc3545;padding:24px;">⚠️ تعذّر تحميل السجل — تحقق من الاتصال</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#dc3545;padding:24px;">⚠️ تعذّر تحميل السجل — تحقق من الاتصال</td></tr>';
     if (lastDateEl) lastDateEl.textContent = 'خطأ في التحميل';
   }
 }
+
+// ===== PORTAL RESTORE =====
+let _restoreTarget = null; // { fileName, driveFileId, backupDate }
+
+function openRestoreModal(fileName, driveFileId, backupDate) {
+  _restoreTarget = { fileName, driveFileId, backupDate };
+  const modal = document.getElementById('restoreConfirmModal');
+  const label = document.getElementById('restoreModalDateLabel');
+  const prog  = document.getElementById('restoreProgressMsg');
+  const btns  = document.getElementById('restoreActionBtns');
+  if (label) label.textContent = 'النسخة المحددة: ' + backupDate + ' — ' + fileName;
+  if (prog)  prog.style.display = 'none';
+  if (btns)  btns.style.display = 'flex';
+  if (modal) { modal.style.display = 'flex'; modal.style.flexDirection = 'column'; }
+}
+
+function closeRestoreModal() {
+  const modal = document.getElementById('restoreConfirmModal');
+  if (modal) modal.style.display = 'none';
+  _restoreTarget = null;
+}
+
+async function confirmRestore() {
+  if (!_restoreTarget) return;
+  const { fileName, driveFileId, backupDate } = _restoreTarget;
+  const prog = document.getElementById('restoreProgressMsg');
+  const btns = document.getElementById('restoreActionBtns');
+  if (prog) prog.style.display = 'block';
+  if (btns) btns.style.display = 'none';
+
+  const requestedBy = (typeof currentStaff !== 'undefined' && currentStaff)
+    ? (currentStaff.nameAr || currentStaff.name || currentStaff.username || 'مدير')
+    : 'مدير';
+
+  try {
+    const WEBHOOK_URL = 'https://webhooks.tasklet.ai/v1/public/webhook?token=1f75fe6c88269f5e877ee2633934e304';
+    await fetch(WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event: 'portal_restore',
+        driveFileId,
+        fileName,
+        backupDate,
+        requestedBy
+      })
+    });
+    if (prog) prog.innerHTML = '✅ تم إرسال طلب الاستعادة بنجاح!<br><small style="font-weight:400;color:#555;">ستصلك رسالة بريد إلكتروني عند اكتمال العملية (دقيقتان تقريباً).</small>';
+    setTimeout(() => {
+      closeRestoreModal();
+      showToast('♻️ طلب الاستعادة أُرسل — ستُستعاد البوابة خلال دقيقتين وتصلك رسالة تأكيد', 6000);
+    }, 3500);
+  } catch(err) {
+    if (prog) prog.innerHTML = '<span style="color:#dc3545;">⚠️ تعذّر إرسال الطلب — تحقق من الاتصال وحاول مجدداً</span>';
+    if (btns) { btns.style.display = 'flex'; }
+  }
+}
+// ===========================
+
 // ======================
 
 function renderWebsiteManager() {
