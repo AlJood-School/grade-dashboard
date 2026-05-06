@@ -7113,6 +7113,7 @@ async function doLogin() {
       resetSessionTimer();
       sessionStorage.setItem('aljood_splash_shown','1');
       showWelcomeToast('🔑 ' + currentUsername); setTimeout(checkTechAssignmentNotification, 1200);
+      setTimeout(initPortalTour, 900);
       setTimeout(function(){ try{ renderGlobalNotifications(); }catch(e){} }, 500);
       showChatBtn();
       if(window._showPortalFooter) window._showPortalFooter();
@@ -7185,6 +7186,7 @@ async function doLogin() {
     resetSessionTimer();
     sessionStorage.setItem('aljood_splash_shown','1');
     showWelcomeToast(currentUsername); setTimeout(checkTechAssignmentNotification, 1200);
+    setTimeout(initPortalTour, 900);
   setTimeout(function(){ try{ renderGlobalNotifications(); }catch(e){} }, 500);
     showChatBtn();
     if(window._showPortalFooter) window._showPortalFooter();
@@ -7232,6 +7234,7 @@ setTimeout(() => { renderMyProfile(); }, 1000);
     resetSessionTimer();
     sessionStorage.setItem('aljood_splash_shown','1');
     showWelcomeToast(currentUsername); setTimeout(checkTechAssignmentNotification, 1200);
+    setTimeout(initPortalTour, 900);
     showChatBtn();
     if(window._showPortalFooter) window._showPortalFooter();
     setTimeout(function(){ checkPendingMessages(currentUsername); startMsgPolling(currentUsername); }, 800);
@@ -12188,6 +12191,355 @@ function initSmartBanner() {
   if (_smartBannerTimer) clearInterval(_smartBannerTimer);
   _smartBannerTimer = setInterval(nextSmartBanner, 30000);
 }
+
+
+/* ═══════════════════════════════════════════════════════
+   PORTAL GUIDED TOUR SYSTEM — بوابة الجود
+   نظام الجولة التعريفية التفاعلية الشاملة
+═══════════════════════════════════════════════════════ */
+const TOUR_PREF_KEY = 'aljood_tour_pref_v2';
+
+const ALL_TOUR_STEPS = [
+  // ── ترحيب ──
+  { roles:['all'], selector:null, icon:'👋',
+    title:'أهلاً بك في بوابة الجود! 🌟',
+    desc:'ستأخذك هذه الجولة في رحلة تعريفية شاملة لكل أقسام البوابة وأزرارها — تماماً مثل أول تشغيل جهاز جديد.\n\nاستخدمي «التالي» و«السابق» للتنقل، أو «تخطى» للبدء مباشرة.' },
+
+  // ── واجهة عامة ──
+  { roles:['all'], selector:'.sidebar-header', icon:'🏫',
+    title:'شعار مدرسة الجود',
+    desc:'شعار المدرسة يظهر دائماً في أعلى القائمة الجانبية — يعيدك لصفحتك الرئيسية عند النقر عليه.' },
+  { roles:['all'], selector:'.user-badge', icon:'👤',
+    title:'بيانات المستخدم',
+    desc:'اسمك ودورك الوظيفي يظهران هنا تلقائياً بعد تسجيل الدخول. يمنحك النظام صلاحيات تناسب دورك تلقائياً.' },
+  { roles:['all'], selector:'#sys-notif-bell-wrap', icon:'🔔',
+    title:'جرس التنبيهات الداخلية',
+    desc:'يُضاء باللون البنفسجي 🟣 عند وصول تنبيه جديد، مثل:\n• تعيينك مربية صف جديد\n• حل مشكلة تقنية سجّلتِها\n• تغيير وضع الجدول\n• رد على بلاغ رقمي\n\nاضغطي عليه لعرض جميع تنبيهاتك.' },
+  { roles:['admin','principal','vice_principal'], selector:'#notif-bell-wrap', icon:'📩',
+    title:'جرس اعتراضات أولياء الأمور',
+    desc:'يُشعرك عند وصول اعتراض جديد من ولي أمر على غياب معلمة أو قرار احتياط. مخصص لصلاحيات الإدارة فقط.' },
+  { roles:['all'], selector:'#topbarTitle', icon:'📍',
+    title:'عنوان القسم الحالي',
+    desc:'يُظهر اسم القسم الذي أنتِ فيه الآن — يتغير تلقائياً عند الانتقال بين الأقسام حتى لا تضيعي!' },
+  { roles:['all'], selector:'.topbar-date', icon:'📅',
+    title:'التاريخ واليوم',
+    desc:'يعرض تاريخ اليوم الحالي. يساعدك في معرفة اليوم الدراسي وما يقابله من جدول.' },
+  { roles:['all'], selector:'#smart-mode-banner', icon:'✨',
+    title:'البانر الذكي المتكيّف',
+    desc:'يتغير تلقائياً حسب وضع الجدول النشط:\n🔵 عادي ← معلومات ثقافية في العلوم واللغة والتراث\n🌙 رمضان ← آيات قرآنية وأذكار وأدعية\n💻 تعلم عن بُعد ← أقوال الشيوخ والقادة\n\nتتغير العبارة كل 30 ثانية. اضغطي «›» لتغييرها يدوياً.' },
+
+  // ── القائمة الرئيسية ──
+  { roles:['all'], selector:'[data-section="home"]', icon:'🏠',
+    title:'الرئيسية',
+    desc:'صفحتك الرئيسية — تعرض:\n• ساعة مباشرة وتاريخ اليوم\n• روابط سريعة لأبرز الأقسام\n• ملخص سريع لأبرز المؤشرات\nهي نقطة انطلاقك في كل جلسة.' },
+  { roles:['all'], selector:'[data-section="my_profile"]', icon:'🪪',
+    title:'ملفي الشخصي',
+    desc:'بياناتك الوظيفية الكاملة:\n• اسمك الرسمي وتخصصك\n• الصفوف والمواد التي تُدرّسينها\n• رقم هاتفك للتواصل\n• مسماك الوظيفي الرسمي' },
+
+  // ── الكادر والإدارة ──
+  { roles:['all'], selector:'[data-section="admin_section"]', icon:'🏢',
+    title:'الإدارة المدرسية',
+    desc:'هيكل القيادة المدرسية كاملاً:\n• المديرة وبياناتها\n• النائبات ومهامهن\n• رؤساء الأقسام\nمع معلومات التواصل المباشر لكل منهم.' },
+  { roles:['all'], selector:'[data-section="staff_directory"]', icon:'📋',
+    title:'دليل الموظفين',
+    desc:'قائمة شاملة بجميع الموظفين والمعلمين:\n• بيانات كل موظف وتخصصه\n• رقم الهاتف للتواصل المباشر\n• ميزة البحث السريع بالاسم أو الصف\n• تصفية حسب الدور الوظيفي' },
+  { roles:['admin','principal','vice_principal'], selector:'[data-section="leaves"]', icon:'🏖️',
+    title:'الإجازات والغياب',
+    desc:'إدارة إجازات الموظفين:\n• طلبات الإجازة والموافقة عليها\n• متابعة رصيد الإجازات\n• سجل الغياب المبرر وغير المبرر\n• تقارير الحضور الشهرية' },
+
+  // ── الطلاب ──
+  { roles:['all'], selector:'[data-section="students"]', icon:'🎓',
+    title:'الطلاب',
+    desc:'قائمة شاملة بطالبات صفك:\n• بطاقة تفصيلية لكل طالبة\n• بيانات ولي الأمر وأرقام التواصل\n• معلومات عضو الدعم التقني المعيَّن للصف\n• إمكانية البحث والتصفية السريعة' },
+  { roles:['all'], selector:'[data-section="reports"]', icon:'📊',
+    title:'تقارير الطلاب',
+    desc:'تقارير الدرجات مباشرة من منصة Teams:\n• نتائج جميع المواد\n• مقارنة الأداء بين الفصول\n• منظمة وسهلة القراءة بدون تعقيد' },
+  { roles:['all'], selector:'[data-section="behavior_log"]', icon:'⚠️',
+    title:'التبليغ السلوكي',
+    desc:'سجّلي ملاحظة سلوكية على طالبة بسرعة:\n• تُحفَظ في سجل المدرسة تلقائياً\n• تُرسَل للأخصائية الاجتماعية والمديرة\n• يمكن إرفاق صور أو مستندات\n• متابعة حالة البلاغ' },
+  { roles:['admin','principal','vice_principal','admin_staff'], selector:'[data-section="social_worker"]', icon:'💛',
+    title:'الأخصائية الاجتماعية',
+    desc:'إدارة الأخصائيات الاجتماعيات:\n• تعيين أخصائية لكل صف\n• متابعة الحالات الاجتماعية\n• التواصل مع أولياء الأمور\n• تنبيه SMS فور التعيين' },
+  { roles:['all'], selector:'[data-section="lesson_attendance"]', icon:'✅',
+    title:'حضور الحصة',
+    desc:'سجّلي حضور وغياب الطالبات أثناء حصتك:\n• يظهر فصلك الحالي تلقائياً حسب الجدول\n• تسجيل بضغطة واحدة لكل طالبة\n• حفظ فوري لسجل الحضور\n• تنبيه للأخصائية عند تكرار الغياب' },
+  { roles:['all'], selector:'[data-section="parent_requests"]', icon:'📞',
+    title:'استدعاء ولي الأمر',
+    desc:'أرسلي طلب استدعاء لولي أمر طالبة:\n• يصله تنبيه SMS فوراً\n• يُسجَّل موعد وسبب الاستدعاء\n• متابعة حضور ولي الأمر\n• أرشفة تلقائية لجميع الطلبات' },
+
+  // ── التعليم والجدول ──
+  { roles:['all'], selector:'[data-section="analysis"]', icon:'📈',
+    title:'تحليل الدرجات',
+    desc:'رسوم بيانية وتحليل تفصيلي لنتائج طالباتك:\n• مقارنة الأداء بين المواد\n• تتبع التقدم عبر الفصول الدراسية\n• تصفية حسب الصف والمادة والفترة\n• تحديد الطالبات الأوائل والمحتاجات للدعم' },
+  { roles:['all'], selector:'[data-section="school_schedule"]', icon:'🗓️',
+    title:'الجدول المدرسي',
+    desc:'جدولك الأسبوعي الكامل:\n• يتغير تلقائياً حسب وضع الجدول النشط\n  - عادي ← جدول الحصص الاعتيادي\n  - رمضان ← جدول الحصص القصيرة\n  - تعلم عن بُعد ← جدول الفصول الافتراضية\n• زر طباعة للجدول' },
+  { roles:['admin','principal','vice_principal','admin_staff'], selector:'[data-section="kg_schedules"]', icon:'🌱',
+    title:'جداول الروضة',
+    desc:'جداول الروضة الكاملة بأوضاعها الثلاثة:\n• جداول الحصص لكل فصل\n• جداول المناوبات (حافلة، تغذية)\n• الوضع العادي والرمضاني والتعلم عن بُعد\n• قابلة للطباعة بصيغة A4' },
+  { roles:['admin','principal','vice_principal'], selector:'[data-section="substitute_scheduler"]', icon:'🛡️',
+    title:'الاحتياط الذكي',
+    desc:'نظام إدارة غياب المعلمات تلقائياً:\n• يقرأ الجدول ويقترح المعلمة البديلة المناسبة\n• يتكيف مع وضع الجدول النشط\n• إرسال SMS للمعلمة البديلة بالتفاصيل\n• سجل كامل لجميع الاحتياطات' },
+  { roles:['all'], selector:'[data-section="weekly_plan"]', icon:'📅',
+    title:'المسار الأسبوعي',
+    desc:'النشرة الأسبوعية للمدرسة:\n• أبرز أحداث الأسبوع\n• المهام المقررة والمواعيد\n• يُرسَل تلقائياً للمعلمات كل أحد\n• أرشيف النشرات السابقة' },
+  { roles:['all'], selector:'[data-section="daily_plans"]', icon:'📖',
+    title:'الخطط الدرسية',
+    desc:'خطط الدروس اليومية:\n• أضيفي خطتك الدرسية لكل حصة\n• راجعي خطط زميلاتك في نفس المادة\n• قوالب جاهزة للخطط\n• أرشيف منظم لجميع الخطط السابقة' },
+
+  // ── التواصل والفعاليات ──
+  { roles:['all'], selector:'[data-section="meetings"]', icon:'🤝',
+    title:'الاجتماعات',
+    desc:'إدارة اجتماعات المدرسة:\n• محاضر الاجتماعات المؤرشفة\n• مواعيد الاجتماعات القادمة\n• القرارات والتوصيات المرفوعة\n• جدول أعمال كل اجتماع' },
+  { roles:['all'], selector:'[data-section="events"]', icon:'🌟',
+    title:'الفعاليات والأحداث',
+    desc:'فعاليات المدرسة:\n• الفعاليات القادمة وتفاصيلها\n• ألبوم صور الفعاليات الماضية\n• تسجيل مشاركات المعلمات والطالبات\n• تقويم الأحداث المدرسية' },
+  { roles:['all'], selector:'[data-section="achievements"]', icon:'🏆',
+    title:'الإنجازات المدرسية',
+    desc:'سجل إنجازات المدرسة:\n• إنجازات الطالبات في المسابقات\n• جوائز المدرسة الخارجية\n• شهادات التميز للمعلمات\n• إضافة إنجاز جديد بسهولة' },
+  { roles:['all'], selector:'[data-section="projects"]', icon:'🔬',
+    title:'المشاريع المدرسية',
+    desc:'متابعة المشاريع والأبحاث:\n• المشاريع العلمية والبحثية\n• مراحل تنفيذ كل مشروع\n• توثيق النتائج والمخرجات\n• مشاريع ولي الأمر والمجتمع' },
+  { roles:['admin','principal'], selector:'[data-section="conferences"]', icon:'🏅',
+    title:'المؤتمرات والمسابقات',
+    desc:'المشاركات الخارجية:\n• المؤتمرات التربوية التي حضرتها المدرسة\n• المسابقات الإقليمية والوطنية\n• توثيق النتائج والشهادات\n• التقارير المرفوعة للوزارة' },
+
+  // ── الموارد والبرامج ──
+  { roles:['all'], selector:'[data-section="distance"]', icon:'💻',
+    title:'التعلم عن بُعد',
+    desc:'كل ما يخص التعلم عن بُعد:\n• جداول الفصول الافتراضية\n• روابط حصص Teams الأسبوعية\n• عضو الدعم التقني المعيَّن لصفك\n• إرشادات التعلم عن بُعد الرسمية' },
+  { roles:['all'], selector:'[data-section="resources"]', icon:'⭐',
+    title:'منصات تعليمية معتمدة',
+    desc:'المنصات الرسمية المعتمدة من الوزارة:\n• رابط منصة درس للطالبات\n• منصة Teams للفصول الافتراضية\n• منصات الإثراء والتعلم الذاتي\n• دليل استخدام كل منصة' },
+  { roles:['all'], selector:'[data-section="digital_safety"]', icon:'🛡️',
+    title:'السلامة الرقمية — برنامج أقدر',
+    desc:'منظومة السلامة الرقمية الكاملة:\n• خطة البرنامج وفريق التنفيذ\n• المواد التعليمية للوعي الرقمي\n• استبيانات قياس الوعي\n• 📛 بلاغات المخالفات الرقمية\n• 🖥️ تسجيل وتتبع المشاكل التقنية\n\nتبليغي هنا عن أي مخالفة رقمية أو مشكلة تقنية.' },
+
+  // ── الوثائق والنماذج ──
+  { roles:['admin','principal'], selector:'[data-section="documents"]', icon:'📁',
+    title:'الوثائق والملفات',
+    desc:'أرشيف الوثائق الرسمية:\n• قرارات وتعاميم الوزارة\n• سياسات المدرسة الداخلية\n• الملفات المؤرشفة بحسب السنة\n• تحميل ورفع المستندات' },
+  { roles:['all'], selector:'[data-section="forms"]', icon:'📝',
+    title:'النماذج والاستبيانات',
+    desc:'نماذج المدرسة الرسمية:\n• نماذج الإجازة والغياب\n• استبيانات رأي المعلمات والأهل\n• نماذج الانضباط والسلوك\n• ملء وإرسال إلكتروني مباشر' },
+  { roles:['all'], selector:'[data-section="templates"]', icon:'📄',
+    title:'القوالب الرسمية',
+    desc:'قوالب المراسلات والتقارير:\n• قوالب المذكرات الرسمية\n• قوالب التقارير الدورية\n• قوالب تقييم الطالبات\n• قابلة للتحميل والتعديل والطباعة' },
+  { roles:['all'], selector:'[data-section="tech_support"]', icon:'🖥️',
+    title:'الدعم التقني',
+    desc:'سجّلي مشكلة تقنية تواجهينها:\n• أعطال الأجهزة والبرامج\n• مشاكل الوصول للمنصات\n• ترسَل فوراً لعضو الدعم المعيَّن لصفك\n• تُشعَرين بـ SMS عند استلامها وحلها\n• سجل كامل بحالة كل مشكلة' },
+
+  // ── الدعم والتطوير ──
+  { roles:['all'], selector:'[data-section="prof_development"]', icon:'🎓',
+    title:'التنمية المهنية',
+    desc:'برامج تطوير كفاءتك:\n• الدورات التدريبية المتاحة\n• ورش العمل والمحاضرات\n• شهادات الإنجاز المكتسبة\n• التسجيل في البرامج الجديدة' },
+  { roles:['all'], selector:'[data-section="smart_report"]', icon:'🤖',
+    title:'التقرير الذكي 🤖',
+    desc:'أداة الذكاء الاصطناعي الحصرية:\n• تولّد تقريراً شاملاً بضغطة واحدة\n• يشمل أداء الطالبات، الحضور، والسلوك\n• مصاغ بلغة مهنية جاهزة للرفع\n• يوفر عليكِ ساعات من الكتابة!' },
+  { roles:['admin','principal','teacher'], selector:'[data-section="ai_predict"]', icon:'🧠',
+    title:'التنبؤ الذكي',
+    desc:'تحليل استباقي بالذكاء الاصطناعي:\n• يتنبأ بالطالبات المعرضات لخطر التأخر\n• يرصد أنماط الغياب المتكرر\n• يقترح خطة تدخل مناسبة\n• التدخل المبكر يحدث الفرق!' },
+
+  // ── أدوات المدير ──
+  { roles:['admin','principal','vice_principal'], selector:'[data-section="hr_management"]', icon:'👥',
+    title:'إدارة الكوادر البشرية',
+    desc:'إدارة شاملة لملفات الموظفين:\n• إضافة موظفة جديدة وتحديد دورها\n• تعديل البيانات والمسميات الوظيفية\n• تعيين مربيات الصفوف والأخصائيات\n• الهيكل الوظيفي الكامل للمدرسة' },
+  { roles:['admin','principal'], selector:'[data-section="student_admission"]', icon:'🗃️',
+    title:'قبول وتسجيل الطلاب',
+    desc:'إدارة قبول الطالبات الجديدات:\n• نماذج التسجيل الإلكترونية\n• متابعة طلبات القبول\n• إدارة قوائم الانتظار\n• إشعار أولياء الأمور بنتائج القبول' },
+  { roles:['admin','principal'], selector:'[data-section="data_analytics"]', icon:'📊',
+    title:'لوحة تحليل البيانات المتقدمة',
+    desc:'إحصاءات شاملة وعميقة:\n• سجلات الدخول والنشاط في البوابة\n• إحصاءات الحضور والغياب الشهرية\n• تقارير الاحتياط والبدل\n• نتائج الاستبيانات وتحليلها' },
+  { roles:['admin'], selector:'[data-section="schedule_builder"]', icon:'🗂️',
+    title:'منشئ الجدول الذكي',
+    desc:'أداة احترافية لبناء الجدول:\n• حدّدي عدد الحصص والمواد\n• أدخلي القيود والاشتراطات\n• يوزّع الجدول تلقائياً بأقل تعارض\n• تصدير الجدول للموافقة والنشر' },
+  { roles:['admin'], selector:'[data-section="roles_permissions"]', icon:'🔐',
+    title:'صلاحيات الأدوار',
+    desc:'إدارة صلاحيات كل دور في البوابة:\n• تحديد من يرى ماذا\n• من يُعدّل ومن يحذف\n• إنشاء أدوار مخصصة\n• سجل التغييرات في الصلاحيات' },
+  { roles:['admin'], selector:'[data-section="security_log"]', icon:'🔒',
+    title:'سجل الأمان',
+    desc:'مراقبة أمان البوابة:\n• سجل كامل لجميع عمليات الدخول\n• التعديلات التي أجراها كل مستخدم\n• تنبيهات محاولات الدخول الخاطئة\n• تصدير التقارير الأمنية' },
+  { roles:['admin'], selector:'[data-section="credentials_center"]', icon:'🔑',
+    title:'مركز الاعتماد',
+    desc:'إدارة بيانات الدخول:\n• كلمات مرور الموظفين لجميع المنصات\n• بيانات دخول Teams وMoodle وغيرها\n• تحديث الكلمات وتوزيعها بأمان\n• محمية بتشفير كامل' },
+  { roles:['admin'], selector:'#exportDataBtn', icon:'⬇️',
+    title:'تصدير بيانات البوابة',
+    desc:'نسخ احتياطي شامل:\n• يُنزّل جميع بيانات البوابة بصيغة JSON\n• يشمل: الطلاب، الموظفين، الجداول، السجلات\n• استخدمي لإعادة الاستيراد عند الحاجة\n• يُنصح بعمل نسخة دورية كل شهر' },
+
+  // ── تسجيل الخروج ──
+  { roles:['all'], selector:'.logout-btn', icon:'🚪',
+    title:'تسجيل الخروج',
+    desc:'اضغطي هنا عند انتهاء عملك:\n• تسجيل خروج آمن فوري\n• تُحفَظ جميع بياناتك تلقائياً\n• لا تتركي الجهاز بدون خروج للحفاظ على خصوصية البيانات' },
+
+  // ── وداع ──
+  { roles:['all'], selector:null, icon:'🎉',
+    title:'أنتِ جاهزة تماماً! 🌟',
+    desc:'تعرفتِ الآن على كل زر وكل قسم في بوابة الجود.\n\nإذا أردتِ إعادة هذه الجولة في أي وقت، اضغطي «ذكّرني في كل دخول» أدناه.\n\nنتمنى لكِ يوماً مثمراً مليئاً بالعطاء! 💙🏫' },
+];
+
+/* ─── Tour Runtime ─── */
+let _tourIdx = 0, _tourSteps = [], _tourActive = false;
+
+function initPortalTour() {
+  const pref = localStorage.getItem(TOUR_PREF_KEY);
+  if (pref === 'never') return;
+  startPortalTour();
+}
+
+function startPortalTour() {
+  const role = (typeof currentRole !== 'undefined' ? currentRole : 'teacher') || 'teacher';
+  _tourSteps = ALL_TOUR_STEPS.filter(function(s) {
+    const r = s.roles || [];
+    return r.includes('all') || r.includes(role);
+  });
+  _tourIdx = 0;
+  _tourActive = true;
+  _buildTourUI();
+  _showTourStep(0);
+}
+
+function _buildTourUI() {
+  ['portal-tour-overlay','portal-tour-spot','portal-tour-card'].forEach(function(id){
+    var e = document.getElementById(id); if(e) e.remove();
+  });
+
+  // Overlay — blocks page clicks
+  var ov = document.createElement('div');
+  ov.id = 'portal-tour-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9993;background:transparent;pointer-events:all;';
+  ov.onclick = function(e){e.stopPropagation();};
+  document.body.appendChild(ov);
+
+  // Spotlight border ring
+  var sp = document.createElement('div');
+  sp.id = 'portal-tour-spot';
+  sp.style.cssText = 'position:fixed;border-radius:12px;border:2.5px solid #C9A84C;box-shadow:0 0 0 4000px rgba(0,0,0,0.78),0 0 0 6px rgba(201,168,76,0.25),0 0 25px rgba(201,168,76,0.45);z-index:9994;transition:top 0.4s ease,left 0.4s ease,width 0.4s ease,height 0.4s ease;pointer-events:none;display:none;';
+  document.body.appendChild(sp);
+
+  // Tour card
+  var cd = document.createElement('div');
+  cd.id = 'portal-tour-card';
+  cd.style.cssText = 'position:fixed;z-index:9996;max-width:370px;min-width:290px;background:linear-gradient(150deg,#0c1930 0%,#162340 100%);border:1.5px solid rgba(201,168,76,0.5);border-radius:18px;padding:22px 20px 16px;box-shadow:0 20px 60px rgba(0,0,0,0.7),0 0 0 1px rgba(201,168,76,0.1);font-family:Tajawal,sans-serif;direction:rtl;transition:top 0.35s ease,left 0.35s ease,opacity 0.2s;';
+  cd.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">' +
+      '<div style="flex:1;">' +
+        '<span id="t-icon" style="font-size:2rem;line-height:1;display:block;margin-bottom:6px;"></span>' +
+        '<div id="t-title" style="color:#C9A84C;font-size:1.05rem;font-weight:800;line-height:1.35;"></div>' +
+      '</div>' +
+      '<span id="t-num" style="color:rgba(201,168,76,0.55);font-size:0.78rem;font-weight:700;white-space:nowrap;padding-right:10px;margin-top:4px;flex-shrink:0;"></span>' +
+    '</div>' +
+    '<div id="t-desc" style="color:rgba(255,255,255,0.87);font-size:0.88rem;line-height:1.85;margin-bottom:14px;white-space:pre-line;max-height:200px;overflow-y:auto;"></div>' +
+    '<div style="background:rgba(255,255,255,0.08);border-radius:20px;height:4px;margin-bottom:16px;overflow:hidden;">' +
+      '<div id="t-bar" style="height:100%;background:linear-gradient(90deg,#C9A84C,#f0d570);border-radius:20px;transition:width 0.4s ease;width:0;"></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:7px;align-items:center;justify-content:flex-end;">' +
+      '<button onclick="skipPortalTour()" style="padding:7px 11px;background:transparent;color:rgba(255,255,255,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:8px;cursor:pointer;font-family:Tajawal,sans-serif;font-size:0.78rem;flex-shrink:0;">تخطى</button>' +
+      '<button id="t-prev" onclick="prevTourStep()" style="padding:8px 14px;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.65);border:1px solid rgba(255,255,255,0.12);border-radius:9px;cursor:pointer;font-family:Tajawal,sans-serif;font-size:0.85rem;">‹ السابق</button>' +
+      '<button id="t-next" onclick="nextTourStep()" style="padding:9px 22px;background:linear-gradient(135deg,#C9A84C,#e8c76a);color:#0c1930;border:none;border-radius:9px;cursor:pointer;font-family:Tajawal,sans-serif;font-size:0.9rem;font-weight:800;">التالي ›</button>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.07);">' +
+      '<button onclick="finishTourNever()" style="padding:4px 0;background:transparent;color:rgba(255,255,255,0.28);border:none;cursor:pointer;font-family:Tajawal,sans-serif;font-size:0.75rem;">✓ فهمت، لا تُذكّرني</button>' +
+      '<button onclick="finishTourAlways()" style="padding:4px 0;background:transparent;color:rgba(201,168,76,0.5);border:none;cursor:pointer;font-family:Tajawal,sans-serif;font-size:0.75rem;">🔁 ذكّرني في كل دخول</button>' +
+    '</div>';
+  document.body.appendChild(cd);
+}
+
+function _showTourStep(idx) {
+  if (!_tourActive) return;
+  var step = _tourSteps[idx];
+  if (!step) return;
+
+  var icon = document.getElementById('t-icon'),
+      title = document.getElementById('t-title'),
+      desc = document.getElementById('t-desc'),
+      num = document.getElementById('t-num'),
+      bar = document.getElementById('t-bar'),
+      prev = document.getElementById('t-prev'),
+      next = document.getElementById('t-next');
+
+  if(icon) icon.textContent = step.icon || '💡';
+  if(title) title.textContent = step.title;
+  if(desc) desc.textContent = step.desc;
+  if(num) num.textContent = (idx+1) + ' / ' + _tourSteps.length;
+  if(bar) bar.style.width = (((idx+1)/_tourSteps.length)*100) + '%';
+  if(prev) prev.style.opacity = idx === 0 ? '0.3' : '1';
+  if(next) next.textContent = idx === _tourSteps.length-1 ? 'إنهاء ✓' : 'التالي ›';
+
+  var sp = document.getElementById('portal-tour-spot');
+  var cd = document.getElementById('portal-tour-card');
+
+  if (step.selector) {
+    var el = null;
+    try { el = document.querySelector(step.selector); } catch(e){}
+    if (el) {
+      try { el.scrollIntoView({block:'center', behavior:'smooth'}); } catch(e){}
+      setTimeout(function(){
+        var r = el.getBoundingClientRect();
+        var pad = 9;
+        if(sp) {
+          sp.style.display = 'block';
+          sp.style.top = (r.top - pad) + 'px';
+          sp.style.left = (r.left - pad) + 'px';
+          sp.style.width = (r.width + pad*2) + 'px';
+          sp.style.height = (r.height + pad*2) + 'px';
+        }
+        _posCard(cd, r);
+      }, 180);
+      return;
+    }
+  }
+  if(sp) sp.style.display = 'none';
+  _centerCard(cd);
+}
+
+function _posCard(cd, r) {
+  if(!cd) return;
+  var W = 370, vpW = window.innerWidth, vpH = window.innerHeight, gap = 14;
+  var H = cd.offsetHeight || 300;
+  cd.style.transform = 'none';
+  var top, left;
+  // vertical
+  if (r.bottom + H + gap < vpH) top = r.bottom + gap;
+  else if (r.top - H - gap > 0) top = r.top - H - gap;
+  else top = Math.max(gap, (vpH - H)/2);
+  // horizontal — if element is in right sidebar area, put card to its left
+  if (r.left > vpW * 0.55) {
+    left = r.left - W - gap;
+  } else {
+    left = r.left + r.width/2 - W/2;
+  }
+  left = Math.max(gap, Math.min(vpW - W - gap, left));
+  top  = Math.max(gap, Math.min(vpH - H - gap, top));
+  cd.style.top = top + 'px';
+  cd.style.left = left + 'px';
+}
+
+function _centerCard(cd) {
+  if(!cd) return;
+  cd.style.top = '50%'; cd.style.left = '50%';
+  cd.style.transform = 'translate(-50%, -50%)';
+}
+
+function nextTourStep() {
+  if (!_tourActive) return;
+  if (_tourIdx >= _tourSteps.length - 1) { finishTourAlways(); return; }
+  _tourIdx++; _showTourStep(_tourIdx);
+}
+function prevTourStep() {
+  if (!_tourActive || _tourIdx <= 0) return;
+  _tourIdx--; _showTourStep(_tourIdx);
+}
+function skipPortalTour() { _removeTour(); }
+function finishTourNever() { localStorage.setItem(TOUR_PREF_KEY,'never'); _removeTour(); }
+function finishTourAlways() { localStorage.setItem(TOUR_PREF_KEY,'always'); _removeTour(); }
+function _removeTour() {
+  _tourActive = false;
+  ['portal-tour-overlay','portal-tour-spot','portal-tour-card'].forEach(function(id){
+    var e = document.getElementById(id);
+    if(e){ e.style.opacity='0'; e.style.transition='opacity 0.3s'; setTimeout(function(){if(e.parentNode)e.remove();},320); }
+  });
+}
+/* ═══════════════════════════════════════════════════════ END TOUR SYSTEM */
 
 function broadcastModeChangeNotif(mode, modeName, changedBy) {
   var broadcast = { id: 'mcb_'+Date.now(), mode: mode, modeName: modeName, changedBy: changedBy, timestamp: new Date().toISOString() };
