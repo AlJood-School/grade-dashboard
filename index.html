@@ -3600,6 +3600,9 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
   <!-- Return to In-Person Attendance Banner -->
   
 
+  <!-- ─── لوحة إحصاءات التعلم عن بعد ─── -->
+  <div id="distance-survey-panel" style="display:none;margin-bottom:16px;"></div>
+
   <!-- Schedule Controls Card - Reorganized -->
   <div id="sched-mode-selector" style="background:white;border-radius:14px;border:1px solid rgba(201,168,76,0.28);margin-bottom:16px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.06);">
     <!-- Row 1: نوع الجدول -->
@@ -12244,6 +12247,8 @@ let currentSchedView = 'class';
 let currentSchedMode = 'normal'; // يُحدَّث من MAINTENANCE_DATA بعد التحميل
 
 function renderScheduleSection() {
+  // Distance survey panel (admin/principal/vice_principal only)
+  renderDistanceSurveyPanel();
   // Initialize schedule mode buttons
   setTimeout(initSchedModeBtns, 50);
   const classes = getClasses();
@@ -12289,6 +12294,70 @@ function renderScheduleSection() {
   }
   if (currentSchedView === 'teacher') renderTeacherSched();
   else renderClassSched();
+}
+
+// ==================== DISTANCE SURVEY PANEL ====================
+function renderDistanceSurveyPanel() {
+  var panel = document.getElementById('distance-survey-panel');
+  if (!panel) return;
+  var allowedRoles = ['admin','principal','vice_principal'];
+  if (allowedRoles.indexOf(currentRole) === -1) { panel.style.display='none'; return; }
+  var mode = (typeof currentSchedMode !== 'undefined') ? currentSchedMode : 'normal';
+  if (mode !== 'distance') { panel.style.display='none'; return; }
+
+  panel.style.display = 'block';
+  panel.innerHTML = '<div style="background:linear-gradient(135deg,#0d1b2e,#1a2a4e);border-radius:14px;padding:16px 20px;color:white;border:1px solid rgba(100,160,255,0.2);">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">' +
+    '<span style="font-weight:700;font-size:1rem;color:#7eb8ff;"><i class="fas fa-laptop-house"></i> إحصاءات التعلم عن بُعد — اليوم</span>' +
+    '<button onclick="renderDistanceSurveyPanel()" style="background:rgba(255,255,255,0.1);border:none;color:white;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:0.78rem;font-family:inherit;"><i class="fas fa-sync-alt"></i> تحديث</button>' +
+    '</div>' +
+    '<div id="dist-stats-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">' +
+    '<div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:1.6rem;margin-bottom:4px;">⏳</div><div style="font-size:0.75rem;color:#aac4ff;">جارٍ التحميل...</div></div>' +
+    '</div>' +
+    '</div>';
+
+  // Fetch stats from GitHub
+  var statsUrl = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/distance_stats.json?t=' + Date.now();
+  fetch(statsUrl).then(function(r){ return r.json(); }).then(function(stats) {
+    var today = new Date().toISOString().slice(0,10);
+    var att = stats.attendance || {};
+    var dev = stats.device_survey || {};
+    var isToday = att.date === today;
+    var devToday = dev.date === today;
+
+    var attRate = isToday ? (att.attendance_rate || 0) : '--';
+    var attColor = typeof attRate === 'number' ? (attRate >= 90 ? '#4cff9e' : attRate >= 70 ? '#ffd166' : '#ff6b6b') : '#aac4ff';
+    var devRate = devToday ? (dev.staff_response_rate || 0) : '--';
+    var devColor = typeof devRate === 'number' ? (devRate >= 80 ? '#4cff9e' : '#ffd166') : '#aac4ff';
+
+    var absentNames = (isToday && att.absent_names && att.absent_names.length) ?
+      '<div style="margin-top:12px;background:rgba(255,107,107,0.1);border-radius:8px;padding:10px 14px;font-size:0.78rem;color:#ffaaaa;">' +
+      '<b style="color:#ff9999;">الغائبات اليوم:</b> ' + att.absent_names.join(' ، ') + '</div>' : '';
+
+    document.getElementById('dist-stats-content').innerHTML =
+      _distStatCard('✅', isToday ? att.present : '--', 'حاضرات', '#4cff9e') +
+      _distStatCard('❌', isToday ? att.absent : '--', 'غائبات', '#ff6b6b') +
+      _distStatCard('📊', typeof attRate === 'number' ? attRate + '%' : attRate, 'نسبة الحضور', attColor) +
+      _distStatCard('💻', devToday ? dev.staff_total : '--', 'استبيان الجاهزية', '#7eb8ff') +
+      _distStatCard('📱', typeof devRate === 'number' ? devRate + '%' : devRate, 'الاستجابة', devColor) +
+      _distStatCard('🛡️', isToday ? (att.substitute_count || 0) : '--', 'حصص الاحتياط', '#ffd166');
+
+    if (absentNames) {
+      document.querySelector('#distance-survey-panel > div').insertAdjacentHTML('beforeend', absentNames);
+    }
+    var lastUp = stats.last_updated ? '<div style="margin-top:8px;font-size:0.72rem;color:#6a8abf;text-align:left;">آخر تحديث: ' + stats.last_updated.slice(0,16).replace('T',' ') + '</div>' : '';
+    if (lastUp) document.querySelector('#distance-survey-panel > div').insertAdjacentHTML('beforeend', lastUp);
+  }).catch(function() {
+    document.getElementById('dist-stats-content').innerHTML =
+      '<div style="color:#ffaaaa;font-size:0.82rem;">⚠️ لم يتم إرسال استبيانات اليوم بعد أو لا توجد بيانات.</div>';
+  });
+}
+function _distStatCard(icon, val, label, color) {
+  return '<div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:14px 10px;text-align:center;">' +
+    '<div style="font-size:1.4rem;margin-bottom:4px;">' + icon + '</div>' +
+    '<div style="font-size:1.3rem;font-weight:800;color:' + color + ';">' + val + '</div>' +
+    '<div style="font-size:0.72rem;color:#aac4ff;margin-top:2px;">' + label + '</div>' +
+    '</div>';
 }
 
 // ==================== PRINT SCHEDULES ====================
