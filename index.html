@@ -11992,43 +11992,109 @@ function switchSchedMode(mode) {
 }
 
 function activateSchedMode() {
-  const modeNames = {normal:'الجدول الاعتيادي', ramadan:'جدول رمضان', distance:'التعلم عن بعد'};
-  const name = modeNames[currentSchedMode] || currentSchedMode;
-  // ─── فحص الصلاحية ──────────────────────────────────────────────────
-  const _cu = getCurrentUser ? getCurrentUser() : null;
-  const _role = _cu ? (_cu.role || '') : '';
-  const _canActivate = ['admin','principal','vice_principal'].includes(_role);
+  var modeNames = {normal:'الجدول الاعتيادي', ramadan:'جدول رمضان', distance:'التعلم عن بُعد'};
+  var modeIcons = {normal:'📋', ramadan:'🌙', distance:'💻'};
+  var modeColors = {normal:'#4ade80', ramadan:'#C9A84C', distance:'#60a5fa'};
+  var modeBg = {normal:'rgba(74,222,128,0.1)', ramadan:'rgba(201,168,76,0.1)', distance:'rgba(96,165,250,0.1)'};
+  var name = modeNames[currentSchedMode] || currentSchedMode;
+  var _cu = (typeof getCurrentUser === 'function') ? getCurrentUser() : null;
+  var _role = _cu ? (_cu.role || '') : '';
+  var _canActivate = ['admin','principal','vice_principal'].indexOf(_role) !== -1;
   if (!_canActivate) {
     if (typeof showNotification === 'function') showNotification('ليس لديك صلاحية تغيير وضع الجدول النشط', 'error');
     return;
   }
-  const _confirmMsg = 'هل تريدين تفعيل "' + name + '" كالجدول النشط لجميع المستخدمين؟\n\nسيُطبَّق التغيير على جميع الأجهزة خلال دقائق.';
-  const _doActivate = function() {
-    const _btn = document.getElementById('sched-activate-btn');
+  var _oldMode = (MAINTENANCE_DATA && MAINTENANCE_DATA.active_sched_mode) ? MAINTENANCE_DATA.active_sched_mode : 'normal';
+  var _oldName = modeNames[_oldMode] || _oldMode;
+  var _mColor = modeColors[currentSchedMode] || '#60a5fa';
+  var _mBg = modeBg[currentSchedMode] || 'rgba(96,165,250,0.1)';
+  var _mIcon = modeIcons[currentSchedMode] || '📋';
+  var _m = currentSchedMode;
+  var _bannerDesc = _m==='ramadan'?' آيات وأذكار رمضانية':_m==='distance'?' أقوال القادة وأدعية الوطن':' العبارات الاعتيادية';
+  var _existing = document.getElementById('sched-confirm-modal');
+  if (_existing) _existing.remove();
+  var _modal = document.createElement('div');
+  _modal.id = 'sched-confirm-modal';
+  _modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;direction:rtl;font-family:Tajawal,sans-serif;';
+  _modal.innerHTML = '<div style="background:#1e2d4a;border-radius:20px;padding:30px;max-width:520px;width:100%;border:1px solid rgba(201,168,76,0.3);box-shadow:0 20px 60px rgba(0,0,0,0.5);">'
+    + '<div style="text-align:center;margin-bottom:22px;">'
+    +   '<div style="font-size:3rem;margin-bottom:8px;">'+_mIcon+'</div>'
+    +   '<h3 style="color:'+_mColor+';margin:0;font-size:1.3rem;">تفعيل '+name+'</h3>'
+    +   '<p style="color:rgba(255,255,255,0.5);margin:6px 0 0;font-size:0.85rem;">هذا التغيير سيُطبَّق على جميع المستخدمين</p>'
+    + '</div>'
+    + '<div style="background:rgba(255,255,255,0.04);border-radius:12px;padding:16px;margin-bottom:18px;">'
+    +   '<div style="color:rgba(255,255,255,0.5);font-size:0.78rem;margin-bottom:10px;font-weight:700;">📊 ما الذي سيتغير؟</div>'
+    +   '<div style="display:flex;flex-direction:column;gap:8px;">'
+    +     '<div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.05);padding:10px 14px;border-radius:10px;">'
+    +       '<span style="font-size:1.1rem;">📅</span>'
+    +       '<div><div style="color:white;font-size:0.88rem;font-weight:700;">الجدول المدرسي</div><div style="color:rgba(255,255,255,0.55);font-size:0.78rem;">سيتحول من «'+_oldName+'» إلى «'+name+'»</div></div>'
+    +     '</div>'
+    +     '<div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.05);padding:10px 14px;border-radius:10px;">'
+    +       '<span style="font-size:1.1rem;">🧠</span>'
+    +       '<div><div style="color:white;font-size:0.88rem;font-weight:700;">الاحتياط الذكي</div><div style="color:rgba(255,255,255,0.55);font-size:0.78rem;">سيُولِّد جداول الاحتياط وفق '+name+'</div></div>'
+    +     '</div>'
+    +     '<div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.05);padding:10px 14px;border-radius:10px;">'
+    +       '<span style="font-size:1.1rem;">🎨</span>'
+    +       '<div><div style="color:white;font-size:0.88rem;font-weight:700;">البانر الترحيبي</div><div style="color:rgba(255,255,255,0.55);font-size:0.78rem;">سيعرض'+_bannerDesc+'</div></div>'
+    +     '</div>'
+    +     '<div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.05);padding:10px 14px;border-radius:10px;">'
+    +       '<span style="font-size:1.1rem;">📱</span>'
+    +       '<div><div style="color:white;font-size:0.88rem;font-weight:700;">الرسائل الصباحية</div><div style="color:rgba(255,255,255,0.55);font-size:0.78rem;">ستُرسَل بصياغة تناسب '+name+'</div></div>'
+    +     '</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div style="background:'+_mBg+';border:1px solid '+_mColor+'44;border-radius:10px;padding:10px 14px;margin-bottom:20px;display:flex;align-items:center;gap:8px;">'
+    +   '<span style="color:rgba(255,255,255,0.75);font-size:0.82rem;">⏱️ سيسري التغيير على جميع الأجهزة خلال <strong style="color:'+_mColor+';">دقيقتين</strong> من التأكيد</span>'
+    + '</div>'
+    + '<div style="display:flex;gap:12px;">'
+    +   '<button id="sched-confirm-yes" style="flex:1;padding:12px;background:'+_mColor+';color:#0f172a;border:none;border-radius:12px;font-weight:800;font-size:1rem;cursor:pointer;font-family:Tajawal,sans-serif;">✅ تأكيد التفعيل</button>'
+    +   '<button onclick="document.getElementById('sched-confirm-modal').remove()" style="flex:0.45;padding:12px;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border:1px solid rgba(255,255,255,0.15);border-radius:12px;font-weight:700;font-size:0.95rem;cursor:pointer;font-family:Tajawal,sans-serif;">إلغاء</button>'
+    + '</div>'
+    + '</div>';
+  document.body.appendChild(_modal);
+  var _savedMode = currentSchedMode;
+  document.getElementById('sched-confirm-yes').onclick = function() {
+    _modal.remove();
+    var _btn = document.getElementById('sched-activate-btn');
     if (_btn) { _btn.disabled = true; _btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الحفظ...'; }
     fetch('https://webhooks.tasklet.ai/v1/public/webhook?token=1f75fe6c88269f5e877ee2633934e304', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         event: 'schedule_mode_change',
-        mode: currentSchedMode,
+        mode: _savedMode, modeName: name,
+        previousMode: _oldMode, previousModeName: _oldName,
         by: (_cu && (_cu.username || _cu.name)) || 'admin',
+        byName: (_cu && _cu.nameAr) || '',
         timestamp: new Date().toISOString()
       })
     }).then(function() {
-      if (typeof showNotification === 'function') showNotification('✅ تم حفظ وضع "' + name + '" وسيُطبَّق على جميع الأجهزة خلال دقائق', 'success');
-      if (MAINTENANCE_DATA) { MAINTENANCE_DATA.active_sched_mode = currentSchedMode; }
-      switchSchedMode(currentSchedMode);
+      if (typeof showNotification === 'function') showNotification('✅ تم تفعيل «' + name + '» — سيُطبَّق على جميع الأجهزة خلال دقيقتين', 'success');
+      if (MAINTENANCE_DATA) { MAINTENANCE_DATA.active_sched_mode = _savedMode; }
+      switchSchedMode(_savedMode);
+      broadcastModeChangeNotif(_savedMode, name, (_cu && (_cu.nameAr || _cu.username)) || 'الإدارة');
+      var homeEl = document.getElementById('smart-mode-banner');
+      if (homeEl) { var tmp = document.createElement('div'); tmp.innerHTML = renderSmartBanner(); if (tmp.firstChild) homeEl.parentNode.replaceChild(tmp.firstChild, homeEl); }
     }).catch(function() {
       if (typeof showNotification === 'function') showNotification('⚠️ حدث خطأ أثناء الحفظ، حاولي مرة أخرى', 'error');
       if (_btn) { _btn.disabled = false; _btn.innerHTML = '<i class="fas fa-check-circle"></i> تفعيل كجدول نشط'; }
     });
   };
-  if (typeof showCustomConfirm === 'function') {
-    showCustomConfirm(_confirmMsg, _doActivate);
-  } else {
-    _doActivate();
+}
+
+function broadcastModeChangeNotif(mode, modeName, changedBy) {
+  var broadcast = { id: 'mcb_'+Date.now(), mode: mode, modeName: modeName, changedBy: changedBy, timestamp: new Date().toISOString() };
+  localStorage.setItem('aljood_mode_broadcast', JSON.stringify(broadcast));
+  var modeIcon = {normal:'📋', ramadan:'🌙', distance:'💻'}[mode] || '📋';
+  if (typeof sysNotifGetAll === 'function') {
+    var allNotifs = sysNotifGetAll();
+    var seen = {};
+    allNotifs.forEach(function(n) { if (n.recipientUsername) seen[n.recipientUsername] = true; });
+    Object.keys(seen).forEach(function(uname) {
+      if (typeof pushNotif === 'function') pushNotif(uname, modeIcon, 'تغيير الجدول النشط', 'تم تفعيل «'+modeName+'» من قِبَل '+changedBy+' — يسري على جميع الأجهزة', 'sched_mode_change');
+    });
   }
+  if (typeof updateSysNotifBell === 'function') updateSysNotifBell();
 }
 
 function initSchedModeBtns() {
