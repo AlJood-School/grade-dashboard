@@ -6949,6 +6949,10 @@ document.addEventListener('DOMContentLoaded', async function() {
   if (loadingEl) loadingEl.style.display = 'flex';
   await loadPortalData();
   if (loadingEl) loadingEl.style.display = 'none';
+  // ─── تطبيق وضع الجدول النشط من maintenance.json (مركزي) ──────────
+  if (MAINTENANCE_DATA && MAINTENANCE_DATA.active_sched_mode) {
+    currentSchedMode = MAINTENANCE_DATA.active_sched_mode;
+  }
   // ─── فحص وضع الصيانة قبل أي شيء ─────────────────────────────────
   if (MAINTENANCE_DATA && MAINTENANCE_DATA.global_maintenance) {
     showMaintenancePage();
@@ -11668,14 +11672,7 @@ function saveClasses(arr) {
 
 let currentSchedGrade = 'all';
 let currentSchedView = 'class';
-let currentSchedMode = (function() {
-  var _now = new Date();
-  if (_now >= new Date('2026-04-19')) {
-    localStorage.setItem('activeSchedMode', 'normal');
-    return 'normal';
-  }
-  return localStorage.getItem('activeSchedMode') || 'normal';
-})();
+let currentSchedMode = 'normal'; // يُحدَّث من MAINTENANCE_DATA بعد التحميل
 
 function renderScheduleSection() {
   // Initialize schedule mode buttons
@@ -11971,19 +11968,24 @@ function switchSchedMode(mode) {
   });
   const badge = document.getElementById('sched-mode-badge');
   const activeBtn = document.getElementById('sched-activate-btn');
-  const activeMode = localStorage.getItem('activeSchedMode') || 'normal';
-  const savedSchedules = JSON.parse(localStorage.getItem('schedules')||'{}');
-  const hasData = mode === 'normal' ? Object.keys(savedSchedules).length > 0
-    : mode === 'distance' ? (Object.keys(DEFAULT_DISTANCE_SCHEDULES).length > 0)
-    : (savedSchedules['__mode_'+mode] && Object.keys(savedSchedules['__mode_'+mode]).length > 0);
+  // الوضع النشط من MAINTENANCE_DATA (مركزي)
+  const activeMode = (typeof MAINTENANCE_DATA !== 'undefined' && MAINTENANCE_DATA && MAINTENANCE_DATA.active_sched_mode) ? MAINTENANCE_DATA.active_sched_mode : 'normal';
+  const hasData = mode === 'normal' ? true
+    : mode === 'distance' ? (typeof DEFAULT_DISTANCE_SCHEDULES !== 'undefined' && Object.keys(DEFAULT_DISTANCE_SCHEDULES).length > 0)
+    : (typeof DEFAULT_SCHEDULES !== 'undefined' && DEFAULT_SCHEDULES && DEFAULT_SCHEDULES['__mode_'+mode] && Object.keys(DEFAULT_SCHEDULES['__mode_'+mode]).length > 0);
+  // صلاحية التفعيل: مدير / مديرة / نائبة فقط
+  const _swCU = (typeof getCurrentUser === 'function') ? getCurrentUser() : null;
+  const _swRole = _swCU ? (_swCU.role || '') : '';
+  const _canActivate = ['admin','principal','vice_principal'].includes(_swRole);
   if (badge) {
     const isActive = activeMode === mode;
-    badge.textContent = modeNames[mode] + (isActive ? ' — الجدول النشط ✓' : (hasData ? ' — محفوظ (غير نشط)' : ' — لا توجد بيانات محفوظة'));
+    badge.textContent = modeNames[mode] + (isActive ? ' — الجدول النشط ✓' : (hasData ? ' — محفوظ (غير نشط)' : ' — لا توجد بيانات'));
     badge.style.background = isActive ? 'rgba(201,168,76,0.2)' : 'rgba(26,42,74,0.07)';
     badge.style.color = isActive ? '#C9A84C' : '#666';
     if (activeBtn) {
-      activeBtn.style.display = (isActive || !hasData) ? 'none' : '';
-      activeBtn.textContent = '\u2713 تفعيل "' + modeNames[mode] + '" كجدول نشط';
+      // يظهر فقط: البيانات موجودة + غير نشط + صلاحية مدير/مديرة/نائبة
+      activeBtn.style.display = (isActive || !hasData || !_canActivate) ? 'none' : '';
+      activeBtn.innerHTML = '<i class="fas fa-check-circle"></i> تفعيل "' + modeNames[mode] + '" كجدول نشط';
     }
   }
   renderScheduleSection();
@@ -11992,14 +11994,40 @@ function switchSchedMode(mode) {
 function activateSchedMode() {
   const modeNames = {normal:'الجدول الاعتيادي', ramadan:'جدول رمضان', distance:'التعلم عن بعد'};
   const name = modeNames[currentSchedMode] || currentSchedMode;
-  if (typeof showCustomConfirm === 'function') {
-    showCustomConfirm('هل تريدين تفعيل "' + name + '" كالجدول النشط لجميع المستخدمين؟', function() {
-      localStorage.setItem('activeSchedMode', currentSchedMode);
+  // ─── فحص الصلاحية ──────────────────────────────────────────────────
+  const _cu = getCurrentUser ? getCurrentUser() : null;
+  const _role = _cu ? (_cu.role || '') : '';
+  const _canActivate = ['admin','principal','vice_principal'].includes(_role);
+  if (!_canActivate) {
+    if (typeof showNotification === 'function') showNotification('ليس لديك صلاحية تغيير وضع الجدول النشط', 'error');
+    return;
+  }
+  const _confirmMsg = 'هل تريدين تفعيل "' + name + '" كالجدول النشط لجميع المستخدمين؟\n\nسيُطبَّق التغيير على جميع الأجهزة خلال دقائق.';
+  const _doActivate = function() {
+    const _btn = document.getElementById('sched-activate-btn');
+    if (_btn) { _btn.disabled = true; _btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الحفظ...'; }
+    fetch('https://webhooks.tasklet.ai/v1/public/webhook?token=1f75fe6c88269f5e877ee2633934e304', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        event: 'schedule_mode_change',
+        mode: currentSchedMode,
+        by: (_cu && (_cu.username || _cu.name)) || 'admin',
+        timestamp: new Date().toISOString()
+      })
+    }).then(function() {
+      if (typeof showNotification === 'function') showNotification('✅ تم حفظ وضع "' + name + '" وسيُطبَّق على جميع الأجهزة خلال دقائق', 'success');
+      if (MAINTENANCE_DATA) { MAINTENANCE_DATA.active_sched_mode = currentSchedMode; }
       switchSchedMode(currentSchedMode);
+    }).catch(function() {
+      if (typeof showNotification === 'function') showNotification('⚠️ حدث خطأ أثناء الحفظ، حاولي مرة أخرى', 'error');
+      if (_btn) { _btn.disabled = false; _btn.innerHTML = '<i class="fas fa-check-circle"></i> تفعيل كجدول نشط'; }
     });
+  };
+  if (typeof showCustomConfirm === 'function') {
+    showCustomConfirm(_confirmMsg, _doActivate);
   } else {
-    localStorage.setItem('activeSchedMode', currentSchedMode);
-    switchSchedMode(currentSchedMode);
+    _doActivate();
   }
 }
 
