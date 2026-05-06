@@ -1689,7 +1689,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     
     <div class="admin-only" id="adminMenu" style="display:none">
       <div class="nav-section-title" style="color:rgba(201,162,39,0.7)">⚙ لوحة المدير</div>
-      <div class="nav-item" onclick="showSection('admin_panel')"><i class="fas fa-cog"></i><span>إعدادات البوابة</span><span class="admin-badge">ADMIN</span></div>
+      <div class="nav-item" onclick="showSection('admin_panel');loadBackupLog()"><i class="fas fa-cog"></i><span>إعدادات البوابة</span><span class="admin-badge">ADMIN</span></div>
       <div class="nav-item" onclick="showSection('data_mgmt')"><i class="fas fa-database"></i><span>إدارة البيانات</span><span class="admin-badge">ADMIN</span></div>
     </div>
 
@@ -3313,6 +3313,45 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
             <div style="font-size:12px;color:#888;margin-top:4px">دخول اليوم</div>
             <div style="font-size:11px;color:#3b82f6;margin-top:4px">🔐 سجل النشاط</div>
           </div>
+        </div>
+      </div>
+
+      <!-- ===== BACKUP LOG PANEL ===== -->
+      <div class="card" id="backupLogCard">
+        <div class="card-title"><i class="fas fa-archive" style="color:#c9a227;"></i> 💾 النسخ الاحتياطية للبوابة</div>
+        <p style="color:#666;font-size:0.85rem;margin:0 0 16px;">نسخ تلقائية كل 3 أيام — محفوظة في Google Drive</p>
+        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:120px;background:#f0fff4;border:1.5px solid #b7f0c8;border-radius:10px;padding:14px;text-align:center;">
+            <div style="font-size:30px;font-weight:800;color:#28a745;" id="backupTotalCount">—</div>
+            <div style="font-size:12px;color:#666;margin-top:4px;">إجمالي النسخ</div>
+          </div>
+          <div style="flex:2;min-width:180px;background:#fffbf0;border:1.5px solid #ffd6a5;border-radius:10px;padding:14px;">
+            <div style="font-size:12px;color:#888;margin-bottom:6px;">📅 آخر نسخة احتياطية</div>
+            <div style="font-size:0.9rem;font-weight:700;color:#1a1a2e;" id="backupLastDate">جارٍ التحميل...</div>
+          </div>
+          <div style="flex:2;min-width:180px;background:#f0f4ff;border:1.5px solid #c3d4ff;border-radius:10px;padding:14px;">
+            <div style="font-size:12px;color:#888;margin-bottom:6px;">⏭️ النسخة القادمة</div>
+            <div style="font-size:0.9rem;font-weight:700;color:#3b82f6;" id="backupNextDate">—</div>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="data-table" id="backupLogTable">
+            <thead>
+              <tr><th>#</th><th>التاريخ والوقت</th><th>اسم الملف</th><th>الحالة</th><th>رابط Drive</th></tr>
+            </thead>
+            <tbody id="backupLogTableBody">
+              <tr><td colspan="5" style="text-align:center;color:#aaa;padding:24px;"><i class="fas fa-spinner fa-spin"></i> جارٍ تحميل السجل...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button onclick="loadBackupLog()" style="padding:8px 18px;background:#f0f4ff;border:1.5px solid #c3d4ff;border-radius:8px;cursor:pointer;font-size:0.85rem;color:#3b82f6;font-weight:600;font-family:inherit;">
+            <i class="fas fa-sync-alt"></i> تحديث
+          </button>
+          <a href="https://drive.google.com/drive/folders/1zLdcVj9_bs_DboblrIYO3Gt0b4AyIuLe" target="_blank" style="padding:8px 18px;background:linear-gradient(135deg,#c9a227,#e8c547);border:none;border-radius:8px;font-size:0.85rem;font-weight:700;color:#1a1a2e;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+            <i class="fas fa-folder-open"></i> مجلد Drive
+          </a>
+          <span style="font-size:0.78rem;color:#aaa;margin-right:auto;">⏰ نسخ تلقائي كل 3 أيام — 3:00 صباحاً (دبي)</span>
         </div>
       </div>
     </div>
@@ -9686,6 +9725,55 @@ function resetNavConfig() {
   renderWebsiteManager();
   showToast('↩️ تم إعادة تعيين القائمة');
 }
+
+// ===== BACKUP LOG =====
+async function loadBackupLog() {
+  const tbody = document.getElementById('backupLogTableBody');
+  const totalEl = document.getElementById('backupTotalCount');
+  const lastDateEl = document.getElementById('backupLastDate');
+  const nextDateEl = document.getElementById('backupNextDate');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#aaa;padding:24px;"><i class="fas fa-spinner fa-spin"></i> جارٍ التحميل...</td></tr>';
+  try {
+    const url = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/backup_log.json?t=' + Date.now();
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('fetch failed');
+    const logs = await res.json();
+    if (totalEl) totalEl.textContent = logs.length;
+    if (logs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#aaa;padding:24px;">📭 لا توجد نسخ احتياطية بعد — ستبدأ النسخة الأولى في 9 مايو 2026</td></tr>';
+      if (lastDateEl) lastDateEl.textContent = 'لم تُسجَّل بعد';
+      if (nextDateEl) nextDateEl.textContent = '9 مايو 2026 — 3:00 صباحاً';
+      return;
+    }
+    const last = logs[0];
+    if (lastDateEl) lastDateEl.textContent = last.datetime || last.date;
+    if (nextDateEl && last.date) {
+      const nextD = new Date(last.date);
+      nextD.setDate(nextD.getDate() + 3);
+      nextDateEl.textContent = nextD.toLocaleDateString('ar-AE', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+    }
+    tbody.innerHTML = logs.map((entry, i) => {
+      const badge = entry.status === 'success'
+        ? '<span style="background:#e8f5e9;color:#28a745;border-radius:6px;padding:3px 10px;font-size:0.78rem;font-weight:700;">✅ ناجحة</span>'
+        : '<span style="background:#ffeaea;color:#dc3545;border-radius:6px;padding:3px 10px;font-size:0.78rem;font-weight:700;">❌ فشلت</span>';
+      const link = entry.driveLink
+        ? `<a href="${entry.driveLink}" target="_blank" style="color:#c9a227;font-weight:600;text-decoration:none;font-size:0.85rem;">🔗 فتح</a>`
+        : '—';
+      return `<tr>
+        <td style="color:#aaa;font-size:0.82rem;">${logs.length - i}</td>
+        <td style="font-weight:600;font-size:0.88rem;">${entry.datetime || entry.date}</td>
+        <td style="font-size:0.8rem;color:#555;direction:ltr;text-align:left;">${entry.filename || '—'}</td>
+        <td>${badge}</td>
+        <td>${link}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#dc3545;padding:24px;">⚠️ تعذّر تحميل السجل — تحقق من الاتصال</td></tr>';
+    if (lastDateEl) lastDateEl.textContent = 'خطأ في التحميل';
+  }
+}
+// ======================
 
 function renderWebsiteManager() {
   const container = document.getElementById('websiteManagerContent');
