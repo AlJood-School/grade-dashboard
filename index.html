@@ -7914,6 +7914,26 @@ function getTeacherClassesNew(email) {
   return [];
 }
 
+// يُرجع قائمة teacherId للمعلمات المعيّنات لصف معين (من لوحة HR)
+function getAssignedTeacherIdsForClass(classId) {
+  if (!classId) return [];
+  var tam = getTeacherAssignmentMap();
+  var roster = (typeof TEACHER_ROSTER !== 'undefined') ? TEACHER_ROSTER : {};
+  var ids = [];
+  Object.keys(tam).forEach(function(k) {
+    var entry = tam[k];
+    if (entry && entry.classes && entry.classes.indexOf(classId) >= 0) {
+      var rk = k.replace(/@moe\.sch\.ae$/i, '');
+      var rEntry = roster[rk];
+      if (rEntry && rEntry.teacherId) {
+        var tid = String(rEntry.teacherId);
+        if (ids.indexOf(tid) < 0) ids.push(tid);
+      }
+    }
+  });
+  return ids;
+}
+
 // Generate password: AJ + first-letter-of-name + 4-digit-random
 function generateStaffPassword(nameEn) {
   const letter = (nameEn || 'X').trim()[0].toUpperCase();
@@ -13999,11 +14019,24 @@ function openSchedEdit(classId, di, pi) {
   document.getElementById('schedEditPeriod').value = pi;
   document.getElementById('schedEditSubject').value = cell.subject || '';
   document.getElementById('schedEditTitle').textContent = `تعديل: ${DAYS[di]} — ${PERIODS[pi]}`;
-  // Populate teacher dropdown
+  // Populate teacher dropdown — المعيّنات لهذا الصف (⭐) تظهر أولاً
   const sel = document.getElementById('schedEditTeacher');
   const emps = getEmployeesData();
   const teachers = emps.filter(e => e.category === 'teacher' || e.category === 'kg_teacher');
-  sel.innerHTML = '<option value="">— بدون تحديد —</option>' + teachers.map(t => `<option value="${t.id}" ${cell.teacherId == t.id ? 'selected' : ''}>${t.name_ar}</option>`).join('');
+  var _assignedIds = getAssignedTeacherIdsForClass(classId);
+  var _sortedTeachers = teachers.slice().sort(function(a,b){
+    var aA = _assignedIds.indexOf(String(a.id)) >= 0;
+    var bA = _assignedIds.indexOf(String(b.id)) >= 0;
+    return (bA ? 1 : 0) - (aA ? 1 : 0);
+  });
+  sel.innerHTML = '<option value="">— بدون تحديد —</option>' +
+    (_assignedIds.length > 0 ? '<optgroup label="⭐ معيّنات لهذا الصف">' +
+      _sortedTeachers.filter(t => _assignedIds.indexOf(String(t.id)) >= 0)
+        .map(t => `<option value="${t.id}" ${cell.teacherId == t.id ? 'selected' : ''}>⭐ ${t.name_ar}</option>`).join('') +
+      '</optgroup><optgroup label="── بقية المعلمات ──">' : '') +
+    _sortedTeachers.filter(t => _assignedIds.indexOf(String(t.id)) < 0)
+      .map(t => `<option value="${t.id}" ${cell.teacherId == t.id ? 'selected' : ''}>${t.name_ar}</option>`).join('') +
+    (_assignedIds.length > 0 ? '</optgroup>' : '');
   document.getElementById('schedEditModal').style.display = 'flex';
 }
 
@@ -15962,7 +15995,7 @@ function sbShowAddSubject(classId) {
   document.getElementById('sbSubjConsec').value = '1';
   const classes = getSBClasses();
   const cls = classes.find(c => c.id === classId);
-  sbPopulateTeacherDropdown(cls ? cls.stage : 'حلقة أولى', null);
+  sbPopulateTeacherDropdown(cls ? cls.stage : 'حلقة أولى', null, cls ? cls.name : '');
   document.getElementById('sbSubjectModal').style.display = 'flex';
 }
 
@@ -15977,11 +16010,11 @@ function sbEditSubject(classId, idx) {
   document.getElementById('sbSubjName').value = sub.subjectName || '';
   document.getElementById('sbSubjPeriods').value = sub.periodsWeek || 4;
   document.getElementById('sbSubjConsec').value = sub.consecutiveSize || 1;
-  sbPopulateTeacherDropdown(cls.stage, sub.teacherId);
+  sbPopulateTeacherDropdown(cls.stage, sub.teacherId, cls.name);
   document.getElementById('sbSubjectModal').style.display = 'flex';
 }
 
-function sbPopulateTeacherDropdown(stage, selectedId) {
+function sbPopulateTeacherDropdown(stage, selectedId, className) {
   const emps = getEmployeesData();
   // Map stages
   const stageMap = { 'روضة': 'رياض الأطفال', 'حلقة أولى': 'الحلقة الأولى', 'حلقة ثانية': 'الحلقة الثانية' };
@@ -15993,17 +16026,30 @@ function sbPopulateTeacherDropdown(stage, selectedId) {
   });
   const sbTData = getSBTeachers();
   const leaves = getLeaves ? getLeaves() : [];
+  // المعيّنات لهذا الصف من لوحة HR — تُعرض أولاً بعلامة ⭐
+  var _sbAssignedIds = getAssignedTeacherIdsForClass(className || '');
+  var _sbSorted = teachers.slice().sort(function(a,b){
+    var aA = _sbAssignedIds.indexOf(String(a.id)) >= 0;
+    var bA = _sbAssignedIds.indexOf(String(b.id)) >= 0;
+    return (bA ? 1 : 0) - (aA ? 1 : 0);
+  });
+  function _sbTeacherOpt(t) {
+    const settings = sbTData[t.id] || {};
+    const isExp = settings.nationality === 'expat';
+    const maxW = isExp ? 30 : 24;
+    const hasLeave = leaves.some(l => l.empId == t.id && l.type === 'maternity');
+    const badge = hasLeave ? ' ⚠' : '';
+    const weeklyUsed = sbCalcTeacherLoad(t.id);
+    const isA = _sbAssignedIds.indexOf(String(t.id)) >= 0;
+    return `<option value="${t.id}" ${t.id == selectedId ? 'selected' : ''}>${isA ? '⭐ ' : ''}${t.name_ar}${badge} — ${weeklyUsed}/${maxW} ح/أسبوع</option>`;
+  }
   const sel = document.getElementById('sbSubjTeacher');
+  var _assigned = _sbSorted.filter(t => _sbAssignedIds.indexOf(String(t.id)) >= 0);
+  var _others   = _sbSorted.filter(t => _sbAssignedIds.indexOf(String(t.id)) < 0);
   sel.innerHTML = '<option value="">— لم يُحدَّد ——</option>' +
-    teachers.map(t => {
-      const settings = sbTData[t.id] || {};
-      const isExp = settings.nationality === 'expat';
-      const maxW = isExp ? 30 : 24;
-      const hasLeave = leaves.some(l => l.empId == t.id && l.type === 'maternity');
-      const badge = hasLeave ? ' ⚠' : '';
-      const weeklyUsed = sbCalcTeacherLoad(t.id);
-      return `<option value="${t.id}" ${t.id == selectedId ? 'selected' : ''}>${t.name_ar}${badge} — ${weeklyUsed}/${maxW} ح/أسبوع</option>`;
-    }).join('');
+    (_assigned.length > 0 ? '<optgroup label="⭐ معيّنات لهذا الصف">' + _assigned.map(_sbTeacherOpt).join('') + '</optgroup><optgroup label="── بقية المعلمات ──">' : '') +
+    _others.map(_sbTeacherOpt).join('') +
+    (_assigned.length > 0 ? '</optgroup>' : '');
   sel.onchange = function() {
     const tid = sel.value;
     if (!tid) { document.getElementById('sbSubjTeacherLoad').textContent = ''; return; }
