@@ -6965,6 +6965,52 @@ async function loadPortalData() {
     STAFF_DB = st;
     TEACHER_ROSTER = t;
     DEFAULT_SCHEDULES = sch;
+    // ─── تعيين الصفوف تلقائياً من الجدول ───────────────────────────────
+    try {
+      var existingTA = {};
+      try { existingTA = JSON.parse(localStorage.getItem('aljood_teacher_assignments') || '{}'); } catch(e) {}
+      var hasTA = Object.keys(existingTA).some(function(k) {
+        return existingTA[k] && existingTA[k].classes && existingTA[k].classes.length > 0;
+      });
+      if (!hasTA) {
+        var autoTA = {};
+        // بناء خريطة teacherId -> rosterKey
+        var tidToKey = {};
+        Object.keys(TEACHER_ROSTER).forEach(function(rk) {
+          var tv = TEACHER_ROSTER[rk];
+          if (tv && typeof tv === 'object' && tv.teacherId) {
+            tidToKey[tv.teacherId] = rk;
+          }
+        });
+        // استخراج الصفوف لكل معلمة من الجدول
+        var teacherClassMap = {};
+        Object.keys(DEFAULT_SCHEDULES).forEach(function(cls) {
+          var clsData = DEFAULT_SCHEDULES[cls];
+          if (!clsData || typeof clsData !== 'object') return;
+          Object.keys(clsData).forEach(function(pkey) {
+            var period = clsData[pkey];
+            if (!period || typeof period !== 'object') return;
+            var tid = period.teacherId || '';
+            if (tid && tidToKey[tid]) {
+              var rk = tidToKey[tid];
+              if (!teacherClassMap[rk]) teacherClassMap[rk] = [];
+              if (teacherClassMap[rk].indexOf(cls) < 0) teacherClassMap[rk].push(cls);
+            }
+          });
+        });
+        // بناء خريطة التعيين النهائية
+        Object.keys(teacherClassMap).forEach(function(rk) {
+          var tv = TEACHER_ROSTER[rk] || {};
+          var subj = (tv && tv.subjects) ? tv.subjects : [];
+          var cls = teacherClassMap[rk].sort();
+          autoTA[rk] = { subjects: subj, classes: cls };
+          autoTA[rk + '@moe.sch.ae'] = { subjects: subj, classes: cls };
+        });
+        localStorage.setItem('aljood_teacher_assignments', JSON.stringify(autoTA));
+        console.log('✅ تم التعيين التلقائي للمعلمات:', Object.keys(teacherClassMap).length, 'معلمة');
+      }
+    } catch(eTA) { console.warn('Teacher assignment auto-init error:', eTA); }
+    // ───────────────────────────────────────────────────────────────────
     initRoleData(u.roles || u);
     // Apply localStorage overrides (from data management panel)
     // But invalidate if server version is newer
