@@ -30804,7 +30804,8 @@ function _notifGetSWUsernameForClass(classCode) {
 
   /* ── بناء عنصر البطاقة ── */
   function _ensureCard() {
-    if (document.getElementById('_chc')) return;
+    var existing = document.getElementById('_chc');
+    if (existing) { _hoverCard = existing; return; }
     var d = document.createElement('div');
     d.id = '_chc';
     d.style.cssText = [
@@ -30939,6 +30940,19 @@ function _notifGetSWUsernameForClass(classCode) {
     }
     var codeSet = new Set(codes);
 
+    /* ① تعليم العناصر التي تستدعي showClassCard مباشرة في onclick */
+    document.querySelectorAll('[onclick*="showClassCard"]').forEach(function(el) {
+      if (el.dataset.ch) return;
+      var m = (el.getAttribute('onclick') || '').match(/showClassCard\(['"]([^'"]+)['"]\)/);
+      if (!m) return;
+      var code = m[1];
+      el.dataset.ch = code;
+      el.setAttribute('data-class-hover', code);
+      /* إزالة title المتعارض مع native tooltip */
+      if (el.getAttribute('title') === 'عرض بطاقة الصف') el.removeAttribute('title');
+    });
+
+    /* ② تعليم العناصر التي نصها يطابق كود صف */
     var skipTags = new Set(['SCRIPT','STYLE','TEXTAREA','INPUT','SELECT','NOSCRIPT','HEAD']);
     var active = document.querySelector('.section.active') || document.body;
     var els = active.querySelectorAll('td, th, span:not([data-ch]), div:not([data-ch]), p, h4, li, label, b, strong');
@@ -30947,8 +30961,7 @@ function _notifGetSWUsernameForClass(classCode) {
       if (el.dataset.ch) return;                        // سبق تعليمه
       if (skipTags.has(el.tagName)) return;
       if (el.closest('[data-ch]')) return;              // داخل عنصر معلَّم
-      // عناصر الورقة فقط (بدون أبناء HTML)
-      if (el.children.length) return;
+      if (el.children.length) return;                  // عناصر الورقة فقط
       var txt = el.textContent.trim();
       if (!codeSet.has(txt)) return;
       el.dataset.ch = txt;
