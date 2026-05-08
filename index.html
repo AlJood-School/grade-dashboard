@@ -9409,6 +9409,7 @@ function initHomeCalendar() {
     + '<button onclick="calPrevMonth()" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(201,168,76,0.4);background:transparent;color:#c9a227;cursor:pointer;font-size:1.1rem;">‹</button>'
     + '<span id="calMonthLabel" style="color:#fff;font-weight:700;font-size:0.95rem;min-width:140px;text-align:center;"></span>'
     + '<button onclick="calNextMonth()" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(201,168,76,0.4);background:transparent;color:#c9a227;cursor:pointer;font-size:1.1rem;">›</button>'
+    + '<button onclick="openAddCalEventForm()" title="إضافة حدث" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(201,168,76,0.5);background:linear-gradient(135deg,rgba(201,168,76,0.2),rgba(201,168,76,0.1));color:#c9a227;cursor:pointer;font-size:1.1rem;font-weight:700;display:flex;align-items:center;justify-content:center;">+</button>'
     + '</div></div>'
     + '<div id="calGrid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;"></div>'
     + '<div style="margin-top:20px;border-top:1px solid rgba(255,255,255,0.1);padding-top:16px;">'
@@ -9568,9 +9569,13 @@ function showCalDayEvents(dateStr) {
     +'</div>'
     +'<div style="display:flex;flex-direction:column;gap:10px;">'
     +dayEvents.map(function(e){
-      var typeLabel = e.type==='national'?'وطني':e.type==='international'?'دولي':e.type==='meeting'?'اجتماع':e.type==='pd'?'تنمية مهنية':'فعالية';
-      return '<div style="padding:12px;background:rgba(255,255,255,0.05);border-radius:10px;border-right:3px solid '+e.color+';">'
-        +'<div style="font-size:0.9rem;font-weight:700;color:#fff;margin-bottom:4px;">'+e.title+'</div>'
+      var typeLabel = e.type==='national'?'🇦🇪 وطني':e.type==='international'?'🌍 دولي':e.type==='meeting'?'🤝 اجتماع':e.type==='pd'?'🎓 تنمية مهنية':'🌟 فعالية';
+      var canDel = (e.type==='event'||e.type==='upcoming');
+      var eIdStr = e.id ? String(e.id).replace(/'/g,"\\'") : '';
+      var eTypeStr = e.type||'event';
+      return '<div style="padding:12px;background:rgba(255,255,255,0.05);border-radius:10px;border-right:3px solid '+e.color+';position:relative;">'
+        +(canDel?'<button onclick="deleteCalEvent(\''+eIdStr+'\',\''+eTypeStr+'\')" title="حذف" style="position:absolute;top:8px;left:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#f87171;border-radius:6px;width:24px;height:24px;cursor:pointer;font-size:0.75rem;display:inline-flex;align-items:center;justify-content:center;">✕</button>':'')
+        +'<div style="font-size:0.9rem;font-weight:700;color:#fff;margin-bottom:4px;'+(canDel?'padding-left:32px;':'')+'">'+e.title+'</div>'
         +(e.desc?'<div style="font-size:0.78rem;color:rgba(255,255,255,0.55);">'+e.desc+'</div>':'')
         +'<div style="margin-top:6px;"><span style="background:'+e.color+'33;color:'+e.color+';font-size:0.7rem;padding:2px 8px;border-radius:6px;">'+typeLabel+'</span></div>'
         +'</div>';
@@ -9606,6 +9611,132 @@ function closeCalModal() {
   var modal = document.getElementById('calEventModal');
   if(modal) modal.style.display = 'none';
 }
+
+/* ── فتح نموذج إضافة حدث ── */
+function openAddCalEventForm(prefillDate) {
+  var modal = document.getElementById('calEventModal');
+  var content = document.getElementById('calModalContent');
+  if (!modal || !content) return;
+  var today = new Date();
+  var defaultDate = prefillDate || (today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0'));
+  content.innerHTML = '<div style="margin-bottom:18px;text-align:center;">'
+    +'<div style="font-size:2rem;margin-bottom:6px;">📅</div>'
+    +'<div style="font-size:1.05rem;font-weight:800;color:#fff;">إضافة حدث جديد</div>'
+    +'</div>'
+    +'<div style="display:flex;flex-direction:column;gap:14px;">'
+    +'<div>'
+    +'<label style="font-size:0.8rem;color:rgba(255,255,255,0.6);display:block;margin-bottom:5px;">📌 عنوان الحدث <span style="color:#f87171;">*</span></label>'
+    +'<input id="calEvTitle" type="text" placeholder="مثال: اجتماع أولياء الأمور" '
+    +'style="width:100%;box-sizing:border-box;padding:10px 12px;background:rgba(255,255,255,0.07);border:1px solid rgba(201,168,76,0.3);border-radius:10px;color:#fff;font-size:0.9rem;font-family:inherit;outline:none;" />'
+    +'</div>'
+    +'<div>'
+    +'<label style="font-size:0.8rem;color:rgba(255,255,255,0.6);display:block;margin-bottom:5px;">📆 التاريخ <span style="color:#f87171;">*</span></label>'
+    +'<input id="calEvDate" type="date" value="'+defaultDate+'" '
+    +'style="width:100%;box-sizing:border-box;padding:10px 12px;background:rgba(255,255,255,0.07);border:1px solid rgba(201,168,76,0.3);border-radius:10px;color:#fff;font-size:0.9rem;font-family:inherit;outline:none;color-scheme:dark;" />'
+    +'</div>'
+    +'<div>'
+    +'<label style="font-size:0.8rem;color:rgba(255,255,255,0.6);display:block;margin-bottom:5px;">📝 الوصف (اختياري)</label>'
+    +'<textarea id="calEvDesc" rows="2" placeholder="تفاصيل الحدث..." '
+    +'style="width:100%;box-sizing:border-box;padding:10px 12px;background:rgba(255,255,255,0.07);border:1px solid rgba(201,168,76,0.3);border-radius:10px;color:#fff;font-size:0.9rem;font-family:inherit;outline:none;resize:none;"></textarea>'
+    +'</div>'
+    +'<div>'
+    +'<label style="font-size:0.8rem;color:rgba(255,255,255,0.6);display:block;margin-bottom:8px;">🎨 لون الحدث</label>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+    +['#c9a227','#4ade80','#60a5fa','#a78bfa','#f472b6','#fb923c','#34d399','#f87171'].map(function(c){
+      return '<div onclick="selectCalColor(this,\''+c+'\')" data-color="'+c+'" '
+        +'style="width:28px;height:28px;border-radius:50%;background:'+c+';cursor:pointer;transition:.15s;border:2px solid transparent;" '
+        +'onmouseover="this.style.transform=\'scale(1.2)\'" onmouseout="this.style.transform=\'scale(1)\'"></div>';
+    }).join('')
+    +'</div>'
+    +'</div>'
+    +'<div style="display:flex;gap:10px;margin-top:4px;">'
+    +'<button onclick="saveCalEvent()" '
+    +'style="flex:1;padding:11px;background:linear-gradient(135deg,#c9a227,#f0c040);border:none;border-radius:10px;color:#1A2A4A;font-weight:800;font-size:0.92rem;cursor:pointer;font-family:inherit;">✅ حفظ الحدث</button>'
+    +'<button onclick="closeCalModal()" '
+    +'style="flex:1;padding:11px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:rgba(255,255,255,0.7);font-weight:600;font-size:0.92rem;cursor:pointer;font-family:inherit;">إلغاء</button>'
+    +'</div>'
+    +'</div>';
+  // Pre-select first color
+  setTimeout(function(){
+    var first = content.querySelector('[data-color]');
+    if(first) { first.style.border='2px solid #fff'; first.dataset.selected='1'; }
+  }, 50);
+  modal.style.display = 'flex';
+}
+
+function selectCalColor(el, color) {
+  var modal = document.getElementById('calEventModal');
+  if (!modal) return;
+  modal.querySelectorAll('[data-color]').forEach(function(d){ d.style.border='2px solid transparent'; delete d.dataset.selected; });
+  el.style.border = '2px solid #fff';
+  el.dataset.selected = '1';
+}
+
+function saveCalEvent() {
+  var title = (document.getElementById('calEvTitle')||{}).value || '';
+  var date  = (document.getElementById('calEvDate')||{}).value || '';
+  var desc  = (document.getElementById('calEvDesc')||{}).value || '';
+  if (!title.trim()) {
+    var ti = document.getElementById('calEvTitle');
+    if (ti) { ti.style.borderColor='#f87171'; ti.focus(); }
+    return;
+  }
+  if (!date) {
+    var di = document.getElementById('calEvDate');
+    if (di) { di.style.borderColor='#f87171'; di.focus(); }
+    return;
+  }
+  var selectedColor = '#c9a227';
+  var modal = document.getElementById('calEventModal');
+  if (modal) {
+    var sel = modal.querySelector('[data-selected="1"]');
+    if (sel) selectedColor = sel.dataset.color;
+  }
+  var events = [];
+  try { events = JSON.parse(localStorage.getItem('aljood_events')||'[]'); } catch(x){}
+  var newEv = {
+    id: 'cal_' + Date.now(),
+    title: title.trim(),
+    date: date,
+    desc: desc.trim(),
+    color: selectedColor,
+    createdAt: new Date().toISOString()
+  };
+  events.push(newEv);
+  localStorage.setItem('aljood_events', JSON.stringify(events));
+  closeCalModal();
+  renderCalendar();
+  renderCalUpcoming();
+  showCalToast('✅ تم حفظ الحدث بنجاح');
+}
+
+function deleteCalEvent(id, type) {
+  if (!id) return;
+  var key = type==='upcoming' ? 'aljood_upcoming' : 'aljood_events';
+  var items = [];
+  try { items = JSON.parse(localStorage.getItem(key)||'[]'); } catch(x){}
+  items = items.filter(function(e){ return String(e.id) !== String(id); });
+  localStorage.setItem(key, JSON.stringify(items));
+  closeCalModal();
+  renderCalendar();
+  renderCalUpcoming();
+  showCalToast('🗑️ تم حذف الحدث');
+}
+
+function showCalToast(msg) {
+  var t = document.getElementById('calToast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'calToast';
+    t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#1A2A4A;border:1px solid rgba(201,168,76,0.5);border-radius:10px;padding:10px 18px;color:#fff;font-size:0.88rem;font-weight:600;z-index:999999;transition:opacity .3s;box-shadow:0 4px 20px rgba(0,0,0,0.4);';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function(){ t.style.opacity='0'; }, 2500);
+}
+
 // ===== END HOME CALENDAR =====
 
 function renderEvents() {
