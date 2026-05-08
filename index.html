@@ -30790,6 +30790,230 @@ function _notifGetSWUsernameForClass(classCode) {
     setTimeout(initSysNotifBell, 150);
   };
 })();
+
+// ═══════════════════════════════════════════════════════════════
+// CLASS HOVER CARD — يظهر عند تمرير الماوس على اسم أي صف
+// ═══════════════════════════════════════════════════════════════
+(function() {
+  'use strict';
+
+  var _hoverCard = null;
+  var _hoverTimer = null;
+  var _hideTimer  = null;
+  var _curCode    = null;
+
+  /* ── بناء عنصر البطاقة ── */
+  function _ensureCard() {
+    if (document.getElementById('_chc')) return;
+    var d = document.createElement('div');
+    d.id = '_chc';
+    d.style.cssText = [
+      'display:none','position:fixed','z-index:999999',
+      'background:#fff','border-radius:16px',
+      'box-shadow:0 8px 40px rgba(26,42,74,0.22)',
+      'min-width:270px','max-width:350px',
+      'pointer-events:auto',
+      'font-family:Cairo,Tajawal,sans-serif',
+      'direction:rtl','border:1.5px solid #e2e8f0',
+      'overflow:hidden','transition:opacity 0.15s'
+    ].join(';');
+    d.innerHTML = '<div id="_chcBody"></div>';
+    document.body.appendChild(d);
+    d.addEventListener('mouseenter', function(){ clearTimeout(_hideTimer); });
+    d.addEventListener('mouseleave', function(){ _hideTimer = setTimeout(_hide, 250); });
+    _hoverCard = d;
+  }
+
+  function _hide() {
+    if (_hoverCard) _hoverCard.style.display = 'none';
+    _curCode = null;
+  }
+
+  /* ── حساب اللون بالحضور ── */
+  function _attColor(p) {
+    return p >= 90 ? '#15803d' : p >= 75 ? '#a16207' : '#b91c1c';
+  }
+  function _attBg(p) {
+    return p >= 90 ? '#dcfce7' : p >= 75 ? '#fef9c3' : '#fee2e2';
+  }
+
+  /* ── بناء محتوى البطاقة ── */
+  function _buildCard(code) {
+    var displayName = (typeof getClassNameAr === 'function') ? (getClassNameAr(code) || code) : code;
+    var hrTeacher   = (typeof getHomeroomTeacher === 'function')    ? (getHomeroomTeacher(code)    || '—') : '—';
+    var hrSubst     = (typeof getHomeroomIsSubstitute === 'function') ? getHomeroomIsSubstitute(code) : false;
+    var swTeacher   = (typeof getSocialWorkerForClass === 'function') ? getSocialWorkerForClass(code) : '';
+    var stuCount    = (typeof getClassStudentCount === 'function')    ? getClassStudentCount(code)    : 0;
+    var attendPct   = (typeof getClassTodayAttendance === 'function') ? getClassTodayAttendance(code) : null;
+    var subjects    = (typeof getClassSubjectTeachers === 'function') ? getClassSubjectTeachers(code) : {};
+    var loc         = (typeof CLASS_LOCATIONS_DB !== 'undefined' && CLASS_LOCATIONS_DB && CLASS_LOCATIONS_DB[code]) ? CLASS_LOCATIONS_DB[code] : {};
+    var locTxt      = [loc.building, loc.floor, loc.room ? 'غرفة ' + loc.room : ''].filter(Boolean).join(' — ');
+
+    /* header */
+    var attendBadge = attendPct !== null
+      ? '<span style="background:'+_attBg(attendPct)+';color:'+_attColor(attendPct)+';border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">'+attendPct+'% حضور</span>'
+      : '';
+    var stuBadge = stuCount
+      ? '<span style="background:rgba(255,255,255,0.15);color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;">👩‍🎓 '+stuCount+'</span>'
+      : '';
+
+    var header = '<div style="background:linear-gradient(135deg,#1A2A4A 0%,#2d4475 100%);padding:13px 16px;display:flex;align-items:center;justify-content:space-between;">'
+      + '<div style="display:flex;align-items:center;gap:9px;">'
+      + '<div style="background:#C9A84C;border-radius:9px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#1A2A4A;flex-shrink:0;">'+code+'</div>'
+      + '<span style="color:#fff;font-size:15px;font-weight:700;">'+displayName+'</span>'
+      + '</div>'
+      + '<div style="display:flex;gap:5px;align-items:center;">'+stuBadge+attendBadge+'</div>'
+      + '</div>';
+
+    /* info row */
+    var hrVal = hrTeacher + (hrSubst ? ' <span style="background:#fef3c7;color:#d97706;border-radius:5px;padding:1px 5px;font-size:9px;">احتياط</span>' : '');
+    var infoRow = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:11px 14px 0;">';
+    infoRow += '<div style="background:#f0f4ff;border-radius:9px;padding:8px 11px;"><div style="font-size:9px;color:#888;margin-bottom:2px;">🏠 المربية</div><div style="font-weight:700;color:#1A2A4A;font-size:11px;">'+hrVal+'</div></div>';
+    if (swTeacher) {
+      infoRow += '<div style="background:#fdf2f8;border-radius:9px;padding:8px 11px;"><div style="font-size:9px;color:#888;margin-bottom:2px;">💛 الأخصائية</div><div style="font-weight:700;color:#1A2A4A;font-size:11px;">'+swTeacher+'</div></div>';
+    } else if (locTxt) {
+      infoRow += '<div style="background:#f0fdf4;border-radius:9px;padding:8px 11px;"><div style="font-size:9px;color:#888;margin-bottom:2px;">📍 الموقع</div><div style="font-weight:700;color:#1A2A4A;font-size:11px;">'+locTxt+'</div></div>';
+    } else {
+      infoRow += '<div style="background:#f9fafb;border-radius:9px;padding:8px 11px;"><div style="font-size:9px;color:#888;margin-bottom:2px;">📍 الموقع</div><div style="font-weight:700;color:#9ca3af;font-size:11px;">غير محدد</div></div>';
+    }
+    infoRow += '</div>';
+
+    /* subjects grid */
+    var pal = ['#dbeafe','#fce7f3','#dcfce7','#fef3c7','#f3e8ff','#ffedd5','#e0f2fe','#fdf4ff'];
+    var subjKeys = Object.keys(subjects);
+    var subjectsBlock = '';
+    if (subjKeys.length) {
+      subjectsBlock = '<div style="padding:8px 14px 0;"><div style="font-size:10px;color:#888;font-weight:600;margin-bottom:5px;">📚 المعلمات والمواد</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">'
+        + subjKeys.map(function(s,i){
+            return '<div style="background:'+pal[i%pal.length]+';border-radius:8px;padding:6px 9px;">'
+              + '<div style="font-size:9px;color:#666;margin-bottom:1px;">'+s+'</div>'
+              + '<div style="font-weight:700;color:#1A2A4A;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+subjects[s]+'">'+subjects[s]+'</div></div>';
+          }).join('')
+        + '</div></div>';
+    } else {
+      subjectsBlock = '<div style="padding:8px 14px 0;text-align:center;color:#bbb;font-size:11px;">لا يوجد جدول مُدخَل لهذا الصف</div>';
+    }
+
+    /* footer button */
+    var footer = '<div style="padding:10px 14px 13px;text-align:center;">'
+      + '<button onclick="showClassCard(\''+code+'\');document.getElementById(\'_chc\').style.display=\'none\'" '
+      + 'style="background:#1A2A4A;color:#C9A84C;border:none;border-radius:9px;padding:7px 20px;'
+      + 'font-family:inherit;font-size:11px;cursor:pointer;font-weight:700;width:100%;">📋 عرض البطاقة الكاملة</button></div>';
+
+    return header + infoRow + subjectsBlock + footer;
+  }
+
+  /* ── إظهار البطاقة عند إحداثيات معينة ── */
+  function _show(code, cx, cy) {
+    _ensureCard();
+    _curCode = code;
+    document.getElementById('_chcBody').innerHTML = _buildCard(code);
+    _hoverCard.style.display = 'block';
+    _hoverCard.style.opacity = '0';
+
+    /* حساب الموضع بعد render */
+    requestAnimationFrame(function() {
+      var w = _hoverCard.offsetWidth  || 300;
+      var h = _hoverCard.offsetHeight || 300;
+      var vw = window.innerWidth, vh = window.innerHeight;
+      var x = cx + 14, y = cy + 14;
+      if (x + w > vw - 8) x = cx - w - 14;
+      if (y + h > vh - 8) y = cy - h - 14;
+      if (x < 8) x = 8;
+      if (y < 8) y = 8;
+      _hoverCard.style.left = x + 'px';
+      _hoverCard.style.top  = y + 'px';
+      _hoverCard.style.opacity = '1';
+    });
+  }
+
+  /* ── تعليم عناصر الصفوف تلقائياً ── */
+  function _tagAll() {
+    var codes = null;
+    try { codes = (typeof getAllClasses === 'function') ? getAllClasses() : null; } catch(e){}
+    if (!codes || !codes.length) {
+      codes = [];
+      ['KG1','KG2'].forEach(function(g){ ['A','B','C','D','E','F'].forEach(function(s){ codes.push(g+'-'+s); }); });
+      for (var g = 1; g <= 5; g++) { ['A','B','C','D','E','F'].forEach(function(s){ codes.push(g+s); }); }
+    }
+    var codeSet = new Set(codes);
+
+    var skipTags = new Set(['SCRIPT','STYLE','TEXTAREA','INPUT','SELECT','NOSCRIPT','HEAD']);
+    var active = document.querySelector('.section.active') || document.body;
+    var els = active.querySelectorAll('td, th, span:not([data-ch]), div:not([data-ch]), p, h4, li, label, b, strong');
+
+    els.forEach(function(el) {
+      if (el.dataset.ch) return;                        // سبق تعليمه
+      if (skipTags.has(el.tagName)) return;
+      if (el.closest('[data-ch]')) return;              // داخل عنصر معلَّم
+      // عناصر الورقة فقط (بدون أبناء HTML)
+      if (el.children.length) return;
+      var txt = el.textContent.trim();
+      if (!codeSet.has(txt)) return;
+      el.dataset.ch = txt;
+      el.setAttribute('data-class-hover', txt);
+      el.style.cursor = 'pointer';
+      el.style.borderBottom = '1.5px dashed #C9A84C';
+    });
+  }
+
+  /* ── مستمعو الأحداث (Event Delegation) ── */
+  document.addEventListener('mouseover', function(e) {
+    var el = e.target.closest('[data-class-hover]');
+    if (!el) {
+      if (!e.target.closest('#_chc')) {
+        clearTimeout(_hoverTimer);
+        _hideTimer = setTimeout(_hide, 350);
+      }
+      return;
+    }
+    clearTimeout(_hideTimer);
+    var code = el.getAttribute('data-class-hover');
+    if (!code) return;
+    if (_curCode === code && _hoverCard && _hoverCard.style.display !== 'none') return;
+    clearTimeout(_hoverTimer);
+    var mx = e.clientX, my = e.clientY;
+    _hoverTimer = setTimeout(function() { _show(code, mx, my); }, 420);
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!e.target.closest('[data-class-hover]') && !e.target.closest('#_chc')) return;
+    /* تحديث موضع البطاقة إن ظهرت */
+  });
+
+  document.addEventListener('mouseout', function(e) {
+    var el = e.target.closest('[data-class-hover]');
+    if (!el) return;
+    var to = e.relatedTarget;
+    if (to && (to.closest('[data-class-hover]') || to.closest('#_chc'))) return;
+    clearTimeout(_hoverTimer);
+    _hideTimer = setTimeout(_hide, 300);
+  });
+
+  /* ── ربط مع showSection ── */
+  var _origSS = window.showSection;
+  window.showSection = function(name) {
+    if (typeof _origSS === 'function') _origSS.apply(this, arguments);
+    setTimeout(_tagAll, 600);
+  };
+
+  /* ── MutationObserver للمحتوى الديناميكي ── */
+  var _mutT = null;
+  new MutationObserver(function(muts) {
+    var relevant = muts.some(function(m){ return m.addedNodes.length > 0; });
+    if (!relevant) return;
+    clearTimeout(_mutT);
+    _mutT = setTimeout(_tagAll, 900);
+  }).observe(document.body, { childList: true, subtree: true });
+
+  /* ── تشغيل أولي ── */
+  setTimeout(_tagAll, 2000);
+
+  /* ── API عامة ── */
+  window.tagClassElements = _tagAll;
+
+})();
 </script>
 
 </body>
