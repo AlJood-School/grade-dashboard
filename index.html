@@ -1866,6 +1866,25 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
   </div>
 
   <!-- Main Content -->
+
+<!-- ===== BREAKING NEWS BAR ===== -->
+<div id="breaking-news-bar" style="display:none;background:linear-gradient(90deg,#c0392b,#e74c3c);color:#fff;padding:8px 0;position:relative;z-index:900;overflow:hidden;direction:rtl;">
+  <div style="display:flex;align-items:center;gap:12px;padding:0 16px;">
+    <span style="background:#fff;color:#c0392b;font-weight:900;font-size:0.72rem;padding:2px 10px;border-radius:4px;white-space:nowrap;flex-shrink:0;">🔴 عاجل</span>
+    <div id="breaking-news-ticker" style="overflow:hidden;flex:1;">
+      <div id="breaking-news-text" style="display:inline-block;white-space:nowrap;animation:tickerScroll 30s linear infinite;font-size:0.85rem;">
+        جاري تحميل الأخبار...
+      </div>
+    </div>
+    <button onclick="document.getElementById('breaking-news-bar').style.display='none'" style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:0.8rem;flex-shrink:0;">✕</button>
+  </div>
+</div>
+<style>
+@keyframes tickerScroll {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100vw); }
+}
+</style>
   <div id="mainArea">
   <div class="topbar">
     <button id="hamburger-btn" onclick="toggleMobileSidebar()" title="القائمة" style="display:none;background:none;border:none;cursor:pointer;padding:6px 10px;margin-left:8px;color:#1A2A4A;font-size:1.4rem;line-height:1;">&#9776;</button>
@@ -10545,6 +10564,10 @@ const NAV_DEFAULT_CONFIG = [
   { id:'security_log',   label:'سجل الأمان',             labelEn:'Security Log',      icon:'fa-shield-alt',     badge:'', badgeColor:'', group:'admin_tools',   visibleTo:['admin'] },
   { id:'data_analytics', label:'تحليل البيانات',         labelEn:'Analytics',         icon:'fa-chart-line',     badge:'', badgeColor:'', group:'admin_tools',   visibleTo:['admin','principal'] },
   { id:'school_stats',    label:'إحصاءات مدرسية',         labelEn:'School Stats',      icon:'fa-chart-pie',      badge:'', badgeColor:'', group:'admin_tools',   visibleTo:['admin','principal','vice_principal'] },
+
+  { id:'quick_attendance', label:'حضور بنقرة',           labelEn:'Quick Attendance', icon:'fa-check-circle',   badge:'جديد', badgeColor:'#28a745', group:'teacher_tools', visibleTo:['teacher','admin','principal','vice_principal','admin_staff'] },
+  { id:'curriculum_tracker', label:'متتبع المناهج',       labelEn:'Curriculum Track',  icon:'fa-book-open',     badge:'جديد', badgeColor:'#17a2b8', group:'teacher_tools', visibleTo:['teacher','admin','principal','vice_principal'] },
+  { id:'task_manager',    label:'إدارة المهام',            labelEn:'Task Manager',      icon:'fa-tasks',         badge:'جديد', badgeColor:'#6366f1', group:'teacher_tools', visibleTo:['all'] },
   { id:'duties',          label:'المناوبات',               labelEn:'Duty Roster',       icon:'fa-clipboard-list', badge:'', badgeColor:'', group:'academic',      visibleTo:['admin','principal','vice_principal','teacher','admin_staff'] },
 ];
 
@@ -24304,6 +24327,209 @@ function renderLoginAnalytics() {
   <div class="dt-grid" id="dt-grid"></div>
 </section>
 
+
+
+<!-- ===== QUICK ATTENDANCE SECTION ===== -->
+<section class="section" id="section-quick_attendance" dir="rtl">
+  <div class="page-header">
+    <div class="page-header-text">
+      <h1><i class="fas fa-check-circle" style="color:#28a745;"></i> حضور بنقرة واحدة</h1>
+      <p>تسجيل حضور وغياب الطلاب بسرعة — تصدير PDF وCSV فوري</p>
+    </div>
+    <i class="fas fa-users page-header-icon"></i>
+  </div>
+
+  <div style="background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.08);margin-bottom:20px;">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
+      <div>
+        <label style="font-size:0.82rem;font-weight:700;color:#1A2A4A;display:block;margin-bottom:4px;">📅 التاريخ</label>
+        <input type="date" id="att-date" style="padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:0.9rem;" />
+      </div>
+      <div>
+        <label style="font-size:0.82rem;font-weight:700;color:#1A2A4A;display:block;margin-bottom:4px;">🏫 الصف</label>
+        <input type="text" id="att-class" placeholder="مثال: 5/1" style="padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:0.9rem;width:120px;" />
+      </div>
+      <div>
+        <label style="font-size:0.82rem;font-weight:700;color:#1A2A4A;display:block;margin-bottom:4px;">📚 المادة</label>
+        <input type="text" id="att-subject" placeholder="مثال: رياضيات" style="padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:0.9rem;width:140px;" />
+      </div>
+      <div style="margin-top:22px;">
+        <button onclick="attLoadSession()" style="background:linear-gradient(135deg,#1A2A4A,#2d4a8a);color:#C9A84C;border:none;padding:9px 20px;border-radius:8px;font-weight:700;cursor:pointer;"><i class="fas fa-sync-alt"></i> تحميل</button>
+      </div>
+    </div>
+
+    <!-- إضافة طلاب -->
+    <div style="background:#f8fafc;border-radius:10px;padding:16px;margin-bottom:16px;">
+      <h4 style="margin:0 0 12px;color:#1A2A4A;font-size:0.95rem;"><i class="fas fa-user-plus" style="color:#C9A84C;margin-left:6px;"></i> إضافة / تعديل قائمة الطلاب</h4>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="att-new-student" placeholder="اسم الطالب/ة" style="flex:1;padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:0.9rem;" onkeydown="if(event.key==='Enter')attAddStudent()" />
+        <button onclick="attAddStudent()" style="background:#28a745;color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:700;"><i class="fas fa-plus"></i></button>
+      </div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="attMarkAll('present')" style="background:#28a745;color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.82rem;"><i class="fas fa-check"></i> حاضر الكل</button>
+        <button onclick="attMarkAll('absent')" style="background:#dc3545;color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.82rem;"><i class="fas fa-times"></i> غائب الكل</button>
+        <button onclick="attClearList()" style="background:#6c757d;color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.82rem;"><i class="fas fa-trash"></i> مسح القائمة</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- قائمة الطلاب -->
+  <div id="att-student-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:20px;"></div>
+
+  <!-- إحصاءات -->
+  <div id="att-stats" style="background:linear-gradient(135deg,#1A2A4A,#2d4a8a);border-radius:14px;padding:20px;color:#fff;margin-bottom:16px;display:none;">
+    <div style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;">
+      <div style="text-align:center;">
+        <div id="att-count-total" style="font-size:2rem;font-weight:900;color:#C9A84C;">0</div>
+        <div style="font-size:0.8rem;opacity:0.8;">إجمالي الطلاب</div>
+      </div>
+      <div style="text-align:center;">
+        <div id="att-count-present" style="font-size:2rem;font-weight:900;color:#4ade80;">0</div>
+        <div style="font-size:0.8rem;opacity:0.8;">حاضر</div>
+      </div>
+      <div style="text-align:center;">
+        <div id="att-count-absent" style="font-size:2rem;font-weight:900;color:#f87171;">0</div>
+        <div style="font-size:0.8rem;opacity:0.8;">غائب</div>
+      </div>
+      <div style="text-align:center;">
+        <div id="att-count-late" style="font-size:2rem;font-weight:900;color:#fbbf24;">0</div>
+        <div style="font-size:0.8rem;opacity:0.8;">متأخر</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- أزرار التصدير -->
+  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <button onclick="attSave()" style="background:linear-gradient(135deg,#1A2A4A,#2d4a8a);color:#C9A84C;border:none;padding:10px 24px;border-radius:10px;font-weight:700;cursor:pointer;font-size:0.9rem;"><i class="fas fa-save"></i> حفظ</button>
+    <button onclick="attExportPDF()" style="background:linear-gradient(135deg,#dc3545,#c82333);color:#fff;border:none;padding:10px 24px;border-radius:10px;font-weight:700;cursor:pointer;font-size:0.9rem;"><i class="fas fa-file-pdf"></i> تصدير PDF</button>
+    <button onclick="attExportCSV()" style="background:linear-gradient(135deg,#28a745,#218838);color:#fff;border:none;padding:10px 24px;border-radius:10px;font-weight:700;cursor:pointer;font-size:0.9rem;"><i class="fas fa-file-csv"></i> تصدير CSV</button>
+  </div>
+
+  <!-- سجل الجلسات السابقة -->
+  <div style="margin-top:24px;background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+    <h3 style="margin:0 0 16px;color:#1A2A4A;font-size:1rem;"><i class="fas fa-history" style="color:#C9A84C;margin-left:6px;"></i> جلسات الحضور المحفوظة</h3>
+    <div id="att-sessions-list" style="max-height:280px;overflow-y:auto;"></div>
+  </div>
+</section>
+
+<!-- ===== CURRICULUM TRACKER SECTION ===== -->
+<section class="section" id="section-curriculum_tracker" dir="rtl">
+  <div class="page-header">
+    <div class="page-header-text">
+      <h1><i class="fas fa-book-open" style="color:#17a2b8;"></i> متتبع المناهج الذكي</h1>
+      <p>تتبعي تقدمك في المنهج درساً بدرس — تلقائي وبصري</p>
+    </div>
+    <i class="fas fa-graduation-cap page-header-icon"></i>
+  </div>
+
+  <div style="background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.08);margin-bottom:20px;">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+      <div>
+        <label style="font-size:0.82rem;font-weight:700;color:#1A2A4A;display:block;margin-bottom:4px;">📚 المادة</label>
+        <input type="text" id="cur-subject" placeholder="مثال: اللغة العربية" style="padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:0.9rem;width:180px;" />
+      </div>
+      <div>
+        <label style="font-size:0.82rem;font-weight:700;color:#1A2A4A;display:block;margin-bottom:4px;">🏫 الصف</label>
+        <input type="text" id="cur-grade" placeholder="مثال: الصف الخامس" style="padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:0.9rem;width:150px;" />
+      </div>
+      <div style="margin-top:22px;">
+        <button onclick="curLoad()" style="background:linear-gradient(135deg,#17a2b8,#138496);color:#fff;border:none;padding:9px 20px;border-radius:8px;font-weight:700;cursor:pointer;"><i class="fas fa-search"></i> بحث</button>
+        <button onclick="curNew()" style="background:linear-gradient(135deg,#1A2A4A,#2d4a8a);color:#C9A84C;border:none;padding:9px 20px;border-radius:8px;font-weight:700;cursor:pointer;margin-right:6px;"><i class="fas fa-plus"></i> جديد</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- شريط التقدم الكلي -->
+  <div id="cur-progress-bar-wrap" style="background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.08);margin-bottom:20px;display:none;">
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+      <span style="font-weight:700;color:#1A2A4A;" id="cur-progress-label">التقدم الكلي</span>
+      <span style="font-weight:900;color:#17a2b8;" id="cur-progress-pct">0%</span>
+    </div>
+    <div style="background:#e2e8f0;border-radius:999px;height:14px;overflow:hidden;">
+      <div id="cur-progress-bar" style="background:linear-gradient(90deg,#17a2b8,#28a745);height:100%;width:0%;transition:width 0.5s;border-radius:999px;"></div>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:12px;font-size:0.85rem;color:#666;" id="cur-progress-stats"></div>
+  </div>
+
+  <!-- إضافة وحدة جديدة -->
+  <div id="cur-add-unit-wrap" style="background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.08);margin-bottom:20px;display:none;">
+    <h4 style="margin:0 0 12px;color:#1A2A4A;"><i class="fas fa-folder-plus" style="color:#C9A84C;margin-left:6px;"></i> إضافة وحدة دراسية</h4>
+    <div style="display:flex;gap:8px;">
+      <input type="text" id="cur-unit-name" placeholder="اسم الوحدة مثال: الوحدة الأولى - الكائنات الحية" style="flex:1;padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:0.9rem;" />
+      <button onclick="curAddUnit()" style="background:#17a2b8;color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:700;"><i class="fas fa-plus"></i> إضافة</button>
+    </div>
+  </div>
+
+  <!-- قائمة الوحدات والدروس -->
+  <div id="cur-units-list"></div>
+</section>
+
+<!-- ===== TASK MANAGER SECTION ===== -->
+<section class="section" id="section-task_manager" dir="rtl">
+  <div class="page-header">
+    <div class="page-header-text">
+      <h1><i class="fas fa-tasks" style="color:#6366f1;"></i> إدارة المهام</h1>
+      <p>قائمة مهامكِ الذكية — مع الأولويات والتذكيرات والتتبع</p>
+    </div>
+    <i class="fas fa-clipboard-check page-header-icon"></i>
+  </div>
+
+  <!-- إضافة مهمة جديدة -->
+  <div style="background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.08);margin-bottom:20px;">
+    <h3 style="margin:0 0 16px;color:#1A2A4A;font-size:1rem;"><i class="fas fa-plus-circle" style="color:#6366f1;margin-left:6px;"></i> مهمة جديدة</h3>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <input type="text" id="task-title-input" placeholder="عنوان المهمة..." style="padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;font-size:1rem;font-family:inherit;" />
+      <textarea id="task-desc-input" placeholder="وصف المهمة (اختياري)..." rows="2" style="padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;font-size:0.9rem;font-family:inherit;resize:none;"></textarea>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div>
+          <label style="font-size:0.8rem;font-weight:700;color:#666;display:block;margin-bottom:4px;">الأولوية</label>
+          <select id="task-priority-input" style="padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;font-family:inherit;">
+            <option value="high">🔴 عالية</option>
+            <option value="medium" selected>🟡 متوسطة</option>
+            <option value="low">🟢 منخفضة</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:0.8rem;font-weight:700;color:#666;display:block;margin-bottom:4px;">📅 الموعد</label>
+          <input type="date" id="task-due-input" style="padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;" />
+        </div>
+        <div>
+          <label style="font-size:0.8rem;font-weight:700;color:#666;display:block;margin-bottom:4px;">التصنيف</label>
+          <select id="task-cat-input" style="padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;font-family:inherit;">
+            <option value="teaching">📖 تدريس</option>
+            <option value="admin">📋 إداري</option>
+            <option value="meeting">🤝 اجتماع</option>
+            <option value="other">📌 أخرى</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:flex-end;">
+          <button onclick="taskAdd()" style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none;padding:10px 24px;border-radius:10px;font-weight:700;cursor:pointer;"><i class="fas fa-plus"></i> إضافة</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- فلاتر وإحصاءات -->
+  <div style="background:#fff;border-radius:16px;padding:16px 20px;box-shadow:0 2px 12px rgba(0,0,0,0.08);margin-bottom:16px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <span style="font-weight:700;color:#1A2A4A;font-size:0.9rem;">عرض:</span>
+      <button onclick="taskFilter('all')" id="task-filter-all" class="task-filter-btn active" style="background:#6366f1;color:#fff;border:none;padding:6px 16px;border-radius:20px;cursor:pointer;font-size:0.82rem;font-family:inherit;">الكل</button>
+      <button onclick="taskFilter('pending')" id="task-filter-pending" class="task-filter-btn" style="background:#e2e8f0;color:#444;border:none;padding:6px 16px;border-radius:20px;cursor:pointer;font-size:0.82rem;font-family:inherit;">⏳ معلقة</button>
+      <button onclick="taskFilter('in_progress')" id="task-filter-in_progress" class="task-filter-btn" style="background:#e2e8f0;color:#444;border:none;padding:6px 16px;border-radius:20px;cursor:pointer;font-size:0.82rem;font-family:inherit;">🔄 جارية</button>
+      <button onclick="taskFilter('done')" id="task-filter-done" class="task-filter-btn" style="background:#e2e8f0;color:#444;border:none;padding:6px 16px;border-radius:20px;cursor:pointer;font-size:0.82rem;font-family:inherit;">✅ مكتملة</button>
+      <div style="margin-right:auto;display:flex;gap:6px;">
+        <span id="task-stats-text" style="font-size:0.82rem;color:#666;"></span>
+        <button onclick="taskExportCSV()" style="background:#28a745;color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.8rem;"><i class="fas fa-download"></i> تصدير</button>
+        <button onclick="taskClearDone()" style="background:#dc3545;color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.8rem;"><i class="fas fa-trash"></i> مسح المكتملة</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- قائمة المهام -->
+  <div id="task-list-container"></div>
+</section>
+
+
 <!-- end mainContent -->
 </div><!-- end mainArea -->
 </div><!-- end app -->
@@ -32596,6 +32822,654 @@ setInterval(loadSmartNotifications, 5 * 60 * 1000);
     setTimeout(injectNotifBell, 200);
   };
 })();
+
+// ══════════════════════════════════════════════════════════════════
+// ███ حضور بنقرة — QUICK ATTENDANCE ███
+// ══════════════════════════════════════════════════════════════════
+(function() {
+  var ATT_KEY = 'aljood_attendance_data';
+
+  function attGetAll() {
+    try { return JSON.parse(localStorage.getItem(ATT_KEY) || '{}'); } catch(e) { return {}; }
+  }
+  function attSaveAll(data) {
+    localStorage.setItem(ATT_KEY, JSON.stringify(data));
+  }
+  function attSessionKey() {
+    var d = document.getElementById('att-date');
+    var c = document.getElementById('att-class');
+    var s = document.getElementById('att-subject');
+    return (d&&d.value||new Date().toISOString().slice(0,10)) + '_' + (c&&c.value||'') + '_' + (s&&s.value||'');
+  }
+
+  window.attLoadSession = function() {
+    var key = attSessionKey();
+    var all = attGetAll();
+    var session = all[key] || { students: [] };
+    if (!session.students.length) {
+      // إضافة طلاب افتراضيين للتجربة
+      session.students = [];
+    }
+    localStorage.setItem('aljood_att_current', JSON.stringify(session.students));
+    attRenderList();
+  };
+
+  window.attAddStudent = function() {
+    var inp = document.getElementById('att-new-student');
+    if (!inp || !inp.value.trim()) return;
+    var students = attGetCurrentStudents();
+    var name = inp.value.trim();
+    if (students.find(function(s){return s.name===name;})) {
+      alert('الطالب/ة موجود مسبقاً'); return;
+    }
+    students.push({ name: name, status: 'pending', note: '' });
+    attSaveCurrent(students);
+    inp.value = '';
+    attRenderList();
+  };
+
+  window.attMarkAll = function(status) {
+    var students = attGetCurrentStudents();
+    students.forEach(function(s){ s.status = status; });
+    attSaveCurrent(students);
+    attRenderList();
+  };
+
+  window.attClearList = function() {
+    if (!confirm('هل تريدين مسح قائمة الطلاب الحالية؟')) return;
+    attSaveCurrent([]);
+    attRenderList();
+  };
+
+  window.attToggleStatus = function(idx) {
+    var students = attGetCurrentStudents();
+    var s = students[idx];
+    if (!s) return;
+    var cycle = ['pending', 'present', 'late', 'absent'];
+    var ci = cycle.indexOf(s.status);
+    s.status = cycle[(ci+1) % cycle.length];
+    attSaveCurrent(students);
+    attRenderList();
+  };
+
+  window.attDeleteStudent = function(idx) {
+    var students = attGetCurrentStudents();
+    students.splice(idx, 1);
+    attSaveCurrent(students);
+    attRenderList();
+  };
+
+  function attGetCurrentStudents() {
+    try { return JSON.parse(localStorage.getItem('aljood_att_current') || '[]'); } catch(e) { return []; }
+  }
+  function attSaveCurrent(students) {
+    localStorage.setItem('aljood_att_current', JSON.stringify(students));
+  }
+
+  window.attRenderList = function() {
+    var el = document.getElementById('att-student-list');
+    if (!el) return;
+    var students = attGetCurrentStudents();
+    if (!students.length) {
+      el.innerHTML = '<div style="text-align:center;padding:40px;color:#aaa;grid-column:1/-1;"><i class="fas fa-users" style="font-size:2rem;display:block;margin-bottom:10px;"></i>لا يوجد طلاب — أضيفي أسماء الطلاب أعلاه</div>';
+      document.getElementById('att-stats') && (document.getElementById('att-stats').style.display='none');
+      return;
+    }
+    var statusConfig = {
+      pending:  { label:'لم يُسجَّل', color:'#94a3b8', bg:'#f1f5f9', icon:'❓' },
+      present:  { label:'حاضر ✅',    color:'#059669', bg:'#ecfdf5', icon:'✅' },
+      absent:   { label:'غائب ❌',    color:'#dc2626', bg:'#fef2f2', icon:'❌' },
+      late:     { label:'متأخر ⏰',   color:'#d97706', bg:'#fffbeb', icon:'⏰' }
+    };
+    var html = '';
+    students.forEach(function(s, i) {
+      var cfg = statusConfig[s.status] || statusConfig.pending;
+      html += '<div onclick="attToggleStatus('+i+')" style="background:'+cfg.bg+';border:2px solid '+cfg.color+';border-radius:12px;padding:14px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:all 0.2s;user-select:none;">';
+      html += '<div style="display:flex;align-items:center;gap:10px;">';
+      html += '<span style="background:'+cfg.color+';color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:700;flex-shrink:0;">'+(i+1)+'</span>';
+      html += '<div><div style="font-weight:700;color:#1A2A4A;font-size:0.95rem;">'+s.name+'</div>';
+      html += '<div style="font-size:0.78rem;color:'+cfg.color+';font-weight:700;">'+cfg.icon+' '+cfg.label+'</div></div>';
+      html += '</div>';
+      html += '<button onclick="event.stopPropagation();attDeleteStudent('+i+')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:1rem;padding:4px;" title="حذف"><i class="fas fa-trash-alt"></i></button>';
+      html += '</div>';
+    });
+    el.innerHTML = html;
+
+    // إحصاءات
+    var stats = {present:0,absent:0,late:0,pending:0};
+    students.forEach(function(s){ stats[s.status]=(stats[s.status]||0)+1; });
+    var statEl = document.getElementById('att-stats');
+    if (statEl) {
+      statEl.style.display='';
+      document.getElementById('att-count-total').textContent = students.length;
+      document.getElementById('att-count-present').textContent = stats.present||0;
+      document.getElementById('att-count-absent').textContent = stats.absent||0;
+      document.getElementById('att-count-late').textContent = stats.late||0;
+    }
+  };
+
+  window.attSave = function() {
+    var key = attSessionKey();
+    var all = attGetAll();
+    var dateEl = document.getElementById('att-date');
+    var classEl = document.getElementById('att-class');
+    var subjectEl = document.getElementById('att-subject');
+    all[key] = {
+      date: dateEl ? dateEl.value : '',
+      className: classEl ? classEl.value : '',
+      subject: subjectEl ? subjectEl.value : '',
+      students: attGetCurrentStudents(),
+      savedAt: new Date().toISOString()
+    };
+    attSaveAll(all);
+    attRenderSessions();
+    // إشعار
+    var msg = document.createElement('div');
+    msg.textContent = '✅ تم حفظ سجل الحضور';
+    msg.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);background:#28a745;color:#fff;padding:12px 28px;border-radius:10px;font-weight:700;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.2);';
+    document.body.appendChild(msg);
+    setTimeout(function(){ msg.remove(); }, 3000);
+  };
+
+  window.attExportPDF = function() {
+    var students = attGetCurrentStudents();
+    if (!students.length) { alert('لا يوجد طلاب لتصديرهم'); return; }
+    var dateEl = document.getElementById('att-date');
+    var classEl = document.getElementById('att-class');
+    var subjectEl = document.getElementById('att-subject');
+    var dateVal = dateEl ? dateEl.value : '';
+    var classVal = classEl ? classEl.value : '';
+    var subjectVal = subjectEl ? subjectEl.value : '';
+    var rows = students.map(function(s, i){
+      var statusAr = {present:'حاضر',absent:'غائب',late:'متأخر',pending:'لم يُسجَّل'};
+      var statusColor = {present:'#059669',absent:'#dc2626',late:'#d97706',pending:'#94a3b8'};
+      return '<tr><td style="border:1px solid #ddd;padding:8px;text-align:center;">'+(i+1)+'</td>'
+           + '<td style="border:1px solid #ddd;padding:8px;">' + s.name + '</td>'
+           + '<td style="border:1px solid #ddd;padding:8px;text-align:center;color:'+statusColor[s.status||'pending']+';font-weight:700;">'+(statusAr[s.status||'pending']||'—')+'</td></tr>';
+    }).join('');
+
+    var stats = {present:0,absent:0,late:0};
+    students.forEach(function(s){ if(s.status!=='pending') stats[s.status]=(stats[s.status]||0)+1; });
+
+    var win = window.open('','_blank');
+    win.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">'
+      + '<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet">'
+      + '<style>body{font-family:Amiri,Arial,sans-serif;direction:rtl;padding:30px;color:#1A2A4A;}h1{color:#1A2A4A;border-bottom:3px solid #C9A84C;padding-bottom:10px;}'
+      + 'table{width:100%;border-collapse:collapse;margin-top:20px;} th{background:#1A2A4A;color:#C9A84C;padding:10px;border:1px solid #ddd;}'
+      + '.stats{display:flex;gap:20px;margin-top:16px;} .stat-box{background:#f8f9fa;border-radius:8px;padding:12px 20px;text-align:center;}'
+      + '@media print{body{padding:10px;}} </style></head><body>'
+      + '<h1>🏫 مدرسة الجود — سجل الحضور</h1>'
+      + '<p><strong>التاريخ:</strong> '+dateVal+' &nbsp; <strong>الصف:</strong> '+classVal+' &nbsp; <strong>المادة:</strong> '+subjectVal+'</p>'
+      + '<div class="stats">'
+      + '<div class="stat-box"><div style="font-size:1.5rem;font-weight:900;color:#059669;">'+stats.present+'</div><div>حاضر</div></div>'
+      + '<div class="stat-box"><div style="font-size:1.5rem;font-weight:900;color:#dc2626;">'+stats.absent+'</div><div>غائب</div></div>'
+      + '<div class="stat-box"><div style="font-size:1.5rem;font-weight:900;color:#d97706;">'+stats.late+'</div><div>متأخر</div></div>'
+      + '<div class="stat-box"><div style="font-size:1.5rem;font-weight:900;color:#1A2A4A;">'+students.length+'</div><div>الإجمالي</div></div>'
+      + '</div>'
+      + '<table><thead><tr><th>#</th><th>اسم الطالب/ة</th><th>الحالة</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      + '<p style="margin-top:20px;color:#888;font-size:0.8rem;">تم إنشاء هذا التقرير من بوابة مدرسة الجود الذكية</p>'
+      + '<script>window.onload=function(){window.print();}<\/script>'
+      + '</body></html>');
+    win.document.close();
+  };
+
+  window.attExportCSV = function() {
+    var students = attGetCurrentStudents();
+    if (!students.length) { alert('لا يوجد طلاب'); return; }
+    var dateEl = document.getElementById('att-date');
+    var classEl = document.getElementById('att-class');
+    var subjectEl = document.getElementById('att-subject');
+    var statusAr = {present:'حاضر',absent:'غائب',late:'متأخر',pending:'لم يسجل'};
+    var csv = '\uFEFF#,الاسم,الحالة,التاريخ,الصف,المادة\n';
+    students.forEach(function(s,i){
+      csv += (i+1)+','+s.name+','+(statusAr[s.status||'pending']||'—')+','+(dateEl?dateEl.value:'')+','+(classEl?classEl.value:'')+','+(subjectEl?subjectEl.value:'')+'\n';
+    });
+    var blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'حضور_'+(dateEl?dateEl.value:new Date().toISOString().slice(0,10))+'.csv';
+    a.click();
+  };
+
+  function attRenderSessions() {
+    var el = document.getElementById('att-sessions-list');
+    if (!el) return;
+    var all = attGetAll();
+    var keys = Object.keys(all).sort().reverse();
+    if (!keys.length) { el.innerHTML = '<p style="color:#aaa;text-align:center;">لا يوجد جلسات محفوظة</p>'; return; }
+    var html = '';
+    keys.slice(0,20).forEach(function(k) {
+      var s = all[k];
+      var total = s.students ? s.students.length : 0;
+      var present = s.students ? s.students.filter(function(x){return x.status==='present';}).length : 0;
+      var absent = s.students ? s.students.filter(function(x){return x.status==='absent';}).length : 0;
+      html += '<div style="background:#f8fafc;border-radius:10px;padding:12px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;border:1px solid #e2e8f0;">';
+      html += '<div><div style="font-weight:700;color:#1A2A4A;font-size:0.9rem;">'+s.date+' — '+s.className+' — '+s.subject+'</div>';
+      html += '<div style="font-size:0.78rem;color:#666;margin-top:2px;"><span style="color:#059669;font-weight:700;">✅ '+present+'</span> حاضر &nbsp; <span style="color:#dc2626;font-weight:700;">❌ '+absent+'</span> غائب &nbsp; 👥 '+total+' إجمالي</div></div>';
+      html += '<div style="display:flex;gap:6px;">';
+      html += '<button onclick="attLoadKey(\''+k+'\')" style="background:#1A2A4A;color:#C9A84C;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.78rem;"><i class="fas fa-folder-open"></i> فتح</button>';
+      html += '<button onclick="attDeleteKey(\''+k+'\')" style="background:#dc3545;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.78rem;"><i class="fas fa-trash"></i></button>';
+      html += '</div></div>';
+    });
+    el.innerHTML = html;
+  }
+
+  window.attLoadKey = function(k) {
+    var all = attGetAll();
+    var session = all[k];
+    if (!session) return;
+    var dateEl = document.getElementById('att-date');
+    var classEl = document.getElementById('att-class');
+    var subjectEl = document.getElementById('att-subject');
+    if (dateEl) dateEl.value = session.date || '';
+    if (classEl) classEl.value = session.className || '';
+    if (subjectEl) subjectEl.value = session.subject || '';
+    attSaveCurrent(session.students || []);
+    attRenderList();
+  };
+
+  window.attDeleteKey = function(k) {
+    if (!confirm('حذف هذه الجلسة؟')) return;
+    var all = attGetAll();
+    delete all[k];
+    attSaveAll(all);
+    attRenderSessions();
+  };
+
+  // تهيئة عند فتح القسم
+  var _origShowSec = window.showSection;
+  window.showSection = function(name) {
+    if (typeof _origShowSec === 'function') _origShowSec(name);
+    if (name === 'quick_attendance') {
+      var dateEl = document.getElementById('att-date');
+      if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0,10);
+      attRenderList();
+      attRenderSessions();
+    }
+    if (name === 'curriculum_tracker') curInitDefault();
+    if (name === 'task_manager') taskRender();
+  };
+})();
+
+// ══════════════════════════════════════════════════════════════════
+// ███ متتبع المناهج — CURRICULUM TRACKER ███
+// ══════════════════════════════════════════════════════════════════
+(function() {
+  var CUR_KEY = 'aljood_curriculum_data';
+
+  function curGetAll() {
+    try { return JSON.parse(localStorage.getItem(CUR_KEY) || '{}'); } catch(e) { return {}; }
+  }
+  function curSaveAll(data) { localStorage.setItem(CUR_KEY, JSON.stringify(data)); }
+
+  function curCurrentKey() {
+    var s = document.getElementById('cur-subject');
+    var g = document.getElementById('cur-grade');
+    return (s?s.value.trim():'') + '_' + (g?g.value.trim():'');
+  }
+
+  window.curLoad = function() {
+    var key = curCurrentKey();
+    if (!key || key === '_') { alert('يرجى إدخال المادة والصف'); return; }
+    var all = curGetAll();
+    var cur = all[key];
+    if (!cur) {
+      if (confirm('لا يوجد منهج محفوظ لهذه المادة والصف — هل تريدين إنشاء منهج جديد؟')) curNew();
+      return;
+    }
+    curRenderUnits(cur);
+  };
+
+  window.curNew = function() {
+    var s = document.getElementById('cur-subject');
+    var g = document.getElementById('cur-grade');
+    if ((!s||!s.value.trim()) || (!g||!g.value.trim())) { alert('يرجى إدخال المادة والصف أولاً'); return; }
+    var key = curCurrentKey();
+    var all = curGetAll();
+    if (!all[key]) all[key] = { subject: s.value.trim(), grade: g.value.trim(), units: [] };
+    curSaveAll(all);
+    curRenderUnits(all[key]);
+    document.getElementById('cur-add-unit-wrap') && (document.getElementById('cur-add-unit-wrap').style.display='');
+  };
+
+  window.curAddUnit = function() {
+    var inp = document.getElementById('cur-unit-name');
+    if (!inp || !inp.value.trim()) return;
+    var key = curCurrentKey();
+    var all = curGetAll();
+    if (!all[key]) { alert('ابدأي بإنشاء منهج أولاً'); return; }
+    all[key].units.push({ name: inp.value.trim(), lessons: [] });
+    curSaveAll(all);
+    inp.value = '';
+    curRenderUnits(all[key]);
+  };
+
+  window.curAddLesson = function(unitIdx) {
+    var key = curCurrentKey();
+    var inp = document.getElementById('cur-lesson-inp-' + unitIdx);
+    if (!inp || !inp.value.trim()) return;
+    var all = curGetAll();
+    if (!all[key] || !all[key].units[unitIdx]) return;
+    all[key].units[unitIdx].lessons.push({ name: inp.value.trim(), done: false, date: '' });
+    curSaveAll(all);
+    inp.value = '';
+    curRenderUnits(all[key]);
+  };
+
+  window.curToggleLesson = function(unitIdx, lessonIdx) {
+    var key = curCurrentKey();
+    var all = curGetAll();
+    if (!all[key]) return;
+    var lesson = all[key].units[unitIdx].lessons[lessonIdx];
+    lesson.done = !lesson.done;
+    lesson.date = lesson.done ? new Date().toISOString().slice(0,10) : '';
+    curSaveAll(all);
+    curRenderUnits(all[key]);
+  };
+
+  window.curDeleteLesson = function(unitIdx, lessonIdx) {
+    var key = curCurrentKey();
+    var all = curGetAll();
+    if (!all[key]) return;
+    all[key].units[unitIdx].lessons.splice(lessonIdx, 1);
+    curSaveAll(all);
+    curRenderUnits(all[key]);
+  };
+
+  window.curDeleteUnit = function(unitIdx) {
+    if (!confirm('حذف هذه الوحدة وكل دروسها؟')) return;
+    var key = curCurrentKey();
+    var all = curGetAll();
+    if (!all[key]) return;
+    all[key].units.splice(unitIdx, 1);
+    curSaveAll(all);
+    curRenderUnits(all[key]);
+  };
+
+  window.curRenderUnits = function(cur) {
+    var el = document.getElementById('cur-units-list');
+    if (!el) return;
+    if (!cur || !cur.units || !cur.units.length) {
+      el.innerHTML = '<div style="text-align:center;padding:40px;color:#aaa;"><i class="fas fa-book" style="font-size:2rem;display:block;margin-bottom:10px;"></i>لا توجد وحدات — أضيفي وحدة دراسية أعلاه</div>';
+      document.getElementById('cur-progress-bar-wrap') && (document.getElementById('cur-progress-bar-wrap').style.display='none');
+      document.getElementById('cur-add-unit-wrap') && (document.getElementById('cur-add-unit-wrap').style.display='');
+      return;
+    }
+
+    // حساب التقدم
+    var totalLessons = 0, doneLessons = 0;
+    cur.units.forEach(function(u){ totalLessons += u.lessons.length; doneLessons += u.lessons.filter(function(l){return l.done;}).length; });
+    var pct = totalLessons ? Math.round(doneLessons/totalLessons*100) : 0;
+
+    var barWrap = document.getElementById('cur-progress-bar-wrap');
+    if (barWrap) {
+      barWrap.style.display = '';
+      document.getElementById('cur-progress-pct').textContent = pct + '%';
+      document.getElementById('cur-progress-bar').style.width = pct + '%';
+      document.getElementById('cur-progress-label').textContent = (cur.subject||'') + ' — ' + (cur.grade||'');
+      document.getElementById('cur-progress-stats').innerHTML = '<span>✅ مكتمل: '+doneLessons+'</span><span>📖 متبقٍ: '+(totalLessons-doneLessons)+'</span><span>📚 الكل: '+totalLessons+'</span>';
+    }
+    document.getElementById('cur-add-unit-wrap') && (document.getElementById('cur-add-unit-wrap').style.display='');
+
+    var html = '';
+    cur.units.forEach(function(unit, ui) {
+      var unitDone = unit.lessons.filter(function(l){return l.done;}).length;
+      var unitPct = unit.lessons.length ? Math.round(unitDone/unit.lessons.length*100) : 0;
+      html += '<div style="background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.08);margin-bottom:16px;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">';
+      html += '<div><h3 style="margin:0;color:#1A2A4A;font-size:1rem;"><i class="fas fa-folder" style="color:#C9A84C;margin-left:6px;"></i>' + unit.name + '</h3>';
+      html += '<div style="font-size:0.8rem;color:#666;margin-top:2px;">'+unitDone+' / '+unit.lessons.length+' درس مكتمل ('+unitPct+'%)</div></div>';
+      html += '<button onclick="curDeleteUnit('+ui+')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.9rem;" title="حذف الوحدة"><i class="fas fa-trash"></i></button>';
+      html += '</div>';
+      // شريط تقدم الوحدة
+      html += '<div style="background:#e2e8f0;border-radius:999px;height:8px;margin-bottom:14px;overflow:hidden;"><div style="background:linear-gradient(90deg,#17a2b8,#28a745);height:100%;width:'+unitPct+'%;transition:width 0.5s;border-radius:999px;"></div></div>';
+
+      // قائمة الدروس
+      if (unit.lessons.length) {
+        html += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;">';
+        unit.lessons.forEach(function(lesson, li) {
+          html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:'+(lesson.done?'#ecfdf5':'#f8fafc')+';border-radius:8px;border:1px solid '+(lesson.done?'#86efac':'#e2e8f0')+';">';
+          html += '<input type="checkbox" '+(lesson.done?'checked':'')+' onchange="curToggleLesson('+ui+','+li+')" style="width:18px;height:18px;cursor:pointer;accent-color:#17a2b8;" />';
+          html += '<span style="flex:1;color:#1A2A4A;font-size:0.9rem;'+(lesson.done?'text-decoration:line-through;color:#94a3b8;':'')+'">' + lesson.name + '</span>';
+          if (lesson.done && lesson.date) html += '<span style="font-size:0.75rem;color:#94a3b8;">'+lesson.date+'</span>';
+          html += '<button onclick="curDeleteLesson('+ui+','+li+')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.8rem;opacity:0.6;" title="حذف"><i class="fas fa-times"></i></button>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      // إضافة درس
+      html += '<div style="display:flex;gap:8px;">';
+      html += '<input type="text" id="cur-lesson-inp-'+ui+'" placeholder="اسم الدرس الجديد..." style="flex:1;padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:0.85rem;font-family:inherit;" onkeydown="if(event.key===\'Enter\')curAddLesson('+ui+')" />';
+      html += '<button onclick="curAddLesson('+ui+')" style="background:#17a2b8;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:700;"><i class="fas fa-plus"></i></button>';
+      html += '</div>';
+      html += '</div>';
+    });
+    el.innerHTML = html;
+  };
+
+  window.curInitDefault = function() {
+    // عرض قائمة المناهج المحفوظة
+    var all = curGetAll();
+    var keys = Object.keys(all);
+    if (!keys.length) return;
+    // تحميل آخر منهج
+    var lastKey = keys[keys.length-1];
+    var last = all[lastKey];
+    if (last) {
+      var s = document.getElementById('cur-subject');
+      var g = document.getElementById('cur-grade');
+      if (s) s.value = last.subject || '';
+      if (g) g.value = last.grade || '';
+      curRenderUnits(last);
+    }
+  };
+})();
+
+// ══════════════════════════════════════════════════════════════════
+// ███ إدارة المهام — TASK MANAGER ███
+// ══════════════════════════════════════════════════════════════════
+(function() {
+  var TASK_KEY = 'aljood_tasks';
+  var _taskFilter = 'all';
+
+  function taskGetAll() {
+    try { return JSON.parse(localStorage.getItem(TASK_KEY) || '[]'); } catch(e) { return []; }
+  }
+  function taskSaveAll(tasks) { localStorage.setItem(TASK_KEY, JSON.stringify(tasks)); }
+
+  window.taskAdd = function() {
+    var titleEl = document.getElementById('task-title-input');
+    var descEl = document.getElementById('task-desc-input');
+    var prioEl = document.getElementById('task-priority-input');
+    var dueEl = document.getElementById('task-due-input');
+    var catEl = document.getElementById('task-cat-input');
+    if (!titleEl || !titleEl.value.trim()) { titleEl && titleEl.focus(); return; }
+    var tasks = taskGetAll();
+    tasks.unshift({
+      id: Date.now(),
+      title: titleEl.value.trim(),
+      desc: descEl ? descEl.value.trim() : '',
+      priority: prioEl ? prioEl.value : 'medium',
+      due: dueEl ? dueEl.value : '',
+      category: catEl ? catEl.value : 'other',
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    });
+    taskSaveAll(tasks);
+    titleEl.value = '';
+    if (descEl) descEl.value = '';
+    if (dueEl) dueEl.value = '';
+    taskRender();
+    // تذكير تلقائي
+    if (dueEl && dueEl.value && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      var dueDate = new Date(dueEl.value);
+      var now = new Date();
+      var diff = dueDate - now;
+      if (diff > 0 && diff < 86400000) { // خلال 24 ساعة
+        new Notification('تذكير مهمة', { body: titleEl.value.trim() + ' — الموعد غداً', icon: '/favicon.ico' });
+      }
+    }
+  };
+
+  window.taskFilter = function(f) {
+    _taskFilter = f;
+    document.querySelectorAll('.task-filter-btn').forEach(function(btn) {
+      btn.style.background = '#e2e8f0';
+      btn.style.color = '#444';
+    });
+    var active = document.getElementById('task-filter-'+f);
+    if (active) { active.style.background = '#6366f1'; active.style.color = '#fff'; }
+    taskRender();
+  };
+
+  window.taskSetStatus = function(id, status) {
+    var tasks = taskGetAll();
+    var t = tasks.find(function(x){return x.id===id;});
+    if (t) { t.status = status; t.updatedAt = new Date().toISOString(); }
+    taskSaveAll(tasks);
+    taskRender();
+  };
+
+  window.taskDelete = function(id) {
+    if (!confirm('حذف هذه المهمة؟')) return;
+    var tasks = taskGetAll().filter(function(t){return t.id!==id;});
+    taskSaveAll(tasks);
+    taskRender();
+  };
+
+  window.taskClearDone = function() {
+    if (!confirm('حذف جميع المهام المكتملة؟')) return;
+    var tasks = taskGetAll().filter(function(t){return t.status!=='done';});
+    taskSaveAll(tasks);
+    taskRender();
+  };
+
+  window.taskExportCSV = function() {
+    var tasks = taskGetAll();
+    if (!tasks.length) { alert('لا يوجد مهام'); return; }
+    var prioAr = {high:'عالية',medium:'متوسطة',low:'منخفضة'};
+    var statusAr = {pending:'معلقة',in_progress:'جارية',done:'مكتملة'};
+    var catAr = {teaching:'تدريس',admin:'إداري',meeting:'اجتماع',other:'أخرى'};
+    var csv = '\uFEFF#,العنوان,الوصف,الأولوية,الموعد,التصنيف,الحالة,تاريخ الإنشاء\n';
+    tasks.forEach(function(t,i){
+      csv += (i+1)+',"'+(t.title||'')+'"'+',"'+(t.desc||'')+'",'+(prioAr[t.priority]||'—')+','+(t.due||'—')+','+(catAr[t.category]||'—')+','+(statusAr[t.status]||'—')+','+(t.createdAt?t.createdAt.slice(0,10):'—')+'\n';
+    });
+    var blob = new Blob([csv],{type:'text/csv;charset=utf-8'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'مهام_'+new Date().toISOString().slice(0,10)+'.csv';
+    a.click();
+  };
+
+  window.taskRender = function() {
+    var el = document.getElementById('task-list-container');
+    var statsEl = document.getElementById('task-stats-text');
+    if (!el) return;
+    var tasks = taskGetAll();
+    var filtered = _taskFilter === 'all' ? tasks : tasks.filter(function(t){return t.status===_taskFilter;});
+
+    if (statsEl) {
+      var done = tasks.filter(function(t){return t.status==='done';}).length;
+      var pending = tasks.filter(function(t){return t.status==='pending';}).length;
+      var inprog = tasks.filter(function(t){return t.status==='in_progress';}).length;
+      statsEl.textContent = 'الكل: '+tasks.length+' | معلقة: '+pending+' | جارية: '+inprog+' | مكتملة: '+done;
+    }
+
+    if (!filtered.length) {
+      el.innerHTML = '<div style="text-align:center;padding:60px;color:#aaa;"><i class="fas fa-tasks" style="font-size:2.5rem;display:block;margin-bottom:14px;"></i>'+(tasks.length?'لا توجد مهام في هذه الفئة':'لا توجد مهام — أضيفي مهمتك الأولى أعلاه')+'</div>';
+      return;
+    }
+
+    var prioConfig = { high:{label:'🔴 عالية',color:'#dc2626',bg:'#fef2f2'}, medium:{label:'🟡 متوسطة',color:'#d97706',bg:'#fffbeb'}, low:{label:'🟢 منخفضة',color:'#059669',bg:'#ecfdf5'} };
+    var statusConfig = { pending:{label:'⏳ معلقة',color:'#94a3b8'}, in_progress:{label:'🔄 جارية',color:'#3b82f6'}, done:{label:'✅ مكتملة',color:'#059669'} };
+    var catIcons = { teaching:'📖',admin:'📋',meeting:'🤝',other:'📌' };
+
+    var html = '';
+    filtered.forEach(function(t) {
+      var prio = prioConfig[t.priority] || prioConfig.medium;
+      var stat = statusConfig[t.status] || statusConfig.pending;
+      var isOverdue = t.due && new Date(t.due) < new Date() && t.status !== 'done';
+      html += '<div style="background:#fff;border-radius:14px;padding:16px 20px;box-shadow:0 2px 12px rgba(0,0,0,0.08);margin-bottom:10px;border-right:4px solid '+prio.color+';'+(t.status==='done'?'opacity:0.7;':'')+(isOverdue?'border:2px solid #dc2626;':''')+'">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">';
+      html += '<div style="flex:1;">';
+      html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">';
+      html += '<span style="font-weight:700;color:#1A2A4A;font-size:0.98rem;'+(t.status==='done'?'text-decoration:line-through;color:#94a3b8;':'')+'">'+catIcons[t.category||'other']+' '+t.title+'</span>';
+      html += '<span style="background:'+prio.bg+';color:'+prio.color+';font-size:0.72rem;font-weight:700;padding:2px 8px;border-radius:20px;">'+prio.label+'</span>';
+      if (isOverdue) html += '<span style="background:#fef2f2;color:#dc2626;font-size:0.72rem;font-weight:700;padding:2px 8px;border-radius:20px;">⚠️ متأخرة</span>';
+      html += '</div>';
+      if (t.desc) html += '<div style="font-size:0.85rem;color:#666;margin-bottom:8px;">'+t.desc+'</div>';
+      html += '<div style="display:flex;gap:12px;font-size:0.78rem;color:#94a3b8;">';
+      if (t.due) html += '<span>📅 '+t.due+'</span>';
+      html += '<span style="color:'+stat.color+';">'+stat.label+'</span>';
+      html += '<span>'+t.createdAt.slice(0,10)+'</span>';
+      html += '</div></div>';
+
+      // أزرار الإجراءات
+      html += '<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">';
+      if (t.status === 'pending') {
+        html += '<button onclick="taskSetStatus('+t.id+',\'in_progress\')" style="background:#3b82f6;color:#fff;border:none;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:0.75rem;white-space:nowrap;"><i class="fas fa-play"></i> ابدأ</button>';
+        html += '<button onclick="taskSetStatus('+t.id+',\'done\')" style="background:#059669;color:#fff;border:none;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:0.75rem;white-space:nowrap;"><i class="fas fa-check"></i> أنهِ</button>';
+      } else if (t.status === 'in_progress') {
+        html += '<button onclick="taskSetStatus('+t.id+',\'done\')" style="background:#059669;color:#fff;border:none;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:0.75rem;white-space:nowrap;"><i class="fas fa-check"></i> أنهِ</button>';
+        html += '<button onclick="taskSetStatus('+t.id+',\'pending\')" style="background:#94a3b8;color:#fff;border:none;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:0.75rem;white-space:nowrap;"><i class="fas fa-pause"></i> إيقاف</button>';
+      } else {
+        html += '<button onclick="taskSetStatus('+t.id+',\'pending\')" style="background:#94a3b8;color:#fff;border:none;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:0.75rem;white-space:nowrap;"><i class="fas fa-undo"></i> إعادة</button>';
+      }
+      html += '<button onclick="taskDelete('+t.id+')" style="background:#dc3545;color:#fff;border:none;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:0.75rem;"><i class="fas fa-trash"></i></button>';
+      html += '</div></div></div>';
+    });
+    el.innerHTML = html;
+  };
+
+  // تذكيرات المهام — فحص يومي عند الدخول
+  (function checkTaskReminders(){
+    var tasks = taskGetAll();
+    if (!tasks.length) return;
+    var today = new Date().toISOString().slice(0,10);
+    var overdue = tasks.filter(function(t){ return t.due && t.due <= today && t.status !== 'done'; });
+    if (overdue.length && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      new Notification('⚠️ مهام متأخرة', { body: 'لديكِ '+overdue.length+' مهمة/مهام متأخرة', icon: '/favicon.ico' });
+    }
+  })();
+})();
+
+// ══════════════════════════════════════════════════════════════════
+// ███ شريط الأخبار العاجلة ███
+// ══════════════════════════════════════════════════════════════════
+(function() {
+  var breakingHeadlines = [
+    'وكالة أنباء الإمارات (وام): الإمارات تحتفل باليوم الوطني الثالث والخمسين بفعاليات متنوعة في جميع الإمارات',
+    'وزارة التربية والتعليم: إطلاق الخطة الاستراتيجية للتعليم 2024-2031 لتعزيز جودة التعليم',
+    'هيئة المعرفة والتنمية البشرية (KHDA): معدلات النجاح في مدارس دبي تحقق مستويات قياسية للعام الثالث',
+    'الإمارات اليوم: برنامج ذكاء اصطناعي جديد يُدرَّس في مدارس الدولة بدءاً من الفصل القادم',
+    'وام: الإمارات تحتل المرتبة الأولى عربياً في مؤشرات التعليم الرقمي لعام 2026',
+    'وزارة التربية: إطلاق منهج مُطوَّر للمرحلة الابتدائية يُركز على التفكير النقدي والإبداع',
+    'KHDA: مدارس أبوظبي والعين تُحقق أعلى معدلات رضا أولياء الأمور في الدولة',
+    'الإمارات اليوم: 500 ألف طالب يُشاركون في مبادرة القراءة الوطنية هذا العام'
+  ];
+
+  function initBreakingBar() {
+    var bar = document.getElementById('breaking-news-bar');
+    var textEl = document.getElementById('breaking-news-text');
+    if (!bar || !textEl) return;
+    var combined = breakingHeadlines.join('   ·   ');
+    textEl.textContent = combined;
+    bar.style.display = '';
+    // إعادة تشغيل الأنيميشن
+    textEl.style.animation = 'none';
+    textEl.offsetHeight; // reflow
+    textEl.style.animation = 'tickerScroll 60s linear infinite';
+  }
+
+  // تشغيل بعد 2 ثانية من الدخول
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(initBreakingBar, 2000);
+  });
+  // تشغيل إذا الصفحة محملة
+  if (document.readyState === 'complete') setTimeout(initBreakingBar, 2000);
+})();
+
 </script>
 </body>
 </html>
