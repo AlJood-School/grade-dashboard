@@ -3,6 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#c9a227">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="بوابة الجود">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>بوابة الجود الذكية لإدارة المعلومات المدرسية | Al Jood Smart Portal</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
@@ -8704,7 +8711,61 @@ function aiPrintMsg() {
   const preview = document.getElementById('msgPreview');
   if (!preview) return;
   const win = window.open('', '_blank');
-  win.document.write('<html dir="rtl"><head><style>body{font-family:Arial,sans-serif;padding:40px;font-size:14px;line-height:2;direction:rtl}</style></head><body>' + preview.textContent.replace(/\n/g,'<br>') + '</body></html>');
+  win.document.write('<html dir="rtl"><head><style>body{font-family:Arial,sans-serif;padding:40px;font-size:14px;line-height:2;direction:rtl}</style></head><body>' + preview.textContent.replace(/\n/g,'<br>') + '
+<!-- ===== PWA Service Worker Registration ===== -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/grade-dashboard/sw.js', { scope: '/grade-dashboard/' })
+      .then(function(reg) {
+        console.log('[PWA] Service Worker registered ✅', reg.scope);
+        // Check for updates every 30 minutes
+        setInterval(function() { reg.update(); }, 30 * 60 * 1000);
+      })
+      .catch(function(err) {
+        console.warn('[PWA] Service Worker registration failed:', err);
+      });
+  });
+}
+// ── PWA Install Prompt ──
+var _pwaInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  _pwaInstallPrompt = e;
+  // Show install button after 5 seconds if on home section
+  setTimeout(function() {
+    if (_pwaInstallPrompt) {
+      var existing = document.getElementById('pwa-install-banner');
+      if (!existing) {
+        var banner = document.createElement('div');
+        banner.id = 'pwa-install-banner';
+        banner.className = 'no-print';
+        banner.style.cssText = 'position:fixed;bottom:20px;left:20px;background:linear-gradient(135deg,#0a1628,#1a2d4a);color:white;padding:14px 20px;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.4);border:1px solid rgba(201,162,39,0.4);z-index:9998;display:flex;align-items:center;gap:12px;font-family:Cairo,sans-serif;max-width:320px;direction:rtl;';
+        banner.innerHTML = '<span style="font-size:1.6rem;">📱</span><div><div style="font-weight:700;font-size:0.9rem;color:#c9a227;">ثبّتي بوابة الجود!</div><div style="font-size:0.78rem;color:rgba(255,255,255,0.7);margin-top:2px;">تطبيق سريع على جهازك</div></div><div style="display:flex;gap:6px;"><button onclick="installPWA()" style="background:#c9a227;color:#0a1628;border:none;border-radius:8px;padding:6px 14px;cursor:pointer;font-weight:700;font-size:0.82rem;font-family:inherit;">تثبيت</button><button onclick="document.getElementById('pwa-install-banner').remove()" style="background:rgba(255,255,255,0.1);color:white;border:none;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:0.82rem;font-family:inherit;">×</button></div>';
+        document.body.appendChild(banner);
+      }
+    }
+  }, 8000);
+});
+function installPWA() {
+  if (!_pwaInstallPrompt) return;
+  _pwaInstallPrompt.prompt();
+  _pwaInstallPrompt.userChoice.then(function(result) {
+    if (result.outcome === 'accepted') {
+      console.log('[PWA] User accepted install');
+      if (window.showToast) window.showToast('✅ تم تثبيت بوابة الجود على جهازك!', 'success');
+    }
+    _pwaInstallPrompt = null;
+    var banner = document.getElementById('pwa-install-banner');
+    if (banner) banner.remove();
+  });
+}
+window.addEventListener('appinstalled', function() {
+  if (window.showToast) window.showToast('🎉 تم تثبيت بوابة الجود بنجاح!', 'success');
+  _pwaInstallPrompt = null;
+});
+</script>
+</body></html>');
   win.document.close();
   win.print();
 }
@@ -9979,6 +10040,151 @@ function parDeleteHw(i) {
   checkMeetings();
   setInterval(checkMeetings, 5 * 60 * 1000); // كل 5 دقائق
 })();
+
+// ═══════════════════════════════════════════════════════════════
+// ✅ PWA v1.0: طباعة الجدول + إشعارات الحصص
+// ═══════════════════════════════════════════════════════════════
+
+// ── طباعة الجدول مباشرة ──
+function printScheduleNow(containerId, title) {
+  var content = document.getElementById(containerId);
+  if (!content) return;
+  var printTitle = title || 'الجدول المدرسي';
+  var schoolName = 'مدرسة الجود';
+  var dateStr = new Date().toLocaleDateString('ar-AE', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+  var w = window.open('', '_blank', 'width=1000,height=750,scrollbars=yes');
+  if (!w) { alert('يرجى السماح بالنوافذ المنبثقة لطباعة الجدول'); return; }
+  w.document.write('<!DOCTYPE html><html lang="ar" dir="rtl"><head>'
+    + '<meta charset="UTF-8"><title>' + printTitle + ' — ' + schoolName + '</title>'
+    + '<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">'
+    + '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">'
+    + '<style>'
+    + '* { margin:0; padding:0; box-sizing:border-box; }'
+    + 'body { font-family:"Cairo",sans-serif; direction:rtl; background:#fff; color:#1a2d4a; }'
+    + '.print-header { background:linear-gradient(135deg,#0a1628,#1a2d4a); color:white; padding:18px 24px; display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }'
+    + '.print-header h1 { font-size:1.4rem; color:#c9a227; }'
+    + '.print-header .date { font-size:0.85rem; color:rgba(255,255,255,0.7); margin-top:4px; }'
+    + '.print-body { padding:0 16px 20px; }'
+    + 'table { width:100%; border-collapse:collapse; margin-bottom:12px; }'
+    + 'th { background:#0a1628; color:#c9a227; padding:10px 8px; font-size:0.88rem; border:1px solid #ddd; }'
+    + 'td { padding:6px; border:1px solid #e5e7eb; font-size:0.82rem; vertical-align:middle; }'
+    + '.sched-cell { padding:6px 8px; border-radius:6px; }'
+    + '.sched-cell-subj { font-weight:700; font-size:0.85rem; }'
+    + '.sched-cell-teacher { font-size:0.75rem; color:#555; margin-top:2px; }'
+    + '.day-col { font-weight:700; color:#0a1628; background:#f8f9fa; text-align:center; white-space:nowrap; }'
+    + '.break-cell { background:#fff8e1; color:#b45309; text-align:center; font-size:0.78rem; }'
+    + '.period-header { color:#c9a227; font-weight:700; font-size:0.78rem; }'
+    + '.assembly-cell { background:#e8f5e9; color:#2e7d32; text-align:center; font-size:0.8rem; }'
+    + '.no-print { display:none !important; }'
+    + '.print-footer { text-align:center; font-size:0.75rem; color:#888; padding:12px; border-top:1px solid #eee; margin-top:16px; }'
+    + '@media print {'
+    + '  body { -webkit-print-color-adjust:exact; print-color-adjust:exact; }'
+    + '  .no-print { display:none !important; }'
+    + '  th { -webkit-print-color-adjust:exact; print-color-adjust:exact; background:#0a1628 !important; color:#c9a227 !important; }'
+    + '}'
+    + '</style>'
+    + '</head><body>'
+    + '<div class="print-header">'
+    + '<div><h1>🏫 ' + schoolName + '</h1><div class="date">' + printTitle + ' &nbsp;|&nbsp; ' + dateStr + '</div></div>'
+    + '<div style="font-size:2rem;">📋</div>'
+    + '</div>'
+    + '<div class="print-body">' + content.innerHTML + '</div>'
+    + '<div class="print-footer">بوابة الجود الذكية — جميع الحقوق محفوظة © مدرسة الجود ' + new Date().getFullYear() + '</div>'
+    + '<script>setTimeout(function(){window.print();},800);<\/script>'
+    + '</body></html>');
+  w.document.close();
+}
+
+// ── إشعارات الحصص — 5 دقائق قبل كل حصة ──
+(function setupClassPeriodNotifications() {
+  if (window._classPeriodNotifSetup) return;
+  window._classPeriodNotifSetup = true;
+
+  // أوقات بداية الحصص حسب الحلقة
+  var PERIOD_TIMES_C1 = ['7:10','8:00','8:50','10:00','10:50','11:50','12:40'];
+  var PERIOD_TIMES_C2_LOWER = ['8:00','8:50','10:00','10:50','11:35','12:20'];
+  var PERIOD_TIMES_C2_UPPER = ['7:10','8:00','8:50','10:00','10:50','11:50','12:40','13:10'];
+
+  var _notifiedKeys = {};
+
+  function getTodayTeacherPeriods() {
+    try {
+      if (typeof currentRole === 'undefined' || currentRole !== 'teacher') return [];
+      var tr = null;
+      if (typeof TEACHER_ROSTER !== 'undefined' && TEACHER_ROSTER) {
+        tr = Object.values(TEACHER_ROSTER).find(function(t) {
+          if (!t) return false;
+          var nameMatch = (window.currentUserNameAr||'') && (t.name_ar||'').includes(window.currentUserNameAr||'');
+          var keyMatch = window.currentUsername && (t.scheduleKey||'').toLowerCase().includes((window.currentUsername||'').toLowerCase().split('.')[0]);
+          return nameMatch || keyMatch;
+        });
+      }
+      if (!tr) return [];
+      var teacherId = tr.teacherId;
+      var schedules = {};
+      try { schedules = JSON.parse(localStorage.getItem('aljood_schedules')||'{}'); } catch(e) {}
+      var now = new Date();
+      var jsDay = now.getDay(); // 0=Sun,1=Mon,...,5=Fri,6=Sat
+      if (jsDay === 0 || jsDay === 6) return []; // عطلة
+      var schoolDayIdx = jsDay - 1; // Mon=0,...,Fri=4
+      var periods = [];
+      Object.entries(schedules).forEach(function(entry) {
+        var classId = entry[0], clsSched = entry[1];
+        if (classId.startsWith('__mode_') || !clsSched) return;
+        var gradeNum = parseInt(classId) || 0;
+        var isC2Upper = gradeNum >= 7;
+        var isC2 = gradeNum >= 5;
+        var timesArr = isC2Upper ? PERIOD_TIMES_C2_UPPER : (isC2 ? PERIOD_TIMES_C2_LOWER : PERIOD_TIMES_C1);
+        Object.entries(clsSched).forEach(function(cellEntry) {
+          var key = cellEntry[0], cell = cellEntry[1];
+          if (!cell || cell.teacherId !== teacherId) return;
+          var parts = (key||'').split('_');
+          if (parts.length < 2) return;
+          var di = parseInt(parts[0]), pi = parseInt(parts[1]);
+          if (di !== schoolDayIdx) return;
+          if (timesArr[pi]) {
+            periods.push({ time: timesArr[pi], subject: cell.subject||'', className: classId, pi: pi });
+          }
+        });
+      });
+      return periods;
+    } catch(e) { return []; }
+  }
+
+  function checkClassPeriods() {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    var periods = getTodayTeacherPeriods();
+    if (!periods.length) return;
+    var now = new Date();
+    var todayStr = now.toDateString();
+    periods.forEach(function(p) {
+      var parts = (p.time||'0:0').split(':');
+      var h = parseInt(parts[0])||0, m = parseInt(parts[1])||0;
+      var periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
+      var notifTime = new Date(periodStart.getTime() - 5*60*1000);
+      var notifKey = p.time + '_' + todayStr;
+      if (_notifiedKeys[notifKey]) return;
+      var diff = now - notifTime;
+      if (diff >= 0 && diff < 65000) { // في الدقيقة الأولى بعد وقت التنبيه
+        _notifiedKeys[notifKey] = true;
+        try {
+          new Notification('🔔 حصة خلال 5 دقائق', {
+            body: (p.subject ? p.subject + ' — ' : '') + 'تبدأ الساعة ' + p.time,
+            dir: 'rtl', lang: 'ar'
+          });
+        } catch(e) {}
+        if (window.showToast) window.showToast('🔔 حصة ' + (p.subject||'') + ' ستبدأ خلال 5 دقائق (' + p.time + ')', 'info');
+      }
+    });
+  }
+
+  // تشغيل كل دقيقة
+  setTimeout(function() {
+    checkClassPeriods();
+    setInterval(checkClassPeriods, 60*1000);
+  }, 3000);
+})();
+
 
 // ── طلبات ولي الأمر في لوحة المدير ──
 function renderParentRequestsAdmin() {
@@ -17008,6 +17214,11 @@ function renderClassSched() {
     html += '<button onclick="deleteClass(\'' + classId + '\')" style="margin-top:14px;padding:7px 16px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);border-radius:8px;cursor:pointer;font-size:0.82rem;font-family:inherit;"><i class="fas fa-trash"></i> \u062d\u0630\u0641 \u0647\u0630\u0627 \u0627\u0644\u0635\u0641</button>';
   }
 
+  // ── زر الطباعة ──
+  html += '<div class="no-print" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">'
+    + '<button onclick="printScheduleNow(\'class-sched-container\')" style="padding:7px 18px;background:var(--primary);color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem;font-family:inherit;display:inline-flex;align-items:center;gap:6px;"><i class=\'fas fa-print\'></i> طباعة الجدول</button>'
+    + '</div>';
+
   container.innerHTML = html;
 }
 
@@ -17133,6 +17344,10 @@ function renderTeacherSched() {
     });
     html += `</div>`;
   }
+
+  // ── زر الطباعة ──
+  html += `<div class="no-print" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;"><button onclick="printScheduleNow('teacher-sched-container')" style="padding:7px 18px;background:var(--primary);color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem;font-family:inherit;display:inline-flex;align-items:center;gap:6px;"><i class='fas fa-print'></i> طباعة جدول المعلمة</button></div>`;
+
   container.innerHTML = html;
 }
 
