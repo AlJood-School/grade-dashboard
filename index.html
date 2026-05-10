@@ -7981,6 +7981,7 @@ async function doLogin() {
       setTimeout(initPortalTour, 900);
       setTimeout(function(){ try{ renderGlobalNotifications(); }catch(e){} }, 500);
       showChatBtn();
+      if(window._fbOnLogin) window._fbOnLogin(); // 🔥 Firebase sync
       if(window._showPortalFooter) window._showPortalFooter();
       setTimeout(function(){ checkPendingMessages(currentUsername); startMsgPolling(currentUsername); }, 800);
       // شارة "دخول إداري" في الهيدر
@@ -8054,6 +8055,7 @@ async function doLogin() {
     setTimeout(initPortalTour, 900);
   setTimeout(function(){ try{ renderGlobalNotifications(); }catch(e){} }, 500);
     showChatBtn();
+      if(window._fbOnLogin) window._fbOnLogin(); // 🔥 Firebase sync
     if(window._showPortalFooter) window._showPortalFooter();
     setTimeout(function(){ checkPendingMessages(currentUsername); startMsgPolling(currentUsername); }, 800);
     return;
@@ -8101,6 +8103,7 @@ setTimeout(() => { renderMyProfile(); }, 1000);
     showWelcomeToast(currentUsername); setTimeout(checkTechAssignmentNotification, 1200);
     setTimeout(initPortalTour, 900);
     showChatBtn();
+      if(window._fbOnLogin) window._fbOnLogin(); // 🔥 Firebase sync
     if(window._showPortalFooter) window._showPortalFooter();
     setTimeout(function(){ checkPendingMessages(currentUsername); startMsgPolling(currentUsername); }, 800);
   } else {
@@ -35745,5 +35748,239 @@ setInterval(loadSmartNotifications, 5 * 60 * 1000);
 })();
 
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     🔥 FIREBASE REAL-TIME SYNC LAYER — Al Jood Portal v4.3
+     ═══════════════════════════════════════════════════════════════ -->
+<script>
+(function() {
+  'use strict';
+
+  const FB_CONFIG = {
+    apiKey: "AIzaSyDri3r5AtyyduyiTS5GzIHOn-XSduhALpM",
+    authDomain: "aljood-school.firebaseapp.com",
+    projectId: "aljood-school",
+    storageBucket: "aljood-school.firebasestorage.app",
+    messagingSenderId: "278563135138",
+    appId: "1:278563135138:web:de89305eddca23fc1241fb"
+  };
+
+  // ── Keys synced to Firestore (shared between all devices/users) ──
+  const SYNC_KEYS = new Set([
+    'aljood_meetings','aljood_events','aljood_manual_events',
+    'aljood_banner','aljood_custom_banner','aljood_att_current',
+    'aljood_period_records','aljood_lesson_attendance_v1',
+    'aljood_forms','aljood_conferences',
+    'aljood_parent_homework','aljood_parent_notifs',
+    'aljood_parent_surveys','aljood_parent_messages',
+    'aljood_parent_requests','aljood_parent_links',
+    'aljood_admissions','aljood_absence_followups',
+    'aljood_clearance_log','aljood_reports',
+    'aljood_pd_programs','aljood_daily_plans',
+    'aljood_homeroom','aljood_homeroom_teachers',
+    'aljood_class_locations','aljood_class_specialist',
+    'aljood_contact_info','aljood_school_name',
+    'aljood_custom_subjects','aljood_access','aljood_schedules'
+  ]);
+
+  const SYNC_PREFIXES = [
+    'aljood_inbox_','aljood_responses_',
+    'aljood_parent_children_','aljood_parent_students'
+  ];
+
+  const NO_SYNC = new Set([
+    'aljood_session','aljood_session_role','aljood_session_pass',
+    'aljood_session_username','aljood_session_staff_id',
+    'aljood_session_master_login','aljood_last_active',
+    'aljood_passwords','aljood_custom_passwords','aljood_new_credentials',
+    'aljood_security_log','aljood_login_log','aljood_login_retention',
+    'aljood_known_devices','aljood_device_id',
+    'aljood_ai_api_key','aljood_ai_provider',
+    'aljood_lang','aljood_current_section',
+    'aljood_nav_config','aljood_nav_version','aljood_navgroups',
+    'aljood_notif_seen','aljood_notifs_read','aljood_mode_broadcast','aljood_role'
+  ]);
+
+  let db = null, fbReady = false;
+  let _listeners = {}, _writeDebounce = {}, _writeQueue = [];
+
+  function toDocId(k) { return k.replace(/[\/\.#\$\[\]]/g,'_').substring(0,100); }
+
+  function shouldSync(k) {
+    if (!k || typeof k !== 'string') return false;
+    if (NO_SYNC.has(k) || k.startsWith('aljood_failed_')) return false;
+    if (SYNC_KEYS.has(k)) return true;
+    return SYNC_PREFIXES.some(p => k.startsWith(p));
+  }
+
+  // ── Sync Status Dot ──────────────────────────────────────────
+  function showSyncDot(state) {
+    let el = document.getElementById('_fbSyncDot');
+    if (!el) {
+      el = document.createElement('span');
+      el.id = '_fbSyncDot';
+      el.style.cssText = [
+        'width:9px','height:9px','border-radius:50%',
+        'display:inline-block','margin:0 6px',
+        'vertical-align:middle','transition:background 0.5s',
+        'cursor:help','flex-shrink:0'
+      ].join(';');
+      const hdr = document.querySelector('#userNameDisplay') || document.querySelector('.header-right');
+      if (hdr && hdr.parentNode) hdr.parentNode.insertBefore(el, hdr);
+    }
+    const colors = { ok:'#4CAF50', sync:'#FFC107', err:'#F44336', off:'#888' };
+    el.style.background = colors[state] || '#888';
+    const labels = {
+      ok:'✅ متصل بـ Firebase — البيانات مزامنة',
+      sync:'🔄 جاري المزامنة...',
+      err:'❌ تعذّرت المزامنة',
+      off:'⚪ وضع عدم الاتصال'
+    };
+    el.title = labels[state] || '';
+  }
+
+  // ── Write to Firestore (debounced 800ms) ─────────────────────
+  function fsWrite(key, value) {
+    if (!fbReady || !db) return;
+    clearTimeout(_writeDebounce[key]);
+    _writeDebounce[key] = setTimeout(() => {
+      showSyncDot('sync');
+      db.collection('portal_data').doc(toDocId(key)).set({
+        key, value,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: (window.currentStaff && window.currentStaff.id) || window.currentRole || 'system'
+      }).then(() => showSyncDot('ok'))
+        .catch(e => { console.warn('[FB] write:', key, e.code); showSyncDot('err'); });
+    }, 800);
+  }
+
+  // ── Pull all synced data from Firestore ──────────────────────
+  async function pullFromFirestore() {
+    if (!fbReady || !db) return;
+    showSyncDot('sync');
+    try {
+      const snap = await db.collection('portal_data').get();
+      let count = 0;
+      snap.forEach(doc => {
+        const d = doc.data();
+        if (d.key && d.value !== undefined && shouldSync(d.key)) {
+          _origSet(d.key, d.value);
+          count++;
+        }
+      });
+      showSyncDot('ok');
+      if (count > 0) {
+        try { if(window.renderHomeDashboard) renderHomeDashboard(); } catch(e){}
+        try { if(window.renderGlobalNotifications) renderGlobalNotifications(); } catch(e){}
+      }
+      console.log('[FB] Pulled', count, 'keys from Firestore');
+    } catch(e) {
+      console.warn('[FB] Pull error:', e);
+      showSyncDot('err');
+    }
+  }
+
+  // ── Real-time listeners for critical shared data ─────────────
+  function setupListeners() {
+    if (!fbReady || !db) return;
+    const watchKeys = [
+      'aljood_meetings','aljood_events','aljood_manual_events',
+      'aljood_banner','aljood_custom_banner',
+      'aljood_period_records','aljood_homeroom_teachers'
+    ];
+    watchKeys.forEach(key => {
+      if (_listeners[key]) return;
+      _listeners[key] = db.collection('portal_data').doc(toDocId(key))
+        .onSnapshot(doc => {
+          if (!doc.exists) return;
+          const remote = doc.data().value;
+          const local  = localStorage.getItem(key);
+          if (remote && remote !== local) {
+            _origSet(key, remote);
+            try {
+              if(key==='aljood_meetings'&&window.renderMeetings) renderMeetings();
+              if((key==='aljood_events'||key==='aljood_manual_events')&&window.renderCalendar) renderCalendar();
+              if((key==='aljood_banner'||key==='aljood_custom_banner')&&window.initGlobalBanner) initGlobalBanner();
+              if(key==='aljood_homeroom_teachers'&&window.renderStudents) renderStudents();
+            } catch(e) {}
+            if(window.showToast) showToast('🔄 تم تحديث البيانات من جهاز آخر', 'info');
+          }
+        }, err => console.warn('[FB] Listener error:', key, err));
+    });
+  }
+
+  // ── Intercept localStorage ───────────────────────────────────
+  const _origSet = localStorage.setItem.bind(localStorage);
+  const _origGet = localStorage.getItem.bind(localStorage);
+  const _origRem = localStorage.removeItem.bind(localStorage);
+
+  localStorage.setItem = function(key, value) {
+    _origSet(key, value);
+    if (shouldSync(key)) {
+      if (fbReady) fsWrite(key, value);
+      else _writeQueue.push({ key, value });
+    }
+  };
+
+  localStorage.removeItem = function(key) {
+    _origRem(key);
+    if (fbReady && db && shouldSync(key)) {
+      db.collection('portal_data').doc(toDocId(key)).delete().catch(()=>{});
+    }
+  };
+
+  // ── Public API ───────────────────────────────────────────────
+  window.firebase_sync = {
+    pull: pullFromFirestore,
+    isReady: () => fbReady,
+    setupListeners
+  };
+
+  // Called after successful login
+  window._fbOnLogin = function() {
+    setTimeout(() => {
+      pullFromFirestore().then(() => setupListeners());
+    }, 600);
+  };
+
+  // ── Load Firebase SDK then init ──────────────────────────────
+  function loadScript(url, cb) {
+    const s = document.createElement('script');
+    s.src = url; s.onload = cb;
+    s.onerror = () => { console.warn('[FB] SDK load failed:', url); showSyncDot('err'); };
+    document.head.appendChild(s);
+  }
+
+  function initFirebase() {
+    try {
+      if (!firebase.apps || !firebase.apps.length) firebase.initializeApp(FB_CONFIG);
+      db = firebase.firestore();
+      db.enablePersistence({ synchronizeTabs: true })
+        .catch(e => { if(e.code !== 'failed-precondition' && e.code !== 'unimplemented') console.warn('[FB]', e); });
+      fbReady = true;
+      showSyncDot('ok');
+      // Flush write queue
+      _writeQueue.forEach(({ key, value }) => fsWrite(key, value));
+      _writeQueue = [];
+      // If already logged in (e.g. page refresh with saved session), sync immediately
+      setTimeout(() => {
+        if (window.currentRole && window.currentRole !== '') {
+          pullFromFirestore().then(() => setupListeners());
+        }
+      }, 1000);
+    } catch(e) {
+      console.warn('[FB] Init error:', e);
+      showSyncDot('err');
+    }
+  }
+
+  loadScript(
+    'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
+    () => loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js', initFirebase)
+  );
+
+})();
+</script>
+
 </body>
 </html>
