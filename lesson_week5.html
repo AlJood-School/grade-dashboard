@@ -598,17 +598,10 @@ body{font-family:'Cairo',sans-serif;background:var(--bg);color:var(--txt);min-he
       </div>
     </div>
 
-    <!-- فلتر الصف -->
-    <div style="margin-bottom:14px;">
-      <div style="font-size:.75rem;font-weight:800;color:#888;margin-bottom:8px;letter-spacing:.5px;">🏫 فلترة حسب الفصل</div>
-      <div id="tp-class-tabs" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
-    </div>
-
-    <!-- إحصائيات -->
+    <!-- ① النتائج تظهر فوق (إحصائيات + جدول) -->
     <div id="tSummary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;"></div>
 
-    <!-- الجدول -->
-    <div style="overflow-x:auto;">
+    <div style="overflow-x:auto;margin-bottom:16px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <span id="tp-table-title" style="font-weight:800;font-size:.95rem;color:var(--p);">نتائج جميع الطلاب</span>
       </div>
@@ -616,11 +609,35 @@ body{font-family:'Cairo',sans-serif;background:var(--bg);color:var(--txt);min-he
         <thead><tr><th>#</th><th>الاسم</th><th>الفصل</th><th>التشخيص</th><th>النشاط</th><th>ورقة العمل</th><th>الخروج</th><th>المجموع</th><th>المستوى</th><th>التاريخ</th></tr></thead>
         <tbody id="rTbody"></tbody>
       </table>
+      <div id="tEmpty" style="text-align:center;padding:40px;color:var(--muted);">
+        <div style="font-size:3rem;">📭</div>
+        <p>لا توجد بيانات بعد — ستظهر هنا بعد انتهاء الطلاب من الدرس</p>
+      </div>
     </div>
-    <div id="tEmpty" style="text-align:center;padding:40px;color:var(--muted);">
-      <div style="font-size:3rem;">📭</div>
-      <p>لا توجد بيانات بعد — ستظهر هنا بعد انتهاء الطلاب من الدرس</p>
+
+    <!-- ② أدوات الفلترة تحت النتائج -->
+    <div style="background:#f8f5ff;border:2px solid var(--p);border-radius:12px;padding:14px;">
+      <div style="font-size:.8rem;font-weight:800;color:var(--p);margin-bottom:10px;">🔍 فلترة النتائج</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <label style="font-size:.78rem;font-weight:700;color:#555;display:block;margin-bottom:4px;">🏫 الصف</label>
+          <select id="w5-sel-grade" onchange="w5UpdateSections(); w5ApplyFilter();"
+            style="width:100%;padding:8px 12px;border-radius:10px;border:2px solid var(--p);font-family:Cairo,sans-serif;font-size:.9rem;font-weight:700;cursor:pointer;background:#fff;">
+            <option value="ALL">جميع الصفوف</option>
+            <option value="3">الصف الثالث (Grade 3)</option>
+            <option value="4">الصف الرابع (Grade 4)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:.78rem;font-weight:700;color:#555;display:block;margin-bottom:4px;">🔤 الشعبة</label>
+          <select id="w5-sel-section" onchange="w5ApplyFilter();"
+            style="width:100%;padding:8px 12px;border-radius:10px;border:2px solid var(--p);font-family:Cairo,sans-serif;font-size:.9rem;font-weight:700;cursor:pointer;background:#fff;">
+            <option value="ALL">جميع الشعب</option>
+          </select>
+        </div>
+      </div>
     </div>
+
   </div>
 </div>
 
@@ -1179,6 +1196,49 @@ let _teacherUnsubscribe = null;
 let _allTeacherData5 = [];
 let _filterClass5 = 'ALL';
 
+function w5UpdateSections() {
+  const grade = document.getElementById('w5-sel-grade')?.value || 'ALL';
+  const ss = document.getElementById('w5-sel-section');
+  if (!ss) return;
+  ss.innerHTML = '<option value="ALL">جميع الشعب</option>';
+  let sections = grade === '3' ? ['A','B','C','D','E'] :
+                 grade === '4' ? ['A','B','C','D','E','F'] :
+                 ['A','B','C','D','E','F'];
+  sections.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s; opt.textContent = 'شعبة ' + s;
+    ss.appendChild(opt);
+  });
+}
+
+function w5ApplyFilter() {
+  const gVal = document.getElementById('w5-sel-grade')?.value || 'ALL';
+  const sVal = document.getElementById('w5-sel-section')?.value || 'ALL';
+  let data = _allTeacherData5;
+  if (gVal !== 'ALL') {
+    data = data.filter(r => {
+      const cls = r.cls || ('Grade ' + r.grade) || '';
+      return cls.includes('Grade ' + gVal) || cls.startsWith(gVal);
+    });
+  }
+  if (sVal !== 'ALL') {
+    data = data.filter(r => {
+      const cls = r.cls || ('Grade ' + r.grade) || '';
+      return cls.endsWith(sVal);
+    });
+  }
+  _filterClass5 = (gVal === 'ALL' && sVal === 'ALL') ? 'ALL' :
+    (gVal !== 'ALL' && sVal !== 'ALL') ? 'Grade ' + gVal + sVal :
+    (gVal !== 'ALL') ? 'Grade ' + gVal : sVal;
+  const title = document.getElementById('tp-table-title');
+  if (title) {
+    let lbl = gVal === 'ALL' ? 'جميع الطلاب' :
+      'الصف ' + gVal + (sVal !== 'ALL' ? ' — شعبة ' + sVal : '');
+    title.textContent = 'نتائج ' + lbl + ' (' + data.length + ' سجل)';
+  }
+  renderFilteredData5(data);
+}
+
 function buildClassTabs5(data) {
   const classes = [...new Set(data.map(r => r.cls || ('Grade ' + r.grade)).filter(Boolean))].sort();
   const tabs = document.getElementById('tp-class-tabs');
@@ -1195,26 +1255,45 @@ function buildClassTabs5(data) {
   });
 }
 
-function filterClass5(cls) {
-  _filterClass5 = cls;
-  document.querySelectorAll('#tp-class-tabs button').forEach(b => {
-    b.style.background = b.id === 'tab5-' + cls ? 'var(--p)' : '#e8edf5';
-    b.style.color = b.id === 'tab5-' + cls ? '#fff' : '#333';
+function filterClass5(cls) { w5ApplyFilter(); }
+
+function renderFilteredData5(filtered) {
+  const tbody = document.getElementById('rTbody');
+  if (!tbody) return;
+  const rTable = document.getElementById('rTable');
+  const tEmpty = document.getElementById('tEmpty');
+  tbody.innerHTML = '';
+  if (filtered.length === 0) {
+    if (rTable) rTable.style.display = 'none';
+    if (tEmpty) tEmpty.style.display = 'block';
+    renderSummary5([]);
+    return;
+  }
+  if (rTable) rTable.style.display = 'table';
+  if (tEmpty) tEmpty.style.display = 'none';
+  renderSummary5(filtered);
+  filtered.forEach((r,i) => {
+    const total = (r.diagScore||0)+(r.actScore||0)+(r.wsScore||0)+(r.exitScore||0);
+    const lvl = total>=16?'🌟 متميز':total>=12?'✅ جيد جداً':total>=8?'⚡ جيد':'📚 يحتاج دعم';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${i+1}</td><td>${r.name||'—'}</td><td>${r.cls||('Grade '+(r.grade||'—'))}</td><td>${r.diagScore||0}/5</td><td>${r.actScore||0}/5</td><td>${r.wsScore||0}/5</td><td>${r.exitScore||0}/5</td><td><b>${total}/20</b></td><td>${lvl}</td><td>${r.ts?new Date(r.ts).toLocaleDateString('ar-AE'):'—'}</td>`;
+    tbody.appendChild(tr);
   });
-  renderTeacherData(_allTeacherData5);
 }
 
 function renderTeacherData(data){
   _allTeacherData5 = data;
-  buildClassTabs5(data);
 
   let filtered = data;
-  if (_filterClass5 !== 'ALL') {
-    filtered = data.filter(r => (r.cls || ('Grade '+r.grade)) === _filterClass5);
-  }
+  const gVal = document.getElementById('w5-sel-grade')?.value || 'ALL';
+  const sVal = document.getElementById('w5-sel-section')?.value || 'ALL';
+  if (gVal !== 'ALL') filtered = filtered.filter(r => (r.cls||('Grade '+r.grade)||'').includes('Grade '+gVal));
+  if (sVal !== 'ALL') filtered = filtered.filter(r => (r.cls||('Grade '+r.grade)||'').endsWith(sVal));
 
   const title = document.getElementById('tp-table-title');
-  if (title) title.textContent = 'نتائج ' + (_filterClass5 === 'ALL' ? 'جميع الطلاب' : _filterClass5) + ' (' + filtered.length + ' سجل)';
+  let lbl = gVal === 'ALL' ? 'جميع الطلاب' :
+    'الصف ' + gVal + (sVal !== 'ALL' ? ' — شعبة ' + sVal : '');
+  if (title) title.textContent = 'نتائج ' + lbl + ' (' + filtered.length + ' سجل)';
 
   const tbody = document.getElementById('rTbody');
   tbody.innerHTML='';

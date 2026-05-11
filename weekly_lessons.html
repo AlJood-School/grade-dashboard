@@ -527,19 +527,10 @@ select:focus { border-color: var(--dark); }
     <p>مدرسة الجود | درجات الطلاب — الأسابيع 5 إلى 11</p>
   </div>
 
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-title">📅 اختر الأسبوع</div>
-    <div class="week-tabs" id="teacher-week-tabs"></div>
-  </div>
-
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-title">🏫 اختر الفصل</div>
-    <div class="class-tabs" id="teacher-class-tabs"></div>
-  </div>
-
+  <!-- ① النتائج تظهر هنا أولاً (فوق) -->
   <div id="teacher-stats" class="stats-grid" style="margin-bottom:8px;"></div>
 
-  <div class="card">
+  <div class="card" style="margin-bottom:16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
       <div class="card-title" style="margin:0;" id="teacher-table-title">نتائج الطلاب</div>
       <div style="display:flex;gap:8px;">
@@ -568,6 +559,40 @@ select:focus { border-color: var(--dark); }
       </table>
     </div>
     <div id="teacher-empty" class="empty-state" style="display:none;">📭 لا توجد نتائج لهذا الفصل في هذا الأسبوع بعد.</div>
+  </div>
+
+  <!-- ② أدوات الفلترة تحت النتائج -->
+  <div class="card" style="margin-bottom:16px;background:#f8f5ff;border:2px solid #4a0e8f;">
+    <div class="card-title" style="color:#4a0e8f;">🔍 فلترة النتائج</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;">
+      <div>
+        <label style="font-size:.8rem;font-weight:700;color:#555;display:block;margin-bottom:4px;">📅 الأسبوع</label>
+        <select id="sel-week" onchange="applyTeacherFilter()" style="width:100%;padding:8px 12px;border-radius:10px;border:2px solid #4a0e8f;font-family:Cairo,sans-serif;font-size:.9rem;font-weight:700;cursor:pointer;background:#fff;">
+          <option value="ALL">كل الأسابيع</option>
+          <option value="5">أسبوع 5</option>
+          <option value="6">أسبوع 6</option>
+          <option value="7">أسبوع 7</option>
+          <option value="8">أسبوع 8</option>
+          <option value="9">أسبوع 9</option>
+          <option value="10">أسبوع 10</option>
+          <option value="11">أسبوع 11</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:.8rem;font-weight:700;color:#555;display:block;margin-bottom:4px;">🏫 الصف</label>
+        <select id="sel-grade" onchange="updateSectionOptions(); applyTeacherFilter();" style="width:100%;padding:8px 12px;border-radius:10px;border:2px solid #4a0e8f;font-family:Cairo,sans-serif;font-size:.9rem;font-weight:700;cursor:pointer;background:#fff;">
+          <option value="ALL">جميع الصفوف</option>
+          <option value="3">الصف الثالث (Grade 3)</option>
+          <option value="4">الصف الرابع (Grade 4)</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:.8rem;font-weight:700;color:#555;display:block;margin-bottom:4px;">🔤 الشعبة</label>
+        <select id="sel-section" onchange="applyTeacherFilter()" style="width:100%;padding:8px 12px;border-radius:10px;border:2px solid #4a0e8f;font-family:Cairo,sans-serif;font-size:.9rem;font-weight:700;cursor:pointer;background:#fff;">
+          <option value="ALL">جميع الشعب</option>
+        </select>
+      </div>
+    </div>
   </div>
 
   <!-- جدول الأكواد -->
@@ -1129,55 +1154,41 @@ async function saveToFirebase(data) {
 window.saveToFirebase = saveToFirebase;
 
 // =========== TEACHER DASHBOARD ===========
-let teacherWeek = 5;
-let teacherClass = 'ALL';
 let allTeacherData = [];
 
 function initTeacherDashboard() {
-  // Week tabs
-  const weekTabs = document.getElementById('teacher-week-tabs');
-  weekTabs.innerHTML = `<button class="tab-btn" onclick="setTeacherFilter('ALL_WEEKS',null)">كل الأسابيع</button>`;
-  [5,6,7,8,9,10,11].forEach(w => {
-    const b = document.createElement('button');
-    b.className = 'tab-btn' + (w === teacherWeek ? ' active' : '');
-    b.textContent = 'أسبوع ' + w;
-    b.onclick = () => setTeacherFilter(w, null);
-    weekTabs.appendChild(b);
-  });
-
-  // Class tabs
-  const classTabs = document.getElementById('teacher-class-tabs');
-  classTabs.innerHTML = `<button class="class-tab active" onclick="setTeacherFilter(null,'ALL')">الكل</button>`;
-  const classes = ['3A','3B','3C','3D','3E','4A','4B','4C','4D','4E','4F'];
-  classes.forEach(c => {
-    const b = document.createElement('button');
-    b.className = 'class-tab';
-    b.textContent = c;
-    b.onclick = () => setTeacherFilter(null, c);
-    classTabs.appendChild(b);
-  });
-
+  // Reset dropdowns
+  const sw = document.getElementById('sel-week');
+  const sg = document.getElementById('sel-grade');
+  const ss = document.getElementById('sel-section');
+  if (sw) sw.value = 'ALL';
+  if (sg) sg.value = 'ALL';
+  if (ss) { ss.innerHTML = '<option value="ALL">جميع الشعب</option>'; }
   loadTeacherData();
 }
 
-function setTeacherFilter(week, cls) {
-  if (week !== null) teacherWeek = week;
-  if (cls !== null) teacherClass = cls;
-
-  // Update tab styles
-  document.querySelectorAll('.tab-btn').forEach(b => {
-    b.classList.toggle('active', 
-      (b.textContent === 'أسبوع ' + teacherWeek) || (teacherWeek === 'ALL_WEEKS' && b.textContent === 'كل الأسابيع')
-    );
+function updateSectionOptions() {
+  const grade = document.getElementById('sel-grade').value;
+  const ss = document.getElementById('sel-section');
+  ss.innerHTML = '<option value="ALL">جميع الشعب</option>';
+  let sections = [];
+  if (grade === '3') sections = ['A','B','C','D','E'];
+  else if (grade === '4') sections = ['A','B','C','D','E','F'];
+  else sections = ['A','B','C','D','E','F'];
+  sections.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s;
+    opt.textContent = 'شعبة ' + s;
+    ss.appendChild(opt);
   });
-  document.querySelectorAll('.class-tab').forEach(b => {
-    b.classList.toggle('active', 
-      (b.textContent === teacherClass) || (teacherClass === 'ALL' && b.textContent === 'الكل')
-    );
-  });
+}
 
+function applyTeacherFilter() {
   renderTeacherTable();
 }
+
+// kept for compatibility
+function setTeacherFilter(week, cls) { renderTeacherTable(); }
 
 async function loadTeacherData() {
   document.getElementById('teacher-loading').style.display = 'block';
@@ -1204,18 +1215,36 @@ async function loadTeacherData() {
 
 function renderTeacherTable() {
   let data = allTeacherData;
-  
-  if (teacherWeek !== 'ALL_WEEKS') {
-    data = data.filter(d => d.week == teacherWeek);
+
+  const selWeek    = document.getElementById('sel-week');
+  const selGrade   = document.getElementById('sel-grade');
+  const selSection = document.getElementById('sel-section');
+  const wVal = selWeek    ? selWeek.value    : 'ALL';
+  const gVal = selGrade   ? selGrade.value   : 'ALL';
+  const sVal = selSection ? selSection.value : 'ALL';
+
+  if (wVal !== 'ALL') {
+    data = data.filter(d => String(d.week) === String(wVal));
   }
-  if (teacherClass !== 'ALL') {
-    data = data.filter(d => d.cls === teacherClass || d.class === teacherClass);
+  if (gVal !== 'ALL') {
+    data = data.filter(d => {
+      const cls = d.cls || d.class || '';
+      return cls.startsWith('Grade ' + gVal) || cls.startsWith(gVal);
+    });
+  }
+  if (sVal !== 'ALL') {
+    data = data.filter(d => {
+      const cls = d.cls || d.class || '';
+      return cls.endsWith(sVal);
+    });
   }
 
+  // Build display label
+  let gradeLabel = gVal === 'ALL' ? 'جميع الصفوف' : 'الصف ' + gVal;
+  let sectionLabel = sVal === 'ALL' ? '' : ' — شعبة ' + sVal;
+  let weekLabel = wVal === 'ALL' ? 'كل الأسابيع' : 'الأسبوع ' + wVal;
   document.getElementById('teacher-table-title').textContent = 
-    'نتائج ' + (teacherClass === 'ALL' ? 'جميع الفصول' : teacherClass) + 
-    (teacherWeek === 'ALL_WEEKS' ? ' — كل الأسابيع' : ' — الأسبوع ' + teacherWeek) +
-    ' (' + data.length + ' سجل)';
+    'نتائج ' + gradeLabel + sectionLabel + ' | ' + weekLabel + ' (' + data.length + ' سجل)';
 
   document.getElementById('teacher-loading').style.display = 'none';
 
@@ -1280,8 +1309,12 @@ function refreshTeacherData() {
 
 function exportCSV() {
   let data = allTeacherData;
-  if (teacherWeek !== 'ALL_WEEKS') data = data.filter(d => d.week == teacherWeek);
-  if (teacherClass !== 'ALL') data = data.filter(d => d.cls === teacherClass || d.class === teacherClass);
+  const wVal = document.getElementById('sel-week')?.value || 'ALL';
+  const gVal = document.getElementById('sel-grade')?.value || 'ALL';
+  const sVal = document.getElementById('sel-section')?.value || 'ALL';
+  if (wVal !== 'ALL') data = data.filter(d => String(d.week) === String(wVal));
+  if (gVal !== 'ALL') data = data.filter(d => (d.cls||d.class||'').includes(gVal));
+  if (sVal !== 'ALL') data = data.filter(d => (d.cls||d.class||'').endsWith(sVal));
   
   const header = 'الاسم,الفصل,الأسبوع,درجة الاختبار,النشاط,الإجمالي,التاريخ,التقييم الذاتي,بطاقة الخروج';
   const rows = data.map(r => {
