@@ -5,6 +5,45 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🤖 AI Lesson — الذكاء الاصطناعي | مدرسة الجود</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<!-- Firebase -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDri3r5AtyyduyiTS5GzIHOn-XSduhALpM",
+    authDomain: "aljood-school.firebaseapp.com",
+    projectId: "aljood-school",
+    storageBucket: "aljood-school.firebasestorage.app",
+    messagingSenderId: "278563135138",
+    appId: "1:278563135138:web:de89305eddca23fc1241fb"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // Save result to Firestore
+  window.saveToFirestore = async function(record) {
+    try {
+      await addDoc(collection(db, "lesson_results"), {
+        ...record,
+        timestamp: serverTimestamp()
+      });
+      console.log("✅ Result saved to Firebase");
+    } catch(e) {
+      console.warn("Firebase save error:", e);
+    }
+  };
+
+  // Listen to Firestore results for teacher panel
+  window.listenFirestoreResults = function(callback) {
+    const q = query(collection(db, "lesson_results"), orderBy("timestamp", "desc"));
+    return onSnapshot(q, (snap) => {
+      const data = snap.docs.map(d => ({id: d.id, ...d.data()}));
+      callback(data);
+    });
+  };
+</script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
 :root{--p:#0a1628;--gold:#c9a227;--g3:#0d7a5f;--g4:#1565c0;--ok:#27ae60;--err:#e74c3c;--bg:#f0f4f8;--card:#fff;--txt:#1a1a2e;--muted:#888;--sh:0 4px 24px rgba(0,0,0,.12);--r:16px;}
@@ -1089,9 +1128,12 @@ function showResults(){
     diag: ST.scores.diag, act: ST.scores.act, ws: ST.scores.ws, exit: ST.scores.exit,
     total, level: lvlTxt.replace(/[⭐📚]/g,'').trim()
   };
+  // Save locally (backup)
   const existing = JSON.parse(localStorage.getItem('lesson_results')||'[]');
   existing.push(record);
   localStorage.setItem('lesson_results', JSON.stringify(existing));
+  // Save to Firebase (real-time sync for teacher panel)
+  if(window.saveToFirestore) window.saveToFirestore(record);
 }
 
 function shareResult(){
@@ -1119,20 +1161,19 @@ function launchConfetti(){
 }
 
 // ════════ TEACHER PANEL ════════
-function openTeacher(){
-  const data = JSON.parse(localStorage.getItem('lesson_results')||'[]');
-  document.getElementById('tp').style.display='block';
+let _teacherUnsubscribe = null;
+
+function renderTeacherData(data){
   const tbody = document.getElementById('rTbody');
   tbody.innerHTML='';
   document.getElementById('tEmpty').style.display = data.length?'none':'block';
   document.querySelector('#tp .rt').style.display = data.length?'table':'none';
 
   if(data.length){
-    // Summary stats
-    const avg = Math.round(data.reduce((s,r)=>s+r.total,0)/data.length);
-    const g3 = data.filter(r=>r.grade===3).length;
-    const g4 = data.filter(r=>r.grade===4).length;
-    const excellent = data.filter(r=>r.total>=90).length;
+    const avg = Math.round(data.reduce((s,r)=>s+(r.total||0),0)/data.length);
+    const g3 = data.filter(r=>r.grade===3||r.grade==='3').length;
+    const g4 = data.filter(r=>r.grade===4||r.grade==='4').length;
+    const excellent = data.filter(r=>(r.total||0)>=90).length;
     document.getElementById('tSummary').innerHTML =
       stat('👥','إجمالي الطلاب',data.length) +
       stat('🟢','الصف الثالث',g3) +
@@ -1142,9 +1183,43 @@ function openTeacher(){
 
     data.forEach((r,i)=>{
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td>'+(i+1)+'</td><td><strong>'+r.name+'</strong></td><td><span class="badge b-g'+(r.grade||3)+'">الصف '+r.grade+'</span></td><td>'+r.diag+'/30</td><td>'+r.act+'</td><td>'+r.ws+'</td><td>'+r.exit+'</td><td><strong>'+r.total+'</strong></td><td>'+r.level+'</td><td>'+r.date+'</td>';
+      const dateStr = r.date || (r.timestamp?.toDate ? r.timestamp.toDate().toLocaleDateString('ar-AE') : '—');
+      tr.innerHTML = '<td>'+(i+1)+'</td><td><strong>'+r.name+'</strong></td><td><span class="badge b-g'+(r.grade||3)+'">الصف '+r.grade+'</span></td><td>'+(r.diag||0)+'/30</td><td>'+(r.act||0)+'</td><td>'+(r.ws||0)+'</td><td>'+(r.exit||0)+'</td><td><strong>'+(r.total||0)+'</strong></td><td>'+(r.level||'—')+'</td><td>'+dateStr+'</td>';
       tbody.appendChild(tr);
     });
+  }
+}
+
+function openTeacher(){
+  document.getElementById('tp').style.display='block';
+
+  // Show loading
+  document.getElementById('tEmpty').style.display='block';
+  document.getElementById('tEmpty').innerHTML='<div style="font-size:2rem">⏳</div><div>جاري تحميل البيانات...</div>';
+  document.querySelector('#tp .rt').style.display='none';
+  document.getElementById('tSummary').innerHTML='';
+
+  // Try Firebase first (real-time)
+  if(window.listenFirestoreResults){
+    if(_teacherUnsubscribe) _teacherUnsubscribe();
+    _teacherUnsubscribe = window.listenFirestoreResults(function(data){
+      window._lastFirebaseData = data;
+      if(data.length === 0){
+        // Also check localStorage
+        const local = JSON.parse(localStorage.getItem('lesson_results')||'[]');
+        renderTeacherData(local);
+        document.getElementById('tEmpty').innerHTML='<div style="font-size:2.5rem">📭</div><div>لا توجد بيانات بعد — ستظهر هنا بعد انتهاء الطلاب من الدرس</div>';
+      } else {
+        renderTeacherData(data);
+      }
+    });
+  } else {
+    // Fallback to localStorage
+    const data = JSON.parse(localStorage.getItem('lesson_results')||'[]');
+    renderTeacherData(data);
+    if(!data.length){
+      document.getElementById('tEmpty').innerHTML='<div style="font-size:2.5rem">📭</div><div>لا توجد بيانات بعد — ستظهر هنا بعد انتهاء الطلاب من الدرس</div>';
+    }
   }
 }
 
@@ -1153,7 +1228,8 @@ function stat(icon, label, val){
 }
 
 function exportCSV(){
-  const data = JSON.parse(localStorage.getItem('lesson_results')||'[]');
+  // Try to get data from the last known Firebase snapshot, fall back to localStorage
+  const data = window._lastFirebaseData || JSON.parse(localStorage.getItem('lesson_results')||'[]');
   if(!data.length){ alert('لا توجد بيانات!'); return; }
   const headers = ['الاسم','الصف','التشخيص','النشاط','ورقة العمل','الخروج','المجموع','المستوى','التاريخ'];
   const rows = data.map(r=>[r.name,r.grade,r.diag,r.act,r.ws,r.exit,r.total,r.level,r.date]);
