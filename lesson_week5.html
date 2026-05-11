@@ -590,11 +590,11 @@ body{font-family:'Cairo',sans-serif;background:var(--bg);color:var(--txt);min-he
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;border-bottom:2px solid var(--bg);padding-bottom:14px;">
       <div>
         <h2>👩‍🏫 لوحة المعلمة — تحليل أداء الطلاب</h2>
-        <p style="font-size:.8rem;color:var(--muted);">جميع البيانات من هذا الجهاز</p>
+        <p style="font-size:.8rem;color:var(--ok);">🔥 بيانات حية من Firebase — تتحدث تلقائياً</p>
       </div>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-ok" onclick="exportCSV()"><i class="fas fa-download"></i> تصدير CSV</button>
-        <button class="btn btn-p" onclick="document.getElementById('tp').style.display='none'"><i class="fas fa-times"></i></button>
+        <button class="btn btn-p" onclick="closeTeacher()"><i class="fas fa-times"></i></button>
       </div>
     </div>
     <div id="tSummary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;"></div>
@@ -1192,36 +1192,58 @@ function renderTeacherData(data){
 
 function openTeacher(){
   document.getElementById('tp').style.display='block';
+  sessionStorage.setItem('teacherOpen','1');
 
   // Show loading
   document.getElementById('tEmpty').style.display='block';
-  document.getElementById('tEmpty').innerHTML='<div style="font-size:2rem">⏳</div><div>جاري تحميل البيانات...</div>';
+  document.getElementById('tEmpty').innerHTML='<div style="font-size:2rem">⏳</div><div>جاري الاتصال بـ Firebase...</div>';
   document.querySelector('#tp .rt').style.display='none';
   document.getElementById('tSummary').innerHTML='';
 
-  // Try Firebase first (real-time)
-  if(window.listenFirestoreResults){
-    if(_teacherUnsubscribe) _teacherUnsubscribe();
-    _teacherUnsubscribe = window.listenFirestoreResults(function(data){
-      window._lastFirebaseData = data;
-      if(data.length === 0){
-        // Also check localStorage
-        const local = JSON.parse(localStorage.getItem('lesson_results')||'[]');
-        renderTeacherData(local);
-        document.getElementById('tEmpty').innerHTML='<div style="font-size:2.5rem">📭</div><div>لا توجد بيانات بعد — ستظهر هنا بعد انتهاء الطلاب من الدرس</div>';
-      } else {
-        renderTeacherData(data);
+  // Wait for Firebase to be ready (retry up to 5 seconds)
+  let attempts = 0;
+  const tryConnect = () => {
+    attempts++;
+    if(window.listenFirestoreResults){
+      if(_teacherUnsubscribe) _teacherUnsubscribe();
+      _teacherUnsubscribe = window.listenFirestoreResults(function(data){
+        window._lastFirebaseData = data;
+        if(data.length === 0){
+          document.getElementById('tEmpty').style.display='block';
+          document.getElementById('tEmpty').innerHTML='<div style="font-size:2.5rem">📭</div><div>لا توجد بيانات بعد — ستظهر هنا بعد انتهاء الطلاب من الدرس</div>';
+          document.querySelector('#tp .rt').style.display='none';
+        } else {
+          renderTeacherData(data);
+        }
+      });
+    } else if(attempts < 50) {
+      // Retry every 100ms for 5 seconds
+      setTimeout(tryConnect, 100);
+    } else {
+      // Fallback to localStorage
+      const data = JSON.parse(localStorage.getItem('lesson_results')||'[]');
+      renderTeacherData(data);
+      if(!data.length){
+        document.getElementById('tEmpty').innerHTML='<div style="font-size:2.5rem">📭</div><div>لا توجد بيانات بعد</div>';
       }
-    });
-  } else {
-    // Fallback to localStorage
-    const data = JSON.parse(localStorage.getItem('lesson_results')||'[]');
-    renderTeacherData(data);
-    if(!data.length){
-      document.getElementById('tEmpty').innerHTML='<div style="font-size:2.5rem">📭</div><div>لا توجد بيانات بعد — ستظهر هنا بعد انتهاء الطلاب من الدرس</div>';
     }
-  }
+  };
+  tryConnect();
 }
+
+function closeTeacher(){
+  document.getElementById('tp').style.display='none';
+  sessionStorage.removeItem('teacherOpen');
+  if(_teacherUnsubscribe){ _teacherUnsubscribe(); _teacherUnsubscribe=null; }
+}
+
+// Restore teacher panel on refresh
+window.addEventListener('DOMContentLoaded', function(){
+  if(sessionStorage.getItem('teacherOpen')==='1'){
+    // Small delay to let Firebase initialize first
+    setTimeout(openTeacher, 800);
+  }
+});
 
 function stat(icon, label, val){
   return '<div class="card" style="margin:0;padding:14px;text-align:center;"><div style="font-size:1.5rem;">'+icon+'</div><div style="font-size:1.4rem;font-weight:900;color:var(--p);">'+val+'</div><div style="font-size:.75rem;color:var(--muted);">'+label+'</div></div>';
