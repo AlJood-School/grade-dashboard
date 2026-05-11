@@ -652,44 +652,75 @@ function eqUpdateNames() {
 }
 
 function eqStartGame() {
-  const pin = document.getElementById('eq-name-select').value;
+  const select = document.getElementById('eq-name-select');
+  const pin = select.value;
   if (!pin) return;
   
-  // Hide overlay
   document.getElementById('eq-login-overlay').classList.add('hidden');
   
-  // Wait for game to render, then auto-enter PIN
-  function tryAutoPin(attempts) {
-    const buttons = document.querySelectorAll('button');
-    // Find digit buttons in the game's pin pad
-    const digitBtns = Array.from(buttons).filter(b => {
-      const txt = b.textContent.trim();
+  function findDigitButtons() {
+    return Array.from(document.querySelectorAll('button, [role="button"]')).filter(b => {
+      if (b.closest('#eq-login-overlay')) return false;
+      const txt = (b.textContent || '').replace(/\s/g, '').trim();
       return txt.length === 1 && '0123456789'.includes(txt);
     });
-    
-    if (digitBtns.length < 10 && attempts > 0) {
-      setTimeout(() => tryAutoPin(attempts - 1), 300);
-      return;
-    }
-    
-    if (digitBtns.length > 0) {
-      // Click each digit
-      let delay = 100;
-      pin.split('').forEach(digit => {
-        setTimeout(() => {
-          const btn = digitBtns.find(b => b.textContent.trim() === digit);
-          if (btn) btn.click();
-        }, delay);
-        delay += 200;
+  }
+  
+  function clickPin() {
+    const digits = pin.split('');
+    let delay = 0;
+    digits.forEach(digit => {
+      setTimeout(() => {
+        const btns = findDigitButtons();
+        const btn = btns.find(b => (b.textContent || '').replace(/\s/g, '').trim() === digit);
+        if (btn) {
+          btn.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+          btn.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+          btn.click();
+        }
+      }, delay);
+      delay += 350;
+    });
+    // After all digits, try to find confirm button
+    setTimeout(() => {
+      const allBtns = Array.from(document.querySelectorAll('button'));
+      const confirmBtn = allBtns.find(b => {
+        if (b.closest('#eq-login-overlay')) return false;
+        const txt = (b.textContent || '').toLowerCase();
+        return txt.includes('enter') || txt.includes('confirm') || txt.includes('ok') ||
+               txt.includes('✓') || txt.includes('تأكيد') || txt.includes('دخول');
       });
+      if (confirmBtn) confirmBtn.click();
+    }, delay + 400);
+  }
+  
+  // Use MutationObserver for reliable detection of when React renders
+  let triggered = false;
+  const root = document.getElementById('root');
+  const observer = new MutationObserver(() => {
+    if (triggered) return;
+    const btns = findDigitButtons();
+    if (btns.length >= 9) {
+      triggered = true;
+      observer.disconnect();
+      clearTimeout(fallbackTimer);
+      setTimeout(clickPin, 200);
+    }
+  });
+  if (root) observer.observe(root, {childList: true, subtree: true});
+  
+  // Fallback: try after 6 seconds regardless
+  const fallbackTimer = setTimeout(() => {
+    observer.disconnect();
+    if (triggered) return;
+    const btns = findDigitButtons();
+    if (btns.length >= 9) {
+      clickPin();
     } else {
-      // Fallback: show overlay again with error
       document.getElementById('eq-login-overlay').classList.remove('hidden');
       document.getElementById('eq-error').style.display = 'block';
     }
-  }
-  
-  setTimeout(() => tryAutoPin(15), 500);
+  }, 6000);
 }
 </script>
 <div id="root"></div></body>
