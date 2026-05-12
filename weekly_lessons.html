@@ -397,7 +397,10 @@ select:focus { border-color: var(--dark); }
           <div id="lesson-week-label" style="font-size:0.8rem;opacity:0.6;text-transform:uppercase;font-weight:600;"></div>
           <div id="lesson-title" style="font-size:1.2rem;font-weight:700;color:var(--dark);"></div>
         </div>
-        <span class="timer-badge" id="timer-badge">⏱️ <span id="stage-label">التهيئة</span></span>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button onclick="toggleLang()" id="lang-btn" class="btn btn-dark btn-sm" style="font-size:0.8rem;padding:6px 14px;background:#c9a227;color:#0a1628;font-weight:700;border:none;">🌐 EN</button>
+          <span class="timer-badge" id="timer-badge">⏱️ <span id="stage-label">التهيئة</span></span>
+        </div>
       </div>
       <!-- Progress -->
       <div class="prog-labels" style="margin-top:12px;">
@@ -443,16 +446,16 @@ select:focus { border-color: var(--dark); }
 
     <!-- Stage: Quiz -->
     <div id="stage-quiz" class="stage-panel" style="display:none;">
-      <div class="card">
+      <div class="card" id="quiz-card-main">
         <div class="quiz-progress" id="quiz-progress"></div>
         <div class="quiz-question" id="quiz-q"></div>
         <div class="quiz-options" id="quiz-opts"></div>
         <div class="quiz-feedback" id="quiz-feedback" style="display:none;"></div>
-        <button class="btn btn-primary" id="btn-quiz-next" onclick="nextQuizQ()" style="display:none;margin-top:12px;">التالي ←</button>
+        <button class="btn btn-primary" id="btn-quiz-next" onclick="nextQuizQ()" style="display:none;margin-top:12px;">التالي → | Next</button>
       </div>
       <div id="quiz-score-display" style="display:none;">
         <div class="alert alert-success" id="quiz-score-msg"></div>
-        <button class="btn btn-primary" onclick="nextStage()">التالي: النشاط 🎮 →</button>
+        <button class="btn btn-primary" id="btn-next-after-quiz" onclick="nextStage()">التالي: النشاط 🎮 →</button>
       </div>
     </div>
 
@@ -666,6 +669,104 @@ let currentSlideIdx = 0;
 let currentStage = 0; // 0=warmup,1=content,2=quiz,3=activity,4=exit
 let quizScores = 0;
 let currentQuizIdx = 0;
+let currentLang = 'ar'; // Language: 'ar' or 'en'
+
+// =========== LANGUAGE STRINGS ===========
+const STRINGS = {
+  ar: {
+    stageLabels: ['التهيئة','المحتوى','الاختبار','النشاط','بطاقة الخروج'],
+    progLabels: ['🌟 تهيئة','📚 محتوى','❓ اختبار','🎮 نشاط','🚪 خروج'],
+    nextBtn: 'التالي ←',
+    startLesson: '📚 ابدأ الدرس | Start →',
+    nextQuiz: '❓ الاختبار القصير →',
+    nextActivity: '🎮 النشاط →',
+    nextExit: '🚪 بطاقة الخروج →',
+    finishBtn: '✅ إنهاء الدرس →',
+    prevSlide: '← السابق',
+    quizNext: 'التالي ←',
+    nextAfterQuiz: 'التالي: النشاط 🎮 →',
+    slideOf: (i,n) => `الشريحة ${i} من ${n}`,
+    qOf: (i,n) => `السؤال ${i} من ${n}`,
+    correct: '✅ إجابة صحيحة! ممتاز 🌟',
+    wrong: (ans) => `❌ الإجابة الصحيحة هي: ${ans}`,
+    weekLabel: (w) => `الأسبوع ${w}`,
+    objectives: 'الأهداف التعليمية:',
+    activityInstruction: '',
+    submitExit: '📤 إرسال ←',
+    exitPlaceholder: 'اكتب إجابتك هنا...',
+    gradeLabel: 'المرحلة',
+    sectionLabel: 'الشعبة',
+    langBtnText: '🌐 EN',
+  },
+  en: {
+    stageLabels: ['Warm-Up','Content','Quiz','Activity','Exit Card'],
+    progLabels: ['🌟 Warm-Up','📚 Content','❓ Quiz','🎮 Activity','🚪 Exit'],
+    nextBtn: 'Next →',
+    startLesson: '📚 Start Lesson →',
+    nextQuiz: '❓ Take the Quiz →',
+    nextActivity: '🎮 Go to Activity →',
+    nextExit: '🚪 Exit Card →',
+    finishBtn: '✅ Finish Lesson →',
+    prevSlide: '← Back',
+    quizNext: 'Next →',
+    nextAfterQuiz: 'Next: Activity 🎮 →',
+    slideOf: (i,n) => `Slide ${i} of ${n}`,
+    qOf: (i,n) => `Question ${i} of ${n}`,
+    correct: '✅ Correct! Excellent 🌟',
+    wrong: (ans) => `❌ Correct answer: ${ans}`,
+    weekLabel: (w) => `Week ${w}`,
+    objectives: 'Learning Objectives:',
+    activityInstruction: '',
+    submitExit: '📤 Submit →',
+    exitPlaceholder: 'Write your answer here...',
+    gradeLabel: 'Grade',
+    sectionLabel: 'Section',
+    langBtnText: '🌐 عربي',
+  }
+};
+
+function toggleLang() {
+  currentLang = currentLang === 'ar' ? 'en' : 'ar';
+  const html = document.documentElement;
+  html.lang = currentLang;
+  html.dir = currentLang === 'ar' ? 'rtl' : 'ltr';
+  // Update lang button
+  const btn = document.getElementById('lang-btn');
+  if (btn) btn.textContent = STRINGS[currentLang].langBtnText;
+  // Update progress bar labels
+  updateProgLabels();
+  // Re-render current stage if in lesson
+  if (document.getElementById('screen-lesson').classList.contains('active')) {
+    updateLessonLabels();
+    if (currentStage === 0) renderWarmup();
+    else if (currentStage === 1) showSlide(currentSlideIdx);
+    else if (currentStage === 2) {
+      const quizCard = document.getElementById('quiz-card-main');
+      if (quizCard) quizCard.style.display = 'block';
+      showQuizQ(currentQuizIdx > 0 ? currentQuizIdx - 1 : 0);
+    }
+    else if (currentStage === 3) renderActivity();
+    else if (currentStage === 4) renderExitCard();
+  }
+}
+
+function updateProgLabels() {
+  const s = STRINGS[currentLang];
+  const labels = document.querySelectorAll('.prog-labels span');
+  s.progLabels.forEach((lbl, i) => { if (labels[i]) labels[i].textContent = lbl; });
+  if (document.getElementById('stage-label'))
+    document.getElementById('stage-label').textContent = s.stageLabels[currentStage] || '';
+}
+
+function updateLessonLabels() {
+  const s = STRINGS[currentLang];
+  const wd = WEEKS_DATA[currentWeek] || WEEKS_DATA[String(currentWeek)];
+  if (!wd) return;
+  if (document.getElementById('lesson-week-label'))
+    document.getElementById('lesson-week-label').textContent = s.weekLabel(currentWeek);
+  if (document.getElementById('lesson-title'))
+    document.getElementById('lesson-title').textContent = currentLang === 'ar' ? wd.title_ar : (wd.title_en || wd.title_ar);
+}
 let activityAnswers = {};
 let activityScore = 0;
 let selfRate = 0;
@@ -673,7 +774,6 @@ let lessonStartTime = null;
 let completedWeeks = JSON.parse(localStorage.getItem('completedWeeks') || '{}');
 
 const STAGES = ['warmup','content','quiz','activity','exit'];
-const STAGE_LABELS = ['التهيئة','المحتوى','الاختبار','النشاط','بطاقة الخروج'];
 
 // =========== SCREEN UTILS ===========
 function showScreen(id) {
@@ -690,7 +790,7 @@ function setProgress(stage) {
     if (i < stage) el.classList.add('done');
     else if (i === stage) el.classList.add('active');
   }
-  document.getElementById('stage-label').textContent = STAGE_LABELS[stage] || '';
+  document.getElementById('stage-label').textContent = (STRINGS[currentLang]?.stageLabels || STRINGS.ar.stageLabels)[stage] || '';
 }
 
 // =========== LOGIN ===========
@@ -893,11 +993,13 @@ function showSlide(idx) {
   document.getElementById('slide-content').textContent = s.content;
   document.getElementById('slide-counter').textContent = 'الشريحة ' + (idx+1) + ' من ' + slides.length;
   document.getElementById('btn-prev-slide').style.display = idx > 0 ? 'inline-block' : 'none';
+  const s = STRINGS[currentLang];
+  document.getElementById('btn-prev-slide').textContent = s.prevSlide;
   if (idx >= slides.length - 1) {
-    document.getElementById('btn-next-slide').textContent = 'الاختبار القصير ❓ →';
+    document.getElementById('btn-next-slide').textContent = s.nextQuiz;
     document.getElementById('btn-next-slide').onclick = () => nextStage();
   } else {
-    document.getElementById('btn-next-slide').textContent = 'التالي ←';
+    document.getElementById('btn-next-slide').textContent = s.nextBtn;
     document.getElementById('btn-next-slide').onclick = () => nextSlide();
   }
 }
@@ -922,6 +1024,9 @@ function renderQuiz() {
   quizScores = 0;
   currentQuizIdx = 0;
   document.getElementById('quiz-score-display').style.display = 'none';
+  // FIX: Reset quiz card visibility (may have been hidden after previous quiz)
+  const quizCard = document.getElementById('quiz-card-main');
+  if (quizCard) quizCard.style.display = 'block';
   showQuizQ(0);
 }
 
@@ -931,13 +1036,18 @@ function showQuizQ(idx) {
   if (idx >= quiz.length) {
     // Done
     document.getElementById('quiz-score-display').style.display = 'block';
-    document.getElementById('quiz-score-msg').textContent = 
-      '✅ انتهى الاختبار! نتيجتك: ' + quizScores + ' / ' + quiz.length + ' (' + Math.round(quizScores/quiz.length*100) + '%)';
-    document.querySelector('.card:has(#quiz-q)').style.display = 'none';
+    const pct = Math.round(quizScores/quiz.length*100);
+    const emoji = pct >= 80 ? '🌟' : pct >= 60 ? '👍' : '💪';
+    document.getElementById('quiz-score-msg').innerHTML = 
+      (currentLang === 'ar'
+        ? `✅ انتهى الاختبار! نتيجتك: ${quizScores} / ${quiz.length} (${pct}%) ${emoji}`
+        : `✅ Quiz done! Your score: ${quizScores} / ${quiz.length} (${pct}%) ${emoji}`);
+    const quizCard = document.getElementById('quiz-card-main');
+    if (quizCard) quizCard.style.display = 'none';
     return;
   }
   const q = quiz[idx];
-  document.getElementById('quiz-progress').textContent = 'السؤال ' + (idx+1) + ' من ' + quiz.length;
+  document.getElementById('quiz-progress').textContent = STRINGS[currentLang].qOf(idx+1, quiz.length);
   document.getElementById('quiz-q').textContent = q.q;
   document.getElementById('quiz-feedback').style.display = 'none';
   document.getElementById('btn-quiz-next').style.display = 'none';
@@ -959,15 +1069,16 @@ function answerQuiz(chosen, correct, el) {
   const fb = document.getElementById('quiz-feedback');
   const wd = WEEKS_DATA[currentWeek] || WEEKS_DATA[String(currentWeek)];
 
+  const s = STRINGS[currentLang];
   if (chosen === correct) {
     el.classList.add('correct');
-    fb.textContent = '✅ إجابة صحيحة! ممتاز 🌟';
+    fb.textContent = s.correct;
     fb.className = 'quiz-feedback ok';
     quizScores++;
   } else {
     el.classList.add('wrong');
     opts[correct].classList.add('correct');
-    fb.textContent = '❌ الإجابة الصحيحة هي: ' + ((wd.quiz||[])[currentQuizIdx]?.opts[correct] || '');
+    fb.textContent = s.wrong((wd.quiz||[])[currentQuizIdx]?.opts[correct] || '');
     fb.className = 'quiz-feedback nok';
   }
   fb.style.display = 'block';
@@ -976,7 +1087,8 @@ function answerQuiz(chosen, correct, el) {
 }
 
 function nextQuizQ() {
-  document.querySelector('.card:has(#quiz-q)').style.display = 'block';
+  const quizCard = document.getElementById('quiz-card-main');
+  if (quizCard) quizCard.style.display = 'block';
   showQuizQ(currentQuizIdx);
 }
 
