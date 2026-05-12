@@ -369,7 +369,7 @@ select:focus { border-color: var(--dark); }
     <button class="btn btn-primary" id="btn-go-weeks" onclick="goToWeeks()" disabled>
       ابدأ الدرس ▶ | Start Lesson
     </button>
-    <button class="btn btn-dark" onclick="showScreen('screen-login')" style="margin-top:8px;background:#888;">← الرجوع</button>
+    <button class="btn btn-dark" onclick="clearState();showScreen('screen-login')" style="margin-top:8px;background:#888;">← الرجوع</button>
   </div>
 </div>
 
@@ -615,7 +615,7 @@ select:focus { border-color: var(--dark); }
     </table>
   </div>
 
-  <button class="btn btn-dark" onclick="showScreen('screen-login')" style="margin-top:16px;background:#888;">← الخروج من لوحة المعلمة</button>
+  <button class="btn btn-dark" onclick="clearState();showScreen('screen-login')" style="margin-top:16px;background:#888;">← الخروج من لوحة المعلمة</button>
 </div>
 
 <!-- FOOTER -->
@@ -669,7 +669,7 @@ let currentSlideIdx = 0;
 let currentStage = 0; // 0=warmup,1=content,2=quiz,3=activity,4=exit
 let quizScores = 0;
 let currentQuizIdx = 0;
-let currentLang = 'ar'; // Language: 'ar' or 'en'
+let currentLang = localStorage.getItem('wl_lang') || 'en'; // Language: 'ar' or 'en'
 
 // =========== LANGUAGE STRINGS ===========
 const STRINGS = {
@@ -725,18 +725,15 @@ const STRINGS = {
   }
 };
 
-function toggleLang() {
-  currentLang = currentLang === 'ar' ? 'en' : 'ar';
+function applyLang() {
   const html = document.documentElement;
   html.lang = currentLang;
   html.dir = currentLang === 'ar' ? 'rtl' : 'ltr';
-  // Update lang button
   const btn = document.getElementById('lang-btn');
   if (btn) btn.textContent = STRINGS[currentLang].langBtnText;
-  // Update progress bar labels
   updateProgLabels();
-  // Re-render current stage if in lesson
-  if (document.getElementById('screen-lesson').classList.contains('active')) {
+  if (document.getElementById('screen-lesson') &&
+      document.getElementById('screen-lesson').classList.contains('active')) {
     updateLessonLabels();
     if (currentStage === 0) renderWarmup();
     else if (currentStage === 1) showSlide(currentSlideIdx);
@@ -748,6 +745,83 @@ function toggleLang() {
     else if (currentStage === 3) renderActivity();
     else if (currentStage === 4) renderExitCard();
   }
+}
+
+function toggleLang() {
+  currentLang = currentLang === 'ar' ? 'en' : 'ar';
+  localStorage.setItem('wl_lang', currentLang);
+  applyLang();
+}
+
+// =========== STATE PERSISTENCE ===========
+function saveState() {
+  const activeScreen = document.querySelector('.screen.active');
+  const screenId = activeScreen ? activeScreen.id : 'screen-login';
+  // Never save teacher screen
+  if (screenId === 'screen-teacher') return;
+  const state = {
+    screen: screenId,
+    currentClass, currentGrade, currentSection, currentStudent,
+    currentWeek, currentStage, currentSlideIdx, currentQuizIdx, quizScores
+  };
+  try { localStorage.setItem('wl_state', JSON.stringify(state)); } catch(e) {}
+}
+
+function clearState() {
+  localStorage.removeItem('wl_state');
+}
+
+function restoreState() {
+  try {
+    const saved = localStorage.getItem('wl_state');
+    if (!saved) return;
+    const state = JSON.parse(saved);
+    if (!state || !state.screen) return;
+
+    // Restore variables
+    currentClass   = state.currentClass   || null;
+    currentGrade   = state.currentGrade   || null;
+    currentSection = state.currentSection || null;
+    currentStudent = state.currentStudent || null;
+    currentWeek    = state.currentWeek    || null;
+    currentStage   = state.currentStage   || 0;
+    currentSlideIdx = state.currentSlideIdx || 0;
+    currentQuizIdx  = state.currentQuizIdx  || 0;
+    quizScores      = state.quizScores      || 0;
+
+    if (state.screen === 'screen-weeks' && currentClass) {
+      // Show week selector
+      showScreen('screen-weeks');
+      renderWeeksGrid();
+      const disp = document.getElementById('class-name-display');
+      if (disp) disp.textContent = CLASS_CODES[Object.keys(CLASS_CODES).find(k => CLASS_CODES[k].class === currentClass)]?.display || currentClass;
+    } else if (state.screen === 'screen-name' && currentClass) {
+      showScreen('screen-name');
+      const sel = document.getElementById('name-select');
+      if (sel) {
+        sel.innerHTML = '<option value="">— ' + (currentLang==='en'?'Select your name':'اختر اسمك') + ' —</option>';
+        (STUDENTS[currentClass]||[]).forEach(n => {
+          const o = document.createElement('option');
+          o.value = n; o.textContent = n; sel.appendChild(o);
+        });
+        if (currentStudent) sel.value = currentStudent;
+      }
+      const d2 = document.getElementById('class-name-display-2');
+      if (d2) d2.textContent = CLASS_CODES[Object.keys(CLASS_CODES).find(k=>CLASS_CODES[k].class===currentClass)]?.display || currentClass;
+    } else if (state.screen === 'screen-lesson' && currentWeek && currentClass && currentStudent) {
+      showScreen('screen-lesson');
+      showStage(currentStage);
+      updateLessonLabels();
+      if (currentStage === 0) renderWarmup();
+      else if (currentStage === 1) { renderSlides(); showSlide(currentSlideIdx); }
+      else if (currentStage === 2) { renderQuiz(); }
+      else if (currentStage === 3) renderActivity();
+      else if (currentStage === 4) renderExitCard();
+    } else if (state.screen === 'screen-result') {
+      showScreen('screen-result');
+    }
+    // else: show login (default)
+  } catch(e) { localStorage.removeItem('wl_state'); }
 }
 
 function updateProgLabels() {
@@ -780,6 +854,8 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const el = document.getElementById(id);
   if (el) { el.classList.add('active'); window.scrollTo(0,0); }
+  // Save state (except teacher screen)
+  if (id !== 'screen-teacher') setTimeout(saveState, 50);
 }
 
 function setProgress(stage) {
@@ -975,6 +1051,7 @@ function nextStage() {
   else if (currentStage === 2) renderQuiz();
   else if (currentStage === 3) renderActivity();
   else if (currentStage === 4) renderExitCard();
+  saveState();
 }
 
 // =========== CONTENT SLIDES ===========
@@ -1439,6 +1516,23 @@ function exportCSV() {
   a.href = url; a.download = 'results_w' + teacherWeek + '_' + teacherClass + '.csv';
   a.click();
 }
+
+// =========== INITIALIZATION ===========
+window.addEventListener('DOMContentLoaded', () => {
+  // 1. Apply saved language (default: en)
+  const html = document.documentElement;
+  html.lang = currentLang;
+  html.dir = currentLang === 'ar' ? 'rtl' : 'ltr';
+  // Update lang button text after DOM ready
+  setTimeout(() => {
+    const btn = document.getElementById('lang-btn');
+    if (btn) btn.textContent = STRINGS[currentLang].langBtnText;
+    updateProgLabels();
+  }, 50);
+
+  // 2. Restore last page state (if any)
+  restoreState();
+});
 </script>
 </body>
 </html>
