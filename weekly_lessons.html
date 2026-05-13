@@ -568,6 +568,15 @@ select:focus { border-color: var(--dark); }
       </select>
     </div>
     <div id="name-confirm" class="alert alert-success" style="display:none;"></div>
+    <!-- Resume Progress Card -->
+    <div id="resume-card" style="display:none;background:linear-gradient(135deg,#e8f5e9,#f1f8e9);border:2px solid #4caf50;border-radius:12px;padding:16px;margin:12px 0;">
+      <div style="font-weight:700;color:#2e7d32;font-size:1rem;margin-bottom:6px;">📌 Resume where you left off | استكمل من حيث توقفت</div>
+      <div id="resume-info" style="font-size:0.85rem;color:#555;margin-bottom:12px;"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="resumeProgress()" class="btn btn-sm" style="background:#4caf50;color:#fff;font-weight:700;border:none;border-radius:8px;padding:8px 18px;">▶ Continue | استكمل</button>
+        <button onclick="clearProgressAndStart()" class="btn btn-sm" style="background:#888;color:#fff;font-weight:700;border:none;border-radius:8px;padding:8px 18px;">🆕 Start Over | ابدأ من جديد</button>
+      </div>
+    </div>
     <button class="btn btn-primary" id="btn-go-weeks" onclick="goToWeeks()" disabled>
       ابدأ الدرس ▶ | Start Lesson
     </button>
@@ -602,6 +611,7 @@ select:focus { border-color: var(--dark); }
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <button onclick="toggleLang()" id="lang-btn" class="btn btn-dark btn-sm" style="font-size:0.8rem;padding:6px 14px;background:#c9a227;color:#0a1628;font-weight:700;border:none;">🌐 EN</button>
           <span class="timer-badge" id="timer-badge">⏱️ <span id="stage-label">التهيئة</span></span>
+          <button onclick="logoutStudent()" class="btn btn-sm" style="font-size:0.8rem;padding:6px 14px;background:#dc3545;color:#fff;font-weight:700;border:none;border-radius:8px;" title="Save & Exit">💾 Save & Exit</button>
         </div>
       </div>
       <!-- Progress -->
@@ -890,7 +900,7 @@ select:focus { border-color: var(--dark); }
 <!-- Firebase SDK -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, collection, addDoc, query, where, getDocs, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc, query, where, getDocs, orderBy, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDri3r5AtyyduyiTS5GzIHOn-XSduhALpM",
@@ -905,7 +915,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 window.__fbdb = db;
-window.__fbFns = { collection, addDoc, query, where, getDocs, orderBy };
+window.__fbFns = { collection, addDoc, query, where, getDocs, orderBy, doc, setDoc, getDoc, deleteDoc };
 window.__fbReady = true;
 console.log("Firebase ready");
 
@@ -1034,6 +1044,142 @@ function saveState() {
 function clearState() {
   localStorage.removeItem('wl_state');
 }
+
+// ── Firebase Progress Save/Load ──
+async function saveProgressToFirebase() {
+  if (!currentStudent || !currentClass || currentWeek === null) return;
+  try {
+    const { doc, setDoc } = window.__fbFns;
+    const progressId = (currentClass + '_' + currentStudent).replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_؀-ۿ]/g,'');
+    const data = {
+      studentName: currentStudent,
+      className: currentClass,
+      grade: currentGrade,
+      section: currentSection,
+      week: currentWeek,
+      stage: currentStage,
+      slideIdx: currentSlideIdx,
+      quizIdx: currentQuizIdx,
+      quizScores: quizScores,
+      savedAt: new Date().toISOString(),
+      completed: false
+    };
+    await setDoc(doc(window.__fbdb, 'student_progress', progressId), data);
+    return true;
+  } catch(e) {
+    console.error('Save progress error:', e);
+    return false;
+  }
+}
+
+async function loadProgressFromFirebase(studentName, className) {
+  if (!studentName || !className) return null;
+  try {
+    const { doc, getDoc } = window.__fbFns;
+    const progressId = (className + '_' + studentName).replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_؀-ۿ]/g,'');
+    const snap = await getDoc(doc(window.__fbdb, 'student_progress', progressId));
+    if (snap.exists()) {
+      const d = snap.data();
+      // Only return if not completed and has a week saved
+      if (!d.completed && d.week !== null && d.week !== undefined) return d;
+    }
+    return null;
+  } catch(e) {
+    console.error('Load progress error:', e);
+    return null;
+  }
+}
+
+async function clearProgressFromFirebase() {
+  if (!currentStudent || !currentClass) return;
+  try {
+    const { doc, deleteDoc } = window.__fbFns;
+    const progressId = (currentClass + '_' + currentStudent).replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_؀-ۿ]/g,'');
+    await deleteDoc(doc(window.__fbdb, 'student_progress', progressId));
+  } catch(e) {}
+}
+
+async function logoutStudent() {
+  const confirmMsg = currentLang === 'ar'
+    ? 'سيتم حفظ تقدمك. هل تريد الخروج؟'
+    : 'Your progress will be saved. Exit?';
+  if (!confirm(confirmMsg)) return;
+
+  // Save to Firebase first
+  const saved = await saveProgressToFirebase();
+
+  // Also save to localStorage
+  saveState();
+
+  // Show feedback
+  const msg = saved
+    ? (currentLang === 'ar' ? '✅ تم حفظ تقدمك! يمكنك الاستكمال لاحقاً.' : '✅ Progress saved! You can continue later.')
+    : (currentLang === 'ar' ? '⚠️ لم يُحفظ في السحابة، لكن تم الحفظ محلياً.' : '⚠️ Saved locally. Cloud save failed.');
+  alert(msg);
+
+  // Go back to login
+  clearState();
+  showScreen('screen-login');
+}
+
+let _resumeData = null;
+
+async function onNameSelect(name) {
+  currentStudent = name;
+  const confirmEl = document.getElementById('name-confirm');
+  const resumeCard = document.getElementById('resume-card');
+  const resumeInfo = document.getElementById('resume-info');
+  const goBtn = document.getElementById('btn-go-weeks');
+
+  if (name) {
+    confirmEl.textContent = (currentLang==='ar' ? '✅ أهلاً ' + name + '!' : '✅ Welcome ' + name + '!');
+    confirmEl.style.display = 'block';
+    goBtn.disabled = false;
+
+    // Check Firebase for saved progress
+    resumeCard.style.display = 'none';
+    _resumeData = await loadProgressFromFirebase(name, currentClass);
+    if (_resumeData) {
+      const stageNames = ['Warm-Up | تهيئة', 'Content | محتوى', 'Quiz | اختبار', 'Activity | نشاط', 'Exit Card | خروج'];
+      const stageName = stageNames[_resumeData.stage] || '';
+      const savedDate = new Date(_resumeData.savedAt).toLocaleDateString('en-GB');
+      resumeInfo.innerHTML = '📅 ' + savedDate + ' &nbsp;|&nbsp; 📖 Week ' + _resumeData.week + ' &nbsp;|&nbsp; 🎯 ' + stageName + ' &nbsp;|&nbsp; ⭐ Score: ' + _resumeData.quizScores;
+      resumeCard.style.display = 'block';
+    }
+    saveState();
+  } else {
+    confirmEl.style.display = 'none';
+    resumeCard.style.display = 'none';
+    goBtn.disabled = true;
+    _resumeData = null;
+  }
+}
+function resumeProgress() {
+  if (!_resumeData) return;
+  currentWeek = _resumeData.week;
+  currentStage = _resumeData.stage || 0;
+  currentSlideIdx = _resumeData.slideIdx || 0;
+  currentQuizIdx = _resumeData.quizIdx || 0;
+  quizScores = _resumeData.quizScores || 0;
+  showScreen('screen-lesson');
+  updateLessonLabels();
+  if (currentStage === 0) renderWarmup();
+  else if (currentStage === 1) { renderSlides(); showSlide(currentSlideIdx); }
+  else if (currentStage === 2) renderQuiz();
+  else if (currentStage === 3) renderActivity();
+  else if (currentStage === 4) renderExitCard();
+  saveState();
+  _resumeData = null;
+}
+
+async function clearProgressAndStart() {
+  await clearProgressFromFirebase();
+  clearState();
+  document.getElementById('resume-card').style.display = 'none';
+  _resumeData = null;
+  goToWeeks();
+}
+
 
 function restoreState() {
   try {
