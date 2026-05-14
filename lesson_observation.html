@@ -2057,6 +2057,11 @@ body {
         <span>لوحة المعلمة</span>
         <span style="font-size:0.8rem;opacity:0.6">Teacher Dashboard</span>
       </button>
+      <button class="btn-mode btn-browse" onclick="startBrowseMode()" style="background:linear-gradient(135deg,#10b981,#059669);border:none;color:white;padding:18px 24px;border-radius:16px;cursor:pointer;font-family:Cairo,sans-serif;font-size:1rem;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:6px;box-shadow:0 4px 15px rgba(16,185,129,0.4);transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+        <span style="font-size:2rem">👁️</span>
+        <span>معاينة الدرس</span>
+        <span style="font-size:0.8rem;opacity:0.85">Browse (No Scores)</span>
+      </button>
     </div>
   </div>
 
@@ -3956,6 +3961,7 @@ const STUDENTS_DATA = {
 // APP STATE
 // ============================================================
 let currentStudent = null;
+let browseMode = false;
 let currentPhase = 0;
 let teacherPhase = 0;
 let timerInterval = null;
@@ -4024,6 +4030,25 @@ window.showPasswordModal = function() {
 window.closePasswordModal = function() {
   document.getElementById('passwordModal').classList.remove('active');
 };
+window.startBrowseMode = function() {
+  browseMode = true;
+  // Create a fake student for browse mode
+  currentStudent = { name: 'Preview Teacher', cls: 'Browse', grade: 3, num: '00' };
+  // Show green badge
+  const existing = document.getElementById('browse-badge');
+  if (existing) existing.remove();
+  const badge = document.createElement('div');
+  badge.id = 'browse-badge';
+  badge.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#10b981,#059669);color:white;padding:8px 22px;border-radius:25px;font-family:Cairo,sans-serif;font-weight:700;font-size:0.9rem;z-index:99999;box-shadow:0 4px 20px rgba(16,185,129,0.6);pointer-events:none;';
+  badge.innerHTML = '👁️ وضع المعاينة | Browse Mode — لا تُسجَّل درجات';
+  document.body.appendChild(badge);
+  // Go to grade 3 lesson directly
+  currentGrade = 3;
+  currentClass = 'Grade 3A';
+  showScreen('screen-lesson');
+  if (typeof startKidMode === 'function') startKidMode();
+};
+
 window.checkPassword = function() {
   const raw = document.getElementById('pwdInput').value;
   const normalized = raw.replace(/٥/g,'5').replace(/٦/g,'6');
@@ -4109,6 +4134,7 @@ window.markPresent = async function() {
   };
   try {
     const docId = selectedClass + '_' + selectedStudentObj.num;
+    if (browseMode) return;
     await setDoc(doc(db, 'obs_attendance', docId), {
       name: currentStudent.name,
       nameEn: currentStudent.nameEn,
@@ -4233,6 +4259,7 @@ window.saveKWL = async function() {
   const want = document.getElementById('kwlWant').value;
   try {
     const docId = (currentStudent.class || 'X') + '_' + (currentStudent.num || '0');
+    if (browseMode) return;
     await setDoc(doc(db, 'obs_exit_cards', docId + '_kwl'), {
       name: currentStudent.name, class: currentStudent.class,
       grade: currentStudent.grade, know, want, timestamp: serverTimestamp()
@@ -4261,6 +4288,7 @@ window.saveDesignBrief = async function() {
   };
   try {
     const docId = (currentStudent.class || 'X') + '_' + (currentStudent.num || '0');
+    if (browseMode) return;
     await setDoc(doc(db, 'obs_exit_cards', docId + '_brief'), data);
     document.getElementById('briefSaved').style.display = 'inline-flex';
     setTimeout(() => { document.getElementById('briefSaved').style.display = 'none'; }, 2500);
@@ -4280,6 +4308,7 @@ window.saveSketch = async function() {
   };
   try {
     const docId = (currentStudent.class || 'X') + '_' + (currentStudent.num || '0');
+    if (browseMode) return;
     await setDoc(doc(db, 'obs_exit_cards', docId + '_sketch'), data);
     document.getElementById('sketchSaved').style.display = 'inline-flex';
     setTimeout(() => { document.getElementById('sketchSaved').style.display = 'none'; }, 2500);
@@ -4332,6 +4361,7 @@ window.submitExitCard = async function() {
   };
   try {
     const docId = currentStudent ? (currentStudent.class + '_' + currentStudent.num) : ('anon_' + Date.now());
+    if (browseMode) return;
     await setDoc(doc(db, 'obs_exit_cards', docId + '_exit'), data);
     document.getElementById('exitSubmitted').style.display = 'block';
     document.querySelector('.btn-submit-exit').disabled = true;
@@ -5867,6 +5897,7 @@ async function saveAllStudentAchievements() {
     if (typeof currentStudent !== 'undefined' && currentStudent && typeof db !== 'undefined') {
       const grade = typeof currentGrade !== 'undefined' ? currentGrade : '';
       const cls = typeof currentClass !== 'undefined' ? currentClass : '';
+      if (browseMode) return;
       await db.collection('lesson_observation_results').doc(currentStudent + '_final').set({
         name: currentStudent,
         grade: grade,
