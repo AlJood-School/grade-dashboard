@@ -2258,6 +2258,63 @@ async function applyTeacherFilter() {
   renderWeeksProgress();
 }
 
+/* ===== Student Tooltip ===== */
+window._ttData = {};
+
+function showStudentTooltip(event, key) {
+  const info = window._ttData[key];
+  if (!info || !info.length) return;
+  let tt = document.getElementById('_student_tt');
+  if (!tt) {
+    tt = document.createElement('div');
+    tt.id = '_student_tt';
+    tt.style.cssText = `
+      position:fixed;z-index:99999;background:#0a1628;color:#fff;
+      border-radius:12px;padding:14px 16px;min-width:220px;max-width:300px;
+      box-shadow:0 8px 32px rgba(0,0,0,.45);font-family:Cairo,sans-serif;
+      font-size:.82rem;pointer-events:none;line-height:1.7;direction:rtl;
+      border:1.5px solid #c9a227;
+    `;
+    document.body.appendChild(tt);
+  }
+  // Build HTML
+  let html = `<div style="font-weight:700;color:#c9a227;margin-bottom:8px;font-size:.88rem;">${info.title}</div>`;
+  // Group by level
+  const groups = {
+    done:    { label:'✅ منجزون', color:'#27ae60', items:[] },
+    not:     { label:'⏳ لم ينجزوا بعد', color:'#e74c3c', items:[] },
+    excellent:{ label:'⭐ ممتاز (9-10)', color:'#27ae60', items:[] },
+    goodplus: { label:'👍 جيد جداً (7-8)', color:'#2980b9', items:[] },
+    good:    { label:'🙂 جيد (5-6)', color:'#f39c12', items:[] },
+    support: { label:'🆘 يحتاج دعم (<5)', color:'#e74c3c', items:[] },
+  };
+  info.forEach(s => {
+    if (s.group === 'not') groups.not.items.push(s.name);
+    else if (s.group === 'done') groups.done.items.push(s.name);
+    else if (s.group === 'excellent') groups.excellent.items.push(s.name);
+    else if (s.group === 'goodplus') groups.goodplus.items.push(s.name);
+    else if (s.group === 'good') groups.good.items.push(s.name);
+    else if (s.group === 'support') groups.support.items.push(s.name);
+  });
+  Object.values(groups).forEach(g => {
+    if (!g.items.length) return;
+    html += `<div style="color:${g.color};font-weight:700;margin-top:6px;">${g.label} (${g.items.length})</div>`;
+    html += `<div style="color:#ddd;padding-right:4px;">${g.items.map(n=>`• ${n}`).join('<br>')}</div>`;
+  });
+  tt.innerHTML = html;
+  tt.style.display = 'block';
+  // Position near cursor
+  const x = event.clientX, y = event.clientY;
+  const tw = 300, th = tt.offsetHeight || 200;
+  tt.style.left = (x + 12 + tw > window.innerWidth ? x - tw - 8 : x + 12) + 'px';
+  tt.style.top  = (y + 12 + th > window.innerHeight ? y - th - 8 : y + 12) + 'px';
+}
+
+function hideStudentTooltip() {
+  const tt = document.getElementById('_student_tt');
+  if (tt) tt.style.display = 'none';
+}
+
 function toggleWeeksProgress() {
   const inner = document.getElementById('weeks-progress-inner');
   const btn = document.getElementById('weeks-toggle-btn');
@@ -2421,8 +2478,21 @@ function renderWeeksProgress() {
     9:'أنشئ نموذجك', 10:'اختبر وحلّل', 11:'حسّن وقدّم'
   };
 
-  // Count unique students per week (latest record per student)
-  const totalStudents = 297;
+  // Build enrolled students list from STUDENTS constant filtered by grade/section
+  function getEnrolledList() {
+    if (typeof STUDENTS === 'undefined') return [];
+    const keys = Object.keys(STUDENTS);
+    let filtered = keys;
+    if (gFilter !== 'ALL') filtered = filtered.filter(k => k.startsWith(gFilter));
+    if (sFilter !== 'ALL') filtered = filtered.filter(k => k.endsWith(sFilter));
+    const res = [];
+    filtered.forEach(k => (STUDENTS[k]||[]).forEach(n => res.push({name:n, cls:k})));
+    return res;
+  }
+  const enrolledList = getEnrolledList();
+  const totalStudents = gFilter === 'ALL' ? 297 : enrolledList.length;
+
+  window._ttData = {};
   let html = '';
 
   weeks.forEach(w => {
@@ -2436,10 +2506,45 @@ function renderWeeksProgress() {
     const unique = Object.values(seen);
     const count = unique.length;
 
-    const excellent = unique.filter(d => (d.totalScore||0) >= 9).length;
-    const good      = unique.filter(d => (d.totalScore||0) >= 7 && (d.totalScore||0) <= 8).length;
-    const ok        = unique.filter(d => (d.totalScore||0) >= 5 && (d.totalScore||0) <= 6).length;
-    const support   = unique.filter(d => (d.totalScore||0) < 5).length;
+    const excellentList = unique.filter(d => (d.totalScore||0) >= 9);
+    const goodplusList  = unique.filter(d => (d.totalScore||0) >= 7 && (d.totalScore||0) <= 8);
+    const okList        = unique.filter(d => (d.totalScore||0) >= 5 && (d.totalScore||0) <= 6);
+    const supportList   = unique.filter(d => (d.totalScore||0) < 5);
+    const excellent = excellentList.length;
+    const good      = goodplusList.length;
+    const ok        = okList.length;
+    const support   = supportList.length;
+
+    // Compute not-completed from enrolled list
+    const completedNames = new Set(unique.map(d => d.studentName||d.name||''));
+    const notDoneList = enrolledList.filter(s => !completedNames.has(s.name));
+
+    // Populate tooltip data
+    const ttKey = `w${w}`;
+    // All count badge
+    window._ttData[ttKey+'_all'] = {
+      title: `الأسبوع ${w} — مستوى الوصول`,
+      data: [
+        ...unique.map(d => ({name: d.studentName||d.name||'—', group:'done'})),
+        ...notDoneList.map(s => ({name: s.name, group:'not'}))
+      ]
+    };
+    // Fix: flatten for showStudentTooltip
+    window._ttData[ttKey+'_all'] = [
+      ...unique.map(d => ({name: d.studentName||d.name||'—', group:'done'})),
+      ...notDoneList.map(s => ({name: s.name, group:'not'}))
+    ];
+    window._ttData[ttKey+'_all'].title = `الأسبوع ${w} — ${weekTitles[w]}`;
+    window._ttData[ttKey+'_ex']   = excellentList.map(d=>({name:d.studentName||d.name||'—',group:'excellent'}));
+    window._ttData[ttKey+'_ex'].title = `W${w} — ⭐ ممتاز`;
+    window._ttData[ttKey+'_gp']   = goodplusList.map(d=>({name:d.studentName||d.name||'—',group:'goodplus'}));
+    window._ttData[ttKey+'_gp'].title = `W${w} — 👍 جيد جداً`;
+    window._ttData[ttKey+'_ok']   = okList.map(d=>({name:d.studentName||d.name||'—',group:'good'}));
+    window._ttData[ttKey+'_ok'].title = `W${w} — 🙂 جيد`;
+    window._ttData[ttKey+'_su']   = supportList.map(d=>({name:d.studentName||d.name||'—',group:'support'}));
+    window._ttData[ttKey+'_su'].title = `W${w} — 🆘 يحتاج دعم`;
+    window._ttData[ttKey+'_not']  = notDoneList.map(s=>({name:s.name,group:'not'}));
+    window._ttData[ttKey+'_not'].title = `W${w} — ⏳ لم ينجزوا بعد`;
 
     const avg = count > 0 ? (unique.reduce((s,d) => s + (d.totalScore||0), 0) / count).toFixed(1) : '—';
     const pct = gFilter === 'ALL' ? Math.min(100, Math.round(count / totalStudents * 100)) : (count > 0 ? Math.min(100, count) : 0);
@@ -2451,6 +2556,7 @@ function renderWeeksProgress() {
     const w_su = count > 0 ? Math.round(support/count*100) : 0;
 
     const avgColor = avg >= 9 ? '#27ae60' : avg >= 7 ? '#2980b9' : avg >= 5 ? '#f39c12' : avg === '—' ? '#999' : '#e74c3c';
+    const badgeStyle = 'cursor:pointer;transition:transform .15s;';
 
     html += `
     <div style="background:#f8f9fa;border-radius:12px;padding:12px 16px;border:1px solid #e0e0e0;">
@@ -2459,13 +2565,15 @@ function renderWeeksProgress() {
           <span style="background:#0a1628;color:#c9a227;font-weight:700;border-radius:8px;padding:3px 10px;font-size:.9rem;">W${w}</span>
           <span style="font-weight:700;font-size:.9rem;color:#0a1628;">${weekTitles[w]}</span>
         </div>
-        <div style="display:flex;align-items:center;gap:14px;">
-          <span style="font-size:.85rem;color:#555;">👥 <b>${count}</b> طالب</span>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+          <span style="font-size:.85rem;color:#555;${badgeStyle}" onmouseenter="showStudentTooltip(event,'w${w}_all')" onmouseleave="hideStudentTooltip()">👥 <b>${count}</b>/${totalStudents} طالب</span>
           <span style="font-size:.85rem;font-weight:700;color:${avgColor};">⌀ ${avg}/10</span>
-          ${count > 0 ? `<span style="font-size:.82rem;background:#e8f5e9;color:#27ae60;border-radius:6px;padding:2px 8px;">🟢${excellent}</span>
-          <span style="font-size:.82rem;background:#e3f2fd;color:#1565c0;border-radius:6px;padding:2px 8px;">🔵${good}</span>
-          <span style="font-size:.82rem;background:#fffde7;color:#f57f17;border-radius:6px;padding:2px 8px;">🟡${ok}</span>
-          ${support > 0 ? `<span style="font-size:.82rem;background:#fce4ec;color:#c62828;border-radius:6px;padding:2px 8px;">🔴${support}</span>` : ''}
+          ${count > 0 ? `
+          <span style="font-size:.82rem;background:#e8f5e9;color:#27ae60;border-radius:6px;padding:2px 8px;${badgeStyle}" onmouseenter="showStudentTooltip(event,'w${w}_ex')" onmouseleave="hideStudentTooltip()">🟢${excellent}</span>
+          <span style="font-size:.82rem;background:#e3f2fd;color:#1565c0;border-radius:6px;padding:2px 8px;${badgeStyle}" onmouseenter="showStudentTooltip(event,'w${w}_gp')" onmouseleave="hideStudentTooltip()">🔵${good}</span>
+          <span style="font-size:.82rem;background:#fffde7;color:#f57f17;border-radius:6px;padding:2px 8px;${badgeStyle}" onmouseenter="showStudentTooltip(event,'w${w}_ok')" onmouseleave="hideStudentTooltip()">🟡${ok}</span>
+          ${support > 0 ? `<span style="font-size:.82rem;background:#fce4ec;color:#c62828;border-radius:6px;padding:2px 8px;${badgeStyle}" onmouseenter="showStudentTooltip(event,'w${w}_su')" onmouseleave="hideStudentTooltip()">🔴${support}</span>` : ''}
+          ${notDoneList.length > 0 ? `<span style="font-size:.82rem;background:#f3e5f5;color:#7b1fa2;border-radius:6px;padding:2px 8px;${badgeStyle}" onmouseenter="showStudentTooltip(event,'w${w}_not')" onmouseleave="hideStudentTooltip()">⏳${notDoneList.length}</span>` : ''}
           ` : '<span style="font-size:.82rem;color:#999;">لا توجد بيانات بعد</span>'}
         </div>
       </div>
