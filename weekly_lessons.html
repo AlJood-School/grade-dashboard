@@ -2931,33 +2931,41 @@ function filterGeminiResponse(text, topicKeywords) {
     text = words.slice(0, 80).join(' ') + '...';
   }
 
-  // 2. الكلمات الممنوعة (عربي + إنجليزي)
-  const banned = [
-    'اقتل','يقتل','قتل','دم','سلاح','انفجار','bomb','kill','weapon','blood','violence','attack','war','shoot',
-    'جنس','عري','خمر','مخدر','sex','nude','alcohol','drug','porn','naked','hate',
-    'اختراق','هاكر','hack','crack','cheat','كيف تسرق','كيف تختر',
-    'password','كلمة مرور','رقم سري','pin','عنوان','هاتف','phone','address'
+  // 2. الكلمات الممنوعة — استخدام \b لتفادي حجب كلمات مثل software/hardware/opinion
+  const bannedArabic = [
+    'اقتل','يقتل','قتل','سلاح','انفجار','جنس','عري','خمر','مخدر',
+    'اختراق','هاكر','كيف تسرق','كيف تختر','كلمة مرور','رقم سري'
+  ];
+  const bannedEnglish = [
+    'bomb','kill','weapon','blood','violence','war','shoot','murder',
+    'nude','alcohol','drug','porn','naked','hate','racist',
+    'hack','crack','cheat','password','pin','phone'
   ];
 
   const lowerText = text.toLowerCase();
-  for (const word of banned) {
+
+  for (const word of bannedArabic) {
     if (lowerText.includes(word)) {
-      return {
-        safe: false,
-        text: '🚫 هذا السؤال خارج نطاق الدرس\nThis question is outside our lesson topic. Ask your teacher! 👩‍🏫'
-      };
+      return { safe: false, text: '\u{1F6AB} هذا السؤال خارج نطاق الدرس\nThis is outside our lesson. Ask your teacher! \u{1F469}\u{200D}\u{1F3EB}' };
     }
   }
 
-  // 3. التحقق من صلة الموضوع
+  for (const word of bannedEnglish) {
+    const regex = new RegExp('\\b' + word + '\\b', 'i');
+    if (regex.test(lowerText)) {
+      return { safe: false, text: '\u{1F6AB} هذا السؤال خارج نطاق الدرس\nThis is outside our lesson. Ask your teacher! \u{1F469}\u{200D}\u{1F3EB}' };
+    }
+  }
+
+  // 3. صلة الموضوع
   if (topicKeywords && topicKeywords.length > 0) {
     const hasRelevant = topicKeywords.some(kw => lowerText.includes(kw.toLowerCase()));
     if (!hasRelevant) {
-      text += '\n\n💡 تذكر: أنا هنا فقط للمساعدة في درسنا! | I\'m here to help with our lesson only!';
+      text += '\n\n\u{1F4A1} تذكر: أنا هنا فقط للمساعدة في درسنا! | I am here to help with our lesson only!';
     }
   }
 
-  // 4. التأكد من وجود العربي والإنجليزي معاً
+  // 4. ثنائية اللغة
   const hasArabic = /[\u0600-\u06FF]/.test(text);
   const hasEnglish = /[a-zA-Z]/.test(text);
   if (!hasArabic) text += '\n(يُرجى السؤال بالعربي أو الإنجليزي)';
