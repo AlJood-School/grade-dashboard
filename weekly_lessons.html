@@ -505,6 +505,45 @@ select:focus { border-color: var(--dark); }
 #draw-canvas { width: 100%; max-height: 260px; border: 2px solid #ccc; border-radius: 12px; background: #fff; touch-action: none; cursor: crosshair; display: block; }
 .draw-hint { text-align:center; color:#888; font-size:.8rem; margin-top:6px; }
 
+/* ===== AI ASSISTANT STYLES ===== */
+@keyframes float {
+  0%,100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.ai-msg-user {
+  background: rgba(102,126,234,0.3);
+  color: white;
+  padding: 8px 14px;
+  border-radius: 12px 12px 0 12px;
+  font-size: 14px;
+  align-self: flex-end;
+  max-width: 80%;
+}
+.ai-msg-bot {
+  background: rgba(255,255,255,0.1);
+  color: #e2e8f0;
+  padding: 8px 14px;
+  border-radius: 12px 12px 12px 0;
+  font-size: 14px;
+  align-self: flex-start;
+  max-width: 85%;
+}
+.ai-msg-loading {
+  color: #94a3b8;
+  font-size: 13px;
+  align-self: flex-start;
+  animation: ai-pulse 1s infinite;
+}
+@keyframes ai-pulse {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+/* ===== END AI ASSISTANT STYLES ===== */
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -761,6 +800,16 @@ select:focus { border-color: var(--dark); }
         <button onclick="enterBrowseMode()" class="btn btn-sm" style="background:#28a745;color:#fff;font-weight:700;font-size:0.9rem;padding:8px 18px;border-radius:10px;border:none;">
           👁️ تصفح الدروس
         </button>
+        <button id="btn-ai-toggle" onclick="toggleAIAssistant()"
+          style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;
+          padding:8px 18px;border-radius:10px;font-size:0.9rem;cursor:pointer;
+          box-shadow:0 4px 15px rgba(102,126,234,0.4);transition:all 0.3s;font-family:Cairo,sans-serif;font-weight:700;">
+          🤖 فعّل المساعد الذكي
+        </button>
+        <span id="ai-status-badge" style="display:none;background:#10b981;color:white;
+          padding:4px 12px;border-radius:20px;font-size:13px;font-family:Cairo,sans-serif;">
+          ● مُفعَّل للطلاب
+        </span>
       </div>
     </div>
   </div>
@@ -992,7 +1041,7 @@ select:focus { border-color: var(--dark); }
 <!-- Firebase SDK -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, collection, addDoc, query, where, getDocs, orderBy, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc, query, where, getDocs, orderBy, doc, setDoc, getDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDri3r5AtyyduyiTS5GzIHOn-XSduhALpM",
@@ -1007,7 +1056,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 window.__fbdb = db;
-window.__fbFns = { collection, addDoc, query, where, getDocs, orderBy, doc, setDoc, getDoc, deleteDoc };
+window.__fbFns = { collection, addDoc, query, where, getDocs, orderBy, doc, setDoc, getDoc, deleteDoc, onSnapshot };
 window.__fbReady = true;
 console.log("Firebase ready");
 
@@ -1497,6 +1546,7 @@ function goToWeeks() {
   document.getElementById('greeting-name').textContent = 
     '👋 أهلاً ' + currentStudent + ' | ' + (currentClass || '');
   renderWeeksGrid();
+  listenForAIAssistant();
 }
 
 // =========== WEEKS GRID ===========
@@ -2861,6 +2911,150 @@ function exportCSV() {
   a.click();
 }
 
+// ==================== AI ASSISTANT ====================
+const GEMINI_API_KEY = 'AIzaSyA0CNgYi4ho7AhGV6f1crlkSfEc7Wp9V9I';
+let aiAssistantActive = false;
+let currentAITopic = '';
+let aiAssistantUnsubscribe = null;
+
+async function toggleAIAssistant() {
+  aiAssistantActive = !aiAssistantActive;
+  const btn = document.getElementById('btn-ai-toggle');
+  const badge = document.getElementById('ai-status-badge');
+  const topic = getCurrentLessonTopic();
+
+  try {
+    if (!browseMode && window.__fbdb && window.__fbFns) {
+      const { doc: fbDoc, setDoc: fbSetDoc } = window.__fbFns;
+      await fbSetDoc(fbDoc(window.__fbdb, 'lesson_control', 'ai_assistant'), {
+        active: aiAssistantActive,
+        topic: topic,
+        activatedAt: new Date().toISOString(),
+        activatedBy: 'teacher'
+      });
+    }
+    if (aiAssistantActive) {
+      btn.innerHTML = '🤖 إغلاق المساعد الذكي';
+      btn.style.background = 'linear-gradient(135deg,#ef4444,#dc2626)';
+      if (badge) badge.style.display = 'inline';
+    } else {
+      btn.innerHTML = '🤖 فعّل المساعد الذكي';
+      btn.style.background = 'linear-gradient(135deg,#667eea,#764ba2)';
+      if (badge) badge.style.display = 'none';
+    }
+  } catch(e) { console.error('AI toggle error:', e); }
+}
+
+function getCurrentLessonTopic() {
+  if (typeof currentWeek !== 'undefined' && currentWeek) {
+    const weekTopics = {
+      5: 'What is Artificial Intelligence?',
+      6: 'How AI Learns — Data & Training',
+      7: 'AI in Our Daily Life',
+      8: 'Design Process: Ask → Imagine → Plan',
+      9: 'Design Process: Create → Test',
+      10: 'Our STREAM Project',
+      11: 'Project Showcase & Reflection'
+    };
+    return weekTopics[currentWeek] || 'AI & Technology';
+  }
+  return 'AI & Technology';
+}
+
+function listenForAIAssistant() {
+  if (sessionStorage.getItem('wl_teacher_logged_in') === '1') return;
+  if (browseMode) return;
+  if (!window.__fbdb || !window.__fbFns || !window.__fbFns.onSnapshot) return;
+  if (aiAssistantUnsubscribe) return;
+
+  const { doc: fbDoc, onSnapshot: fbOnSnapshot } = window.__fbFns;
+  aiAssistantUnsubscribe = fbOnSnapshot(fbDoc(window.__fbdb, 'lesson_control', 'ai_assistant'), (docSnap) => {
+    if (!docSnap.exists()) return;
+    const data = docSnap.data();
+    const overlay = document.getElementById('ai-assistant-overlay');
+    if (!overlay) return;
+
+    if (data.active) {
+      currentAITopic = data.topic || 'AI & Technology';
+      const topicDisplay = document.getElementById('ai-topic-display');
+      if (topicDisplay) topicDisplay.textContent = currentAITopic;
+      overlay.style.display = 'block';
+      setTimeout(() => { overlay.style.transform = 'translateY(0)'; }, 50);
+    } else {
+      overlay.style.transform = 'translateY(100%)';
+      setTimeout(() => { overlay.style.display = 'none'; }, 500);
+    }
+  });
+}
+
+async function askAI() {
+  const input = document.getElementById('ai-question-input');
+  const messages = document.getElementById('ai-chat-messages');
+  const sendBtn = document.getElementById('ai-send-btn');
+  const question = input.value.trim();
+  if (!question) return;
+
+  input.value = '';
+  const userMsg = document.createElement('div');
+  userMsg.className = 'ai-msg-user';
+  userMsg.textContent = question;
+  messages.appendChild(userMsg);
+
+  const loadingMsg = document.createElement('div');
+  loadingMsg.className = 'ai-msg-loading';
+  loadingMsg.textContent = '🤖 يفكر...';
+  messages.appendChild(loadingMsg);
+  messages.scrollTop = messages.scrollHeight;
+
+  sendBtn.disabled = true;
+  sendBtn.textContent = '⏳';
+
+  try {
+    const systemPrompt = `You are a friendly AI assistant for Grade 3 and Grade 4 students (ages 8-10) in the UAE.
+You help them understand: "${currentAITopic}".
+Rules:
+- Answer ONLY questions related to the current lesson topic
+- Use simple English and Arabic words together
+- Keep answers SHORT (2-3 sentences max)
+- Use emojis to make it fun
+- If question is unrelated, say "This question is not about our lesson today! 😊"
+- Never discuss inappropriate topics
+- Always be encouraging and positive`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: systemPrompt + '\n\nStudent question: ' + question }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 150 }
+        })
+      }
+    );
+    const data = await response.json();
+    const answer = data.candidates?.[0]?.content?.parts?.[0]?.text || 'عذراً، حدث خطأ. حاول مرة أخرى! 😊';
+
+    loadingMsg.remove();
+    const botMsg = document.createElement('div');
+    botMsg.className = 'ai-msg-bot';
+    botMsg.textContent = answer;
+    messages.appendChild(botMsg);
+    messages.scrollTop = messages.scrollHeight;
+  } catch(e) {
+    loadingMsg.remove();
+    const errMsg = document.createElement('div');
+    errMsg.className = 'ai-msg-bot';
+    errMsg.textContent = '⚠️ تحقق من الاتصال بالإنترنت وحاول مرة أخرى.';
+    messages.appendChild(errMsg);
+  }
+
+  sendBtn.disabled = false;
+  sendBtn.textContent = '➤';
+  messages.scrollTop = messages.scrollHeight;
+}
+// ==================== END AI ASSISTANT ====================
+
 // =========== INITIALIZATION ===========
 window.addEventListener('DOMContentLoaded', () => {
   // 1. Apply saved language (default: en)
@@ -2878,5 +3072,53 @@ window.addEventListener('DOMContentLoaded', () => {
   restoreState();
 });
 </script>
+
+<!-- AI Assistant Overlay — shown to students when teacher activates -->
+<div id="ai-assistant-overlay" style="display:none;position:fixed;bottom:0;left:0;right:0;
+  z-index:9999;background:linear-gradient(135deg,#1a1a2e,#16213e);
+  border-radius:20px 20px 0 0;padding:20px;max-height:60vh;
+  box-shadow:0 -10px 40px rgba(102,126,234,0.5);
+  font-family:Cairo,sans-serif;direction:rtl;
+  transform:translateY(100%);transition:transform 0.5s cubic-bezier(0.34,1.56,0.64,1)">
+
+  <!-- Header -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:32px;animation:float 2s ease-in-out infinite">🤖</span>
+      <div>
+        <div style="color:#c9a227;font-size:18px;font-weight:700">المساعد الذكي</div>
+        <div style="color:#94a3b8;font-size:12px" id="ai-topic-display">موضوع الدرس</div>
+      </div>
+    </div>
+    <div style="background:#10b981;color:white;padding:4px 12px;border-radius:20px;font-size:12px">
+      ● مباشر
+    </div>
+  </div>
+
+  <!-- Chat messages area -->
+  <div id="ai-chat-messages" style="height:180px;overflow-y:auto;background:rgba(255,255,255,0.05);
+    border-radius:12px;padding:12px;margin-bottom:12px;display:flex;flex-direction:column;gap:8px">
+    <div style="color:#94a3b8;font-size:14px;text-align:center;margin-top:60px">
+      👋 اسألني أي سؤال عن الدرس!
+    </div>
+  </div>
+
+  <!-- Input area -->
+  <div style="display:flex;gap:8px;align-items:center">
+    <input type="text" id="ai-question-input"
+      placeholder="اكتب سؤالك هنا..." autocomplete="off"
+      style="flex:1;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);
+      color:white;padding:12px 16px;border-radius:12px;font-size:15px;
+      font-family:Cairo,sans-serif;outline:none"
+      onkeypress="if(event.key==='Enter')askAI()">
+    <button onclick="askAI()" id="ai-send-btn"
+      style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;
+      padding:12px 20px;border-radius:12px;font-size:18px;cursor:pointer;
+      min-width:50px;transition:all 0.3s">
+      ➤
+    </button>
+  </div>
+</div>
+
 </body>
 </html>
