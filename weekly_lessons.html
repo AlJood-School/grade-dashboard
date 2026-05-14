@@ -844,6 +844,33 @@ select:focus { border-color: var(--dark); }
     </div>
   </div>
 
+
+  <!-- ② تقدم الطلاب عبر الأسابيع -->
+  <div class="card" id="weeks-progress-card" style="margin-bottom:16px;background:#fff;border:2px solid #0a1628;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+      <div class="card-title" style="margin:0;">📈 مستوى وصول الطلاب — الأسابيع 5 إلى 11</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <select id="progress-filter-grade" onchange="renderWeeksProgress()" style="padding:5px 10px;border-radius:8px;border:2px solid #0a1628;font-family:Cairo,sans-serif;font-weight:700;font-size:.85rem;cursor:pointer;">
+          <option value="ALL">كل الصفوف</option>
+          <option value="3">الصف 3</option>
+          <option value="4">الصف 4</option>
+        </select>
+        <select id="progress-filter-section" onchange="renderWeeksProgress()" style="padding:5px 10px;border-radius:8px;border:2px solid #0a1628;font-family:Cairo,sans-serif;font-weight:700;font-size:.85rem;cursor:pointer;">
+          <option value="ALL">كل الشعب</option>
+          <option value="A">A</option><option value="B">B</option><option value="C">C</option>
+          <option value="D">D</option><option value="E">E</option><option value="F">F</option>
+        </select>
+      </div>
+    </div>
+    <div id="weeks-progress-body" style="display:flex;flex-direction:column;gap:10px;"></div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;font-size:.82rem;opacity:.75;">
+      <span>🟢 ممتاز (9-10)</span>
+      <span>🔵 جيد جداً (7-8)</span>
+      <span>🟡 جيد (5-6)</span>
+      <span>🔴 يحتاج دعم (&lt;5)</span>
+    </div>
+  </div>
+
   <!-- ② الإحصائيات والجدول تحت الفلترة مباشرة -->
   <div id="teacher-stats" class="stats-grid" style="margin-bottom:8px;"></div>
 
@@ -2337,6 +2364,7 @@ async function loadTeacherData() {
     allTeacherData = [];
     snapshot.forEach(doc => allTeacherData.push({ id: doc.id, ...doc.data() }));
     console.log('Loaded', allTeacherData.length, 'records');
+    renderWeeksProgress();
     renderTeacherTable();
   } catch(e) {
     console.error('Load error:', e);
@@ -2435,6 +2463,97 @@ function getStudentLevel(score) {
   if (score >= 7) return { label: '👍 جيد جداً', cls: 'lvl-verygood', en: 'Very Good', color: '#007bff' };
   if (score >= 5) return { label: '🙂 جيد', cls: 'lvl-good', en: 'Good', color: '#ffc107' };
   return { label: '🆘 يحتاج دعم', cls: 'lvl-support', en: 'Needs Support', color: '#dc3545' };
+}
+
+function renderWeeksProgress() {
+  const body = document.getElementById('weeks-progress-body');
+  if (!body || !allTeacherData) return;
+
+  const gFilter = (document.getElementById('progress-filter-grade') || {}).value || 'ALL';
+  const sFilter = (document.getElementById('progress-filter-section') || {}).value || 'ALL';
+
+  let data = allTeacherData;
+  if (gFilter !== 'ALL') {
+    data = data.filter(d => {
+      const cls = d.cls || d.class || '';
+      return cls.startsWith('Grade ' + gFilter);
+    });
+  }
+  if (sFilter !== 'ALL') {
+    data = data.filter(d => {
+      const cls = d.cls || d.class || '';
+      return cls.endsWith(sFilter);
+    });
+  }
+
+  const weeks = [5,6,7,8,9,10,11];
+  const weekTitles = {
+    5:'الذكاء الاصطناعي في حياتنا', 6:'التصميم والنماذج الأولية',
+    7:'مهارات العرض والتقديم', 8:'عملية التصميم الهندسي',
+    9:'أنشئ نموذجك', 10:'اختبر وحلّل', 11:'حسّن وقدّم'
+  };
+
+  // Count unique students per week (latest record per student)
+  const totalStudents = 297;
+  let html = '';
+
+  weeks.forEach(w => {
+    const wData = data.filter(d => String(d.week) === String(w));
+    // Deduplicate: latest per student
+    const seen = {};
+    wData.forEach(d => {
+      const key = (d.cls||'') + '|' + (d.studentName||d.name||'');
+      if (!seen[key] || d.createdAt > seen[key].createdAt) seen[key] = d;
+    });
+    const unique = Object.values(seen);
+    const count = unique.length;
+
+    const excellent = unique.filter(d => (d.totalScore||0) >= 9).length;
+    const good      = unique.filter(d => (d.totalScore||0) >= 7 && (d.totalScore||0) <= 8).length;
+    const ok        = unique.filter(d => (d.totalScore||0) >= 5 && (d.totalScore||0) <= 6).length;
+    const support   = unique.filter(d => (d.totalScore||0) < 5).length;
+
+    const avg = count > 0 ? (unique.reduce((s,d) => s + (d.totalScore||0), 0) / count).toFixed(1) : '—';
+    const pct = gFilter === 'ALL' ? Math.min(100, Math.round(count / totalStudents * 100)) : (count > 0 ? Math.min(100, count) : 0);
+
+    // Stacked bar widths (relative to count)
+    const w_ex = count > 0 ? Math.round(excellent/count*100) : 0;
+    const w_go = count > 0 ? Math.round(good/count*100) : 0;
+    const w_ok = count > 0 ? Math.round(ok/count*100) : 0;
+    const w_su = count > 0 ? Math.round(support/count*100) : 0;
+
+    const avgColor = avg >= 9 ? '#27ae60' : avg >= 7 ? '#2980b9' : avg >= 5 ? '#f39c12' : avg === '—' ? '#999' : '#e74c3c';
+
+    html += \`
+    <div style="background:#f8f9fa;border-radius:12px;padding:12px 16px;border:1px solid #e0e0e0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="background:#0a1628;color:#c9a227;font-weight:700;border-radius:8px;padding:3px 10px;font-size:.9rem;">W\${w}</span>
+          <span style="font-weight:700;font-size:.9rem;color:#0a1628;">\${weekTitles[w]}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;">
+          <span style="font-size:.85rem;color:#555;">👥 <b>\${count}</b> طالب</span>
+          <span style="font-size:.85rem;font-weight:700;color:\${avgColor};">⌀ \${avg}/10</span>
+          \${count > 0 ? \`<span style="font-size:.82rem;background:#e8f5e9;color:#27ae60;border-radius:6px;padding:2px 8px;">🟢\${excellent}</span>
+          <span style="font-size:.82rem;background:#e3f2fd;color:#1565c0;border-radius:6px;padding:2px 8px;">🔵\${good}</span>
+          <span style="font-size:.82rem;background:#fffde7;color:#f57f17;border-radius:6px;padding:2px 8px;">🟡\${ok}</span>
+          \${support > 0 ? \`<span style="font-size:.82rem;background:#fce4ec;color:#c62828;border-radius:6px;padding:2px 8px;">🔴\${support}</span>\` : ''}
+          \` : '<span style="font-size:.82rem;color:#999;">لا توجد بيانات بعد</span>'}
+        </div>
+      </div>
+      \${count > 0 ? \`
+      <div style="height:18px;border-radius:10px;overflow:hidden;background:#e0e0e0;display:flex;">
+        \${excellent > 0 ? \`<div style="width:\${w_ex}%;background:#27ae60;transition:width 0.6s;" title="ممتاز: \${excellent}"></div>\` : ''}
+        \${good > 0 ? \`<div style="width:\${w_go}%;background:#2980b9;transition:width 0.6s;" title="جيد جداً: \${good}"></div>\` : ''}
+        \${ok > 0 ? \`<div style="width:\${w_ok}%;background:#f39c12;transition:width 0.6s;" title="جيد: \${ok}"></div>\` : ''}
+        \${support > 0 ? \`<div style="width:\${w_su}%;background:#e74c3c;transition:width 0.6s;" title="يحتاج دعم: \${support}"></div>\` : ''}
+      </div>
+      <div style="margin-top:4px;font-size:.75rem;color:#777;text-align:left;">\${gFilter==='ALL' ? pct + '% من الطلاب الكلي' : count + ' طالب مكتمل'}</div>
+      \` : '<div style="height:18px;border-radius:10px;background:#e0e0e0;"></div>'}
+    </div>\`;
+  });
+
+  body.innerHTML = html;
 }
 
 function renderStats(data) {
