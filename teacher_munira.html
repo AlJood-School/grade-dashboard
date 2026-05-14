@@ -125,6 +125,27 @@ body{font-family:'Cairo',sans-serif;background:#f0f4f8;color:#1a2a4a;direction:r
 
 /* RESPONSIVE */
 @media print{.nav-tabs,.btn,.upload-zone,.modal-bg{display:none!important}.hero{background:#0a1628!important;-webkit-print-color-adjust:exact}}
+
+/* SPECIAL NEEDS KPI CARDS */
+.sn-kpi-card {
+  background: white;
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+  border-bottom: 3px solid #ff9800;
+  direction: rtl;
+}
+.sn-kpi-num {
+  font-size: 28px;
+  font-weight: bold;
+  color: #e65100;
+  line-height: 1;
+}
+.sn-kpi-label {
+  font-size: 11px;
+  color: #757575;
+  margin-top: 4px;
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -640,6 +661,43 @@ body{font-family:'Cairo',sans-serif;background:#f0f4f8;color:#1a2a4a;direction:r
     </div>
   </div>
 
+  <!-- Special Needs Impact Card -->
+  <div class="card sn-impact-card" style="margin-bottom:20px;background: linear-gradient(135deg, #fff3e0, #fce4ec); border: 2px solid #ff9800;">
+    <h3 style="color:#e65100;margin:0 0 12px;direction:rtl;font-size:1rem">♿ أثر دعم أصحاب الهمم</h3>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px" id="sn-impact-grid">
+      <div class="sn-kpi-card">
+        <div class="sn-kpi-num" id="sn-total-count">41</div>
+        <div class="sn-kpi-label">إجمالي أصحاب الهمم<br>(صف 3+4)</div>
+      </div>
+      <div class="sn-kpi-card">
+        <div class="sn-kpi-num" id="sn-participated-total">-</div>
+        <div class="sn-kpi-label">شاركوا في الدروس التفاعلية</div>
+      </div>
+      <div class="sn-kpi-card" style="border-color:#4caf50">
+        <div class="sn-kpi-num" id="sn-passing-rate" style="color:#2e7d32">-</div>
+        <div class="sn-kpi-label">معدل النجاح (60%+)</div>
+      </div>
+      <div class="sn-kpi-card" style="border-color:#9c27b0">
+        <div class="sn-kpi-num" id="sn-growth" style="color:#6a1b9a">-</div>
+        <div class="sn-kpi-label">نمو متوسط الدرجات</div>
+      </div>
+    </div>
+    <!-- Breakdown by disability type -->
+    <div style="margin-top:12px;direction:rtl">
+      <p style="font-size:13px;color:#795548;margin:0 0 8px">توزيع الفئات (صف 3+4):</p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px" id="sn-type-breakdown">
+        <span style="background:#fff3e0;border:1px solid #ff9800;border-radius:12px;padding:3px 10px;font-size:12px">📖 صعوبات تعلم: 26</span>
+        <span style="background:#fff3e0;border:1px solid #ff9800;border-radius:12px;padding:3px 10px;font-size:12px">⚡ ADHD: 6</span>
+        <span style="background:#fff3e0;border:1px solid #ff9800;border-radius:12px;padding:3px 10px;font-size:12px">💬 تواصل: 3</span>
+        <span style="background:#fff3e0;border:1px solid #ff9800;border-radius:12px;padding:3px 10px;font-size:12px">🎯 إعاقة متعددة: 2</span>
+        <span style="background:#fff3e0;border:1px solid #ff9800;border-radius:12px;padding:3px 10px;font-size:12px">♾️ توحد: 1</span>
+        <span style="background:#fff3e0;border:1px solid #ff9800;border-radius:12px;padding:3px 10px;font-size:12px">👂 ضعف سمعي: 1</span>
+        <span style="background:#fff3e0;border:1px solid #ff9800;border-radius:12px;padding:3px 10px;font-size:12px">♿ إعاقة جسدية: 1</span>
+        <span style="background:#fff3e0;border:1px solid #ff9800;border-radius:12px;padding:3px 10px;font-size:12px">🌟 متلازمة داون: 1</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Class Filter -->
   <div class="card" style="margin-bottom:20px">
     <div class="card-title"><div class="icon">🔍</div> فلترة بالفصل</div>
@@ -941,7 +999,7 @@ function showSection(id) {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('sec-' + id).classList.add('active');
   event.target.classList.add('active');
-  if (id === 'impact') { setTimeout(loadImpactData, 100); }
+  if (id === 'impact') { setTimeout(loadImpactData, 100); setTimeout(loadSNImpact, 200); }
 }
 
 // Goal accordion
@@ -1042,6 +1100,50 @@ async function loadImpactData() {
   } finally {
     document.getElementById('imp-loading').style.display = 'none';
   }
+}
+
+async function loadSNImpact() {
+  try {
+    // Load SN student names
+    const snSnap = await getDocs(collection(db, 'special_needs'));
+    const snNames = new Set();
+    snSnap.forEach(doc => {
+      const d = doc.data();
+      if (d.name) snNames.add(d.name.trim());
+    });
+
+    if (snNames.size === 0) return;
+
+    // Load lesson results from all collections
+    const collections = ['lesson_results', 'lesson_results_w8', 'weekly_results'];
+    let allSNResults = [];
+
+    for (const col of collections) {
+      try {
+        const snap = await getDocs(collection(db, col));
+        snap.forEach(doc => {
+          const d = doc.data();
+          const name = (d.name || d.studentName || '').trim();
+          const score = d.totalScore ?? ((d.quizScore || 0) + (d.activityScore || 0));
+          if (snNames.has(name) && score !== undefined) {
+            allSNResults.push({ name, score, maxScore: d.maxScore || 10, col });
+          }
+        });
+      } catch(e) {}
+    }
+
+    // Update KPI cards
+    const participated = new Set(allSNResults.map(r => r.name)).size;
+    const passing = allSNResults.filter(r => (r.score / (r.maxScore || 10)) >= 0.6);
+    const passingRate = allSNResults.length > 0 ? Math.round((passing.length / allSNResults.length) * 100) : 0;
+
+    const participatedEl = document.getElementById('sn-participated-total');
+    const passingEl = document.getElementById('sn-passing-rate');
+
+    if (participatedEl) participatedEl.textContent = participated || '—';
+    if (passingEl) passingEl.textContent = passingRate ? passingRate + '%' : '—';
+
+  } catch(e) { console.warn('SN impact load error', e); }
 }
 
 function normalizeClass(cls) {

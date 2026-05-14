@@ -914,6 +914,21 @@ select:focus { border-color: var(--dark); }
   <!-- ② الإحصائيات والجدول تحت الفلترة مباشرة -->
   <div id="teacher-stats" class="stats-grid" style="margin-bottom:8px;"></div>
 
+  <!-- Special Needs Stats Section -->
+  <div id="sn-stats-section" style="background:#fff3e0;border-radius:10px;padding:12px;margin-top:10px;direction:rtl;display:none">
+    <h4 style="color:#e65100;margin:0 0 8px">♿ إحصائيات أصحاب الهمم</h4>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="background:white;border-radius:8px;padding:8px;text-align:center">
+        <div id="sn-participated" style="font-size:24px;font-weight:bold;color:#e65100">0</div>
+        <div style="font-size:12px;color:#757575">شاركوا في الدرس</div>
+      </div>
+      <div style="background:white;border-radius:8px;padding:8px;text-align:center">
+        <div id="sn-avg-score" style="font-size:24px;font-weight:bold;color:#2e7d32">0%</div>
+        <div style="font-size:12px;color:#757575">متوسط درجاتهم</div>
+      </div>
+    </div>
+  </div>
+
   <!-- ③ مؤشرات الأثر والتحليل البياني -->
   <div id="analytics-section" style="display:none;">
 
@@ -2284,6 +2299,7 @@ async function initTeacherDashboard() {
   if (sw) sw.value = 'ALL';
   if (sg) sg.value = 'ALL';
   if (ss) { ss.innerHTML = '<option value="ALL">جميع الشعب</option>'; }
+  loadSpecialNeeds();
   loadTeacherData();
 }
 
@@ -2462,6 +2478,7 @@ function renderTeacherTable() {
   document.getElementById('teacher-table-wrap').style.display = 'block';
   document.getElementById('teacher-empty').style.display = 'none';
   renderStats(data);
+  updateSNStats(data);
 
   const tbody = document.getElementById('teacher-tbody');
   tbody.innerHTML = '';
@@ -2475,7 +2492,7 @@ function renderTeacherTable() {
     const lvl = getStudentLevel(total);
     tr.innerHTML = `
       <td>${i+1}</td>
-      <td style="font-weight:600;min-width:220px;white-space:nowrap;">${r.studentName || r.name || '—'}</td>
+      <td style="font-weight:600;min-width:220px;white-space:nowrap;">${renderNameWithBadge(r.studentName || r.name || '')}</td>
       <td>${r.cls || r.class || '—'}</td>
       <td>أسبوع ${r.week || '—'}</td>
       <td>${r.quizScore || 0} / 5</td>
@@ -3119,6 +3136,49 @@ Rules:
 // ==================== END AI ASSISTANT ====================
 
 // =========== INITIALIZATION ===========
+// =========== SPECIAL NEEDS BADGE SYSTEM ===========
+let specialNeedsMap = {};
+
+async function loadSpecialNeeds() {
+  try {
+    if (!window.__fbReady) { setTimeout(loadSpecialNeeds, 1500); return; }
+    const { collection, getDocs } = window.__fbFns;
+    const snap = await getDocs(collection(window.__fbdb, 'special_needs'));
+    snap.forEach(doc => {
+      const d = doc.data();
+      if (d.name) specialNeedsMap[d.name.trim()] = {
+        badge: d.badge || '♿',
+        short: d.disability_short || '',
+        plan: d.plan_type || ''
+      };
+    });
+    console.log('SN map loaded:', Object.keys(specialNeedsMap).length, 'students');
+  } catch(e) { console.warn('SN load error', e); }
+}
+
+function renderNameWithBadge(name) {
+  const sn = specialNeedsMap[name ? name.trim() : ''];
+  if (!sn) return name || '';
+  return `${name} <span style="font-size:13px;cursor:help" title="${sn.short}${sn.plan ? ' — ' + sn.plan.substring(0,35) : ''}">${sn.badge}</span>`;
+}
+
+function updateSNStats(results) {
+  const section = document.getElementById('sn-stats-section');
+  if (!section || Object.keys(specialNeedsMap).length === 0) return;
+
+  const snResults = results.filter(r => specialNeedsMap[(r.studentName || r.name || '').trim()]);
+  if (snResults.length === 0) { section.style.display = 'none'; return; }
+
+  section.style.display = 'block';
+  document.getElementById('sn-participated').textContent = snResults.length;
+
+  const avgScore = snResults.reduce((sum, r) => {
+    const total = r.totalScore ?? ((r.quizScore || 0) + (r.activityScore || 0));
+    return sum + total;
+  }, 0) / snResults.length;
+  document.getElementById('sn-avg-score').textContent = Math.round((avgScore / 10) * 100) + '%';
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   // 1. Apply saved language (default: en)
   const html = document.documentElement;
