@@ -1741,27 +1741,51 @@ function renderActivity() {
   } else if (type === 'draw') {
     renderDrawActivity(act, grid);
   } else {
-    // default classify
+    // default classify — two buttons per item
     (act.items || []).forEach((item, i) => {
-      const div = document.createElement('div');
-      div.className = 'act-item';
-      div.textContent = item.name;
-      div.dataset.idx = i;
-      div.dataset.correct = item.isAI;
-      div.onclick = function() {
-        if (div.classList.contains('selected-yes')) {
-          div.classList.remove('selected-yes');
-          delete activityAnswers[i];
-        } else if (div.classList.contains('selected-no')) {
-          div.classList.remove('selected-no');
-          div.classList.add('selected-yes');
-          activityAnswers[i] = true;
-        } else {
-          div.classList.add('selected-yes');
-          activityAnswers[i] = true;
-        }
+      const wrapper = document.createElement('div');
+      wrapper.className = 'act-item-wrapper';
+      wrapper.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px;background:#f8f9fa;border-radius:10px;border:2px solid #dee2e6;';
+
+      const label = document.createElement('div');
+      label.textContent = item.name;
+      label.style.cssText = 'font-size:1rem;font-weight:bold;text-align:center;';
+      wrapper.appendChild(label);
+
+      const btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display:flex;gap:8px;';
+
+      const btnYes = document.createElement('button');
+      btnYes.textContent = currentLang === 'ar' ? '✅ ذكاء اصطناعي' : '✅ AI';
+      btnYes.style.cssText = 'padding:4px 10px;border-radius:6px;border:2px solid #28a745;background:#fff;cursor:pointer;font-size:0.85rem;transition:all 0.2s;';
+      btnYes.dataset.idx = i;
+      btnYes.dataset.val = 'yes';
+
+      const btnNo = document.createElement('button');
+      btnNo.textContent = currentLang === 'ar' ? '❌ ليس ذكاء اصطناعي' : '❌ Not AI';
+      btnNo.style.cssText = 'padding:4px 10px;border-radius:6px;border:2px solid #dc3545;background:#fff;cursor:pointer;font-size:0.85rem;transition:all 0.2s;';
+      btnNo.dataset.idx = i;
+      btnNo.dataset.val = 'no';
+
+      btnYes.onclick = function() {
+        activityAnswers[i] = true;
+        btnYes.style.background = '#28a745'; btnYes.style.color = '#fff';
+        btnNo.style.background = '#fff'; btnNo.style.color = '#000';
+        wrapper.style.borderColor = '#28a745';
       };
-      grid.appendChild(div);
+      btnNo.onclick = function() {
+        activityAnswers[i] = false;
+        btnNo.style.background = '#dc3545'; btnNo.style.color = '#fff';
+        btnYes.style.background = '#fff'; btnYes.style.color = '#000';
+        wrapper.style.borderColor = '#dc3545';
+      };
+
+      btnRow.appendChild(btnYes);
+      btnRow.appendChild(btnNo);
+      wrapper.appendChild(btnRow);
+      wrapper.dataset.idx = i;
+      wrapper.dataset.correct = item.isAI;
+      grid.appendChild(wrapper);
     });
   }
 }
@@ -2018,19 +2042,42 @@ function submitActivity() {
     fb.innerHTML = `<div class="alert alert-success">🎨 ${currentLang==='ar'?'أحسنت! رسمتَ نموذجك بإبداع ✅':'Great! You sketched your prototype ✅'} — ${currentLang==='ar'?'درجتك':'Score'}: ${activityScore} / 5</div>`;
     fb.style.display = 'block';
   } else {
-    // classify
+    // classify — two-button system
     const items = act.items || [];
     let correct = 0;
+    let answered = 0;
     items.forEach((item, i) => {
-      const div = document.querySelector(`.act-item[data-idx="${i}"]`);
-      if (!div) return;
-      div.onclick = null; div.style.cursor = 'default';
-      const selected = activityAnswers[i] === true;
-      if (selected === item.isAI) { div.classList.remove('selected-yes','selected-no'); div.classList.add('reveal-correct'); correct++; }
-      else { div.classList.remove('selected-yes','selected-no'); div.classList.add('reveal-wrong'); }
+      const wrapper = document.querySelector(`.act-item-wrapper[data-idx="${i}"]`);
+      if (!wrapper) return;
+      // Disable buttons
+      wrapper.querySelectorAll('button').forEach(b => { b.onclick = null; b.style.cursor = 'default'; });
+      const userAnswer = activityAnswers[i];
+      // If user didn't answer, treat as wrong
+      if (userAnswer === undefined) {
+        wrapper.style.borderColor = '#aaa';
+        wrapper.style.opacity = '0.7';
+      } else {
+        answered++;
+        if (userAnswer === item.isAI) {
+          wrapper.style.borderColor = '#28a745';
+          wrapper.style.background = '#d4edda';
+          correct++;
+        } else {
+          wrapper.style.borderColor = '#dc3545';
+          wrapper.style.background = '#f8d7da';
+          // Show correct answer
+          const hint = document.createElement('div');
+          hint.style.cssText = 'font-size:0.8rem;color:#721c24;margin-top:4px;';
+          hint.textContent = item.isAI
+            ? (currentLang === 'ar' ? '✔️ الصحيح: ذكاء اصطناعي' : '✔️ Correct: AI')
+            : (currentLang === 'ar' ? '✔️ الصحيح: ليس ذكاء اصطناعي' : '✔️ Correct: Not AI');
+          wrapper.appendChild(hint);
+        }
+      }
     });
     activityScore = Math.round(correct / items.length * 5);
-    fb.innerHTML = `<div class="alert ${correct >= items.length*0.7 ? 'alert-success' : 'alert-info'}">🎯 ${currentLang==='ar'?'أصبت بـ '+correct+' من '+items.length:'Correct: '+correct+'/'+items.length} | ${currentLang==='ar'?'درجتك':'Score'}: ${activityScore} / 5</div>`;
+    const pct = Math.round(correct / items.length * 100);
+    fb.innerHTML = '<div class="alert ' + (correct >= items.length*0.7 ? 'alert-success' : 'alert-info') + '">🎯 ' + (currentLang==='ar'?'أصبت بـ '+correct+' من '+items.length+' ('+pct+'%)':'Correct: '+correct+'/'+items.length+' ('+pct+'%)') + ' | ' + (currentLang==='ar'?'درجتك':'Score') + ': ' + activityScore + ' / 5</div>';
     fb.style.display = 'block';
   }
 }
