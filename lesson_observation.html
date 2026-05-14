@@ -4382,6 +4382,8 @@ window.checkPassword = function() {
   const normalized = raw.replace(/٥/g,'5').replace(/٦/g,'6');
   if (normalized === '5565' || raw === '5565') {
     closePasswordModal();
+    sessionStorage.setItem('obs_teacher', '1');
+    sessionStorage.removeItem('obs_student');
     showScreen('screen-teacher');
   } else {
     document.getElementById('pwdError').style.display = 'block';
@@ -4473,6 +4475,9 @@ window.markPresent = async function() {
       weekday: true
     });
     playJoinChime();
+    // 💾 حفظ الحالة لاستعادتها عند الرفريش
+    sessionStorage.setItem('obs_student', JSON.stringify(currentStudent));
+    sessionStorage.removeItem('obs_teacher');
   } catch(e) { console.warn('Attendance save failed:', e.message); }
   document.getElementById('lessonStudentName').textContent = currentStudent.name;
   document.getElementById('lessonStudentClass').textContent = 'الصف ' + selectedClass + ' | Grade ' + selectedClass;
@@ -5291,9 +5296,44 @@ window.toggleDiff = function() {
 };
 
 // ============================================================
-// INIT
+// INIT — مع استعادة الجلسة عند الرفريش
 // ============================================================
 initEntry();
+
+// استعادة الحالة عند الرفريش
+(function restoreSession() {
+  const teacherSession = sessionStorage.getItem('obs_teacher');
+  const studentSession = sessionStorage.getItem('obs_student');
+  if (teacherSession) {
+    // المعلمة — أعد للوحة مباشرة
+    setTimeout(() => showScreen('screen-teacher'), 100);
+    return;
+  }
+  if (studentSession) {
+    try {
+      const saved = JSON.parse(studentSession);
+      if (saved && saved.name && saved.class) {
+        currentStudent = saved;
+        // أعد الطالب لشاشة الدرس (انتظار مزامنة المعلمة)
+        setTimeout(() => {
+          const nameEl = document.getElementById('lessonStudentName');
+          const clsEl = document.getElementById('lessonStudentClass');
+          if (nameEl) nameEl.textContent = saved.name;
+          if (clsEl) clsEl.textContent = 'الصف ' + saved.class + ' | Grade ' + saved.class;
+          showScreen('screen-student-lesson');
+          startStudentSync();
+          listenForAIAssistant();
+          // إظهار رسالة للطالب
+          const toast = document.createElement('div');
+          toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#10b981,#059669);color:white;padding:12px 24px;border-radius:16px;font-family:Cairo,sans-serif;font-weight:700;font-size:1rem;z-index:99999;box-shadow:0 4px 20px rgba(16,185,129,0.5);text-align:center;';
+          toast.innerHTML = '✅ مرحباً ' + saved.name + ' — تم استعادة جلستك!';
+          document.body.appendChild(toast);
+          setTimeout(() => toast.remove(), 4000);
+        }, 300);
+      }
+    } catch(e) { sessionStorage.removeItem('obs_student'); }
+  }
+})();
 
 
 // ============================================================
