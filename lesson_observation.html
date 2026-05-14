@@ -6156,6 +6156,52 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ==================== AI ASSISTANT ====================
+
+// كلمات مفتاحية للحصة النموذجية
+const OBSERVATION_KEYWORDS = ['design','تصميم','ask','imagine','plan','stream','مشروع','process','مراحل','robot','روبوت','city','مدينة','smart','ذكي'];
+
+function filterGeminiResponse(text, topicKeywords) {
+  // 1. حد أقصى 80 كلمة
+  const words = text.split(/\s+/);
+  if (words.length > 80) {
+    text = words.slice(0, 80).join(' ') + '...';
+  }
+
+  // 2. الكلمات الممنوعة (عربي + إنجليزي)
+  const banned = [
+    'اقتل','يقتل','قتل','دم','سلاح','انفجار','bomb','kill','weapon','blood','violence','attack','war','shoot',
+    'جنس','عري','خمر','مخدر','sex','nude','alcohol','drug','porn','naked','hate',
+    'اختراق','هاكر','hack','crack','cheat','كيف تسرق','كيف تختر',
+    'password','كلمة مرور','رقم سري','pin','عنوان','هاتف','phone','address'
+  ];
+
+  const lowerText = text.toLowerCase();
+  for (const word of banned) {
+    if (lowerText.includes(word)) {
+      return {
+        safe: false,
+        text: '🚫 هذا السؤال خارج نطاق الدرس\nThis question is outside our lesson topic. Ask your teacher! 👩‍🏫'
+      };
+    }
+  }
+
+  // 3. التحقق من صلة الموضوع
+  if (topicKeywords && topicKeywords.length > 0) {
+    const hasRelevant = topicKeywords.some(kw => lowerText.includes(kw.toLowerCase()));
+    if (!hasRelevant) {
+      text += '\n\n💡 تذكر: أنا هنا فقط للمساعدة في درسنا! | I\'m here to help with our lesson only!';
+    }
+  }
+
+  // 4. التأكد من وجود العربي والإنجليزي معاً
+  const hasArabic = /[\u0600-\u06FF]/.test(text);
+  const hasEnglish = /[a-zA-Z]/.test(text);
+  if (!hasArabic) text += '\n(يُرجى السؤال بالعربي أو الإنجليزي)';
+  if (!hasEnglish) text += '\n(Please also ask in English)';
+
+  return { safe: true, text };
+}
+
 const GEMINI_API_KEY_AI = 'AIzaSyA0CNgYi4ho7AhGV6f1crlkSfEc7Wp9V9I';
 let aiAssistantActive = false;
 let currentAITopic = '';
@@ -6273,12 +6319,13 @@ Rules:
       }
     );
     const data = await response.json();
-    const answer = data.candidates?.[0]?.content?.parts?.[0]?.text || 'عذراً، حدث خطأ. حاول مرة أخرى! 😊';
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'عذراً، حدث خطأ. حاول مرة أخرى! 😊';
+    const filtered = filterGeminiResponse(rawText, OBSERVATION_KEYWORDS);
 
     loadingMsg.remove();
     const botMsg = document.createElement('div');
     botMsg.className = 'ai-msg-bot';
-    botMsg.textContent = answer;
+    botMsg.textContent = filtered.text;
     messages.appendChild(botMsg);
     messages.scrollTop = messages.scrollHeight;
   } catch(e) {
