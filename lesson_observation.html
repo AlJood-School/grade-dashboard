@@ -4813,12 +4813,59 @@ window.resetTimer = function() {
 // ============================================================
 // ATTENDANCE LISTENER
 // ============================================================
+let _prevAttCount = 0;
+let _prevAttNames = new Set();
+
+function playJoinSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Cheerful two-note "ding dong" sound
+    function note(freq, start, dur, vol=0.4) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(vol, ctx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + dur + 0.05);
+    }
+    note(880, 0, 0.15);
+    note(1100, 0.18, 0.2);
+  } catch(e) {}
+}
+
+function showJoinToast(name) {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#2E7D32,#43A047);color:white;padding:12px 24px;border-radius:30px;font-family:Cairo,sans-serif;font-size:1rem;font-weight:700;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.3);animation:slideUp 0.3s ease;direction:rtl;';
+  t.textContent = '✋ ' + name + ' انضم/انضمت!';
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
 function listenAttendance() {
   if (attUnsubscribe) attUnsubscribe();
+  _prevAttCount = 0;
+  _prevAttNames = new Set();
   attUnsubscribe = onSnapshot(collection(db, 'obs_attendance'), (snap) => {
     attendanceList = [];
     snap.forEach(d => attendanceList.push(d.data()));
     window.attendanceSnapshot = attendanceList.map(a => ({name: a.name, score: a.score, level: a.level, cls: a.class}));
+    
+    // Detect new joiners
+    const currentNames = new Set(attendanceList.map(a => a.name));
+    if (_prevAttCount > 0) { // skip first load
+      currentNames.forEach(name => {
+        if (!_prevAttNames.has(name)) {
+          playJoinSound();
+          showJoinToast(name);
+        }
+      });
+    }
+    _prevAttCount = attendanceList.length;
+    _prevAttNames = new Set(currentNames);
+    
     renderAttendance();
   });
 }

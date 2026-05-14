@@ -1296,28 +1296,80 @@ window.loadSchedule = async () => {
 window.printSchedule = () => window.print();
 
 // ===== Attendance Calendar =====
-function buildAttCalendar() {
-  const data = {1:'present',2:'present',3:'holiday',4:'absent',5:'present',6:'present',7:'present',8:'present',9:'late',10:'present',11:'holiday',12:'holiday',13:'present',14:'present',15:'present',16:'present',17:'present',18:'holiday',19:'holiday',20:'present',21:'absent',22:'present',23:'present',24:'holiday',25:'holiday'};
+async function buildAttCalendar() {
+  const cal = document.getElementById('att-calendar');
+  const child = parentData?.child || '';
+  const grade = parentData?.grade || '';
+  
+  // Try Firebase first
+  try {
+    const q = query(
+      collection(db, 'parent_attendance'),
+      orderBy('date', 'asc')
+    );
+    const snap = await getDocs(q);
+    const allDocs = [];
+    snap.forEach(d => {
+      const data = d.data();
+      // Match by child name or grade
+      if (!child || data.child === child || data.grade === grade || data.cls === grade) {
+        allDocs.push(data);
+      }
+    });
+    
+    if (allDocs.length > 0) {
+      renderAttCalendarFromData(allDocs);
+      return;
+    }
+  } catch(e) { /* fallback below */ }
+  
+  // No real data yet — show informative placeholder
+  const placeholderHTML = `
+    <div style="grid-column:1/-1;text-align:center;padding:24px;color:rgba(255,255,255,0.5)">
+      <div style="font-size:2rem;margin-bottom:8px">📋</div>
+      <div style="font-size:0.85rem">سيتم تفعيل سجل الحضور قريباً</div>
+      <div style="font-size:0.75rem;margin-top:4px;opacity:0.7">تواصلي مع إدارة المدرسة لمزيد من المعلومات</div>
+    </div>`;
+  if (cal) cal.innerHTML = placeholderHTML;
+  ['att-present-num','att-absent-num','att-late-num'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.textContent = '—';
+  });
+  const pctEl = document.getElementById('att-pct');
+  if (pctEl) pctEl.textContent = '—';
+  const barEl = document.getElementById('att-bar');
+  if (barEl) barEl.style.width = '0%';
+  ['stat-present','stat-absent'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.textContent = '—';
+  });
+}
+
+function renderAttCalendarFromData(records) {
+  const cal = document.getElementById('att-calendar');
+  if (!cal) return;
   let present=0, absent=0, late=0;
   let html = '';
-  for (let d = 1; d <= 25; d++) {
-    const s = data[d] || 'present';
+  records.forEach((r, i) => {
+    const s = r.status || 'present';
+    const day = r.day || (i + 1);
+    const label = r.dateLabel || String(day);
     if(s==='present') present++;
     else if(s==='absent') absent++;
     else if(s==='late') late++;
-    const cls = `att-${s}`;
-    html += `<div class="att-day ${cls}" title="${d} مايو">${d}</div>`;
-  }
-  document.getElementById('att-calendar').innerHTML = html;
+    html += `<div class="att-day att-${s}" title="${label}">${day}</div>`;
+  });
+  cal.innerHTML = html || '<div style="color:rgba(255,255,255,0.4);font-size:0.8rem;padding:10px">لا بيانات</div>';
   const total = present + absent + late;
   const pct = total ? ((present/total)*100).toFixed(1) : 0;
-  document.getElementById('att-present-num').textContent = present;
-  document.getElementById('att-absent-num').textContent = absent;
-  document.getElementById('att-late-num').textContent = late;
-  document.getElementById('att-pct').textContent = pct + '%';
-  document.getElementById('att-bar').style.width = pct + '%';
-  document.getElementById('stat-present').textContent = present;
-  document.getElementById('stat-absent').textContent = absent;
+  const ids = {
+    'att-present-num': present, 'att-absent-num': absent,
+    'att-late-num': late, 'att-pct': pct + '%',
+    'stat-present': present, 'stat-absent': absent
+  };
+  Object.entries(ids).forEach(([id, val]) => {
+    const el = document.getElementById(id); if(el) el.textContent = val;
+  });
+  const barEl = document.getElementById('att-bar');
+  if (barEl) barEl.style.width = pct + '%';
 }
 
 // ===== Send Message =====
