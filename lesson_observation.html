@@ -2066,6 +2066,95 @@ body {
   box-shadow: 0 20px 60px rgba(0,0,0,0.5);
   border: 4px solid rgba(255,255,255,0.4);
 }
+
+/* ---- Objective Achievement Badge ---- */
+#objectiveBadge {
+  position: fixed; inset: 0; z-index: 999999;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(8px);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+#objectiveBadge.show {
+  opacity: 1; pointer-events: all;
+}
+.obj-card {
+  background: linear-gradient(135deg,#1a1a2e,#16213e);
+  border-radius: 28px;
+  padding: 36px 44px;
+  max-width: 520px;
+  width: 92%;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 60px rgba(0,0,0,0.6), 0 0 120px rgba(255,255,255,0.05);
+  animation: cardPop 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards;
+}
+@keyframes cardPop {
+  0%{transform:scale(0.4) translateY(40px);opacity:0}
+  100%{transform:scale(1) translateY(0);opacity:1}
+}
+.obj-check {
+  font-size: 64px;
+  animation: checkBounce 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.2s both;
+  display: block; margin-bottom: 8px;
+}
+@keyframes checkBounce {
+  0%{transform:scale(0) rotate(-30deg)}
+  60%{transform:scale(1.3) rotate(5deg)}
+  100%{transform:scale(1) rotate(0)}
+}
+.obj-headline {
+  font-size: 1rem; font-weight: 700; letter-spacing: 2px;
+  text-transform: uppercase; color: rgba(255,255,255,0.5);
+  margin-bottom: 6px;
+}
+.obj-ican {
+  font-size: 1.55rem; font-weight: 900;
+  line-height: 1.3; margin: 10px 0 6px;
+}
+.obj-ican-ar {
+  font-size: 1.15rem; font-weight: 700;
+  color: rgba(255,255,255,0.75); margin-bottom: 18px;
+  direction: rtl;
+}
+.obj-tags {
+  display: flex; gap: 10px; justify-content: center;
+  flex-wrap: wrap; margin-bottom: 20px;
+}
+.obj-bloom-tag {
+  padding: 6px 16px; border-radius: 50px;
+  font-size: 0.82rem; font-weight: 800;
+  letter-spacing: 0.5px; text-transform: uppercase;
+}
+.obj-strategy-tag {
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.8);
+  padding: 6px 14px; border-radius: 50px;
+  font-size: 0.78rem; font-weight: 600;
+}
+.obj-bloom-bar {
+  display: flex; gap: 5px; justify-content: center;
+  margin-bottom: 20px;
+}
+.obj-bloom-bar span {
+  width: 32px; height: 8px; border-radius: 4px;
+  background: rgba(255,255,255,0.15);
+  transition: background 0.3s ease;
+}
+.obj-bloom-bar span.filled {
+  background: currentColor;
+}
+.obj-progress-wrap {
+  background: rgba(255,255,255,0.1);
+  border-radius: 10px; overflow: hidden; height: 6px;
+}
+.obj-progress-bar {
+  height: 100%; border-radius: 10px;
+  transition: width 0.1s linear;
+}
+
 #kidToast.show {
   transform: translate(-50%, -50%) scale(1);
 }
@@ -2707,7 +2796,21 @@ body {
         <div id="exitResultsSummary" style="margin-top:8px"></div>
       </div>
       <!-- Smart Student Level Analysis Panel -->
-      <div class="smart-levels-panel" id="smartLevelsPanel">
+      
+          <!-- Bloom's Pyramid Live -->
+          <div style="background:rgba(255,255,255,0.04);border-radius:16px;padding:20px;margin-bottom:20px;border:1px solid rgba(255,255,255,0.08);">
+            <div style="font-size:0.95rem;font-weight:700;color:#ffd54f;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+              🔺 Bloom's Taxonomy — Live Progress
+              <span style="font-size:0.75rem;color:rgba(255,255,255,0.4);font-weight:400;margin-right:auto">يتحدث تلقائياً مع كل مرحلة</span>
+            </div>
+            <div id="bloomPyramid" style="display:flex;flex-direction:column;gap:6px;">
+              <!-- Rows inserted by JS -->
+            </div>
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);font-size:0.8rem;color:rgba(255,255,255,0.5);">
+              🎯 <span id="bloomCurrentStrategy">Strategy: —</span>
+            </div>
+          </div>
+<div class="smart-levels-panel" id="smartLevelsPanel">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
           <div>
             <div style="font-size:0.85rem;font-weight:700;color:#c9a227">📊 تحليل مستويات الطلاب</div>
@@ -4531,6 +4634,8 @@ window.submitExitCard = async function() {
 // TEACHER DASHBOARD
 // ============================================================
 function initTeacherDashboard() {
+  initBloomPyramid();
+
   updateTeacherPhaseUI(teacherPhase);
   // Don't start timer on phase 0 (waiting for START)
   if (teacherPhase > 0) {
@@ -4553,6 +4658,7 @@ window.advancePhase = function() {
 
 window.teacherGoToPhase = async function(phase) {
   teacherPhase = phase;
+  if (typeof updateBloomPyramid === "function") updateBloomPyramid(phase);
   updateTeacherPhaseUI(phase);
   startTeacherTimer(PHASE_DURATIONS[phase]);
   try {
@@ -5908,6 +6014,29 @@ document.addEventListener('DOMContentLoaded', () => {
   <span class="kid-toast-sub" id="kidToastSub">ممتاز! واصل!</span>
 </div>
 
+<!-- Objective Achievement Badge -->
+<div id="objectiveBadge">
+  <div class="obj-card" id="objCard">
+    <div class="obj-glow" id="objGlow" style="position:absolute;inset:0;border-radius:28px;pointer-events:none;"></div>
+    <span class="obj-check" id="objCheck">✅</span>
+    <div class="obj-headline">🎯 Goal Achieved! | هدف محقق!</div>
+    <div class="obj-ican" id="objIcanEN" style="color:#fff;"></div>
+    <div class="obj-ican-ar" id="objIcanAR"></div>
+    <div class="obj-tags">
+      <span class="obj-bloom-tag" id="objBloomTag"></span>
+      <span class="obj-strategy-tag" id="objStrategyTag"></span>
+    </div>
+    <div class="obj-bloom-bar" id="objBloomBar">
+      <span id="obl1"></span><span id="obl2"></span><span id="obl3"></span>
+      <span id="obl4"></span><span id="obl5"></span><span id="obl6"></span>
+    </div>
+    <div class="obj-progress-wrap">
+      <div class="obj-progress-bar" id="objProgressBar" style="width:100%"></div>
+    </div>
+  </div>
+</div>
+
+
 <!-- Timer 8-min Alert Overlay -->
 <div id="timerAlertOverlay">
   <div class="alert-emoji">⏰</div>
@@ -6025,8 +6154,135 @@ const ENCOURAGEMENTS = [
   { emoji: '💪', msg: 'Strong Work!',  sub: 'عمل قوي! أنت تستطيع!',      bg: 'linear-gradient(135deg,#4527a0,#311b92)', sound: 'applause' },
 ];
 
+// ---- Phase Objectives (Bloom's Taxonomy) ----
+const PHASE_OBJECTIVES = [
+  null, // phase 0 = waiting
+  {
+    iCanEN: "I can recall what I know about Technology!",
+    iCanAR: "أستطيع تذكّر ما أعرفه عن التكنولوجيا!",
+    bloom: "Remembering", bloomAR: "التذكُّر", bloomLevel: 1,
+    strategy: "Prior Knowledge Activation", strategyAR: "تنشيط المعرفة السابقة",
+    emoji: "💡", color: "#7c4dff", bg: "linear-gradient(135deg,#4a148c,#7c4dff)"
+  },
+  {
+    iCanEN: "I can describe what I know & want to learn!",
+    iCanAR: "أستطيع وصف ما أعرفه وما أريد تعلمه!",
+    bloom: "Understanding", bloomAR: "الفهم", bloomLevel: 2,
+    strategy: "KWL Chart", strategyAR: "خريطة KWL",
+    emoji: "🧠", color: "#1565c0", bg: "linear-gradient(135deg,#0d47a1,#1976d2)"
+  },
+  {
+    iCanEN: "I can explain the Design Process steps!",
+    iCanAR: "أستطيع شرح خطوات عملية التصميم!",
+    bloom: "Understanding", bloomAR: "الفهم", bloomLevel: 2,
+    strategy: "Direct Instruction", strategyAR: "التعليم المباشر",
+    emoji: "📚", color: "#00838f", bg: "linear-gradient(135deg,#006064,#00acc1)"
+  },
+  {
+    iCanEN: "I can apply the Design Process with my team!",
+    iCanAR: "أستطيع تطبيق عملية التصميم مع مجموعتي!",
+    bloom: "Applying", bloomAR: "التطبيق", bloomLevel: 3,
+    strategy: "Collaborative Learning", strategyAR: "التعلم التعاوني",
+    emoji: "👥", color: "#2e7d32", bg: "linear-gradient(135deg,#1b5e20,#388e3c)"
+  },
+  {
+    iCanEN: "I can create my own design plan!",
+    iCanAR: "أستطيع إنشاء خطة تصميمي الخاصة!",
+    bloom: "Creating", bloomAR: "الإبداع", bloomLevel: 6,
+    strategy: "Project-Based Learning", strategyAR: "التعلم بالمشروع",
+    emoji: "✏️", color: "#e65100", bg: "linear-gradient(135deg,#bf360c,#f4511e)"
+  },
+  {
+    iCanEN: "I can evaluate my own learning today!",
+    iCanAR: "أستطيع تقييم تعلمي اليوم!",
+    bloom: "Evaluating", bloomAR: "التقييم", bloomLevel: 5,
+    strategy: "Exit Card", strategyAR: "بطاقة الخروج",
+    emoji: "🚪", color: "#c62828", bg: "linear-gradient(135deg,#b71c1c,#e53935)"
+  }
+];
+
+
 // ---- Show Encouragement Toast (auto-disappear) ----
 let kidToastTimeout = null;
+
+// ---- Objective Achievement Badge ----
+let objBadgeTimeout = null;
+function showObjectiveBadge(phase) {
+  const obj = PHASE_OBJECTIVES[phase];
+  if (!obj) { showKidToast(phase - 1, 6000); return; }
+
+  const badge   = document.getElementById('objectiveBadge');
+  const card    = document.getElementById('objCard');
+  const check   = document.getElementById('objCheck');
+  const icanEN  = document.getElementById('objIcanEN');
+  const icanAR  = document.getElementById('objIcanAR');
+  const bloom   = document.getElementById('objBloomTag');
+  const strat   = document.getElementById('objStrategyTag');
+  const barEl   = document.getElementById('objProgressBar');
+  const glow    = document.getElementById('objGlow');
+
+  if (!badge) { showKidToast(phase - 1, 6000); return; }
+
+  // Populate content
+  icanEN.textContent  = obj.iCanEN;
+  icanAR.textContent  = obj.iCanAR;
+  bloom.textContent   = obj.bloom + ' | ' + obj.bloomAR;
+  bloom.style.background = obj.color;
+  bloom.style.color   = '#fff';
+  strat.textContent   = obj.strategy + ' | ' + obj.strategyAR;
+  check.textContent   = obj.emoji;
+  card.style.boxShadow = '0 0 60px ' + obj.color + '66, 0 0 120px ' + obj.color + '22';
+  glow.style.boxShadow = 'inset 0 0 40px ' + obj.color + '33';
+  barEl.style.background = obj.color;
+
+  // Bloom bar — fill up to level
+  for (let b = 1; b <= 6; b++) {
+    const s = document.getElementById('obl' + b);
+    if (!s) continue;
+    s.style.color = obj.color;
+    s.classList.toggle('filled', b <= obj.bloomLevel);
+  }
+
+  // Reset progress bar + animation
+  barEl.style.transition = 'none';
+  barEl.style.width = '100%';
+
+  // Show badge
+  badge.classList.add('show');
+
+  // Clear any existing timeout
+  if (objBadgeTimeout) clearTimeout(objBadgeTimeout);
+
+  // Animate progress bar
+  const DURATION = 6000;
+  let startTime = null;
+  function animateBar(ts) {
+    if (!startTime) startTime = ts;
+    const elapsed = ts - startTime;
+    const remaining = Math.max(0, 1 - elapsed / DURATION);
+    barEl.style.transition = 'none';
+    barEl.style.width = (remaining * 100) + '%';
+    if (elapsed < DURATION) {
+      requestAnimationFrame(animateBar);
+    }
+  }
+  requestAnimationFrame(animateBar);
+
+  // Auto-dismiss after 6s
+  objBadgeTimeout = setTimeout(() => {
+    badge.classList.remove('show');
+    // Play random encouragement toast after badge dismisses
+    setTimeout(() => showKidToast('random', 4000), 300);
+  }, DURATION);
+
+  // Click to dismiss early
+  badge.onclick = () => {
+    if (objBadgeTimeout) clearTimeout(objBadgeTimeout);
+    badge.classList.remove('show');
+    badge.onclick = null;
+  };
+}
+
 function showKidToast(type = 'random', duration = 6000) {
   const toast = document.getElementById('kidToast');
   if (!toast) return;
@@ -6284,7 +6540,7 @@ function onKidCorrectAnswer() {
 
 function onKidPhaseChange(phase) {
   if (phase > 0) {
-    showKidToast(phase - 1, 6000);
+    showObjectiveBadge(phase);
     KidAudio.milestone();
   }
 }
@@ -6333,7 +6589,75 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Expose globally for external calls
-window.showKidToast = showKidToast;
+
+// ---- Update Bloom Pyramid in Teacher Dashboard ----
+const BLOOM_LEVELS = [
+  { level: 1, name: 'Remembering', nameAR: 'التذكُّر',   color: '#9c27b0', width: '40%'  },
+  { level: 2, name: 'Understanding',nameAR: 'الفهم',      color: '#1976d2', width: '52%'  },
+  { level: 3, name: 'Applying',     nameAR: 'التطبيق',    color: '#0097a7', width: '64%'  },
+  { level: 4, name: 'Analyzing',    nameAR: 'التحليل',    color: '#388e3c', width: '76%'  },
+  { level: 5, name: 'Evaluating',   nameAR: 'التقييم',    color: '#f57c00', width: '88%'  },
+  { level: 6, name: 'Creating',     nameAR: 'الإبداع',    color: '#c62828', width: '100%' },
+];
+
+function initBloomPyramid() {
+  const container = document.getElementById('bloomPyramid');
+  if (!container) return;
+  // Build reversed pyramid (Creating at top visually = bottom of Bloom)
+  // We show from bottom (Remembering) to top (Creating) — top = hardest
+  const sorted = [...BLOOM_LEVELS].reverse(); // Creating first (top visual)
+  container.innerHTML = sorted.map(b => `
+    <div style="display:flex;align-items:center;gap:10px;" id="bloomRow${b.level}">
+      <div style="font-size:0.72rem;color:rgba(255,255,255,0.45);width:88px;text-align:left;flex-shrink:0">
+        ${b.name}
+      </div>
+      <div style="flex:1;background:rgba(255,255,255,0.07);border-radius:6px;height:20px;overflow:hidden;">
+        <div id="bloomBar${b.level}" style="height:100%;width:0%;background:${b.color};border-radius:6px;transition:width 0.8s ease;display:flex;align-items:center;padding-left:8px;font-size:0.65rem;font-weight:700;color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;">
+        </div>
+      </div>
+      <div id="bloomCheck${b.level}" style="font-size:1rem;opacity:0;transition:opacity 0.4s">✅</div>
+    </div>
+  `).join('');
+}
+
+function updateBloomPyramid(phase) {
+  const obj = PHASE_OBJECTIVES ? PHASE_OBJECTIVES[phase] : null;
+
+  // Fill all levels up to current phase's bloom level
+  BLOOM_LEVELS.forEach(b => {
+    const bar   = document.getElementById('bloomBar'   + b.level);
+    const check = document.getElementById('bloomCheck' + b.level);
+    if (!bar) return;
+
+    // Determine % fill based on how many phases covered this level
+    let filled = 0;
+    for (let p = 1; p <= phase; p++) {
+      const o = PHASE_OBJECTIVES ? PHASE_OBJECTIVES[p] : null;
+      if (o && o.bloomLevel >= b.level) filled++;
+    }
+    const pct = Math.min(100, filled * 25); // each phase adds 25%
+    bar.style.width = pct + '%';
+    bar.textContent = pct > 15 ? pct + '%' : '';
+
+    if (check) check.style.opacity = filled > 0 ? '1' : '0';
+  });
+
+  // Update current strategy
+  const stratEl = document.getElementById('bloomCurrentStrategy');
+  if (stratEl && obj) {
+    stratEl.textContent = 'Strategy: ' + obj.strategy + ' | ' + obj.strategyAR;
+    stratEl.style.color = obj.color;
+  } else if (stratEl && phase === 0) {
+    stratEl.textContent = 'Strategy: —';
+    stratEl.style.color = 'rgba(255,255,255,0.5)';
+  }
+}
+
+window.initBloomPyramid  = initBloomPyramid;
+window.updateBloomPyramid = updateBloomPyramid;
+
+  window.showKidToast = showKidToast;
+  window.showObjectiveBadge = showObjectiveBadge;
 window.startKidTimer = startKidTimer;
 window.onKidCorrectAnswer = onKidCorrectAnswer;
 window.onKidPhaseChange = onKidPhaseChange;
