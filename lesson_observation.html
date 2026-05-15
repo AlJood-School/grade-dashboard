@@ -3420,12 +3420,20 @@ body {
     </div>
     <div class="teacher-right">
       <div class="attendance-card">
+        <div style="font-size:0.85rem;font-weight:700;color:#c9a227;margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+          👥 الحضور المباشر
+          <span style="background:rgba(220,50,50,0.8);border-radius:50%;width:8px;height:8px;display:inline-block;animation:pulse 1.5s infinite;"></span>
+          <span style="font-weight:400;color:rgba(255,255,255,0.4);font-size:0.75rem;margin-right:auto">مباشر / Live</span>
+        </div>
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
           <div>
             <div class="att-count" id="attCount">0</div>
-            <div class="att-label">من <span id="attTotal">243</span> طالبة | Students Present</div>
+            <div class="att-label">طالب حاضر | Students Present</div>
           </div>
-          <div style="font-size:0.75rem;color:rgba(255,255,255,0.4);text-align:left">🔴 مباشر</div>
+          <div style="text-align:left">
+            <div style="font-size:0.7rem;color:rgba(255,255,255,0.35)">إجمالي الكل</div>
+            <div style="font-size:1.1rem;font-weight:700;color:rgba(255,255,255,0.5)" id="attTotal">—</div>
+          </div>
         </div>
 <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
   <div style="background:rgba(40,167,69,0.15);border:1px solid rgba(40,167,69,0.4);border-radius:10px;padding:10px 20px;text-align:center;">
@@ -3445,7 +3453,7 @@ body {
     <div style="font-size:0.75rem;color:rgba(255,255,255,0.6);">نسبة الحضور / Rate</div>
   </div>
 </div>
-        <div class="att-filter-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div class="att-filter-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
           <!-- Smart active class badge -->
           <div id="activeClassBadge" style="display:none;background:linear-gradient(135deg,rgba(201,162,39,0.25),rgba(201,162,39,0.1));border:1px solid rgba(201,162,39,0.5);border-radius:8px;padding:4px 12px;font-size:0.78rem;font-weight:700;color:#FFD700;align-items:center;gap:6px;">
             <span>📍 الفصل النشط:</span> <span id="activeClassName">—</span>
@@ -3454,7 +3462,9 @@ body {
           <button class="btn-filter" onclick="filterAtt('3')" id="attFilterG3">📗 صف 3</button>
           <button class="btn-filter" onclick="filterAtt('4')" id="attFilterG4">📘 صف 4</button>
           <div id="attFilterClasses" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
-          <div style="margin-right:auto;display:flex;gap:6px;">
+          <div style="margin-right:auto;display:flex;gap:6px;flex-wrap:wrap;">
+            <button onclick="listenAttendance()" style="background:rgba(116,192,252,0.2);border:1px solid rgba(116,192,252,0.4);color:#74c0fc;padding:4px 10px;border-radius:8px;font-size:0.75rem;font-family:Cairo,sans-serif;cursor:pointer;" title="إعادة تحميل الحضور من Firebase">🔄 تحديث</button>
+            <button onclick="clearAttendanceNow()" style="background:rgba(255,100,100,0.15);border:1px solid rgba(255,100,100,0.4);color:#ff8080;padding:4px 10px;border-radius:8px;font-size:0.75rem;font-family:Cairo,sans-serif;cursor:pointer;" title="مسح جميع سجلات الحضور">🗑️ مسح الحضور</button>
             <button class="btn-kick-all" onclick="kickAllStudents()" title="طرد جميع الطلاب من الحصة">🚫 طرد الجميع</button>
             <button class="btn-restore-all" onclick="restoreAllStudents()" title="إعادة جميع الطلاب">🔓 إعادة الجميع</button>
           </div>
@@ -3769,7 +3779,7 @@ body {
 // FIREBASE SETUP
 // ============================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, addDoc, collection, onSnapshot, serverTimestamp, query, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, addDoc, collection, onSnapshot, serverTimestamp, query, orderBy, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDri3r5AtyyduyiTS5GzIHOn-XSduhALpM",
@@ -4037,7 +4047,7 @@ window.startBrowseMode = function() {
 window.checkPassword = function() {
   const raw = document.getElementById('pwdInput').value;
   const normalized = raw.replace(/٥/g,'5').replace(/٦/g,'6');
-  if (normalized === '5565' || raw === '5565') {
+  if (normalized === 'alhdg35dhl' || raw === 'alhdg35dhl') {
     closePasswordModal();
     sessionStorage.setItem('obs_teacher', '1');
     sessionStorage.removeItem('obs_student');
@@ -4550,18 +4560,40 @@ window.teacherGoToPhase = async function(phase) {
 window.startNewSession = async function() {
   if (!confirm('⚠️ إعادة ضبط الجلسة للفصل الجديد؟\nهذا سيُعيد شاشات الانتظار لجميع الطلاب.\nReset session for new class?')) return;
   try {
+    // Generate new session ID
+    const newSid = Date.now().toString(36);
+    window._currentSessionId = newSid;
+    window._autoFilterApplied = false;
+    
+    // Reset session document
     await setDoc(doc(db, 'obs_session', 'current'), {
       phase: 0,
       lessonActive: false,
       timerSeconds: 300,
       kickAll: false,
       kickedStudents: [],
+      sessionId: newSid,
       updatedAt: serverTimestamp()
     });
+    
+    // Clear ALL obs_attendance records from previous session
+    const oldSnap = await getDocs(collection(db, 'obs_attendance'));
+    const delBatch = [];
+    oldSnap.forEach(d => delBatch.push(deleteDoc(d.ref)));
+    await Promise.all(delBatch);
+    console.log('✅ Cleared', delBatch.length, 'old attendance records');
+    
+    // Reset local state
+    attendanceList = [];
+    window.kickedStudentsSet = new Set();
     teacherPhase = 0;
     updateTeacherPhaseUI(0);
-    showToastTeacher('✅ جلسة جديدة جاهزة! | New session ready!');
-  } catch(e) { console.warn('Reset session failed:', e); }
+    renderAttendance();
+    showToastTeacher('✅ جلسة جديدة جاهزة! | New session ready — ' + delBatch.length + ' سجل قديم مُحذَف');
+  } catch(e) { 
+    console.warn('Reset session failed:', e);
+    showToastTeacher('⚠️ خطأ في إعادة الضبط: ' + e.message);
+  }
 };
 
 function updateTeacherPhaseUI(phase) {
@@ -4663,6 +4695,23 @@ function showJoinToast(name) {
   t.textContent = '✋ ' + name + ' انضم/انضمت!';
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 3000);
+}
+
+async function clearAttendanceNow() {
+  if (!confirm('مسح جميع سجلات الحضور الحالية؟\nClear all attendance records?')) return;
+  try {
+    const snap = await getDocs(collection(db, 'obs_attendance'));
+    const dels = [];
+    snap.forEach(d => dels.push(deleteDoc(d.ref)));
+    await Promise.all(dels);
+    attendanceList = [];
+    window._autoFilterApplied = false;
+    window.kickedStudentsSet = new Set();
+    renderAttendance();
+    showToastTeacher('✅ تم مسح ' + dels.length + ' سجل حضور');
+  } catch(e) {
+    showToastTeacher('⚠️ خطأ: ' + e.message);
+  }
 }
 
 function listenAttendance() {
