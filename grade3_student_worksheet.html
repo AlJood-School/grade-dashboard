@@ -231,7 +231,7 @@
   #drawCanvas {
     display: block;
     width: 100%;
-    height: 260px;
+    height: 340px;
     cursor: crosshair;
     touch-action: none;
   }
@@ -762,8 +762,8 @@
   }
 
   /* ===== COMPACT CANVAS ===== */
-  .canvas-wrap canvas { height: 220px !important; }
-  @media (min-width: 600px) { .canvas-wrap canvas { height: 280px !important; } }
+  .canvas-wrap canvas { height: 280px !important; }
+  @media (min-width: 600px) { .canvas-wrap canvas { height: 340px !important; } }
 
   /* Mobile: stack to 1 column */
   @media (max-width: 480px) {
@@ -772,6 +772,7 @@
   }
 
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
 </head>
 <body>
 
@@ -1474,7 +1475,7 @@ function initCanvas() {
   const wrapper = canvas.parentElement;
   // Set canvas internal size
   canvas.width = wrapper.offsetWidth || 340;
-  canvas.height = 260;
+  canvas.height = 340;
   drawCtx = canvas.getContext('2d');
   drawCtx.fillStyle = '#FFFFFF';
   drawCtx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1493,7 +1494,7 @@ function initCanvas() {
   window.addEventListener('resize', () => {
     const imgData = canvas.toDataURL();
     canvas.width = wrapper.offsetWidth || 340;
-    canvas.height = 260;
+    canvas.height = 340;
     drawCtx.fillStyle = '#FFFFFF';
     drawCtx.fillRect(0, 0, canvas.width, canvas.height);
     const img = new Image();
@@ -1684,18 +1685,41 @@ function backToStart() {
 async function saveAsImage() {
   showToast('جاري تحضير الصورة...', '');
   try {
+    // أولاً: حاول html2canvas للصفحة كاملة
     if (typeof html2canvas !== 'undefined') {
-      const canvas = await html2canvas(document.getElementById('s4'));
+      const pageCanvas = await html2canvas(document.getElementById('s4'), {
+        backgroundColor: '#F0F6FF',
+        scale: 2,
+        useCORS: true,
+        logging: false
+      });
       const link = document.createElement('a');
-      link.download = `ورقة_عمل_${appState.student.name}.png`;
-      link.href = canvas.toDataURL();
+      link.download = `ورقة_عمل_${appState.student.name || 'الطالب'}.png`;
+      link.href = pageCanvas.toDataURL('image/png');
+      document.body.appendChild(link);
       link.click();
-    } else {
-      showToast('احفظ الصفحة يدوياً من خيارات المتصفح', '');
+      document.body.removeChild(link);
+      showToast('✅ تم حفظ الصورة!', '');
+      return;
     }
-  } catch (e) {
-    showToast('احفظ الصفحة يدوياً من خيارات المتصفح', '');
-  }
+  } catch (e) { /* fallback below */ }
+  
+  // ثانياً: حفظ الرسم فقط من الـ canvas
+  try {
+    const drawCanvas = document.getElementById('drawCanvas');
+    if (drawCanvas && drawCanvas.width > 0) {
+      const link = document.createElement('a');
+      link.download = `رسم_روبوت_${appState.student.name || 'الطالب'}.png`;
+      link.href = drawCanvas.toDataURL('image/png');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('✅ تم حفظ الرسم!', '');
+      return;
+    }
+  } catch (e) { /* ignore */ }
+  
+  showToast('⚠️ يتعذر الحفظ التلقائي — جرب: Share > Save to Photos', '');
 }
 
 // ============================================================
