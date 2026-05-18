@@ -146,6 +146,16 @@ body{font-family:'Cairo',sans-serif;background:var(--g100);color:var(--g800);min
 .btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-dark)}
 .btn-success{background:var(--success);color:#fff}.btn-success:hover{background:#047857}
 .btn-danger{background:var(--danger-light);color:var(--danger);border:1px solid #FCA5A5}.btn-danger:hover{background:var(--danger);color:#fff}
+.bulk-bar{display:none;align-items:center;gap:.75rem;background:#fef3c7;border:1.5px solid #f59e0b;border-radius:10px;padding:.55rem 1rem;margin-bottom:.6rem;animation:fadeIn .2s ease}
+.bulk-bar.visible{display:flex}
+.bulk-bar .bulk-info{font-weight:700;color:#92400e;font-size:.88rem}
+.bulk-bar .btn-bulk-del{background:#ef4444;color:#fff;border:none;border-radius:8px;padding:.35rem .9rem;font-size:.84rem;cursor:pointer;font-weight:700;transition:background .15s}
+.bulk-bar .btn-bulk-del:hover{background:#dc2626}
+.bulk-bar .btn-bulk-cancel{background:#fff;color:#6b7280;border:1px solid #d1d5db;border-radius:8px;padding:.35rem .9rem;font-size:.84rem;cursor:pointer;transition:background .15s}
+.bulk-bar .btn-bulk-cancel:hover{background:#f3f4f6}
+.row-check{width:16px;height:16px;cursor:pointer;accent-color:#ef4444}
+.row-selected td{background:#fef9c3!important}
+th .th-check{width:16px;height:16px;cursor:pointer;accent-color:#ef4444}
 .btn-outline{background:#fff;color:var(--g700);border:1.5px solid var(--g200)}.btn-outline:hover{border-color:var(--primary);color:var(--primary)}
 .btn-sm{padding:4px 11px;font-size:.75rem}
 .btn-lg{padding:11px 22px;font-size:.92rem;border-radius:var(--r)}
@@ -448,10 +458,15 @@ body{font-family:'Cairo',sans-serif;background:var(--g100);color:var(--g800);min
             </div>
             <div class="search-box"><span>🔍</span><input id="srch" type="text" placeholder="بحث باسم الطالب..." oninput="renderTbl()"></div>
           </div>
+          <div id="bulkBar" class="bulk-bar">
+            <span class="bulk-info" id="bulkCount">0 ورقة محددة</span>
+            <button class="btn-bulk-del" onclick="bulkDelete()">🗑️ حذف المحددة</button>
+            <button class="btn-bulk-cancel" onclick="clearSelection()">✕ إلغاء التحديد</button>
+          </div>
           <div style="overflow-x:auto">
             <table class="dtbl">
-              <thead><tr><th>#</th><th>اسم الطالب</th><th>الشعبة</th><th>الروبوت</th><th>اسم الروبوت</th><th>النتيجة</th><th>الحالة</th><th>التاريخ</th><th>الوقت</th><th></th></tr></thead>
-              <tbody id="tblBody"><tr class="empty"><td colspan="10">⏳ جاري التحميل...</td></tr></tbody>
+              <thead><tr><th><input type="checkbox" class="th-check" id="checkAll" onclick="toggleSelectAll(this)" title="تحديد الكل"></th><th>#</th><th>اسم الطالب</th><th>الشعبة</th><th>الروبوت</th><th>اسم الروبوت</th><th>النتيجة</th><th>الحالة</th><th>التاريخ</th><th>الوقت</th><th></th></tr></thead>
+              <tbody id="tblBody"><tr class="empty"><td colspan="11">⏳ جاري التحميل...</td></tr></tbody>
             </table>
           </div>
         </div>
@@ -1107,7 +1122,7 @@ function renderTbl() {
   if($('wsR')) $('wsR').textContent = total ? Math.round(subs.length/total*100)+'%' : '—';
 
   const body = document.getElementById('tblBody');
-  if (!rows.length) { body.innerHTML='<tr class="empty"><td colspan="10">📭 لا توجد تسليمات</td></tr>'; return; }
+  if (!rows.length) { body.innerHTML='<tr class="empty"><td colspan="11">📭 لا توجد تسليمات</td></tr>'; return; }
 
   body.innerHTML = rows.map((s,i) => {
     const ts  = s.ts ? new Date(s.ts) : null;
@@ -1115,7 +1130,8 @@ function renderTbl() {
     const imgSrc  = hasDraw ? (s.drawing.startsWith('<svg') ? 'data:image/svg+xml,'+encodeURIComponent(s.drawing) : s.drawing) : null;
     const thumb   = imgSrc ? `<img class="rthumb" src="${imgSrc}"/>` : `<div class="rthumb-empty">🤖</div>`;
     const stBadge = s.status==='submitted' ? `<span class="badge bg">✅ مسلّمة</span>` : s.status==='in_progress' ? `<span class="badge ba">📝 جارية</span>` : `<span class="badge bb">🆕 جديدة</span>`;
-    return `<tr onclick="openM('${s.id}')">
+    return `<tr onclick="openM('${s.id}')" id="row-${s.id}">
+      <td onclick="event.stopPropagation()"><input type="checkbox" class="row-check" data-id="${s.id}" onchange="onRowCheck(this,'${s.id}')"></td>
       <td><b>${i+1}</b></td>
       <td><b>${s.name}</b></td>
       <td><span class="badge bp">${s.section}</span></td>
@@ -1316,6 +1332,84 @@ async function delDoc(id) {
     renderTbl(); renderOverview(); closeM();
     toast('✅ تم الحذف', 'ok');
   } catch(e) { toast('❌ '+e.message,'err'); }
+}
+
+// ═══════════════════════════════════════
+// BULK SELECT & DELETE
+// ═══════════════════════════════════════
+let selectedIds = new Set();
+
+function onRowCheck(cb, id) {
+  const row = document.getElementById('row-'+id);
+  if (cb.checked) {
+    selectedIds.add(id);
+    row?.classList.add('row-selected');
+  } else {
+    selectedIds.delete(id);
+    row?.classList.remove('row-selected');
+    const allChk = document.getElementById('checkAll');
+    if (allChk) allChk.checked = false;
+  }
+  updateBulkBar();
+}
+
+function toggleSelectAll(masterCb) {
+  const boxes = document.querySelectorAll('.row-check');
+  boxes.forEach(cb => {
+    cb.checked = masterCb.checked;
+    const id = cb.dataset.id;
+    const row = document.getElementById('row-'+id);
+    if (masterCb.checked) {
+      selectedIds.add(id);
+      row?.classList.add('row-selected');
+    } else {
+      selectedIds.delete(id);
+      row?.classList.remove('row-selected');
+    }
+  });
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('bulkBar');
+  const cnt = document.getElementById('bulkCount');
+  if (!bar) return;
+  if (selectedIds.size > 0) {
+    bar.classList.add('visible');
+    cnt.textContent = selectedIds.size + ' ورقة محددة';
+  } else {
+    bar.classList.remove('visible');
+  }
+}
+
+function clearSelection() {
+  selectedIds.clear();
+  document.querySelectorAll('.row-check').forEach(cb => cb.checked = false);
+  document.querySelectorAll('.row-selected').forEach(r => r.classList.remove('row-selected'));
+  const allChk = document.getElementById('checkAll');
+  if (allChk) allChk.checked = false;
+  updateBulkBar();
+}
+
+async function bulkDelete() {
+  const count = selectedIds.size;
+  if (!count) return;
+  if (!confirm(`هل تريدين حذف ${count} ورقة/أوراق نهائياً؟ لا يمكن التراجع عن هذا الإجراء!`)) return;
+  const ids = [...selectedIds];
+  let deleted = 0, failed = 0;
+  for (const id of ids) {
+    try {
+      await fetch(`https://firestore.googleapis.com/v1/projects/${FB}/databases/(default)/documents/${COL}/${id}?key=${FBKEY}`, {method:'DELETE'});
+      subs = subs.filter(s => s.id !== id);
+      deleted++;
+    } catch(e) { failed++; }
+  }
+  document.getElementById('wsBadge').textContent = subs.filter(s=>s.status==='submitted').length;
+  selectedIds.clear();
+  renderTbl(); renderOverview(); renderRecent();
+  updateBulkBar();
+  if (failed === 0) toast(`✅ تم حذف ${deleted} ورقة بنجاح`, 'ok');
+  else toast(`⚠️ تم حذف ${deleted}، فشل ${failed}`, 'warn');
 }
 
 // ═══════════════════════════════════════
