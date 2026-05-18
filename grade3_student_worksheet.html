@@ -2194,14 +2194,34 @@ function goToScreen3() {
 
   if (alertBanner) alertBanner.classList.remove('show');
   appState.robotName = robotName;
-  try {
-    const canvas = document.getElementById('drawCanvas');
-    if (canvas && canvas.width > 0) {
-      appState.drawingData = canvas.toDataURL('image/png');
-    }
-  } catch(e) { /* canvas not ready */ }
-  saveToFirebase({ status: 'in_progress' });
-  showScreen('s3');
+
+  // ── Capture robot image WHILE screen 2 is still visible ──
+  const captureAndProceed = () => {
+    saveToFirebase({ status: 'in_progress' });
+    showScreen('s3');
+  };
+
+  const robotEl = document.getElementById('robotBuilder');
+  const filledSlots = document.querySelectorAll('.robot-slot.slot-filled').length;
+  if (filledSlots >= 1 && robotEl && typeof html2canvas !== 'undefined') {
+    html2canvas(robotEl, {
+      backgroundColor: '#EEF2FF',
+      scale: 1.5,
+      useCORS: true,
+      logging: false,
+      ignoreElements: el => el.classList && el.classList.contains('slot-remove')
+    }).then(canvas => {
+      window._robotImageData = canvas.toDataURL('image/png');
+      captureAndProceed();
+    }).catch(() => {
+      // fallback: use SVG approach
+      window._robotImageData = (typeof buildConnectedRobotSVG === 'function') ? buildConnectedRobotSVG() : '';
+      captureAndProceed();
+    });
+  } else {
+    window._robotImageData = (typeof buildConnectedRobotSVG === 'function') ? buildConnectedRobotSVG() : '';
+    captureAndProceed();
+  }
 }
 
 // ============================================================
@@ -2366,13 +2386,12 @@ async function submitWorksheet() {
   alert.classList.remove('show');
 
   const score = calcScore();
-  // Auto-generate connected robot SVG from current slot state (most reliable)
-  // Falls back to html2canvas capture, then blank
-  const _autoSVG = (typeof buildConnectedRobotSVG === 'function') ? buildConnectedRobotSVG() : '';
-  const _dc = document.getElementById('drawCanvas');
-  const drawingData = (_autoSVG && _autoSVG.length > 200) ? _autoSVG
-    : (window._robotImageData && window._robotImageData.length > 200) ? window._robotImageData
-    : (_dc && _dc.width > 0) ? _dc.toDataURL('image/png') : '';
+  // Priority: 1) Captured PNG from goToScreen3 (most reliable)  2) SVG fallback  3) blank
+  const drawingData = (window._robotImageData && window._robotImageData.length > 500)
+    ? window._robotImageData
+    : (typeof buildConnectedRobotSVG === 'function' && buildConnectedRobotSVG().length > 500)
+      ? buildConnectedRobotSVG()
+      : '';
 
   // Build full data
   const payload = {
@@ -2525,8 +2544,13 @@ function launchConfetti(count = 60) {
 // ============================================================
 async function saveToFirebase(data, silent = false) {
   if (!appState.student) return false;
+  // Final submissions (not silent) → new document each time (POST with auto ID)
+  // Auto-saves (silent) → update existing doc with PATCH
   const docId = `${appState.section}_${appState.student.id}`;
-  const url = `${FIRESTORE_BASE}${COLLECTION}/${docId}?key=${FIREBASE_API_KEY}`;
+  const isFinal = !silent && data.status === 'submitted';
+  const url = isFinal
+    ? `${FIRESTORE_BASE}${COLLECTION}?key=${FIREBASE_API_KEY}`  // POST → new doc
+    : `${FIRESTORE_BASE}${COLLECTION}/${docId}?key=${FIREBASE_API_KEY}`; // PATCH → update
 
   const fields = {};
   for (const [k, v] of Object.entries(data)) {
@@ -2539,15 +2563,17 @@ async function saveToFirebase(data, silent = false) {
     }
   }
 
-  // Get existing fields and merge
-  try {
-    const existing = await getFirestoreDoc(docId);
-    if (existing?.fields) Object.assign(fields, existing.fields, fields);
-  } catch (e) { /* new doc */ }
+  // Merge with existing doc only for auto-saves (not final submissions)
+  if (!isFinal) {
+    try {
+      const existing = await getFirestoreDoc(docId);
+      if (existing?.fields) Object.assign(fields, existing.fields, fields);
+    } catch (e) { /* new doc */ }
+  }
 
   try {
     const resp = await fetch(url, {
-      method: 'PATCH',
+      method: isFinal ? 'POST' : 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields })
     });
