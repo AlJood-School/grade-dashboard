@@ -6832,10 +6832,6 @@ document.addEventListener('click', function(e) {
   if (modal && e.target === modal) closePwModal();
 });
 
-// ===== PORTAL DATA READY FLAG =====
-let _portalDataReady = false;
-let _portalDataPromise = null;
-
 // ===== PASSWORDS & ROLES =====
 let PASSWORDS = {};
 function buildPasswordsMap() {
@@ -7007,11 +7003,9 @@ async function loadPortalData() {
       teachers: Object.keys(TEACHER_ROSTER).length,
       scheduleClasses: Object.keys(DEFAULT_SCHEDULES).length
     });
-    _portalDataReady = true;
     return true;
   } catch(e) {
     console.warn('⚠️ fetch failed, using empty data:', e.message);
-    _portalDataReady = false;
     return false;
   }
 }
@@ -7093,8 +7087,7 @@ function restoreSession() {
 document.addEventListener('DOMContentLoaded', async function() {
   const loadingEl = document.getElementById('portalLoadingScreen');
   if (loadingEl) loadingEl.style.display = 'flex';
-  _portalDataPromise = loadPortalData();
-  await _portalDataPromise;
+  await loadPortalData();
   if (loadingEl) loadingEl.style.display = 'none';
   // ─── تطبيق وضع الجدول النشط من maintenance.json (مركزي) ──────────
   if (MAINTENANCE_DATA && MAINTENANCE_DATA.active_sched_mode) {
@@ -7166,19 +7159,6 @@ function showLoginFromMaintenance() {
 async function doLogin() {
   const pass = document.getElementById('loginPass').value.trim();
   const enteredUsername = (document.getElementById('loginUsername')?.value || '').trim();
-
-  // ── انتظر اكتمال تحميل البيانات إذا لم تكتمل بعد ──────────────────
-  if (!_portalDataReady) {
-    const loginBtn = document.getElementById('loginBtn');
-    const origText = loginBtn ? loginBtn.textContent : '';
-    if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = '⏳ جارٍ تحميل البيانات...'; }
-    try {
-      if (_portalDataPromise) await _portalDataPromise;
-      else await loadPortalData();
-    } catch(e) {}
-    if (loginBtn) { loginBtn.disabled = false; loginBtn.textContent = origText; }
-  }
-  // ──────────────────────────────────────────────────────────────────────
 
   // Hash input password once for all comparisons
   const passHash = await hashPass(pass);
