@@ -349,12 +349,13 @@ body { font-family:'Cairo',sans-serif; background:var(--bg); min-height:100vh; d
           <th>الشعبة</th>
           <th>اسم الروبوت</th>
           <th>الحالة</th>
-          <th>وقت التسليم</th>
+          <th>التاريخ</th>
+          <th>الوقت</th>
           <th>حذف</th>
         </tr>
       </thead>
       <tbody id="tableBody">
-        <tr class="loading-row"><td colspan="7">⏳ جاري التحميل...</td></tr>
+        <tr class="loading-row"><td colspan="8">⏳ جاري التحميل...</td></tr>
       </tbody>
     </table>
   </div>
@@ -493,7 +494,7 @@ function switchTab(id, btn) {
 // FIREBASE LOAD
 // ══════════════════════════════════
 async function loadWorksheets() {
-  document.getElementById('tableBody').innerHTML = '<tr class="loading-row"><td colspan="7">⏳ جاري التحميل...</td></tr>';
+  document.getElementById('tableBody').innerHTML = '<tr class="loading-row"><td colspan="8">⏳ جاري التحميل...</td></tr>';
   try {
     const url = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents/${COLLECTION}?key=${FB_KEY}&pageSize=500`;
     const res = await fetch(url);
@@ -510,7 +511,7 @@ async function loadWorksheets() {
           materials: parseMaterials(f),
           function: f.robotFunction?.stringValue || f.data?.mapValue?.fields?.robotFunction?.stringValue || '—',
           size: f.robotSize?.stringValue || f.data?.mapValue?.fields?.robotSize?.stringValue || '—',
-          drawing: f.drawing?.stringValue || f.data?.mapValue?.fields?.drawing?.stringValue || '',
+          drawing: f.drawingData?.stringValue || f.drawing?.stringValue || f.data?.mapValue?.fields?.drawingData?.stringValue || f.data?.mapValue?.fields?.drawing?.stringValue || '',
           timestamp: f.timestamp?.timestampValue || f.submittedAt?.timestampValue || '',
           phase: f.phase?.integerValue || '1',
           raw: doc
@@ -522,7 +523,7 @@ async function loadWorksheets() {
     renderTable();
     loadStudentsForStats();
   } catch(e) {
-    document.getElementById('tableBody').innerHTML = '<tr class="empty-row"><td colspan="7">❌ خطأ في التحميل: '+e.message+'</td></tr>';
+    document.getElementById('tableBody').innerHTML = '<tr class="empty-row"><td colspan="8">❌ خطأ في التحميل: '+e.message+'</td></tr>';
   }
 }
 
@@ -561,14 +562,15 @@ function renderTable() {
 
   const tbody = document.getElementById('tableBody');
   if(!rows.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">📭 لا توجد تسليمات</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="8">📭 لا توجد تسليمات</td></tr>';
     updateHeaderStats(0, today, 0);
     return;
   }
 
   tbody.innerHTML = rows.map((s,i) => {
     const ts = s.timestamp ? new Date(s.timestamp) : null;
-    const timeStr = ts ? formatTime(ts) : '—';
+    const dateStr = ts ? formatDate(ts) : '—';
+    const timeStr = ts ? formatTimeOnly(ts) : '—';
     if(ts && ts.toDateString()===today) todayCount++;
     const status = getStatus(s);
     return `<tr onclick="openModal('${s.id}')">
@@ -577,7 +579,8 @@ function renderTable() {
       <td><span style="background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:10px;font-size:0.8rem;font-weight:700">${s.section}</span></td>
       <td>${s.robotName}</td>
       <td><span class="status-badge ${status.cls}">${status.label}</span></td>
-      <td style="font-size:0.8rem;color:#64748b">${timeStr}</td>
+      <td style="font-size:0.8rem;color:#64748b">${dateStr}</td>
+      <td style="font-size:0.8rem;color:#64748b;direction:ltr;text-align:center">${timeStr}</td>
       <td><button class="del-btn" onclick="event.stopPropagation();deleteDoc('${s.id}')">🗑 حذف</button></td>
     </tr>`;
   }).join('');
@@ -588,7 +591,7 @@ function renderTable() {
 function getStatus(s) {
   const filled = [s.robotName, s.function, s.size].filter(v=>v&&v!=='—').length;
   const hasMat = s.materials.length > 0;
-  const hasDraw = s.drawing && s.drawing.length > 100;
+  const hasDraw = (s.drawing && s.drawing.length > 100) || (s.drawingData && s.drawingData.length > 100);
   if(filled>=3 && hasMat && hasDraw) return {cls:'status-done', label:'✅ مكتملة'};
   if(filled>=2 || hasMat) return {cls:'status-partial', label:'📝 جزئية'};
   return {cls:'status-new', label:'🆕 جديدة'};
@@ -599,9 +602,14 @@ function updateHeaderStats(filtered, today, todayCount) {
   document.getElementById('totalToday').textContent = todayCount;
 }
 
+function formatDate(d) {
+  return d.toLocaleDateString('ar-AE',{month:'short',day:'numeric'});
+}
+function formatTimeOnly(d) {
+  return d.toLocaleTimeString('ar-AE',{hour:'2-digit',minute:'2-digit'});
+}
 function formatTime(d) {
-  return d.toLocaleDateString('ar-AE',{month:'short',day:'numeric'}) + ' ' +
-    d.toLocaleTimeString('ar-AE',{hour:'2-digit',minute:'2-digit'});
+  return formatDate(d) + ' ' + formatTimeOnly(d);
 }
 
 function filterClass(cls, btn) {
@@ -618,7 +626,9 @@ function openModal(id) {
   const s = allSubmissions.find(x=>x.id===id);
   if(!s) return;
   document.getElementById('modalTitle').textContent = `📋 ${s.name} — ${s.section}`;
-  const ts = s.timestamp ? formatTime(new Date(s.timestamp)) : '—';
+  const tsDate = s.timestamp ? formatDate(new Date(s.timestamp)) : '—';
+  const tsTime = s.timestamp ? formatTimeOnly(new Date(s.timestamp)) : '—';
+  const ts = tsDate + ' · ' + tsTime;
   const mats = s.materials.length ? s.materials.map(m=>`<span class="chip">${m}</span>`).join('') : '<span style="color:#94a3b8">لم تُحدد</span>';
   document.getElementById('modalBody').innerHTML = `
     <div class="detail-row"><div class="detail-icon">🤖</div><div><div class="detail-label">اسم الروبوت</div><div class="detail-value">${s.robotName}</div></div></div>
