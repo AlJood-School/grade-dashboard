@@ -2991,7 +2991,9 @@ function exportCSV() {
       const revSub = document.getElementById('robotRevealSub');
       const revBtn = document.getElementById('robotRevealBtn');
       if (overlay && revImg) {
-        revImg.src = window._robotImageData;
+        // Use connected robot SVG for reveal, fallback to canvas image
+        const connectedSVG = buildConnectedRobotSVG();
+        revImg.src = (connectedSVG && connectedSVG.length > 100) ? connectedSVG : (window._robotImageData || '');
         revTitle.textContent = isAr ? '🎊 روبوتك جاهز!' : '🎊 Your Robot is Ready!';
         revSub.textContent = isAr ? 'عمل رائع! تابع لإجابة الأسئلة.' : 'Amazing build! Now continue to the questions.';
         revBtn.textContent = isAr ? '✅ تابع' : '✅ Continue';
@@ -3002,6 +3004,91 @@ function exportCSV() {
 
   updateSaveBtn();
 })();
+
+// ── Close robot reveal modal ──────────────────────────────────────────────
+function closeRobotReveal(e) {
+  // If called from overlay click, only close if user clicked the backdrop
+  if (e && e.target && !e.target.closest('.robot-reveal-card')) {
+    // backdrop click → close
+  } else if (e && e.target) {
+    return; // clicked inside card but not the button → do nothing
+  }
+  const overlay = document.getElementById('robotRevealOverlay');
+  if (overlay) overlay.classList.remove('open');
+}
+
+// ── Build connected robot SVG from placed slots ───────────────────────────
+function buildConnectedRobotSVG() {
+  const W = 280, H = 370;
+  const BG = '#EEF2FF';
+  // positions and sizes for each slot in the assembled robot
+  const layout = {
+    extra:    { x: 115, y: 2,   w: 50, h: 50 },
+    head:     { x: 100, y: 48,  w: 80, h: 72 },
+    body:     { x: 100, y: 116, w: 80, h: 88 },
+    leftarm:  { x: 36,  y: 120, w: 66, h: 80, mirror: false },
+    rightarm: { x: 178, y: 120, w: 66, h: 80, mirror: true  },
+    legs:     { x: 100, y: 198, w: 80, h: 72 },
+  };
+  const cx = 140; // center x
+
+  // Connector joints (visual lines between parts)
+  const connectors = [
+    // head → body
+    `<line x1="${cx}" y1="118" x2="${cx}" y2="122" stroke="#6366F1" stroke-width="6" stroke-linecap="round" opacity="0.4"/>`,
+    // body → left arm
+    `<line x1="102" y1="156" x2="102" y2="156" stroke="#6366F1" stroke-width="6" stroke-linecap="round" opacity="0.4"/>`,
+    // body → right arm
+    `<line x1="178" y1="156" x2="178" y2="156" stroke="#6366F1" stroke-width="6" stroke-linecap="round" opacity="0.4"/>`,
+    // body → legs
+    `<line x1="${cx}" y1="200" x2="${cx}" y2="204" stroke="#6366F1" stroke-width="6" stroke-linecap="round" opacity="0.4"/>`,
+  ];
+
+  let svgParts = '';
+  Object.entries(layout).forEach(([slot, pos]) => {
+    const sc = document.getElementById('sc-' + slot);
+    if (!sc) return;
+    const svgEl = sc.querySelector('svg');
+    if (!svgEl) return;
+
+    // Get viewBox dimensions
+    const vbAttr = svgEl.getAttribute('viewBox') || `0 0 ${pos.w} ${pos.h}`;
+    const vbParts = vbAttr.split(/\s+/).map(Number);
+    const ow = vbParts[2] || pos.w;
+    const oh = vbParts[3] || pos.h;
+
+    const sx = pos.w / ow;
+    const sy = pos.h / oh;
+
+    // Get inner SVG content
+    const inner = svgEl.innerHTML;
+
+    if (pos.mirror) {
+      svgParts += `<g transform="translate(${pos.x + pos.w},${pos.y}) scale(-${sx},${sy})">${inner}</g>\n`;
+    } else {
+      svgParts += `<g transform="translate(${pos.x},${pos.y}) scale(${sx},${sy})">${inner}</g>\n`;
+    }
+  });
+
+  const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+  <defs>
+    <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#E0E7FF"/>
+      <stop offset="100%" stop-color="#C7D2FE"/>
+    </radialGradient>
+  </defs>
+  <rect width="${W}" height="${H}" fill="url(#bgGrad)" rx="20"/>
+  ${connectors.join('\n  ')}
+  ${svgParts}
+</svg>`;
+
+  try {
+    return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
+  } catch(e) {
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
+  }
+}
 
 // ── Language toggle support for .en-text / .ar-text ──
 (function patchLangToggle() {
@@ -3023,7 +3110,7 @@ function exportCSV() {
 </div>
 
 <!-- Robot Reveal Modal -->
-<div id="robotRevealOverlay" onclick="closeRobotReveal(event)">
+<div id="robotRevealOverlay" onclick="if(event.target===this)closeRobotReveal()">
   <div class="confetti-emoji">🎉</div>
   <div class="robot-reveal-card">
     <div class="confetti-emoji">🤖✨</div>
