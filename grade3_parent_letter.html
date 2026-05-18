@@ -24,7 +24,15 @@ body { font-family:'Cairo',sans-serif; background:#e8edf5; direction:rtl; }
   background:linear-gradient(135deg,#c9a84c,#f0d080); color:#1a2744;
   border:none; padding:7px 18px; border-radius:20px;
   font-family:'Cairo',sans-serif; font-size:13px; font-weight:900; cursor:pointer;
-  margin-right:auto;
+}
+#langToggle {
+  background:linear-gradient(135deg,#c9a84c,#f0d080); color:#1a2744;
+  border:none; padding:7px 18px; border-radius:20px;
+  font-family:'Cairo',sans-serif; font-size:13px; font-weight:900; cursor:pointer;
+  margin-inline-start:auto;
+}
+.print-btn {
+  /* no margin-right:auto here — langToggle handles the push */
 }
 
 /* ── PAGE ── */
@@ -46,11 +54,11 @@ body { font-family:'Cairo',sans-serif; background:#e8edf5; direction:rtl; }
 }
 .hero-top {
   display:flex; align-items:center; justify-content:space-between;
-  direction:rtl;
   padding:14px 24px 10px;
   border-bottom:1px solid rgba(201,168,76,.2);
 }
 .school-info { text-align:right; }
+html[dir="ltr"] .school-info { text-align:left; }
 .school-name { color:#fff; font-size:16px; font-weight:900; letter-spacing:-.3px; }
 .school-sub { color:rgba(240,208,128,.7); font-size:10px; font-weight:600; margin-top:2px; }
 .moe-badge {
@@ -138,6 +146,7 @@ body { font-family:'Cairo',sans-serif; background:#e8edf5; direction:rtl; }
 }
 .j-items li:last-child { border:none; }
 .j-items li::before { content:'← '; color:#c9a84c; font-weight:900; }
+html[dir="ltr"] .j-items li::before { content:'→ '; }
 
 /* DEADLINE */
 .deadline {
@@ -237,41 +246,252 @@ body { font-family:'Cairo',sans-serif; background:#e8edf5; direction:rtl; }
 
 <!-- SCREEN BAR -->
 <div class="screen-bar">
-  <span>📄 وثيقة مشروع الصف الثالث</span>
+  <span id="bar-title">📄 وثيقة مشروع الصف الثالث</span>
   <select onchange="showSection(this.value)">
-    <option value="all">كل الشعب</option>
+    <option value="all" id="opt-all">كل الشعب</option>
     <option value="3A">الشعبة 3A</option>
     <option value="3B">الشعبة 3B</option>
     <option value="3C">الشعبة 3C</option>
     <option value="3D">الشعبة 3D</option>
     <option value="3E">الشعبة 3E</option>
   </select>
-  <button onclick="window.print()">🖨️ حفظ PDF</button>
+  <button id="langToggle" onclick="toggleLang()">🌐 English</button>
+  <button class="print-btn" onclick="window.print()">🖨️ حفظ PDF</button>
 </div>
 
 <script>
+// ── Language State ──
+let currentLang = 'ar';
+
+// ── Translations ──
+const LANG = {
+  ar: {
+    barTitle: '📄 وثيقة مشروع الصف الثالث',
+    allClasses: 'كل الشعب',
+    savePdf: '🖨️ حفظ PDF',
+    schoolName: '⭐ روضة ومدرسة الجود',
+    schoolSub: 'Al-Jood Kindergarten & School — مدينة العين، أبوظبي',
+    moeBadge: 'مادة تقنية المعلومات والذكاء الاصطناعي<br>📅 الفصل الثالث 2025–2026',
+    classBadgeSuffix: '· الصف الثالث',
+    heroLabel: '🎓 مادة تقنية المعلومات والذكاء الاصطناعي · الصف الثالث',
+    heroTitle: 'مشروع <span>STREAM</span><br>روبوتي الذكي ♻️',
+    heroDesc: 'ابنك سيبني روبوتاً ذكياً بيديه من مواد منزلية معاد تدويرها —<br>تجربة إبداعية تجمع الفن والعلوم والتكنولوجيا 🌟',
+    chipGrade: '🎓 الصف الثالث',
+    chipTerm: '📅 الفصل الثالث',
+    chipScore: '⭐ 30 درجة',
+    chipClass: '🏫 الشعبة',
+    chipMaterials: '♻️ مواد منزلية فقط',
+    greetingStrong: 'أعزائي أولياء الأمور الكرام،',
+    greetingBody: 'السلام عليكم ورحمة الله وبركاته 🌸 — نسعد بإشراككم في <strong>أجمل مشروع للعام الدراسي!</strong> سيبني ابنكم روبوتاً ذكياً من مواد منزلية بسيطة، وسيعرضه أمام زملائه بكل فخر 🏆',
+    journeyTitle: '🗺️ رحلة المشروع — خطوة بخطوة',
+    atHome: 'في المنزل',
+    homeItems: [
+      'افتح ورقة التخطيط الرقمية (QR أدناه)',
+      'فكّر في مشكلة يحلها روبوتك',
+      'ارسم تصميمك وخطط مواده',
+      'اجمع المواد المعاد تدويرها',
+      'ابنِ الروبوت بيديك!'
+    ],
+    sizeAlertLabel: 'تنبيه الحجم:',
+    sizeAlertBody: 'يجب ألا يتجاوز حجم الروبوت علبة ماء سعة <b>500 مل</b>',
+    atSchool: 'في المدرسة',
+    schoolItemPrefix: 'أحضر روبوتك يوم',
+    schoolItems: [
+      'اعرضه أمام الصف',
+      'اشرح فكرته ومشكلته',
+      'أجب على أسئلة المعلمة',
+      'احصل على تقييمك! 🌟'
+    ],
+    dlLabel: 'موعد إحضار الروبوت — الشعبة',
+    dlDatePrefix: 'يوم',
+    dlDateSuffix: '← أول حصة حوسبة في الأسبوع',
+    dlNote: 'يُرجى الالتزام بالموعد لضمان تقييم عادل لجميع الطلاب',
+    materialsTitle: '♻️ المواد المطلوبة',
+    materials: [
+      { emoji:'📦', name:'علب كرتون' },
+      { emoji:'🍾', name:'زجاجات بلاستيك' },
+      { emoji:'🥫', name:'علب معدنية' },
+      { emoji:'🧻', name:'أنابيب ورقية' },
+      { emoji:'🔘', name:'أغطية زجاجات' },
+      { emoji:'🎀', name:'خيوط وشرائط' },
+      { emoji:'📰', name:'ورق مقوى' },
+      { emoji:'✨', name:'أي شيء آخر!' }
+    ],
+    sizeMax: 'الحجم الأقصى للروبوت',
+    sizeEq: '= علبة ماء 500 مل 🚰',
+    sizeWarn: 'الروبوت الأكبر من ذلك لن يُقبل ✋',
+    assessTitle: '📊 التقييم — 30 درجة',
+    assessDesign: 'ورقة التصميم',
+    assessHome: '🏠 البيت',
+    assessUnit: 'أسئلة الوحدة',
+    assessSchool: '🏫 المدرسة',
+    assessPresent: 'العرض والشرح',
+    assessTotal: '🏆 المجموع الكلي',
+    assessTotalScore: '30 درجة',
+    qrTitle: 'ورقة التخطيط الرقمية — الشعبة',
+    qrClassLabel: 'الشعبة',
+    qrSteps: [
+      '1. افتح كاميرا الجوال وصوّب على الكود 📷',
+      '2. اختر اسم ابنك/ابنتك من القائمة ✅',
+      '3. ساعده يملأ ورقة التخطيط قبل البناء ✏️',
+      '4. تُحفظ إجاباته تلقائياً عند المعلمة فور الإرسال 🔒'
+    ],
+    tips: [
+      { icon:'🗣️', text:'اسأله: "ما المشكلة التي يحلها روبوتك؟"' },
+      { icon:'🙌', text:'دعه يبني بنفسه — ساعد فقط عند الضرورة' },
+      { icon:'📸', text:'صوّر مراحل البناء — وثّق رحلته الإبداعية!' },
+      { icon:'♻️', text:'اجمعوا المواد القديمة معاً — المتعة تبدأ من هنا' }
+    ],
+    footerLeft: 'مادة تقنية المعلومات والذكاء الاصطناعي · الصف الثالث ·',
+    footerCenter: 'روضة ومدرسة الجود 🌟'
+  },
+  en: {
+    barTitle: '📄 Grade 3 Project Document',
+    allClasses: 'All Classes',
+    savePdf: '🖨️ Save PDF',
+    schoolName: '⭐ Al-Jood Kindergarten & School',
+    schoolSub: 'Al-Jood Kindergarten & School — Al Ain City, Abu Dhabi',
+    moeBadge: 'Information Technology & AI<br>📅 Term 3, 2025–2026',
+    classBadgeSuffix: '· Grade 3',
+    heroLabel: '🎓 Information Technology & AI · Grade 3',
+    heroTitle: 'STREAM Project<br><span>My Smart Robot ♻️</span>',
+    heroDesc: 'Your child will build a smart robot with their hands from recycled home materials —<br>a creative experience combining art, science, and technology 🌟',
+    chipGrade: '🎓 Grade 3',
+    chipTerm: '📅 Term 3',
+    chipScore: '⭐ 30 Points',
+    chipClass: '🏫 Class',
+    chipMaterials: '♻️ Home materials only',
+    greetingStrong: 'Dear Parents & Guardians,',
+    greetingBody: '🌸 — We are delighted to involve you in the <strong>most exciting project of the school year!</strong> Your child will build a smart robot from simple household materials and present it to their classmates with pride 🏆',
+    journeyTitle: '🗺️ Project Journey — Step by Step',
+    atHome: 'At Home',
+    homeItems: [
+      'Open the digital planning sheet (QR below)',
+      'Think of a problem your robot can solve',
+      'Draw your design and plan materials',
+      'Collect recycled materials',
+      'Build the robot with your hands!'
+    ],
+    sizeAlertLabel: 'Size Alert:',
+    sizeAlertBody: 'Robot must not exceed the size of a <b>500ml water bottle</b>',
+    atSchool: 'At School',
+    schoolItemPrefix: 'Bring your robot on',
+    schoolItems: [
+      'Present it to the class',
+      'Explain its idea and the problem it solves',
+      'Answer the teacher\'s questions',
+      'Get your grade! 🌟'
+    ],
+    dlLabel: 'Robot Submission — Class',
+    dlDatePrefix: 'Day:',
+    dlDateSuffix: '→ First Computing class of the week',
+    dlNote: 'Please submit on time to ensure fair assessment for all students',
+    materialsTitle: '♻️ Required Materials',
+    materials: [
+      { emoji:'📦', name:'Cardboard boxes' },
+      { emoji:'🍾', name:'Plastic bottles' },
+      { emoji:'🥫', name:'Metal cans' },
+      { emoji:'🧻', name:'Paper tubes' },
+      { emoji:'🔘', name:'Bottle caps' },
+      { emoji:'🎀', name:'Strings & ribbons' },
+      { emoji:'📰', name:'Cardboard paper' },
+      { emoji:'✨', name:'Anything else!' }
+    ],
+    sizeMax: 'Maximum robot size',
+    sizeEq: '= 500ml water bottle 🚰',
+    sizeWarn: 'Robots larger than this will NOT be accepted ✋',
+    assessTitle: '📊 Assessment — 30 Points',
+    assessDesign: 'Design Sheet',
+    assessHome: '🏠 At Home',
+    assessUnit: 'Unit Questions',
+    assessSchool: '🏫 At School',
+    assessPresent: 'Presentation',
+    assessTotal: '🏆 Total Score',
+    assessTotalScore: '30 Points',
+    qrTitle: 'Digital Planning Sheet — Class',
+    qrClassLabel: 'Class',
+    qrSteps: [
+      '1. Open your phone camera and scan the code 📷',
+      '2. Select your child\'s name from the list ✅',
+      '3. Help them fill the planning sheet before building ✏️',
+      '4. Answers are automatically saved to the teacher upon submission 🔒'
+    ],
+    tips: [
+      { icon:'🗣️', text:'Ask them: "What problem does your robot solve?"' },
+      { icon:'🙌', text:'Let them build independently — help only when needed' },
+      { icon:'📸', text:'Photograph the building stages — document their creative journey!' },
+      { icon:'♻️', text:'Collect old materials together — the fun starts here' }
+    ],
+    footerLeft: 'Information Technology & AI · Grade 3 ·',
+    footerCenter: 'Al-Jood School 🌟'
+  }
+};
+
+// ── Sections data ──
+const SECTIONS = [
+  { id:'3A', day_ar:'الثلاثاء',  day_en:'Tuesday',   color:'#3b82f6', light:'#eff6ff', border:'#bfdbfe', mat:'#dbeafe' },
+  { id:'3B', day_ar:'الثلاثاء',  day_en:'Tuesday',   color:'#8b5cf6', light:'#f5f3ff', border:'#ddd6fe', mat:'#ede9fe' },
+  { id:'3C', day_ar:'الثلاثاء',  day_en:'Tuesday',   color:'#0d9488', light:'#f0fdfa', border:'#99f6e4', mat:'#ccfbf1' },
+  { id:'3D', day_ar:'الأربعاء',  day_en:'Wednesday', color:'#ea580c', light:'#fff7ed', border:'#fed7aa', mat:'#ffedd5' },
+  { id:'3E', day_ar:'الخميس',    day_en:'Thursday',  color:'#dc2626', light:'#fef2f2', border:'#fecaca', mat:'#fee2e2' },
+];
+
+// ── Helpers ──
 function showSection(v) {
   document.querySelectorAll('.page').forEach(p => {
     p.style.display = (v==='all' || p.dataset.sec===v) ? 'flex' : 'none';
   });
 }
 
-const SECTIONS = [
-  { id:'3A', day:'الثلاثاء',  color:'#3b82f6', light:'#eff6ff', border:'#bfdbfe', mat:'#dbeafe' },
-  { id:'3B', day:'الثلاثاء',  color:'#8b5cf6', light:'#f5f3ff', border:'#ddd6fe', mat:'#ede9fe' },
-  { id:'3C', day:'الثلاثاء',  color:'#0d9488', light:'#f0fdfa', border:'#99f6e4', mat:'#ccfbf1' },
-  { id:'3D', day:'الأربعاء',  color:'#ea580c', light:'#fff7ed', border:'#fed7aa', mat:'#ffedd5' },
-  { id:'3E', day:'الخميس',    color:'#dc2626', light:'#fef2f2', border:'#fecaca', mat:'#fee2e2' },
-];
+function toggleLang() {
+  currentLang = currentLang === 'ar' ? 'en' : 'ar';
+  document.documentElement.lang = currentLang;
+  document.documentElement.dir = currentLang === 'ar' ? 'rtl' : 'ltr';
+  document.body.style.direction  = currentLang === 'ar' ? 'rtl' : 'ltr';
 
-SECTIONS.forEach(s => {
-  const el = document.createElement('div');
-  el.innerHTML = buildPage(s);
-  document.body.appendChild(el.firstElementChild);
-});
+  // Update screen bar static text
+  const T = LANG[currentLang];
+  document.getElementById('bar-title').textContent = T.barTitle;
+  document.getElementById('opt-all').textContent   = T.allClasses;
+  document.querySelector('.print-btn').textContent  = T.savePdf;
+  document.getElementById('langToggle').textContent = currentLang === 'ar' ? '🌐 English' : '🌐 عربي';
 
+  // Remove existing pages and re-render
+  document.querySelectorAll('.page').forEach(p => p.remove());
+  SECTIONS.forEach(s => {
+    const el = document.createElement('div');
+    el.innerHTML = buildPage(s);
+    document.body.appendChild(el.firstElementChild);
+  });
+
+  // Restore section filter
+  const sel = document.querySelector('.screen-bar select');
+  if (sel) showSection(sel.value);
+}
+
+// ── Page Builder ──
 function buildPage(s) {
+  const T   = LANG[currentLang];
+  const day = currentLang === 'ar' ? s.day_ar : s.day_en;
   const qrUrl = `https://aljood-school.web.app/worksheet?sec=${s.id}`;
+
+  const homeItemsHtml   = T.homeItems.map(i => `<li>${i}</li>`).join('');
+  const schoolItemsHtml = T.schoolItems.map(i => `<li>${i}</li>`).join('');
+  const matsHtml = T.materials.map(m => `
+    <div class="mat" style="background:${s.mat}; border-color:${s.border}; color:#1a2744;">
+      <span class="mat-emoji">${m.emoji}</span><div class="mat-name">${m.name}</div>
+    </div>`).join('');
+  const tipsHtml = T.tips.map(t => `
+    <div class="tip"><span class="tip-icon">${t.icon}</span>${t.text}</div>`).join('');
+  const qrStepsHtml = T.qrSteps.map((step, i) => {
+    // Wrap step number in bold
+    const match = step.match(/^(\d+\.) (.+)$/);
+    return match ? `<b>${match[1]}</b> ${match[2]}<br>` : step + '<br>';
+  }).join('');
+
+  // Arrow direction
+  const arrow = currentLang === 'ar' ? '❯' : '❮';
+
   return `
 <div class="page" data-sec="${s.id}" style="display:flex;flex-direction:column;">
 
@@ -279,34 +499,34 @@ function buildPage(s) {
   <div class="hero">
     <div class="hero-top">
       <div class="school-info">
-        <div class="school-name">⭐ روضة ومدرسة الجود</div>
-        <div class="school-sub">Al-Jood Kindergarten & School — مدينة العين، أبوظبي</div>
+        <div class="school-name">${T.schoolName}</div>
+        <div class="school-sub">${T.schoolSub}</div>
       </div>
       <div class="moe-badge">
-        <div class="moe-text">مادة تقنية المعلومات والذكاء الاصطناعي<br>📅 الفصل الثالث 2025–2026</div>
+        <div class="moe-text">${T.moeBadge}</div>
       </div>
       <div class="class-badge" style="background:${s.color};color:#fff;border-radius:12px;padding:8px 18px;font-size:1.2rem;font-weight:900;direction:ltr;">
-        ${s.id} · الصف الثالث
+        ${s.id} ${T.classBadgeSuffix}
       </div>
     </div>
 
     <div class="hero-main">
       <div class="hero-robot">🤖</div>
       <div class="hero-text">
-        <div class="hero-label">🎓 مادة تقنية المعلومات والذكاء الاصطناعي · الصف الثالث</div>
-        <div class="hero-title">مشروع <span>STREAM</span><br>روبوتي الذكي ♻️</div>
-        <div class="hero-desc">ابنك سيبني روبوتاً ذكياً بيديه من مواد منزلية معاد تدويرها —<br>تجربة إبداعية تجمع الفن والعلوم والتكنولوجيا 🌟</div>
+        <div class="hero-label">${T.heroLabel}</div>
+        <div class="hero-title">${T.heroTitle}</div>
+        <div class="hero-desc">${T.heroDesc}</div>
       </div>
     </div>
 
     <div class="hero-chips">
-      <div class="chip">🎓 الصف الثالث</div>
-      <div class="chip">📅 الفصل الثالث</div>
-      <div class="chip gold">⭐ 30 درجة</div>
+      <div class="chip">${T.chipGrade}</div>
+      <div class="chip">${T.chipTerm}</div>
+      <div class="chip gold">${T.chipScore}</div>
       <div class="chip section" style="border-color:${s.color}; color:${s.color}; background:${s.light};">
-        🏫 الشعبة ${s.id}
+        ${T.chipClass} ${s.id}
       </div>
-      <div class="chip">♻️ مواد منزلية فقط</div>
+      <div class="chip">${T.chipMaterials}</div>
     </div>
   </div>
 
@@ -317,44 +537,33 @@ function buildPage(s) {
     <div class="greeting">
       <span class="greeting-icon">💌</span>
       <div class="greeting-text">
-        <strong>أعزائي أولياء الأمور الكرام،</strong><br>
-        السلام عليكم ورحمة الله وبركاته 🌸 — نسعد بإشراككم في
-        <strong>أجمل مشروع للعام الدراسي!</strong>
-        سيبني ابنكم روبوتاً ذكياً من مواد منزلية بسيطة، وسيعرضه أمام زملائه بكل فخر 🏆
+        <strong>${T.greetingStrong}</strong><br>
+        ${T.greetingBody}
       </div>
     </div>
 
     <!-- JOURNEY -->
     <div>
       <div class="sec-head" style="border-color:${s.color};">
-        <span style="font-size:20px;">🗺️</span> رحلة المشروع — خطوة بخطوة
+        <span style="font-size:20px;">🗺️</span> ${T.journeyTitle.replace('🗺️ ','')}
       </div>
       <div class="journey">
         <div class="j-step home">
           <div class="j-icon">🏠</div>
-          <div class="j-title">في المنزل</div>
-          <ul class="j-items">
-            <li>افتح ورقة التخطيط الرقمية (QR أدناه)</li>
-            <li>فكّر في مشكلة يحلها روبوتك</li>
-            <li>ارسم تصميمك وخطط مواده</li>
-            <li>اجمع المواد المعاد تدويرها</li>
-            <li>ابنِ الروبوت بيديك!</li>
-          </ul>
+          <div class="j-title">${T.atHome}</div>
+          <ul class="j-items">${homeItemsHtml}</ul>
           <div style="margin-top:8px; padding:7px 10px; background:#fff3cd; border:1.5px solid #f0c040; border-radius:8px; font-size:11px; color:#7a5800; display:flex; align-items:center; gap:6px;">
             <span style="font-size:16px;">📏</span>
-            <span><b>تنبيه الحجم:</b> يجب ألا يتجاوز حجم الروبوت علبة ماء سعة <b>500 مل</b></span>
+            <span><b>${T.sizeAlertLabel}</b> ${T.sizeAlertBody}</span>
           </div>
         </div>
-        <div class="journey-arrow">❯</div>
+        <div class="journey-arrow">${arrow}</div>
         <div class="j-step school">
           <div class="j-icon">🏫</div>
-          <div class="j-title">في المدرسة</div>
+          <div class="j-title">${T.atSchool}</div>
           <ul class="j-items">
-            <li>أحضر روبوتك يوم ${s.day}</li>
-            <li>اعرضه أمام الصف</li>
-            <li>اشرح فكرته ومشكلته</li>
-            <li>أجب على أسئلة المعلمة</li>
-            <li>احصل على تقييمك! 🌟</li>
+            <li>${T.schoolItemPrefix} ${day}</li>
+            ${schoolItemsHtml}
           </ul>
         </div>
       </div>
@@ -364,9 +573,9 @@ function buildPage(s) {
     <div class="deadline" style="background:linear-gradient(135deg,${s.color}15,${s.color}25); border:2px solid ${s.color}40;">
       <span class="dl-icon">📅</span>
       <div>
-        <div class="dl-label" style="color:${s.color};">⏰ موعد إحضار الروبوت — الشعبة ${s.id}</div>
-        <div class="dl-date" style="color:#1a2744;">يوم ${s.day} ← أول حصة حوسبة في الأسبوع</div>
-        <div class="dl-note" style="color:#555;">يُرجى الالتزام بالموعد لضمان تقييم عادل لجميع الطلاب</div>
+        <div class="dl-label" style="color:${s.color};">⏰ ${T.dlLabel} ${s.id}</div>
+        <div class="dl-date" style="color:#1a2744;">${T.dlDatePrefix} ${day} ${T.dlDateSuffix}</div>
+        <div class="dl-note" style="color:#555;">${T.dlNote}</div>
       </div>
     </div>
 
@@ -376,41 +585,16 @@ function buildPage(s) {
       <!-- MATERIALS -->
       <div>
         <div class="sec-head" style="border-color:${s.color};">
-          <span style="font-size:20px;">♻️</span> المواد المطلوبة
+          <span style="font-size:20px;">♻️</span> ${T.materialsTitle.replace('♻️ ','')}
         </div>
-        <div class="mats-grid">
-          <div class="mat" style="background:${s.mat}; border-color:${s.border}; color:#1a2744;">
-            <span class="mat-emoji">📦</span><div class="mat-name">علب كرتون</div>
-          </div>
-          <div class="mat" style="background:${s.mat}; border-color:${s.border}; color:#1a2744;">
-            <span class="mat-emoji">🍾</span><div class="mat-name">زجاجات بلاستيك</div>
-          </div>
-          <div class="mat" style="background:${s.mat}; border-color:${s.border}; color:#1a2744;">
-            <span class="mat-emoji">🥫</span><div class="mat-name">علب معدنية</div>
-          </div>
-          <div class="mat" style="background:${s.mat}; border-color:${s.border}; color:#1a2744;">
-            <span class="mat-emoji">🧻</span><div class="mat-name">أنابيب ورقية</div>
-          </div>
-          <div class="mat" style="background:${s.mat}; border-color:${s.border}; color:#1a2744;">
-            <span class="mat-emoji">🔘</span><div class="mat-name">أغطية زجاجات</div>
-          </div>
-          <div class="mat" style="background:${s.mat}; border-color:${s.border}; color:#1a2744;">
-            <span class="mat-emoji">🎀</span><div class="mat-name">خيوط وشرائط</div>
-          </div>
-          <div class="mat" style="background:${s.mat}; border-color:${s.border}; color:#1a2744;">
-            <span class="mat-emoji">📰</span><div class="mat-name">ورق مقوى</div>
-          </div>
-          <div class="mat" style="background:${s.mat}; border-color:${s.border}; color:#1a2744;">
-            <span class="mat-emoji">✨</span><div class="mat-name">أي شيء آخر!</div>
-          </div>
-        </div>
+        <div class="mats-grid">${matsHtml}</div>
         <!-- SIZE WARNING -->
         <div style="margin-top:10px; background:#FFF3CD; border:2px solid #F59E0B; border-radius:12px; padding:10px 12px; display:flex; align-items:center; gap:8px;">
           <span style="font-size:22px; flex-shrink:0;">📏</span>
           <div style="font-size:11px; font-weight:800; color:#92400E; line-height:1.7;">
-            الحجم الأقصى للروبوت<br>
-            <span style="font-size:13px; color:#D97706;">= علبة ماء 500 مل 🚰</span><br>
-            <span style="font-weight:600; color:#78350F;">الروبوت الأكبر من ذلك لن يُقبل ✋</span>
+            ${T.sizeMax}<br>
+            <span style="font-size:13px; color:#D97706;">${T.sizeEq}</span><br>
+            <span style="font-weight:600; color:#78350F;">${T.sizeWarn}</span>
           </div>
         </div>
       </div>
@@ -418,31 +602,31 @@ function buildPage(s) {
       <!-- ASSESSMENT -->
       <div>
         <div class="sec-head" style="border-color:${s.color};">
-          <span style="font-size:20px;">📊</span> التقييم — 30 درجة
+          <span style="font-size:20px;">📊</span> ${T.assessTitle.replace('📊 ','')}
         </div>
         <div class="assess-cards">
           <div class="assess-card" style="background:${s.light}; border:1.5px solid ${s.border};">
             <span class="assess-icon">✏️</span>
-            <div class="assess-title">ورقة التصميم</div>
-            <span class="assess-where" style="background:${s.mat}; color:${s.color};">🏠 البيت</span>
+            <div class="assess-title">${T.assessDesign}</div>
+            <span class="assess-where" style="background:${s.mat}; color:${s.color};">${T.assessHome}</span>
             <div class="assess-score">10</div>
           </div>
           <div class="assess-card" style="background:#f0f9ff; border:1.5px solid #bae6fd;">
             <span class="assess-icon">❓</span>
-            <div class="assess-title">أسئلة الوحدة</div>
-            <span class="assess-where" style="background:#e0f2fe; color:#0369a1;">🏫 المدرسة</span>
+            <div class="assess-title">${T.assessUnit}</div>
+            <span class="assess-where" style="background:#e0f2fe; color:#0369a1;">${T.assessSchool}</span>
             <div class="assess-score">10</div>
           </div>
           <div class="assess-card" style="background:#f0fdf4; border:1.5px solid #bbf7d0;">
             <span class="assess-icon">🎤</span>
-            <div class="assess-title">العرض والشرح</div>
-            <span class="assess-where" style="background:#dcfce7; color:#15803d;">🏫 المدرسة</span>
+            <div class="assess-title">${T.assessPresent}</div>
+            <span class="assess-where" style="background:#dcfce7; color:#15803d;">${T.assessSchool}</span>
             <div class="assess-score">10</div>
           </div>
         </div>
         <div class="assess-total">
-          <span class="assess-total-label">🏆 المجموع الكلي</span>
-          <span class="assess-total-score">30 درجة</span>
+          <span class="assess-total-label">${T.assessTotal}</span>
+          <span class="assess-total-score">${T.assessTotalScore}</span>
         </div>
       </div>
     </div>
@@ -451,33 +635,23 @@ function buildPage(s) {
     <div class="qr-section" style="background:linear-gradient(135deg,#f8faff,#eef2ff); border-color:#c0d0f0;">
       <div class="qr-box" style="border-color:${s.color};padding:6px;">
         <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(qrUrl)}&bgcolor=ffffff&qzone=2" alt="QR ${s.id}" style="width:130px;height:130px;border-radius:8px;display:block;">
-        <small style="color:${s.color};margin-top:4px;display:block;">الشعبة ${s.id}</small>
+        <small style="color:${s.color};margin-top:4px;display:block;">${T.qrClassLabel} ${s.id}</small>
       </div>
       <div style="flex:1;">
-        <div class="qr-info-title" style="color:${s.color};">📱 ورقة التخطيط الرقمية — الشعبة ${s.id}</div>
-        <div class="qr-steps" style="color:#333;">
-          <b>1.</b> افتح كاميرا الجوال وصوّب على الكود 📷<br>
-          <b>2.</b> اختر اسم ابنك/ابنتك من القائمة ✅<br>
-          <b>3.</b> ساعده يملأ ورقة التخطيط قبل البناء ✏️<br>
-          <b>4.</b> تُحفظ إجاباته تلقائياً عند المعلمة فور الإرسال 🔒
-        </div>
+        <div class="qr-info-title" style="color:${s.color};">📱 ${T.qrTitle} ${s.id}</div>
+        <div class="qr-steps" style="color:#333;">${qrStepsHtml}</div>
       </div>
     </div>
 
     <!-- TIPS -->
-    <div class="tips">
-      <div class="tip"><span class="tip-icon">🗣️</span>اسأله: "ما المشكلة التي يحلها روبوتك؟"</div>
-      <div class="tip"><span class="tip-icon">🙌</span>دعه يبني بنفسه — ساعد فقط عند الضرورة</div>
-      <div class="tip"><span class="tip-icon">📸</span>صوّر مراحل البناء — وثّق رحلته الإبداعية!</div>
-      <div class="tip"><span class="tip-icon">♻️</span>اجمعوا المواد القديمة معاً — المتعة تبدأ من هنا</div>
-    </div>
+    <div class="tips">${tipsHtml}</div>
 
   </div>
 
   <!-- FOOTER -->
   <div class="footer">
-    <div class="footer-r">مادة تقنية المعلومات والذكاء الاصطناعي · الصف الثالث · ${s.id}</div>
-    <div class="footer-c" style="color:${s.color};">روضة ومدرسة الجود 🌟</div>
+    <div class="footer-r">${T.footerLeft} ${s.id}</div>
+    <div class="footer-c" style="color:${s.color};">${T.footerCenter}</div>
     <div class="footer-l">
       <div class="footer-dot" style="background:${s.color};"></div>
       <div class="footer-dot" style="background:${s.color}; opacity:.6;"></div>
@@ -487,6 +661,13 @@ function buildPage(s) {
 
 </div>`;
 }
+
+// ── Initial Render ──
+SECTIONS.forEach(s => {
+  const el = document.createElement('div');
+  el.innerHTML = buildPage(s);
+  document.body.appendChild(el.firstElementChild);
+});
 </script>
 
 </body>
