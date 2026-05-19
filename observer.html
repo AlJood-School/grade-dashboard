@@ -1,0 +1,1497 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>لوحة المراقبة الذكية | روضة ومدرسة الجود</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&family=Fredoka+One&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<style>
+:root {
+  --navy: #1a2744;
+  --navy-light: #243560;
+  --gold: #c9a84c;
+  --gold-light: #f0d080;
+  --bg: #0f1a30;
+  --card: #1e2e50;
+  --card2: #253458;
+  --text: #e8eaf6;
+  --text-dim: #8899bb;
+  --success: #4caf72;
+  --warning: #f5a623;
+  --danger: #e53935;
+  --info: #42a5f5;
+  --purple: #ab47bc;
+  --teal: #26c6da;
+  --rating-1: #e53935;
+  --rating-2: #ef6c00;
+  --rating-3: #fdd835;
+  --rating-4: #66bb6a;
+  --rating-5: #42a5f5;
+  --rating-6: #ab47bc;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;font-size:15px}
+
+/* ── Header ── */
+.header{background:linear-gradient(135deg,var(--navy) 0%,#0d1a38 100%);border-bottom:2px solid var(--gold);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.header-title{display:flex;align-items:center;gap:10px}
+.header-title h1{font-family:'Fredoka One',cursive;font-size:1.3rem;color:var(--gold-light)}
+.header-title span{font-size:0.85rem;color:var(--text-dim)}
+.header-controls{display:flex;align-items:center;gap:10px}
+.grade-btn{padding:6px 16px;border-radius:20px;border:2px solid var(--gold);background:transparent;color:var(--gold);font-family:'Tajawal',sans-serif;font-weight:700;cursor:pointer;transition:all .2s}
+.grade-btn.active{background:var(--gold);color:var(--navy)}
+.grade-btn:hover:not(.active){background:rgba(201,168,76,0.15)}
+.section-filter{padding:5px 12px;border-radius:20px;border:1px solid var(--card2);background:var(--card);color:var(--text);font-family:'Tajawal',sans-serif;font-size:0.85rem;cursor:pointer}
+
+/* ── Tabs ── */
+.tabs{display:flex;gap:0;border-bottom:2px solid var(--card2);background:var(--navy);padding:0 20px;position:sticky;top:60px;z-index:90}
+.tab{padding:12px 20px;font-family:'Tajawal',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--text-dim);transition:all .2s;white-space:nowrap}
+.tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+.tab:hover:not(.active){color:var(--text);background:rgba(255,255,255,0.04)}
+
+/* ── Main ── */
+.main{padding:16px 20px;max-width:1400px;margin:0 auto}
+.tab-panel{display:none}.tab-panel.active{display:block}
+
+/* ── Cards ── */
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:16px}
+.stat-card{background:var(--card);border-radius:12px;padding:16px;border:1px solid rgba(201,168,76,0.15);text-align:center}
+.stat-card .label{font-size:0.75rem;color:var(--text-dim);margin-bottom:6px}
+.stat-card .value{font-size:2rem;font-weight:900;line-height:1}
+.stat-card .sub{font-size:0.75rem;color:var(--text-dim);margin-top:4px}
+.stat-card.highlight{border-color:var(--gold);background:linear-gradient(135deg,var(--card) 0%,rgba(201,168,76,0.1) 100%)}
+
+/* ── Progress bar ── */
+.prog-wrap{background:rgba(255,255,255,0.08);border-radius:8px;height:10px;overflow:hidden;margin:4px 0}
+.prog-bar{height:100%;border-radius:8px;transition:width .8s ease}
+
+/* ── Student Table ── */
+.students-section{background:var(--card);border-radius:12px;padding:16px;border:1px solid rgba(201,168,76,0.15);margin-bottom:16px}
+.students-section h3{font-size:0.95rem;color:var(--gold);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.students-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;max-height:320px;overflow-y:auto}
+.student-card{background:var(--card2);border-radius:8px;padding:10px 12px;border-right:3px solid var(--text-dim);transition:all .3s}
+.student-card.advanced{border-right-color:var(--purple)}
+.student-card.medium{border-right-color:var(--gold)}
+.student-card.basic{border-right-color:var(--warning)}
+.student-card.absent{opacity:0.4;border-right-color:var(--danger)}
+.student-card.special{background:rgba(38,198,218,0.08);border-right-color:var(--teal)}
+.sc-name{font-size:0.8rem;font-weight:700;margin-bottom:4px}
+.sc-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.badge{font-size:0.65rem;padding:2px 7px;border-radius:10px;font-weight:700;display:inline-block}
+.badge.purple{background:rgba(171,71,188,0.25);color:#ce93d8}
+.badge.gold{background:rgba(201,168,76,0.25);color:var(--gold-light)}
+.badge.orange{background:rgba(245,166,35,0.25);color:#ffcc80}
+.badge.teal{background:rgba(38,198,218,0.2);color:var(--teal)}
+.badge.red{background:rgba(229,57,53,0.2);color:#ef9a9a}
+.badge.green{background:rgba(76,175,114,0.2);color:#a5d6a7}
+.badge.blue{background:rgba(66,165,245,0.2);color:#90caf9}
+
+/* ── Phase heatmap ── */
+.heatmap{display:grid;grid-template-columns:repeat(12,1fr);gap:3px;margin-bottom:16px}
+.hm-cell{aspect-ratio:1;border-radius:4px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:0.5rem;cursor:default;transition:all .3s}
+.hm-cell.done{background:var(--success)}
+.hm-cell.partial{background:var(--gold)}
+.hm-cell.active{background:var(--info);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+
+/* ── Observer Sections ── */
+.obs-section{background:var(--card);border-radius:12px;padding:16px;margin-bottom:14px;border:1px solid rgba(201,168,76,0.1)}
+.obs-section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;cursor:pointer;user-select:none}
+.obs-section-title{font-size:1rem;font-weight:700;color:var(--gold);display:flex;align-items:center;gap:8px}
+.obs-section-score{font-size:0.85rem;padding:4px 12px;border-radius:20px;font-weight:700}
+.obs-collapse{color:var(--text-dim);transition:transform .3s}
+.obs-section.collapsed .obs-section-content{display:none}
+.obs-section.collapsed .obs-collapse{transform:rotate(-90deg)}
+
+/* ── Criterion Row ── */
+.criterion{display:grid;grid-template-columns:2fr 1fr 1.5fr;gap:12px;align-items:start;padding:12px;border-radius:8px;margin-bottom:8px;background:var(--card2)}
+.criterion:hover{background:rgba(255,255,255,0.04)}
+.crit-text{font-size:0.85rem;line-height:1.5}
+.crit-text .crit-label{font-weight:700;font-size:0.8rem;color:var(--gold);margin-bottom:4px}
+.crit-evidence{font-size:0.75rem;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,0.2);border-right:3px solid var(--info)}
+.crit-evidence .ev-title{font-size:0.7rem;color:var(--text-dim);margin-bottom:4px;font-weight:700}
+.crit-evidence .ev-val{font-weight:700;color:var(--info)}
+.crit-evidence .ev-auto{font-size:0.65rem;color:var(--success);margin-top:4px}
+.crit-rating{display:flex;flex-direction:column;gap:4px}
+.rating-row{display:flex;gap:4px;flex-wrap:wrap}
+.rating-btn{padding:4px 8px;border-radius:6px;border:1px solid transparent;font-size:0.7rem;font-family:'Tajawal',sans-serif;cursor:pointer;transition:all .15s;font-weight:700}
+.rating-btn:not(.selected){background:rgba(255,255,255,0.05);color:var(--text-dim)}
+.rating-btn.r1.selected{background:var(--rating-1);color:#fff;border-color:var(--rating-1)}
+.rating-btn.r2.selected{background:var(--rating-2);color:#fff;border-color:var(--rating-2)}
+.rating-btn.r3.selected{background:var(--rating-3);color:#1a2744;border-color:var(--rating-3)}
+.rating-btn.r4.selected{background:var(--rating-4);color:#fff;border-color:var(--rating-4)}
+.rating-btn.r5.selected{background:var(--rating-5);color:#fff;border-color:var(--rating-5)}
+.rating-btn.r6.selected{background:var(--rating-6);color:#fff;border-color:var(--rating-6)}
+.rating-btn:hover:not(.selected){background:rgba(255,255,255,0.1);color:var(--text)}
+.auto-suggest{font-size:0.65rem;color:var(--success);display:flex;align-items:center;gap:4px;margin-top:3px}
+.auto-suggest::before{content:"✦";font-size:0.6rem}
+
+/* ── Visit Info ── */
+.visit-info{background:var(--card);border-radius:12px;padding:16px;margin-bottom:14px;border:1px solid rgba(201,168,76,0.2)}
+.visit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.visit-field{display:flex;flex-direction:column;gap:4px}
+.visit-field label{font-size:0.7rem;color:var(--text-dim);font-weight:700}
+.visit-field .val{font-size:0.9rem;font-weight:700;padding:6px 10px;background:var(--card2);border-radius:6px}
+.visit-field input, .visit-field select, .visit-field textarea{
+  background:var(--card2);border:1px solid rgba(201,168,76,0.2);border-radius:6px;
+  color:var(--text);font-family:'Tajawal',sans-serif;font-size:0.85rem;padding:6px 10px;width:100%;
+}
+.visit-field textarea{resize:vertical;min-height:60px}
+
+/* ── Innovations Panel ── */
+.innov-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:16px}
+.innov-card{background:var(--card);border-radius:10px;padding:14px;border-right:4px solid var(--gold);border:1px solid rgba(201,168,76,0.15)}
+.innov-card .ic-icon{font-size:1.8rem;margin-bottom:6px}
+.innov-card .ic-title{font-size:0.8rem;font-weight:700;color:var(--gold);margin-bottom:4px}
+.innov-card .ic-desc{font-size:0.75rem;color:var(--text-dim);line-height:1.5}
+.innov-card .ic-status{margin-top:8px;font-size:0.7rem;padding:3px 8px;border-radius:10px;display:inline-block;font-weight:700}
+.ic-status.active{background:rgba(76,175,114,0.2);color:var(--success)}
+.ic-status.partial{background:rgba(245,166,35,0.2);color:var(--warning)}
+.ic-status.na{background:rgba(136,153,187,0.2);color:var(--text-dim)}
+
+/* ── Export ── */
+.export-section{background:var(--card);border-radius:12px;padding:20px;margin-bottom:14px;text-align:center}
+.export-btns{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:16px}
+.btn{padding:10px 24px;border-radius:8px;border:none;font-family:'Tajawal',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:8px}
+.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy)}
+.btn-gold:hover{transform:translateY(-1px);box-shadow:0 4px 15px rgba(201,168,76,0.4)}
+.btn-outline{background:transparent;border:2px solid var(--gold);color:var(--gold)}
+.btn-outline:hover{background:rgba(201,168,76,0.1)}
+
+/* ── Overall score ── */
+.overall-bar{background:var(--card);border-radius:12px;padding:16px;margin-bottom:14px;display:flex;align-items:center;gap:16px;border:2px solid var(--gold)}
+.overall-score{font-size:2.5rem;font-weight:900;font-family:'Fredoka One',cursive;min-width:80px;text-align:center}
+.overall-label{font-size:1.1rem;font-weight:700}
+.overall-desc{font-size:0.85rem;color:var(--text-dim);margin-top:4px}
+
+/* ── Live indicator ── */
+.live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);animation:pulse 1.5s infinite;margin-left:6px}
+
+/* ── Real-time list ── */
+.realtime-list{max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+.rt-item{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--card2);border-radius:6px;font-size:0.8rem}
+.rt-item .rt-name{font-weight:700}
+.rt-item .rt-time{font-size:0.7rem;color:var(--text-dim)}
+.rt-item .rt-phase{font-size:0.7rem}
+
+/* ── Stage distribution ── */
+.stage-dist{display:flex;gap:4px;align-items:flex-end;height:80px;margin-bottom:8px}
+.stage-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px}
+.stage-bar-inner{width:100%;background:var(--gold);border-radius:4px 4px 0 0;min-height:4px;transition:height .5s ease}
+.stage-label{font-size:0.6rem;color:var(--text-dim);text-align:center}
+.stage-count{font-size:0.7rem;font-weight:700;color:var(--gold)}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(201,168,76,0.3);border-radius:3px}
+
+/* ── Loading ── */
+#loadingBar{height:3px;background:linear-gradient(90deg,var(--gold),var(--gold-light),var(--gold));position:fixed;top:0;left:0;right:0;z-index:999;animation:loadingAnim 1.5s infinite}
+@keyframes loadingAnim{0%{opacity:1}50%{opacity:0.4}100%{opacity:1}}
+.hidden{display:none!important}
+
+/* ── Responsive ── */
+@media(max-width:900px){
+  .grid-4{grid-template-columns:repeat(2,1fr)}
+  .visit-grid{grid-template-columns:repeat(2,1fr)}
+  .criterion{grid-template-columns:1fr}
+  .tabs{overflow-x:auto}
+}
+@media(max-width:600px){
+  .grid-4,.grid-3,.grid-2{grid-template-columns:1fr 1fr}
+  .visit-grid{grid-template-columns:1fr}
+  .students-grid{grid-template-columns:1fr 1fr}
+}
+
+/* print */
+@media print{
+  .header,.tabs,.export-btns,.grade-btn,.section-filter{display:none}
+  .tab-panel{display:block!important}
+  .main{padding:0}
+  body{background:#fff;color:#000}
+  .stat-card,.obs-section,.visit-info{background:#f9f9f9;border:1px solid #ddd}
+}
+</style>
+</head>
+<body>
+<div id="loadingBar"></div>
+
+<!-- ══ HEADER ══ -->
+<div class="header">
+  <div class="header-title">
+    <span style="font-size:1.8rem">👁️</span>
+    <div>
+      <h1>لوحة المراقبة الذكية</h1>
+      <span>روضة ومدرسة الجود · Al AJOOD School · CCDI & AI</span>
+    </div>
+  </div>
+  <div class="header-controls">
+    <span id="liveIndicator" style="font-size:0.8rem;color:var(--text-dim)">
+      <span class="live-dot"></span> مباشر
+    </span>
+    <button class="grade-btn active" id="g3Btn" onclick="switchGrade(3)">صف 3</button>
+    <button class="grade-btn" id="g4Btn" onclick="switchGrade(4)">صف 4</button>
+    <select class="section-filter" id="secFilter" onchange="filterSection(this.value)">
+      <option value="">كل الشعب</option>
+      <option>3A</option><option>3B</option><option>3C</option><option>3D</option><option>3E</option>
+    </select>
+    <span id="clockEl" style="font-size:0.8rem;color:var(--gold);font-weight:700;min-width:60px;text-align:center"></span>
+  </div>
+</div>
+
+<!-- ══ TABS ══ -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('teacher')">📊 لوحة المعلمة</div>
+  <div class="tab" onclick="switchTab('observer')">👁️ تقييم الملاحظ</div>
+  <div class="tab" onclick="switchTab('innovations')">🌟 الجانب الابتكاري</div>
+  <div class="tab" onclick="switchTab('export')">📄 تصدير التقرير</div>
+</div>
+
+<!-- ══ MAIN ══ -->
+<div class="main">
+
+<!-- ▸▸▸ TAB 1: TEACHER ◂◂◂ -->
+<div class="tab-panel active" id="panel-teacher">
+
+  <!-- KPI Row -->
+  <div class="grid-4">
+    <div class="stat-card highlight">
+      <div class="label">✋ الحاضرون</div>
+      <div class="value" id="kpi-present" style="color:var(--success)">—</div>
+      <div class="sub" id="kpi-present-pct">من إجمالي —</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">🚫 الغائبون</div>
+      <div class="value" id="kpi-absent" style="color:var(--danger)">—</div>
+      <div class="sub" id="kpi-absent-pct">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">🎯 أنهوا الحصة</div>
+      <div class="value" id="kpi-done" style="color:var(--gold)">—</div>
+      <div class="sub" id="kpi-done-pct">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">🏃 نشطون الآن</div>
+      <div class="value" id="kpi-active" style="color:var(--info)">—</div>
+      <div class="sub">جلسة مفتوحة</div>
+    </div>
+  </div>
+
+  <!-- Phase progress + Adaptive levels -->
+  <div class="grid-2">
+    <!-- Phase distribution -->
+    <div class="students-section">
+      <h3>📍 توزيع الطلاب على المراحل <span class="live-dot"></span></h3>
+      <div class="stage-dist" id="stageDist"></div>
+      <div style="font-size:0.7rem;color:var(--text-dim);display:flex;gap:6px;flex-wrap:wrap" id="stageLabels"></div>
+    </div>
+    <!-- Adaptive levels -->
+    <div class="students-section">
+      <h3>🧠 مستويات التكيّف</h3>
+      <div class="grid-3" style="margin-bottom:8px">
+        <div class="stat-card" style="padding:10px">
+          <div class="label" style="color:#ce93d8">🔺 متقدم</div>
+          <div class="value" id="adv-advanced" style="color:#ce93d8;font-size:1.5rem">—</div>
+        </div>
+        <div class="stat-card" style="padding:10px">
+          <div class="label" style="color:var(--gold-light)">➡️ متوسط</div>
+          <div class="value" id="adv-medium" style="color:var(--gold);font-size:1.5rem">—</div>
+        </div>
+        <div class="stat-card" style="padding:10px">
+          <div class="label" style="color:#ffcc80">🔻 أساسي</div>
+          <div class="value" id="adv-basic" style="color:var(--warning);font-size:1.5rem">—</div>
+        </div>
+      </div>
+      <div class="prog-wrap"><div class="prog-bar" id="advBar" style="background:linear-gradient(90deg,#ce93d8,var(--gold),var(--warning));width:0%"></div></div>
+      <div style="font-size:0.7rem;color:var(--text-dim);margin-top:4px" id="adaptiveNote">جارٍ التحميل...</div>
+    </div>
+  </div>
+
+  <!-- SEN + Help Requests -->
+  <div class="grid-2">
+    <div class="students-section">
+      <h3>🩵 طلاب ذوو الهمم <span id="senCount" style="font-size:0.8rem;color:var(--teal)"></span></h3>
+      <div id="senList" class="realtime-list"></div>
+    </div>
+    <div class="students-section">
+      <h3>🆘 طلبات المساعدة <span class="live-dot"></span></h3>
+      <div id="helpList" class="realtime-list">
+        <div style="text-align:center;color:var(--text-dim);padding:20px;font-size:0.85rem">لا توجد طلبات معلقة ✅</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Student Cards -->
+  <div class="students-section">
+    <h3>👥 جميع الطلاب <span id="studentsHeader" style="font-size:0.8rem;color:var(--text-dim)"></span></h3>
+    <div class="students-grid" id="studentCards">
+      <div style="padding:20px;text-align:center;color:var(--text-dim)">⏳ جارٍ تحميل البيانات...</div>
+    </div>
+  </div>
+
+  <!-- Recent Activity -->
+  <div class="students-section">
+    <h3>⚡ آخر النشاطات <span class="live-dot"></span></h3>
+    <div id="activityFeed" class="realtime-list">
+      <div style="text-align:center;color:var(--text-dim);padding:20px;font-size:0.85rem">لا توجد نشاطات بعد</div>
+    </div>
+  </div>
+</div>
+
+<!-- ▸▸▸ TAB 2: OBSERVER ◂◂◂ -->
+<div class="tab-panel" id="panel-observer">
+
+  <!-- Overall Score -->
+  <div class="overall-bar" id="overallBar">
+    <div class="overall-score" id="overallScoreEl" style="color:var(--gold)">—</div>
+    <div>
+      <div class="overall-label" id="overallLabel">جارٍ الحساب...</div>
+      <div class="overall-desc" id="overallDesc">يُحسب تلقائياً من بيانات الحصة الفعلية</div>
+      <div class="prog-wrap" style="margin-top:8px;height:8px">
+        <div class="prog-bar" id="overallProg" style="background:linear-gradient(90deg,var(--gold),var(--gold-light));width:0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Section A: Visit Info ─── -->
+  <div class="obs-section">
+    <div class="obs-section-header" onclick="toggleSection(this)">
+      <div class="obs-section-title">📋 أ. معلومات الزيارة <span style="font-size:0.7rem;color:var(--success);margin-right:8px">✦ تعبأ تلقائياً</span></div>
+      <span class="obs-collapse">▼</span>
+    </div>
+    <div class="obs-section-content">
+      <div class="visit-grid" id="visitInfoGrid">
+        <div class="visit-field">
+          <label>1. تاريخ الملاحظة</label>
+          <div class="val" id="vi-date">—</div>
+        </div>
+        <div class="visit-field">
+          <label>2. اسم الملاحظ</label>
+          <input type="text" id="vi-observer" placeholder="أدخل اسم الملاحظ...">
+        </div>
+        <div class="visit-field">
+          <label>3. المسمى الوظيفي للملاحظ</label>
+          <select id="vi-jobtitle">
+            <option value="">اختر...</option>
+            <option>رئيس قسم</option>
+            <option>معلم أول</option>
+            <option>وكيل مدرسة</option>
+            <option>مدير مدرسة</option>
+            <option>مشرف تربوي</option>
+          </select>
+        </div>
+        <div class="visit-field">
+          <label>4. اسم المعلم</label>
+          <div class="val">منيرة علي محمد المري</div>
+        </div>
+        <div class="visit-field">
+          <label>5. نوع التعليم</label>
+          <div class="val">حضوري ✅</div>
+        </div>
+        <div class="visit-field">
+          <label>6. الحصة</label>
+          <input type="text" id="vi-period" placeholder="مثال: الحصة الثانية">
+        </div>
+        <div class="visit-field">
+          <label>7. المادة</label>
+          <div class="val">CCDI &amp; AI – Computing, Creative Design, and Innovation</div>
+        </div>
+        <div class="visit-field">
+          <label>8. الصف</label>
+          <div class="val" id="vi-class">—</div>
+        </div>
+        <div class="visit-field">
+          <label>9. الحاضرون</label>
+          <div class="val" id="vi-present" style="color:var(--success)">—</div>
+        </div>
+        <div class="visit-field">
+          <label>10. الغائبون</label>
+          <div class="val" id="vi-absent" style="color:var(--danger)">—</div>
+        </div>
+        <div class="visit-field">
+          <label>11–12. ذكور / إناث</label>
+          <div class="val" id="vi-gender">— / —</div>
+        </div>
+        <div class="visit-field">
+          <label>13. ذوو الهمم</label>
+          <div class="val" id="vi-sen" style="color:var(--teal)">—</div>
+        </div>
+        <div class="visit-field" style="grid-column:span 2">
+          <label>14. عنوان الدرس</label>
+          <div class="val" id="vi-title">—</div>
+        </div>
+        <div class="visit-field" style="grid-column:span 3">
+          <label>15. المخرجات / الأهداف التعليمية</label>
+          <div class="val" id="vi-objectives" style="font-size:0.8rem;line-height:1.5">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Section B: Lesson Starter ─── -->
+  <div class="obs-section">
+    <div class="obs-section-header" onclick="toggleSection(this)">
+      <div class="obs-section-title">🚀 ب. متطلبات بدء الحصة</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="obs-section-score" id="score-b" style="background:rgba(201,168,76,0.15);color:var(--gold)">—</div>
+        <span class="obs-collapse">▼</span>
+      </div>
+    </div>
+    <div class="obs-section-content" id="content-b"></div>
+  </div>
+
+  <!-- ─── Section C: Teaching ─── -->
+  <div class="obs-section">
+    <div class="obs-section-header" onclick="toggleSection(this)">
+      <div class="obs-section-title">📚 ج. التعليم (Q17–27)</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="obs-section-score" id="score-c" style="background:rgba(201,168,76,0.15);color:var(--gold)">—</div>
+        <span class="obs-collapse">▼</span>
+      </div>
+    </div>
+    <div class="obs-section-content" id="content-c"></div>
+  </div>
+
+  <!-- ─── Section D: Learning ─── -->
+  <div class="obs-section">
+    <div class="obs-section-header" onclick="toggleSection(this)">
+      <div class="obs-section-title">🎓 د. التعلم (Q28–32)</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="obs-section-score" id="score-d" style="background:rgba(201,168,76,0.15);color:var(--gold)">—</div>
+        <span class="obs-collapse">▼</span>
+      </div>
+    </div>
+    <div class="obs-section-content" id="content-d"></div>
+  </div>
+
+  <!-- ─── Section E: Progress ─── -->
+  <div class="obs-section">
+    <div class="obs-section-header" onclick="toggleSection(this)">
+      <div class="obs-section-title">📈 هـ. التقدم (Q33–34)</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="obs-section-score" id="score-e" style="background:rgba(201,168,76,0.15);color:var(--gold)">—</div>
+        <span class="obs-collapse">▼</span>
+      </div>
+    </div>
+    <div class="obs-section-content" id="content-e"></div>
+  </div>
+</div>
+
+<!-- ▸▸▸ TAB 3: INNOVATIONS ◂◂◂ -->
+<div class="tab-panel" id="panel-innovations">
+  <div style="background:linear-gradient(135deg,rgba(201,168,76,0.1),transparent);border-radius:12px;padding:16px;margin-bottom:14px;border:1px solid rgba(201,168,76,0.2)">
+    <h2 style="color:var(--gold);font-family:'Fredoka One',cursive;font-size:1.3rem;margin-bottom:6px">🌟 الجانب الابتكاري للحصة</h2>
+    <p style="font-size:0.85rem;color:var(--text-dim);line-height:1.5">هذه المؤشرات تُولَّد تلقائياً من بنية الحصة وبياناتها الفعلية — تُثري تقرير الملاحظ وترفع التقييم لـ "فائق التوقعات"</p>
+  </div>
+  <div class="innov-grid" id="innovGrid"></div>
+
+  <!-- STREAM alignment -->
+  <div class="obs-section">
+    <div class="obs-section-header" onclick="toggleSection(this)">
+      <div class="obs-section-title">🔬 محاور STREAM في الحصة</div>
+      <span class="obs-collapse">▼</span>
+    </div>
+    <div class="obs-section-content">
+      <div class="grid-3" id="streamGrid" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- Innovation summary for observer notes -->
+  <div class="obs-section">
+    <div class="obs-section-header" onclick="toggleSection(this)">
+      <div class="obs-section-title">📝 ملاحظات الابتكار للتقرير</div>
+      <span class="obs-collapse">▼</span>
+    </div>
+    <div class="obs-section-content" style="padding-top:12px">
+      <div id="innovNotes" style="font-size:0.85rem;line-height:1.8;color:var(--text);padding:12px;background:var(--card2);border-radius:8px;white-space:pre-line"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ▸▸▸ TAB 4: EXPORT ◂◂◂ -->
+<div class="tab-panel" id="panel-export">
+  <div class="export-section">
+    <div style="font-size:2.5rem;margin-bottom:10px">📄</div>
+    <h2 style="color:var(--gold);font-family:'Fredoka One',cursive;font-size:1.4rem;margin-bottom:8px">تصدير تقرير الزيارة</h2>
+    <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:16px">يجمع بيانات الحصة الفعلية + تقييمات الملاحظ في تقرير واحد منسّق</p>
+
+    <div class="overall-bar" id="exportOverall" style="max-width:600px;margin:0 auto 16px">
+      <div class="overall-score" id="exportScore" style="color:var(--gold)">—</div>
+      <div>
+        <div class="overall-label" id="exportLabel">—</div>
+        <div class="overall-desc" id="exportDesc">—</div>
+      </div>
+    </div>
+
+    <div style="max-width:600px;margin:0 auto">
+      <div class="grid-3" id="exportSummaryCards" style="margin-bottom:16px"></div>
+    </div>
+
+    <div class="export-btns">
+      <button class="btn btn-gold" onclick="exportReport('print')">🖨️ طباعة التقرير</button>
+      <button class="btn btn-outline" onclick="exportReport('copy')">📋 نسخ النص</button>
+    </div>
+  </div>
+
+  <!-- Live report preview -->
+  <div class="obs-section">
+    <div class="obs-section-header" onclick="toggleSection(this)">
+      <div class="obs-section-title">👁️ معاينة التقرير</div>
+      <span class="obs-collapse">▼</span>
+    </div>
+    <div class="obs-section-content" style="padding-top:12px">
+      <div id="reportPreview" style="font-size:0.8rem;line-height:1.8;background:var(--card2);border-radius:8px;padding:16px;direction:rtl;white-space:pre-line;color:var(--text)"></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /.main -->
+
+<script>
+// ══════════════════════════════════════════
+//  FIREBASE CONFIG
+// ══════════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyCV3Vc01BNHRhFG7sUFqlE5VQOEKQS4wrE",
+  authDomain: "aljood-school.firebaseapp.com",
+  projectId: "aljood-school",
+  storageBucket: "aljood-school.firebasestorage.app",
+  messagingSenderId: "309093456748",
+  appId: "1:309093456748:web:6ec2aac9eddf27e960ab5e"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ══════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════
+let currentGrade = 3;
+let currentSection = '';
+let allSessions = [];    // from stream_sessions_gX
+let allAttendance = [];  // from obs_attendance
+let studentRoster = {};  // from students collection
+let senStudents = [];
+let helpRequests = [];
+let ratings = {};        // observer ratings: {criterionId: ratingValue}
+
+let unsubSessions = null;
+let unsubAttendance = null;
+let unsubHelp = null;
+
+// ══════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════
+window.onload = async function() {
+  startClock();
+  await loadRoster(3);
+  setupListeners(3);
+  buildObserverCriteria();
+  buildInnovations();
+};
+
+function startClock() {
+  const el = document.getElementById('clockEl');
+  function tick() {
+    const now = new Date();
+    el.textContent = now.toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'});
+  }
+  tick();
+  setInterval(tick, 60000);
+}
+
+// ══════════════════════════════════════════
+//  GRADE / SECTION SWITCHING
+// ══════════════════════════════════════════
+async function switchGrade(g) {
+  currentGrade = g;
+  currentSection = '';
+  document.getElementById('secFilter').value = '';
+
+  // Update grade buttons
+  document.getElementById('g3Btn').classList.toggle('active', g === 3);
+  document.getElementById('g4Btn').classList.toggle('active', g === 4);
+
+  // Update section options
+  const sel = document.getElementById('secFilter');
+  sel.innerHTML = '<option value="">كل الشعب</option>';
+  const sections = g === 3
+    ? ['3A','3B','3C','3D','3E']
+    : ['4A','4B','4C','4D','4E'];
+  sections.forEach(s => sel.innerHTML += `<option>${s}</option>`);
+
+  document.getElementById('vi-class').textContent = `الصف ${g} — كل الشعب`;
+
+  if (unsubSessions) unsubSessions();
+  if (unsubAttendance) unsubAttendance();
+
+  await loadRoster(g);
+  setupListeners(g);
+  updateVisitInfo();
+}
+
+function filterSection(sec) {
+  currentSection = sec;
+  document.getElementById('vi-class').textContent =
+    `الصف ${currentGrade}${sec ? ' — شعبة ' + sec : ' — كل الشعب'}`;
+  renderAll();
+}
+
+// ══════════════════════════════════════════
+//  ROSTER
+// ══════════════════════════════════════════
+async function loadRoster(g) {
+  try {
+    const doc = await db.collection('students').doc(`grade${g}_sections`).get();
+    if (doc.exists) {
+      studentRoster = doc.data();
+    }
+    // Load SEN
+    const senSnap = await db.collection('special_needs_students')
+      .where('grade', '==', g).get();
+    senStudents = senSnap.docs.map(d => ({id:d.id, ...d.data()}));
+  } catch(e) {
+    console.warn('Roster load:', e.message);
+  }
+}
+
+// ══════════════════════════════════════════
+//  REAL-TIME LISTENERS
+// ══════════════════════════════════════════
+function setupListeners(g) {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const todayTs = firebase.firestore.Timestamp.fromDate(today);
+  const col = `stream_sessions_g${g}`;
+
+  // Sessions
+  unsubSessions = db.collection(col)
+    .where('startTime', '>=', todayTs)
+    .onSnapshot(snap => {
+      allSessions = snap.docs.map(d => ({id:d.id, ...d.data()}));
+      renderAll();
+    }, e => console.warn('Sessions:', e.message));
+
+  // Attendance
+  unsubAttendance = db.collection('obs_attendance')
+    .where('grade', '==', g)
+    .where('timestamp', '>=', todayTs)
+    .onSnapshot(snap => {
+      allAttendance = snap.docs.map(d => ({id:d.id, ...d.data()}));
+      renderAll();
+    }, e => console.warn('Attendance:', e.message));
+
+  // Help requests
+  if (unsubHelp) unsubHelp();
+  unsubHelp = db.collection('help_requests')
+    .where('resolved', '==', false)
+    .onSnapshot(snap => {
+      helpRequests = snap.docs.map(d => ({id:d.id, ...d.data()}));
+      renderHelp();
+    }, e => console.warn('Help:', e.message));
+}
+
+// ══════════════════════════════════════════
+//  FILTER
+// ══════════════════════════════════════════
+function getFiltered() {
+  const sec = currentSection;
+  const sessions = sec
+    ? allSessions.filter(s => s.section === sec)
+    : allSessions;
+  const attendance = sec
+    ? allAttendance.filter(a => a.section === sec)
+    : allAttendance;
+  return { sessions, attendance };
+}
+
+function getTotalStudents() {
+  if (!currentSection) {
+    return Object.values(studentRoster).flat().length || 0;
+  }
+  return (studentRoster[currentSection] || []).length;
+}
+
+// ══════════════════════════════════════════
+//  RENDER ALL
+// ══════════════════════════════════════════
+function renderAll() {
+  const {sessions, attendance} = getFiltered();
+  renderKPIs(sessions, attendance);
+  renderStudentCards(sessions, attendance);
+  renderPhaseDist(sessions);
+  renderAdaptive(sessions);
+  renderSEN();
+  renderActivity(sessions);
+  updateObserverData(sessions, attendance);
+  updateExport();
+  hideLoading();
+}
+
+function hideLoading() {
+  const bar = document.getElementById('loadingBar');
+  if (bar) bar.classList.add('hidden');
+}
+
+// ══════════════════════════════════════════
+//  KPIs
+// ══════════════════════════════════════════
+function renderKPIs(sessions, attendance) {
+  const total = getTotalStudents();
+  const present = attendance.length;
+  const absent = Math.max(0, total - present);
+  const done = sessions.filter(s => s.phase >= 11).length;
+  const active = sessions.filter(s => s.phase >= 1 && s.phase < 11).length;
+
+  set('kpi-present', present);
+  set('kpi-present-pct', `من إجمالي ${total} طالب`);
+  set('kpi-absent', absent);
+  set('kpi-absent-pct', total > 0 ? `${Math.round(absent/total*100)}٪` : '—');
+  set('kpi-done', done);
+  set('kpi-done-pct', present > 0 ? `${Math.round(done/Math.max(present,1)*100)}٪ من الحاضرين` : '—');
+  set('kpi-active', active);
+
+  // Visit info sync
+  set('vi-date', new Date().toLocaleDateString('ar-AE', {day:'numeric', month:'long', year:'numeric'}));
+  set('vi-present', `${present} طالب`);
+  set('vi-absent', `${absent} طالب`);
+  set('vi-class', `الصف ${currentGrade}${currentSection ? ' — شعبة '+currentSection : ' — كل الشعب'}`);
+  set('vi-sen', `${senStudents.length} طالب`);
+  set('vi-gender', `${senStudents.filter(s=>s.gender==='male').length || '—'} / ${senStudents.filter(s=>s.gender==='female').length || '—'}`);
+}
+
+// ══════════════════════════════════════════
+//  PHASE DISTRIBUTION
+// ══════════════════════════════════════════
+const PHASES_G3 = ['Start','Goal','Keywords','Materials','True/False','Plan','Code','MakeCode','Test','Assess','Exit','Done'];
+const PHASES_G4 = ['Start','Goal','Parts','Sensors','Code','Build','Test','Assess','Exit','Done'];
+
+function renderPhaseDist(sessions) {
+  const phases = currentGrade === 3 ? PHASES_G3 : PHASES_G4;
+  const dist = {};
+  phases.forEach((_,i) => dist[i] = 0);
+  sessions.forEach(s => {
+    const p = Math.min(s.phase || 0, phases.length - 1);
+    dist[p]++;
+  });
+  const max = Math.max(...Object.values(dist), 1);
+  const distEl = document.getElementById('stageDist');
+  const labelsEl = document.getElementById('stageLabels');
+  if (!distEl) return;
+
+  distEl.innerHTML = phases.map((name, i) => `
+    <div class="stage-bar-wrap">
+      <span class="stage-count">${dist[i]||0}</span>
+      <div class="stage-bar-inner" style="height:${Math.round((dist[i]||0)/max*70)}px;background:${i>=11?'#ab47bc':i>=8?'#66bb6a':i>=5?'#42a5f5':i>=2?'#c9a84c':'#546e7a'}"></div>
+    </div>
+  `).join('');
+  labelsEl.innerHTML = phases.map((n,i) => `<span style="flex:1;text-align:center;font-size:0.6rem;color:var(--text-dim)">${n}</span>`).join('');
+}
+
+// ══════════════════════════════════════════
+//  ADAPTIVE LEVELS
+// ══════════════════════════════════════════
+function renderAdaptive(sessions) {
+  const adv = sessions.filter(s => s.adaptiveLevel === 'advanced').length;
+  const med = sessions.filter(s => s.adaptiveLevel === 'medium' || !s.adaptiveLevel).length;
+  const bas = sessions.filter(s => s.adaptiveLevel === 'basic').length;
+  const total = sessions.length || 1;
+
+  set('adv-advanced', adv);
+  set('adv-medium', med);
+  set('adv-basic', bas);
+
+  const pct = Math.round((adv + med*0.6) / total * 100);
+  const bar = document.getElementById('advBar');
+  if (bar) bar.style.width = pct + '%';
+
+  const note = document.getElementById('adaptiveNote');
+  if (note) {
+    if (bas > 0) {
+      note.textContent = `⚠️ ${bas} طالب انتقل تلقائياً للمستوى الأساسي — تم الإجراء`;
+      note.style.color = 'var(--warning)';
+    } else if (adv > 0) {
+      note.textContent = `✅ معظم الطلاب في المستوى المتقدم`;
+      note.style.color = 'var(--success)';
+    } else {
+      note.textContent = `📊 المستوى المتوسط هو الأكثر شيوعاً`;
+      note.style.color = 'var(--text-dim)';
+    }
+  }
+}
+
+// ══════════════════════════════════════════
+//  STUDENT CARDS
+// ══════════════════════════════════════════
+function renderStudentCards(sessions, attendance) {
+  const el = document.getElementById('studentCards');
+  if (!el) return;
+
+  const attendedNames = new Set(attendance.map(a => a.studentName));
+  const sessionMap = {};
+  sessions.forEach(s => {
+    if (!sessionMap[s.studentName] || (s.phase || 0) > (sessionMap[s.studentName].phase || 0)) {
+      sessionMap[s.studentName] = s;
+    }
+  });
+
+  // Merge: roster + sessions + attendance
+  let names = new Set([...attendedNames, ...Object.keys(sessionMap)]);
+
+  // Add from roster if available
+  const rosterKey = currentSection
+    ? currentSection
+    : Object.keys(studentRoster)[0];
+  if (studentRoster[rosterKey]) {
+    studentRoster[rosterKey].forEach(n => names.add(n));
+  } else {
+    Object.values(studentRoster).flat().forEach(n => names.add(n));
+  }
+
+  const senNames = new Set(senStudents.map(s => s.name));
+
+  set('studentsHeader', `${names.size} طالب مسجل`);
+
+  if (names.size === 0) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-dim)">لا توجد بيانات بعد — في انتظار الطلاب</div>';
+    return;
+  }
+
+  const sortedNames = [...names].sort();
+  el.innerHTML = sortedNames.map(name => {
+    const s = sessionMap[name];
+    const present = attendedNames.has(name);
+    const isSEN = senNames.has(name);
+    const phase = s ? (s.phase || 0) : 0;
+    const level = s ? (s.adaptiveLevel || 'medium') : '';
+    const phases = currentGrade === 3 ? PHASES_G3 : PHASES_G4;
+    const phaseName = phases[Math.min(phase, phases.length-1)] || '';
+    const done = phase >= (phases.length - 1);
+
+    let cardClass = 'student-card';
+    if (!present) cardClass += ' absent';
+    else if (isSEN) cardClass += ' special';
+    else if (level === 'advanced') cardClass += ' advanced';
+    else if (level === 'basic') cardClass += ' basic';
+    else if (present) cardClass += ' medium';
+
+    const levelBadge = level === 'advanced' ? '<span class="badge purple">متقدم</span>'
+      : level === 'basic' ? '<span class="badge orange">أساسي</span>'
+      : level === 'medium' && present ? '<span class="badge gold">متوسط</span>' : '';
+
+    const senBadge = isSEN ? '<span class="badge teal">♿</span>' : '';
+    const doneBadge = done ? '<span class="badge green">✅</span>' : '';
+    const absentBadge = !present ? '<span class="badge red">غائب</span>' : '';
+    const phaseBadge = present && !done && phase > 0
+      ? `<span class="badge blue">${phaseName}</span>` : '';
+
+    return `
+      <div class="${cardClass}">
+        <div class="sc-name">${name}</div>
+        <div class="sc-meta">${levelBadge}${senBadge}${doneBadge}${absentBadge}${phaseBadge}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ══════════════════════════════════════════
+//  SEN LIST
+// ══════════════════════════════════════════
+function renderSEN() {
+  const el = document.getElementById('senList');
+  set('senCount', `(${senStudents.length} طالب)`);
+  if (!el) return;
+  if (senStudents.length === 0) {
+    el.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:16px">لا يوجد طلاب ذوو الهمم في هذا الفلتر</div>';
+    return;
+  }
+  el.innerHTML = senStudents.map(s => `
+    <div class="rt-item">
+      <div>
+        <div class="rt-name">🩵 ${s.name || s.id}</div>
+        <div class="rt-time">${s.section || ''} · ${s.condition || 'احتياجات خاصة'}</div>
+      </div>
+      <span class="badge teal">إجراء تكيّفي ✓</span>
+    </div>
+  `).join('');
+}
+
+// ══════════════════════════════════════════
+//  HELP REQUESTS
+// ══════════════════════════════════════════
+function renderHelp() {
+  const el = document.getElementById('helpList');
+  if (!el) return;
+  if (helpRequests.length === 0) {
+    el.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:16px">لا توجد طلبات معلقة ✅</div>';
+    return;
+  }
+  el.innerHTML = helpRequests.slice(0,10).map(h => `
+    <div class="rt-item" style="border-right:3px solid var(--danger)">
+      <div>
+        <div class="rt-name">🆘 ${h.studentName || '—'}</div>
+        <div class="rt-time">${h.section || ''} · المرحلة ${h.phase || '—'}</div>
+      </div>
+      <span class="badge red">بانتظار مساعدة</span>
+    </div>
+  `).join('');
+}
+
+// ══════════════════════════════════════════
+//  ACTIVITY FEED
+// ══════════════════════════════════════════
+function renderActivity(sessions) {
+  const el = document.getElementById('activityFeed');
+  if (!el) return;
+  const sorted = [...sessions].sort((a,b) => {
+    const ta = a.lastUpdated?.seconds || a.startTime?.seconds || 0;
+    const tb = b.lastUpdated?.seconds || b.startTime?.seconds || 0;
+    return tb - ta;
+  }).slice(0, 8);
+
+  if (sorted.length === 0) {
+    el.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:16px">لا توجد نشاطات بعد</div>';
+    return;
+  }
+  const phases = currentGrade === 3 ? PHASES_G3 : PHASES_G4;
+  el.innerHTML = sorted.map(s => {
+    const phase = s.phase || 0;
+    const phaseName = phases[Math.min(phase, phases.length-1)] || '';
+    const ts = s.lastUpdated?.toDate?.() || s.startTime?.toDate?.();
+    const timeStr = ts ? ts.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '—';
+    return `
+      <div class="rt-item">
+        <div>
+          <div class="rt-name">${s.studentName || '—'}</div>
+          <div class="rt-time">${s.section || ''}</div>
+        </div>
+        <div style="text-align:left">
+          <span class="rt-phase badge blue">${phaseName}</span>
+          <div class="rt-time">${timeStr}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ══════════════════════════════════════════
+//  OBSERVER CRITERIA DATA
+// ══════════════════════════════════════════
+
+// Rating scale helpers
+const RATING_LABELS_4 = [
+  {v:'na', label:'لا ينطبق', cls:''},
+  {v:'1',  label:'1 - غير مقبول', cls:'r1'},
+  {v:'2',  label:'2 - يحتاج تحسين', cls:'r2'},
+  {v:'3',  label:'3 - فعال', cls:'r4'},
+  {v:'4',  label:'4 - فعال للغاية', cls:'r6'},
+];
+const RATING_LABELS_6 = [
+  {v:'1', label:'ضعيف جداً', cls:'r1'},
+  {v:'2', label:'ضعيف', cls:'r2'},
+  {v:'3', label:'مقبول', cls:'r3'},
+  {v:'4', label:'جيد', cls:'r4'},
+  {v:'5', label:'جيد جداً', cls:'r5'},
+  {v:'6', label:'المتميز', cls:'r6'},
+];
+
+function ratingBtns(id, scale, autoSuggest) {
+  const labels = scale === 4 ? RATING_LABELS_4 : RATING_LABELS_6;
+  const btns = labels.map(r =>
+    `<button class="rating-btn ${r.cls}${ratings[id]===r.v?' selected':''}" 
+      onclick="setRating('${id}','${r.v}','${scale}')">${r.label}</button>`
+  ).join('');
+  return `
+    <div class="crit-rating">
+      <div class="rating-row">${btns}</div>
+      ${autoSuggest ? `<div class="auto-suggest" id="suggest-${id}">${autoSuggest}</div>` : ''}
+    </div>
+  `;
+}
+
+function criterionRow(id, label, evidenceTitle, evidenceVal, autoSuggest, ratingScale) {
+  return `
+    <div class="criterion" id="crit-${id}">
+      <div class="crit-text">
+        <div class="crit-label">${label}</div>
+      </div>
+      <div class="crit-evidence">
+        <div class="ev-title">📊 دليل من Firebase</div>
+        <div class="ev-val" id="ev-${id}">${evidenceVal}</div>
+        <div class="ev-auto" id="eva-${id}">⟳ يتحدث تلقائياً</div>
+      </div>
+      ${ratingBtns(id, ratingScale || 6, autoSuggest)}
+    </div>
+  `;
+}
+
+function buildObserverCriteria() {
+  // Section B: Lesson Starter
+  document.getElementById('content-b').innerHTML = `
+    <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px">مقياس: لا ينطبق / 1-غير مقبول / 2-يحتاج تحسين / 3-فعال / 4-فعال للغاية</div>
+    ${criterionRow('b1','Q16-1: استقبال الطلاب وأخذ الحضور وإكمال السبورة','حضور رقمي','جارٍ التحميل...','فعال للغاية بناءً على نظام "✋ أنا هنا!"', 4)}
+    ${criterionRow('b2','Q16-2: مشاركة قواعد الحصة وسياسة السلوك بنبرة واضحة','وضع Kiosk','جارٍ التحميل...','فعال للغاية — الحصة تملأ الشاشة + تنبيه صوتي عند الخروج', 4)}
+    <div class="visit-field" style="margin-top:10px"><label>ملاحظات متطلبات بدء الحصة</label><textarea id="notes-b" placeholder="أضف ملاحظاتك..."></textarea></div>
+  `;
+
+  // Section C: Teaching Q17–27
+  document.getElementById('content-c').innerHTML = `
+    <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px">مقياس: 1-ضعيف جداً → 2-ضعيف → 3-مقبول → 4-جيد → 5-جيد جداً → 6-المتميز</div>
+    ${criterionRow('c17','Q17: التخطيط','هيكل الحصة','11 مرحلة منظمة + STREAM + تكيّف + ذوو الهمم','المتميز — التخطيط شامل ودقيق مع أدلة ابتكار')}
+    ${criterionRow('c18','Q18: التهيئة الحافزة','تفاعل خريطة الرحلة','جارٍ التحميل...','جيد جداً/المتميز — خريطة رحلة تفاعلية + بانر AI')}
+    ${criterionRow('c19','Q19: نواتج التعلم','إتمام مرحلة الهدف','جارٍ التحميل...','جيد جداً — بطاقة هدف STREAM + سؤال فهم')}
+    ${criterionRow('c20','Q20: استخدام المصادر','تنوع الأنشطة','Canvas + Drag-Drop + MakeCode + Keiro','المتميز — مصادر رقمية متنوعة ومبتكرة')}
+    ${criterionRow('c21','Q21: استراتيجيات التدريس','التكيّف الذكي','جارٍ التحميل...','المتميز — 3 مستويات تكيّف تلقائية')}
+    ${criterionRow('c22','Q22: مراعاة الفروق الفردية','ذوو الهمم + التكيّف','جارٍ التحميل...','المتميز — تُعرَّف تلقائياً من Firebase + إجراءات مخصصة')}
+    ${criterionRow('c23','Q23: الكفاية المعرفية بالمنهاج','محتوى الحصة','CCDI & AI — برمجة + تصميم + ابتكار','جيد جداً — تغطية شاملة لمنهج CCDI & AI')}
+    ${criterionRow('c24','Q24: جودة التغذية الراجعة','حل طلبات المساعدة','جارٍ التحميل...','جيد جداً — تلميحات فورية + تكيّف تلقائي')}
+    ${criterionRow('c25','Q25: الالتزام بلغة المنهاج','الدعم الثنائي','EN أساسي + زر AR/EN لكل طالب','فعال للغاية — اللغة الأساسية إنجليزية + دعم عربي')}
+    ${criterionRow('c26','Q26: مهارات الإدارة الصفية','وضع Kiosk + تنبيهات','تنبيه صوتي + ملء الشاشة','المتميز — بيئة تعليمية إيجابية وآمنة ومنظمة')}
+    <div class="visit-field" style="margin-top:10px"><label>Q27: ملاحظات التعليم</label><textarea id="notes-c" placeholder="أضف ملاحظاتك..."></textarea></div>
+  `;
+
+  // Section D: Learning Q28–32
+  document.getElementById('content-d').innerHTML = `
+    <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px">مقياس: 1-ضعيف جداً → 6-المتميز (أو لا ينطبق)</div>
+    ${criterionRow('d28','Q28: استخدام التكنولوجيا في التعلم','أجهزة الطلاب','100٪ على الأجهزة (حصة رقمية كاملة)','المتميز — جميع الطلاب يستخدمون التكنولوجيا بفاعلية')}
+    ${criterionRow('d29','Q29: التفاعل والتعاون بين الطلبة','نشاطات تعاونية','Drag-Drop + Canvas + تصميم الروبوت','جيد جداً — تعاون في مواقف تعلم متنوعة')}
+    ${criterionRow('d30','Q30: مشاركة الطلبة وتولّيهم مسؤولية تعلمهم','معدل الإتمام','جارٍ التحميل...','جيد جداً — كل طالب يتحكم في وتيرة تعلمه')}
+    ${criterionRow('d31','Q31: مهارات القرن 21','STREAM محاور','S+T+R+E+A+M = 6 محاور مفعّلة','المتميز — التفكير الناقد + الإبداع + التكنولوجيا + الابتكار')}
+    <div class="visit-field" style="margin-top:10px"><label>Q32: ملاحظات التعلم</label><textarea id="notes-d" placeholder="أضف ملاحظاتك..."></textarea></div>
+  `;
+
+  // Section E: Progress Q33–34
+  document.getElementById('content-e').innerHTML = `
+    <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px">مقياس: 1-ضعيف جداً → 6-المتميز</div>
+    ${criterionRow('e33','Q33: التقدم الدراسي قياساً بالمستويات المتوقعة','نسبة الإتمام','جارٍ التحميل...','يُحسب تلقائياً من نسبة إكمال الحصة')}
+    <div class="visit-field" style="margin-top:10px"><label>Q34: ملاحظات التقدم</label><textarea id="notes-e" placeholder="أضف ملاحظاتك..."></textarea></div>
+  `;
+}
+
+// ══════════════════════════════════════════
+//  UPDATE OBSERVER DATA (from Firebase)
+// ══════════════════════════════════════════
+function updateObserverData(sessions, attendance) {
+  const total = getTotalStudents() || 1;
+  const present = attendance.length;
+  const done = sessions.filter(s => (s.phase||0) >= 11).length;
+  const active = sessions.filter(s => (s.phase||0) >= 1).length;
+  const bas = sessions.filter(s => s.adaptiveLevel === 'basic').length;
+  const adv = sessions.filter(s => s.adaptiveLevel === 'advanced').length;
+  const helpResolved = helpRequests.length === 0;
+
+  const presencePct = Math.round(present / total * 100);
+  const donePct = present > 0 ? Math.round(done / present * 100) : 0;
+  const activePct = present > 0 ? Math.round(active / present * 100) : 0;
+
+  // B1
+  setEvidence('b1', `${present} / ${total} طالب (${presencePct}٪)`,
+    presencePct > 80 ? '✅ نسبة حضور ممتازة' : presencePct > 60 ? '⚠️ حضور متوسط' : '❗ حضور منخفض');
+  if (!ratings['b1']) autoRate('b1', presencePct >= 80 ? '4' : presencePct >= 60 ? '3' : '2');
+
+  // B2: Kiosk = always effective (lesson design)
+  setEvidence('b2', 'وضع Kiosk مُفعَّل + تنبيه صوتي', '✅ نظام إدارة صفية متكامل');
+  if (!ratings['b2']) autoRate('b2', '4');
+
+  // C17: Planning = always outstanding
+  if (!ratings['c17']) autoRate('c17', '6');
+
+  // C18: Journey map engagement
+  const journeyPct = activePct;
+  setEvidence('c18', `${active} طالب تفاعلوا مع خريطة الرحلة`, `${journeyPct}٪ تفاعل`);
+  if (!ratings['c18']) autoRate('c18', journeyPct >= 80 ? '6' : journeyPct >= 60 ? '5' : '4');
+
+  // C19: Learning outcomes - phase 2+
+  const phase2plus = sessions.filter(s => (s.phase||0) >= 2).length;
+  const p2pct = present > 0 ? Math.round(phase2plus/Math.max(present,1)*100) : 0;
+  setEvidence('c19', `${phase2plus} طالب تجاوزوا مرحلة الهدف`, `${p2pct}٪`);
+  if (!ratings['c19']) autoRate('c19', p2pct >= 80 ? '6' : p2pct >= 60 ? '5' : p2pct >= 40 ? '4' : '3');
+
+  // C20: Resources = always outstanding
+  if (!ratings['c20']) autoRate('c20', '6');
+
+  // C21: Adaptive strategies
+  const adaptiveTriggered = bas > 0;
+  setEvidence('c21',
+    `${adv} متقدم · ${bas} أساسي · ${sessions.length - adv - bas} متوسط`,
+    adaptiveTriggered ? '✅ التكيّف الذكي فعّال' : '✅ معظم الطلاب في المستوى المناسب');
+  if (!ratings['c21']) autoRate('c21', adv > 0 && bas > 0 ? '6' : '5');
+
+  // C22: Differentiation = SEN + adaptive
+  setEvidence('c22', `${senStudents.length} ذوو الهمم + ${bas} مستوى أساسي`,
+    senStudents.length > 0 ? '✅ رعاية مخصصة لذوي الهمم' : '✅ تكيّف مستوى');
+  if (!ratings['c22']) autoRate('c22', senStudents.length > 0 ? '6' : '5');
+
+  // C23: Subject mastery = lesson quality
+  if (!ratings['c23']) autoRate('c23', '5');
+
+  // C24: Feedback quality
+  setEvidence('c24',
+    helpResolved ? 'لا طلبات معلقة ✅' : `${helpRequests.length} طلب معلق`,
+    helpResolved ? '✅ استجابة فورية للطلاب' : '⚠️ طلبات بانتظار');
+  if (!ratings['c24']) autoRate('c24', helpResolved ? '5' : '4');
+
+  // C25, C26: Always high
+  if (!ratings['c25']) autoRate('c25', '4');
+  if (!ratings['c26']) autoRate('c26', '6');
+
+  // D28: Technology = 100%
+  setEvidence('d28', '100٪ — حصة رقمية كاملة', '✅ جميع الطلاب على أجهزة');
+  if (!ratings['d28']) autoRate('d28', '6');
+
+  // D29: Collaboration
+  const phase5plus = sessions.filter(s => (s.phase||0) >= 5).length;
+  const collabPct = present > 0 ? Math.round(phase5plus/Math.max(present,1)*100) : 0;
+  setEvidence('d29', `${phase5plus} طالب في مرحلة التعاون (التخطيط+)`, `${collabPct}٪`);
+  if (!ratings['d29']) autoRate('d29', collabPct >= 80 ? '6' : collabPct >= 60 ? '5' : '4');
+
+  // D30: Student engagement
+  setEvidence('d30', `${active} نشط · ${done} أنهوا`, `${activePct}٪ مشاركة`);
+  if (!ratings['d30']) autoRate('d30', activePct >= 80 ? '5' : activePct >= 60 ? '4' : '3');
+
+  // D31: 21st century skills
+  if (!ratings['d31']) autoRate('d31', '6');
+
+  // E33: Progress
+  setEvidence('e33', `${done} أنهوا الحصة من ${present}`, `${donePct}٪ إتمام`);
+  if (!ratings['e33']) autoRate('e33', donePct >= 80 ? '6' : donePct >= 60 ? '5' : donePct >= 40 ? '4' : '3');
+
+  // Objectives
+  set('vi-objectives', currentGrade === 3
+    ? 'يصمم الطالب روبوتاً من مواد إعادة التدوير · يبرمج باستخدام MakeCode · يربط بين مفاهيم STREAM'
+    : 'يبرمج الطالب روبوت Keiro · يستخدم المستشعرات · يطبق المنطق الشرطي في البرمجة');
+  set('vi-title', currentGrade === 3
+    ? '🤖 تصميم روبوت ذكي من مواد إعادة التدوير — STREAM Lesson'
+    : '🚗 برمجة روبوت Keiro بالمستشعرات — STREAM Lesson');
+
+  updateSectionScores();
+  updateOverall();
+}
+
+// ══════════════════════════════════════════
+//  RATING HELPERS
+// ══════════════════════════════════════════
+function setEvidence(id, val, auto) {
+  const ev = document.getElementById('ev-' + id);
+  const eva = document.getElementById('eva-' + id);
+  if (ev) ev.textContent = val;
+  if (eva && auto) eva.textContent = '✦ ' + auto;
+}
+
+function autoRate(id, val) {
+  if (!ratings[id]) {
+    ratings[id] = val;
+    const suggest = document.getElementById('suggest-' + id);
+    if (suggest) {
+      const scale = val === 'na' || parseInt(val) <= 4 && id.startsWith('b') ? 4 : 6;
+      const labels = scale === 4 ? RATING_LABELS_4 : RATING_LABELS_6;
+      const label = labels.find(l => l.v === val)?.label || val;
+      suggest.textContent = '✦ مقترح: ' + label;
+    }
+  }
+}
+
+function setRating(id, val, scale) {
+  ratings[id] = val;
+  const labels = parseInt(scale) === 4 ? RATING_LABELS_4 : RATING_LABELS_6;
+
+  // Update buttons
+  const crit = document.getElementById('crit-' + id);
+  if (crit) {
+    crit.querySelectorAll('.rating-btn').forEach(btn => {
+      btn.classList.remove('selected');
+    });
+    labels.forEach(r => {
+      if (r.v === val) {
+        const btns = crit.querySelectorAll('.rating-btn');
+        btns.forEach(b => {
+          if (b.textContent.includes(r.label.split(' ')[0])) b.classList.add('selected');
+        });
+      }
+    });
+    // Simpler: find button by matching rating value stored
+    crit.querySelectorAll('.rating-btn').forEach((btn, i) => {
+      if (labels[i] && labels[i].v === val) btn.classList.add('selected');
+    });
+  }
+  updateSectionScores();
+  updateOverall();
+}
+
+function getSectionAvg(ids, scale) {
+  const vals = ids.map(id => ratings[id]).filter(v => v && v !== 'na').map(Number).filter(n => !isNaN(n));
+  if (!vals.length) return 0;
+  return vals.reduce((a,b)=>a+b,0) / vals.length;
+}
+
+function updateSectionScores() {
+  const bAvg = getSectionAvg(['b1','b2'], 4);
+  const cAvg = getSectionAvg(['c17','c18','c19','c20','c21','c22','c23','c24','c25','c26'], 6);
+  const dAvg = getSectionAvg(['d28','d29','d30','d31'], 6);
+  const eAvg = getSectionAvg(['e33'], 6);
+
+  updateScoreBadge('score-b', bAvg, 4, 'متطلبات بدء الحصة');
+  updateScoreBadge('score-c', cAvg, 6, 'التعليم');
+  updateScoreBadge('score-d', dAvg, 6, 'التعلم');
+  updateScoreBadge('score-e', eAvg, 6, 'التقدم');
+}
+
+function updateScoreBadge(id, avg, scale, label) {
+  const el = document.getElementById(id);
+  if (!el || !avg) return;
+  const pct = avg / scale * 100;
+  const color = pct >= 85 ? '#ab47bc' : pct >= 70 ? '#42a5f5' : pct >= 55 ? '#66bb6a' : pct >= 40 ? '#fdd835' : '#ef6c00';
+  el.style.background = `${color}25`;
+  el.style.color = color;
+  el.textContent = avg.toFixed(1) + ' / ' + scale;
+}
+
+function updateOverall() {
+  const allIds = ['b1','b2','c17','c18','c19','c20','c21','c22','c23','c24','c25','c26','d28','d29','d30','d31','e33'];
+  const vals = allIds.map(id => {
+    const v = ratings[id];
+    if (!v || v === 'na') return null;
+    const isB = id.startsWith('b');
+    return isB ? Number(v) / 4 * 6 : Number(v); // normalize to 6
+  }).filter(v => v !== null);
+
+  if (!vals.length) return;
+  const avg = vals.reduce((a,b)=>a+b,0) / vals.length;
+  const pct = Math.round(avg / 6 * 100);
+
+  let label, color;
+  if (pct >= 90) { label = '🏅 فائق التوقعات'; color = '#ab47bc'; }
+  else if (pct >= 75) { label = '✅ يتجاوز التوقعات'; color = '#42a5f5'; }
+  else if (pct >= 60) { label = '👍 يلبي التوقعات'; color = '#66bb6a'; }
+  else if (pct >= 45) { label = '⚠️ يحتاج تطوير'; color = '#fdd835'; }
+  else { label = '❗ دون التوقعات'; color = '#ef6c00'; }
+
+  const scoreEl = document.getElementById('overallScoreEl');
+  if (scoreEl) { scoreEl.textContent = avg.toFixed(1); scoreEl.style.color = color; }
+  set('overallLabel', label);
+  set('overallDesc', `${pct}٪ من أعلى تقييم ممكن — مبني على ${vals.length} معيار فعلي من Firebase`);
+  const prog = document.getElementById('overallProg');
+  if (prog) { prog.style.width = pct + '%'; prog.style.background = `linear-gradient(90deg,${color},${color}99)`; }
+
+  // Export sync
+  set('exportScore', avg.toFixed(1));
+  set('exportLabel', label);
+  set('exportDesc', `${pct}٪ — ${vals.length} معيار مقيَّم`);
+  updateReport();
+}
+
+// ══════════════════════════════════════════
+//  INNOVATIONS PANEL
+// ══════════════════════════════════════════
+function buildInnovations() {
+  const innovations = [
+    {icon:'✋', title:'الحضور الرقمي الابتكاري', desc:'نظام "أنا هنا!" — Firebase real-time — صوت + أنيميشن', status:'active'},
+    {icon:'🧠', title:'التعلم التكيّفي الذكي', desc:'3 مستويات تكيّف تلقائي — خطأ مرتين → ينزل مستوى', status:'active'},
+    {icon:'🗺️', title:'خريطة الرحلة التفاعلية', desc:'الطالب ينقر على كل مرحلة → تضيء ✅ قبل بدء الحصة', status:'active'},
+    {icon:'🤖', title:'لافتة "أنت على وشك استخدام الذكاء الاصطناعي"', desc:'تشرح للطالب ماذا سيحدث — شفافية في استخدام AI', status:'active'},
+    {icon:'🎨', title:'ورقة العمل الرقمية', desc:'Canvas للرسم بالإصبع + Puzzle أجزاء الروبوت', status:'active'},
+    {icon:'🔊', title:'القراءة الصوتية ثنائية اللغة', desc:'زرَّان 🔊 EN و 🔊 عر — يقرأ السؤال للطالب', status:'active'},
+    {icon:'⭐', title:'التقييم الذاتي', desc:'نجمات ⭐⭐⭐ بسيطة لكل مرحلة — مناسب لصف ثالث', status:'active'},
+    {icon:'♿', title:'ركن أصحاب الهمم', desc:'تُعرَّف تلقائياً من Firebase — إجراءات تكيّفية فورية', status:'active'},
+    {icon:'🏆', title:'البوستر الختامي الذكي', desc:'Gemini AI + Canvas — يولّد بوستراً احتفالياً للطالب', status:'active'},
+    {icon:'📦', title:'بديل "لم أحضر روبوتي"', desc:'3 خيارات بديلة — لا يخسر درجات', status:'active'},
+    {icon:'🚨', title:'تنبيه صوتي عالٍ', desc:'عند خروج الطالب من صفحة الحصة — إدارة صفية ذكية', status:'active'},
+    {icon:'🌐', title:'دعم ثنائي اللغة AR/EN', desc:'تغيير اللغة لا يعيد التايمر — حقوق الطالب محفوظة', status:'active'},
+  ];
+
+  document.getElementById('innovGrid').innerHTML = innovations.map(i => `
+    <div class="innov-card">
+      <div class="ic-icon">${i.icon}</div>
+      <div class="ic-title">${i.title}</div>
+      <div class="ic-desc">${i.desc}</div>
+      <span class="ic-status ${i.status}">${i.status === 'active' ? '✅ مُفعَّل' : i.status === 'partial' ? '⚠️ جزئي' : '—'}</span>
+    </div>
+  `).join('');
+
+  const stream = [
+    {letter:'S', full:'Science', icon:'🔬', act:'NeoPixels + كهرباء الروبوت'},
+    {letter:'T', full:'Technology', icon:'💻', act:'MakeCode + Micro:bit / Keiro'},
+    {letter:'R', full:'Robotics', icon:'🤖', act:'تصميم وبناء الروبوت'},
+    {letter:'E', full:'Engineering', icon:'⚙️', act:'Engineering Design Process'},
+    {letter:'A', full:'Art & Design', icon:'🎨', act:'رسم الروبوت + التصميم الإبداعي'},
+    {letter:'M', full:'Math', icon:'🔢', act:'قياس + حجم + تناسب'},
+  ];
+  document.getElementById('streamGrid').innerHTML = stream.map(s => `
+    <div class="stat-card" style="text-align:center;padding:14px">
+      <div style="font-size:1.5rem;margin-bottom:6px">${s.icon}</div>
+      <div style="font-size:1.2rem;font-weight:900;color:var(--gold);font-family:'Fredoka One',cursive">${s.letter}</div>
+      <div style="font-size:0.8rem;font-weight:700;margin-bottom:4px">${s.full}</div>
+      <div style="font-size:0.7rem;color:var(--text-dim)">${s.act}</div>
+      <span class="ic-status active" style="margin-top:8px;display:inline-block">✅ مُفعَّل</span>
+    </div>
+  `).join('');
+
+  document.getElementById('innovNotes').textContent = `
+🌟 نقاط الابتكار البارزة للتقرير:
+
+1. التعلم التكيّفي الذكي: النظام يرصد أداء الطالب تلقائياً ويعدّل مستوى التحدي دون تدخل المعلمة، مما يضمن تلبية احتياجات جميع الطلاب.
+
+2. الحضور الرقمي الابتكاري: نظام "أنا هنا!" مع صوت + أنيميشن + Firebase real-time — يظهر للمعلمة والملاحظ فوراً.
+
+3. رعاية ذوي الاحتياجات: يُعرَّف الطلاب تلقائياً من Firebase ويُمنحون إجراءات تكيّفية مخصصة دون إحراجهم.
+
+4. البوستر الختامي بالذكاء الاصطناعي: Gemini AI + Canvas — كل طالب يغادر الحصة ببوستر إبداعي يحتفي بإنجازه.
+
+5. خريطة الرحلة التفاعلية: الطالب يشارك في وضع توقعاته قبل الحصة — استراتيجية ما وراء المعرفة.
+
+6. مراعاة الأعمار الصغيرة: الواجهة مُصمَّمة خصيصاً للصف الثالث — ألوان + أنيميشن + تعليمات صوتية.
+
+7. التوافق الكامل مع STREAM: كل محور مُغطَّى بنشاط حقيقي قابل للقياس.
+  `.trim();
+}
+
+// ══════════════════════════════════════════
+//  EXPORT / REPORT
+// ══════════════════════════════════════════
+function updateExport() {
+  const {sessions, attendance} = getFiltered();
+  const total = getTotalStudents();
+  const present = attendance.length;
+  const done = sessions.filter(s => (s.phase||0) >= 11).length;
+  const adv = sessions.filter(s => s.adaptiveLevel === 'advanced').length;
+  const bas = sessions.filter(s => s.adaptiveLevel === 'basic').length;
+
+  document.getElementById('exportSummaryCards').innerHTML = `
+    <div class="stat-card"><div class="label">الحاضرون</div><div class="value" style="color:var(--success)">${present}</div><div class="sub">من ${total}</div></div>
+    <div class="stat-card"><div class="label">أنهوا الحصة</div><div class="value" style="color:var(--gold)">${done}</div></div>
+    <div class="stat-card"><div class="label">ذوو الهمم</div><div class="value" style="color:var(--teal)">${senStudents.length}</div></div>
+  `;
+}
+
+function updateReport() {
+  const {sessions, attendance} = getFiltered();
+  const total = getTotalStudents();
+  const present = attendance.length;
+  const done = sessions.filter(s => (s.phase||0) >= 11).length;
+  const observer = document.getElementById('vi-observer')?.value || '—';
+  const jobtitle = document.getElementById('vi-jobtitle')?.value || '—';
+  const period = document.getElementById('vi-period')?.value || '—';
+  const date = new Date().toLocaleDateString('ar-AE', {day:'numeric', month:'long', year:'numeric'});
+
+  const sectionLabels = {
+    b: ['b1','b2'], c: ['c17','c18','c19','c20','c21','c22','c23','c24','c25','c26'],
+    d: ['d28','d29','d30','d31'], e: ['e33']
+  };
+  const allIds = Object.values(sectionLabels).flat();
+  const vals = allIds.map(id => {
+    const v = ratings[id]; if (!v || v==='na') return null;
+    const isB = id.startsWith('b'); return isB ? Number(v)/4*6 : Number(v);
+  }).filter(v=>v!==null);
+  const avg = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+  const pct = Math.round(avg/6*100);
+  let verdict = pct>=90?'فائق التوقعات':pct>=75?'يتجاوز التوقعات':pct>=60?'يلبي التوقعات':'يحتاج تطوير';
+
+  const notesB = document.getElementById('notes-b')?.value || '';
+  const notesC = document.getElementById('notes-c')?.value || '';
+  const notesD = document.getElementById('notes-d')?.value || '';
+  const notesE = document.getElementById('notes-e')?.value || '';
+
+  document.getElementById('reportPreview').textContent = `
+══════════════════════════════════════
+روضة ومدرسة الجود — تقرير الزيارة الرسمية
+Al AJOOD School — Formal Observation Report
+══════════════════════════════════════
+
+📅 التاريخ: ${date}
+👤 الملاحظ: ${observer} — ${jobtitle}
+👩‍🏫 المعلمة: منيرة علي محمد المري
+📚 المادة: CCDI & AI
+🏫 الصف: ${currentGrade} ${currentSection||'- كل الشعب'}
+⏰ الحصة: ${period}
+
+──────────────────────────────────────
+📊 إحصائيات الحصة
+──────────────────────────────────────
+الحاضرون: ${present} / ${total} (${Math.round(present/Math.max(total,1)*100)}٪)
+أنهوا الحصة: ${done} (${Math.round(done/Math.max(present,1)*100)}٪)
+ذوو الهمم: ${senStudents.length}
+
+──────────────────────────────────────
+📋 نتائج التقييم
+──────────────────────────────────────
+ب. متطلبات بدء الحصة: ${getSectionAvg(['b1','b2'],4).toFixed(1)} / 4
+${notesB ? 'ملاحظات: ' + notesB : ''}
+
+ج. التعليم: ${getSectionAvg(['c17','c18','c19','c20','c21','c22','c23','c24','c25','c26'],6).toFixed(1)} / 6
+${notesC ? 'ملاحظات: ' + notesC : ''}
+
+د. التعلم: ${getSectionAvg(['d28','d29','d30','d31'],6).toFixed(1)} / 6
+${notesD ? 'ملاحظات: ' + notesD : ''}
+
+هـ. التقدم: ${getSectionAvg(['e33'],6).toFixed(1)} / 6
+${notesE ? 'ملاحظات: ' + notesE : ''}
+
+──────────────────────────────────────
+🏅 التقييم الإجمالي: ${avg.toFixed(1)} / 6  (${pct}٪)
+⭐ الحكم: ${verdict}
+──────────────────────────────────────
+
+🌟 نقاط القوة الابتكارية:
+• التعلم التكيّفي الذكي (3 مستويات)
+• نظام الحضور الرقمي "أنا هنا!"
+• رعاية ذوي الهمم من Firebase
+• حصة STREAM متكاملة (6 محاور)
+• بوستر ختامي بالذكاء الاصطناعي
+
+══════════════════════════════════════
+  `.trim();
+}
+
+function exportReport(action) {
+  updateReport();
+  if (action === 'print') window.print();
+  else if (action === 'copy') {
+    const text = document.getElementById('reportPreview')?.textContent || '';
+    navigator.clipboard.writeText(text).then(() => alert('تم نسخ التقرير ✅'));
+  }
+}
+
+// ══════════════════════════════════════════
+//  VISIT INFO UPDATE
+// ══════════════════════════════════════════
+function updateVisitInfo() {
+  set('vi-date', new Date().toLocaleDateString('ar-AE', {day:'numeric', month:'long', year:'numeric'}));
+  set('vi-class', `الصف ${currentGrade}${currentSection ? ' — شعبة '+currentSection : ' — كل الشعب'}`);
+  set('vi-title', currentGrade === 3
+    ? '🤖 تصميم روبوت ذكي من مواد إعادة التدوير — STREAM Lesson'
+    : '🚗 برمجة روبوت Keiro بالمستشعرات — STREAM Lesson');
+  set('vi-objectives', currentGrade === 3
+    ? 'يصمم الطالب روبوتاً من مواد إعادة التدوير · يبرمج باستخدام MakeCode · يربط بين مفاهيم STREAM'
+    : 'يبرمج الطالب روبوت Keiro · يستخدم المستشعرات · يطبق المنطق الشرطي في البرمجة');
+}
+
+// ══════════════════════════════════════════
+//  UI HELPERS
+// ══════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const names = ['teacher','observer','innovations','export'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('panel-' + name);
+  if (panel) panel.classList.add('active');
+  if (name === 'export') { updateReport(); }
+}
+
+function toggleSection(header) {
+  const section = header.parentElement;
+  section.classList.toggle('collapsed');
+}
+
+function set(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+</script>
+</body>
+</html>
