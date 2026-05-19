@@ -3830,22 +3830,42 @@ body {
 
 <script type="module">
 // ============================================================
-// FIREBASE SETUP
 // ============================================================
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, addDoc, collection, onSnapshot, serverTimestamp, query, orderBy, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyDri3r5AtyyduyiTS5GzIHOn-XSduhALpM",
-  authDomain: "aljood-school.firebaseapp.com",
-  projectId: "aljood-school",
-  storageBucket: "aljood-school.firebasestorage.app",
-  messagingSenderId: "278563135138",
-  appId: "1:278563135138:web:de89305eddca23fc1241fb"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// SUPABASE SETUP (Firebase → Supabase)
+// ============================================================
+const SUPA_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+let _sb = null;
+async function getSB() {
+  if (_sb) return _sb;
+  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+  _sb = createClient(SUPA_URL, SUPA_KEY);
+  return _sb;
+}
+async function sbUpsert(table, data) {
+  const sb = await getSB();
+  const { error } = await sb.from(table).upsert(data);
+  if (error) console.warn('[SB] upsert:', error.message);
+}
+async function sbInsert(table, data) {
+  const sb = await getSB();
+  const { error } = await sb.from(table).insert(data);
+  if (error) console.warn('[SB] insert:', error.message);
+}
+async function sbDeleteAll(table) {
+  const sb = await getSB();
+  await sb.from(table).delete().gte('id', '');
+}
+async function sbDeleteAllByField(table, field) {
+  const sb = await getSB();
+  await sb.from(table).delete().neq(field, '___never___');
+}
+async function sbGetAll(table) {
+  const sb = await getSB();
+  const { data } = await sb.from(table).select('*');
+  return data || [];
+}
+getSB().then(() => console.log('✅ Supabase ready'));
 
 
 // ============================================================
@@ -3866,19 +3886,19 @@ const snSuggestions = {
 
 async function loadSpecialNeeds() {
   try {
-    const snap = await getDocs(collection(db, 'special_needs'));
-    snap.forEach(docSnap => {
-      const d = docSnap.data();
+    const res = await fetch('data/special_needs.json');
+    if (!res.ok) return;
+    const arr = await res.json();
+    arr.forEach(d => {
       if (d.name) specialNeedsMap[d.name.trim()] = {
-        badge: d.badge || '♿',
-        short: d.disability_short || '',
+        badge: d.badge || d.emoji || '♿',
+        short: d.disability_short || d.condition || '',
         plan: d.plan_type || '',
         severity: d.severity || '',
-        cls: d.class || ''
+        cls: d.class || d.className || ''
       };
     });
     console.log('✅ Special needs loaded:', Object.keys(specialNeedsMap).length, 'students');
-    // Re-render attendance if already loaded
     if (typeof renderAttendance === 'function') renderAttendance();
   } catch(e) { console.warn('Special needs load failed:', e); }
 }
@@ -3987,12 +4007,14 @@ async function saveTeacherNotes() {
     return;
   }
   try {
-    await addDoc(collection(db, 'lesson_observation_notes'), {
-      ...teacherArabicNotes,
+    await sbInsert('lesson_observation_notes', {
+      achievement: teacherArabicNotes.achievement,
+      challenges: teacherArabicNotes.challenges,
+      future_plans: teacherArabicNotes.futurePlans,
       class: attFilter !== 'all' ? attFilter : '',
       grade: attFilter !== 'all' ? attFilter : '',
-      date: new Date().toISOString(),
-      teacherId: 'munira'
+      teacher_id: 'munira',
+      created_at: new Date().toISOString()
     });
     alert('✅ تم حفظ الملاحظات');
   } catch(e) {
@@ -4189,13 +4211,13 @@ window.markPresent = async function() {
   try {
     const docId = selectedClass + '_' + selectedStudentObj.num;
     if (browseMode) return;
-    await setDoc(doc(db, 'obs_attendance', docId), {
+    await sbUpsert('obs_attendance', { id: docId, 
       name: currentStudent.name,
       nameEn: currentStudent.nameEn,
       class: selectedClass,
       grade: selectedGrade,
       num: selectedStudentObj.num,
-      timestamp: serverTimestamp(),
+      timestamp: new Date().toISOString(),
       weekday: true
     });
     playJoinChime();
@@ -4216,46 +4238,37 @@ window.markPresent = async function() {
 // ============================================================
 function startStudentSync() {
   if (sessionUnsubscribe) sessionUnsubscribe();
-  sessionUnsubscribe = onSnapshot(doc(db, 'obs_session', 'current'), (snap) => {
-    if (snap.exists()) {
-      const data = snap.data();
-      // ---- KICK CHECK ----
-      const myName = currentStudent ? currentStudent.nameAr : null;
-      const kickAll = data.kickAll === true;
-      const kickedList = data.kickedStudents || [];
-      const isKicked = kickAll || (myName && kickedList.includes(myName));
-      const overlay = document.getElementById('kickOverlay');
-      if (overlay) overlay.classList.toggle('active', isKicked);
-      // Update teacher kicked set and re-render attendance
-      if (data.kickedStudents !== undefined) {
-        window.kickedStudentsSet = new Set(data.kickedStudents);
-        if (typeof renderAttendance === 'function') renderAttendance();
-      }
-      // -------------------
-      const phase = data.phase !== undefined ? data.phase : 0;
-      const lessonActive = data.lessonActive === true;
-      // Student ALWAYS waits until teacher explicitly starts (lessonActive=true)
-      if (!lessonActive) {
-        // Stay on waiting screen — don't advance even if phase>0 (old session data)
-        if (currentPhase !== 0) {
-          currentPhase = 0;
-          updateStudentPhaseDisplay(0);
+  getSB().then(sb => {
+    const loadSession = async () => {
+      const { data: snap } = await sb.from('obs_session').select('*').eq('id', 'current').maybeSingle();
+      if (snap) {
+        const data = snap;
+        // Process session data (same as Firebase snap.data())
+        if (data.phase !== undefined) {
+          currentPhase = data.phase;
+          updateStudentPhaseDisplay(currentPhase);
         }
-      } else if (phase !== currentPhase) {
-        currentPhase = phase;
-        updateStudentPhaseDisplay(phase);
-      }
-      if (data.timerSeconds !== undefined) {
-        // sync timer display
-        const display = document.getElementById('lessonTimerDisplay');
-        if (display) {
-          const m = Math.floor(data.timerSeconds / 60).toString().padStart(2,'0');
-          const s = (data.timerSeconds % 60).toString().padStart(2,'0');
-          display.textContent = m + ':' + s;
+        if (data.lesson_active !== undefined) {
+          if (data.lesson_active && !window._lessonStarted) {
+            window._lessonStarted = true;
+          }
+        }
+        if (data.class_timer_seconds !== undefined && data.class_timer_seconds !== null) {
+          classTimerSeconds = data.class_timer_seconds;
+          updateClassTimerDisplay && updateClassTimerDisplay();
+        }
+        if (data.groups) {
+          window._obsGroups = data.groups;
+          if (typeof renderGroupsForStudent === 'function') renderGroupsForStudent(data.groups);
         }
       }
-    }
-  });
+    };
+    loadSession();
+    window._sessChannel = sb.channel('obs_sess_rt')
+      .on('postgres_changes', {event: '*', schema: 'public', table: 'obs_session', filter: 'id=eq.current'}, loadSession)
+      .subscribe();
+    sessionUnsubscribe = () => { sb.removeChannel(window._sessChannel); window._sessChannel = null; };
+  })
 }
 
 function updateStudentPhaseDisplay(phase) {
@@ -4296,11 +4309,11 @@ function initDesignProcessAnimation() {
 }
 
 function initGroupWorkDisplay() {
-  // Try to get group assignment from Firebase
-  const attDoc = doc(db, 'obs_session', 'current');
-  getDoc(attDoc).then(snap => {
-    if (snap.exists() && snap.data().groups) {
-      const groups = snap.data().groups;
+  // Get group assignment from Supabase obs_session
+  getSB().then(async sb => {
+    const { data: snap } = await sb.from('obs_session').select('groups').eq('id', 'current').maybeSingle();
+    if (snap && snap.groups) {
+      const groups = snap.groups;
       const ROLES = ['🎨 المصمم/ة', '📝 الكاتب/ة', '🔬 الباحث/ة', '🎤 المقدم/ة'];
       if (currentStudent) {
         for (const [gId, members] of Object.entries(groups)) {
@@ -4360,11 +4373,11 @@ window.saveWarmup = async function() {
   const wu2El = document.getElementById(wu2Id);
   try {
     const docId = (currentStudent.class || 'X') + '_' + (currentStudent.num || '0');
-    await setDoc(doc(db, 'obs_exit_cards', docId + '_warmup'), {
+    await sbUpsert('obs_exit_cards', { student_id: docId + '_warmup', 
       name: currentStudent.name, class: currentStudent.class, grade: currentStudent.grade,
       answers: warmupAnswers,
       q2text: wu2El ? wu2El.value : '',
-      timestamp: serverTimestamp()
+      timestamp: new Date().toISOString()
     });
   } catch(e) { console.warn('Warmup save failed:', e); }
 };
@@ -4419,10 +4432,10 @@ window.saveDPStep = async function(step) {
   if (!currentStudent || (typeof browseMode !== 'undefined' && browseMode)) return;
   try {
     const docId = (currentStudent.class || 'X') + '_' + (currentStudent.num || '0');
-    await setDoc(doc(db, 'obs_exit_cards', docId + '_dp_' + step), {
+    await sbUpsert('obs_exit_cards', { student_id: docId + '_dp_' + step, 
       name: currentStudent.name, class: currentStudent.class, grade: currentStudent.grade,
       step: step, answers: dpAnswers,
-      timestamp: serverTimestamp()
+      timestamp: new Date().toISOString()
     });
   } catch(e) { console.warn('DP step save failed:', e); }
 };
@@ -4454,9 +4467,9 @@ window.saveKWL = async function() {
   try {
     const docId = (currentStudent.class || 'X') + '_' + (currentStudent.num || '0');
     if (browseMode) return;
-    await setDoc(doc(db, 'obs_exit_cards', docId + '_kwl'), {
+    await sbUpsert('obs_exit_cards', { student_id: docId + '_kwl', 
       name: currentStudent.name, class: currentStudent.class,
-      grade: currentStudent.grade, know, want, timestamp: serverTimestamp()
+      grade: currentStudent.grade, know, want, timestamp: new Date().toISOString()
     });
     if (savedDiv) {
       savedDiv.style.display = 'inline-flex';
@@ -4480,7 +4493,7 @@ window.saveDesignBrief = async function() {
     con1: document.getElementById('briefCon1').value,
     con2: document.getElementById('briefCon2').value,
     ideaName: document.getElementById('briefIdeaName').value,
-    timestamp: serverTimestamp()
+    timestamp: new Date().toISOString()
   };
   try {
     const docId = (currentStudent.class || 'X') + '_' + (currentStudent.num || '0');
@@ -4500,7 +4513,7 @@ window.saveSketch = async function() {
     name: currentStudent.name, class: currentStudent.class, grade: currentStudent.grade,
     sketch: (document.getElementById(typeof selectedGrade !== 'undefined' && selectedGrade === 4 ? 'sketchDescription4' : 'sketchDescription3') || {value:''}).value,
     altSketch: document.getElementById('sketchAlt') ? document.getElementById('sketchAlt').value : '',
-    timestamp: serverTimestamp()
+    timestamp: new Date().toISOString()
   };
   try {
     const docId = (currentStudent.class || 'X') + '_' + (currentStudent.num || '0');
@@ -4553,7 +4566,7 @@ window.submitExitCard = async function() {
     q2: q2val,
     q3: exitEmoji,
     score: score,
-    timestamp: serverTimestamp()
+    timestamp: new Date().toISOString()
   };
   try {
     const docId = currentStudent ? (currentStudent.class + '_' + currentStudent.num) : ('anon_' + Date.now());
@@ -4601,11 +4614,11 @@ window.teacherGoToPhase = async function(phase) {
   updateTeacherPhaseUI(phase);
   startTeacherTimer(PHASE_DURATIONS[phase]);
   try {
-    await setDoc(doc(db, 'obs_session', 'current'), {
+    await sbUpsert('obs_session', { id: 'current', 
       phase: phase,
       lessonActive: phase >= 1,
       timerSeconds: PHASE_DURATIONS[phase],
-      updatedAt: serverTimestamp()
+      updatedAt: new Date().toISOString()
     });
   } catch(e) { console.warn('Phase push failed:', e); }
 };
@@ -4620,21 +4633,19 @@ window.startNewSession = async function() {
     window._autoFilterApplied = false;
     
     // Reset session document
-    await setDoc(doc(db, 'obs_session', 'current'), {
+    await sbUpsert('obs_session', { id: 'current', 
       phase: 0,
       lessonActive: false,
       timerSeconds: 300,
       kickAll: false,
       kickedStudents: [],
       sessionId: newSid,
-      updatedAt: serverTimestamp()
+      updatedAt: new Date().toISOString()
     });
     
     // Clear ALL obs_attendance records from previous session
-    const oldSnap = await getDocs(collection(db, 'obs_attendance'));
-    const delBatch = [];
-    oldSnap.forEach(d => delBatch.push(deleteDoc(d.ref)));
-    await Promise.all(delBatch);
+    // (clearing obs_attendance via Supabase)
+    await (await getSB()).from('obs_attendance').delete().neq('id', '___never___');
     console.log('✅ Cleared', delBatch.length, 'old attendance records');
     
     // Reset local state
@@ -4754,43 +4765,36 @@ function showJoinToast(name) {
 async function clearAttendanceNow() {
   if (!confirm('مسح جميع سجلات الحضور الحالية؟\nClear all attendance records?')) return;
   try {
-    const snap = await getDocs(collection(db, 'obs_attendance'));
-    const dels = [];
-    snap.forEach(d => dels.push(deleteDoc(d.ref)));
-    await Promise.all(dels);
+    const sb = await getSB();
+    await sb.from('obs_attendance').delete().neq('id', '___never___');
     attendanceList = [];
     window._autoFilterApplied = false;
     window.kickedStudentsSet = new Set();
     renderAttendance();
-    showToastTeacher('✅ تم مسح ' + dels.length + ' سجل حضور');
+    showToastTeacher('✅ تم مسح سجلات الحضور');
   } catch(e) {
     showToastTeacher('⚠️ خطأ: ' + e.message);
   }
 }
 
 function listenAttendance() {
-  if (attUnsubscribe) attUnsubscribe();
-  _prevAttCount = 0;
-  _prevAttNames = new Set();
-  attUnsubscribe = onSnapshot(collection(db, 'obs_attendance'), (snap) => {
-    attendanceList = [];
-    snap.forEach(d => attendanceList.push(d.data()));
-    window.attendanceSnapshot = attendanceList.map(a => ({name: a.name, score: a.score, level: a.level, cls: a.class}));
-    
-    // Detect new joiners
-    const currentNames = new Set(attendanceList.map(a => a.name));
-    if (_prevAttCount > 0) { // skip first load
-      currentNames.forEach(name => {
-        if (!_prevAttNames.has(name)) {
-          playJoinSound();
-          showJoinToast(name);
-        }
-      });
-    }
-    _prevAttCount = attendanceList.length;
-    _prevAttNames = new Set(currentNames);
-    
+  if (window._attChannel) { getSB().then(sb => sb.removeChannel(window._attChannel)); window._attChannel = null; }
+  attUnsubscribe = () => { if (window._attChannel) { getSB().then(sb => sb.removeChannel(window._attChannel)); window._attChannel = null; } };
+  _prevAttCount = 0; _prevAttNames = new Set();
+  const reloadAtt = async () => {
+    const rows = await sbGetAll('obs_attendance');
+    attendanceList = rows.map(a => ({name: a.name, score: a.score, level: a.level, cls: a.class}));
+    window.attendanceSnapshot = attendanceList.map(a => ({...a}));
+    const cur = new Set(attendanceList.map(a => a.name));
+    if (_prevAttCount > 0) { cur.forEach(n => { if (!_prevAttNames.has(n)) { playJoinSound(); showJoinToast(n); } }); }
+    _prevAttCount = attendanceList.length; _prevAttNames = new Set(cur);
     renderAttendance();
+  };
+  reloadAtt();
+  getSB().then(sb => {
+    window._attChannel = sb.channel('obs_att_rt')
+      .on('postgres_changes', {event: '*', schema: 'public', table: 'obs_attendance'}, reloadAtt)
+      .subscribe();
   });
 }
 
@@ -5105,11 +5109,18 @@ window.filterAtt = function(f) {
 // EXIT CARD LISTENER
 // ============================================================
 function listenExitCards() {
-  if (exitUnsubscribe) exitUnsubscribe();
-  exitUnsubscribe = onSnapshot(collection(db, 'obs_exit_cards'), (snap) => {
-    exitCardList = [];
-    snap.forEach(d => { if (d.id.endsWith('_exit')) exitCardList.push(d.data()); });
+  if (window._exitChannel) { getSB().then(sb => sb.removeChannel(window._exitChannel)); window._exitChannel = null; }
+  exitUnsubscribe = () => { if (window._exitChannel) { getSB().then(sb => sb.removeChannel(window._exitChannel)); window._exitChannel = null; } };
+  const reloadExit = async () => {
+    const rows = await sbGetAll('obs_exit_cards');
+    exitCardList = rows.filter(d => d.student_id && d.student_id.endsWith('_exit')).map(d => ({ ...d, ...((typeof d.data === 'object' && d.data) || {}) }));
     renderExitProgress();
+  };
+  reloadExit();
+  getSB().then(sb => {
+    window._exitChannel = sb.channel('obs_exit_rt')
+      .on('postgres_changes', {event: '*', schema: 'public', table: 'obs_exit_cards'}, reloadExit)
+      .subscribe();
   });
 }
 // ============================================================
@@ -5119,32 +5130,20 @@ let studentHistoricalData = {}; // name → {total: sumPct, count: n}
 
 async function fetchHistoricalData() {
   try {
-    const { getDocs, collection: col } = await import('https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js');
-    // Try multiple collection names used by weekly_lessons
-    const collections = ['lesson_results', 'weekly_lesson_results', 'weeklyResults'];
-    for (const cname of collections) {
-      try {
-        const snap = await getDocs(col(db, cname));
-        if (snap.empty) continue;
-        snap.forEach(d => {
-          const data = d.data();
-          const name = data.studentName || data.name || data.student;
-          const score = data.score;
-          const total = data.total || data.maxScore || 10;
-          if (!name || score === undefined || score === null) return;
-          const pct = Math.min(100, Math.round((Number(score) / Number(total)) * 100));
-          if (isNaN(pct)) return;
-          if (!studentHistoricalData[name]) {
-            studentHistoricalData[name] = { total: 0, count: 0 };
-          }
-          studentHistoricalData[name].total += pct;
-          studentHistoricalData[name].count++;
-        });
-      } catch(e2) { /* collection might not exist */ }
-    }
-  } catch(e) {
-    console.log('Historical fetch error:', e);
-  }
+    const sb = await getSB();
+    const { data } = await sb.from('worksheets').select('student_name, score');
+    if (!data) return;
+    data.forEach(d => {
+      const name = d.student_name;
+      const score = d.score;
+      if (!name || score === undefined || score === null) return;
+      const pct = Math.min(100, Math.round(Number(score) * 10));
+      if (isNaN(pct)) return;
+      if (!studentHistoricalData[name]) studentHistoricalData[name] = { total: 0, count: 0 };
+      studentHistoricalData[name].total += pct;
+      studentHistoricalData[name].count++;
+    });
+  } catch(e) { console.log('Historical fetch error:', e); }
 }
 
 function getHistoricalAvg(name) {
@@ -5355,7 +5354,7 @@ window.openGroupDistribution = async function() {
   }
   // Save to Firebase
   try {
-    await setDoc(doc(db, 'obs_session', 'current'), { groups }, { merge: true });
+    await sbUpsert('obs_session', { id: 'current',  groups });
   } catch(e) { console.warn('Groups save failed:', e); }
   // Render
   const grid = document.getElementById('groupsGrid');
@@ -5493,8 +5492,8 @@ async function recordLeaveAlert(type) {
       type: type,
       count: leaveAlerts[key],
       lastTime: timeStr,
-      timestamp: serverTimestamp()
-    }, { merge: true });
+      timestamp: new Date().toISOString()
+    });
   } catch(e) { console.warn('Alert save failed:', e); }
 }
 
@@ -5505,12 +5504,17 @@ let alertCount = 0;
 
 function initAlertListener() {
   if (alertUnsubscribe) alertUnsubscribe();
-  alertUnsubscribe = onSnapshot(collection(db, 'obs_alerts'), (snap) => {
-    const items = [];
-    snap.forEach(d => items.push(d.data()));
-    items.sort((a,b) => b.count - a.count);
-    renderAlerts(items);
-  });
+  getSB().then(sb => {
+    const loadAlerts = async () => {
+      const { data } = await sb.from('obs_alerts').select('*').order('ts', {ascending: false}).limit(20);
+      if (data && typeof renderAlerts === 'function') renderAlerts(data);
+    };
+    loadAlerts();
+    window._alertsChannel = sb.channel('obs_alerts_rt')
+      .on('postgres_changes', {event: '*', schema: 'public', table: 'obs_alerts'}, loadAlerts)
+      .subscribe();
+    alertUnsubscribe = () => { sb.removeChannel(window._alertsChannel); };
+  })
 }
 
 function renderAlerts(items) {
@@ -6109,7 +6113,7 @@ window.startClassTimer = function() {
       updateClassTimerDisplay();
       // Sync to Firebase every 10 seconds
       if (classTimerSeconds % 10 === 0) {
-        try { setDoc(doc(db, 'obs_session', 'current'), { classTimerSeconds }, { merge: true }); } catch(e){}
+        try { setDoc(doc(db, 'obs_session', 'current'), { classTimerSeconds }); } catch(e){}
       }
     }
   }, 1000);
@@ -6307,7 +6311,7 @@ window.initDesignProcessAnimation = function() {
         // Save to Firebase
         try {
           const studentId = currentStudent ? currentStudent.id || currentStudent.name : 'unknown';
-          setDoc(doc(db, 'obs_boost_results', studentId + '_phase3'), {
+          sbUpsert('obs_boost_results', {
             studentName: currentStudent ? currentStudent.name : '?',
             class: currentStudent ? currentStudent.class : '?',
             phase: 'phase3', correct, total,
@@ -6440,23 +6444,19 @@ window.listenForAIAssistant = function() {
   if (browseMode) return;
   if (aiAssistantUnsubscribe) return;
 
-  aiAssistantUnsubscribe = onSnapshot(doc(db, 'lesson_control', 'ai_assistant'), (docSnap) => {
-    if (!docSnap.exists()) return;
-    const data = docSnap.data();
-    const overlay = document.getElementById('ai-assistant-overlay');
-    if (!overlay) return;
-
-    if (data.active) {
-      currentAITopic = data.topic || 'Design Process';
-      const topicDisplay = document.getElementById('ai-topic-display');
-      if (topicDisplay) topicDisplay.textContent = currentAITopic;
-      overlay.style.display = 'block';
-      setTimeout(() => { overlay.style.transform = 'translateY(0)'; }, 50);
-    } else {
-      overlay.style.transform = 'translateY(100%)';
-      setTimeout(() => { overlay.style.display = 'none'; }, 500);
-    }
-  });
+  getSB().then(sb => {
+    const loadAI = async () => {
+      const { data: docSnap } = await sb.from('lesson_control').select('*').eq('id', 'ai_assistant').maybeSingle();
+      if (docSnap && docSnap.data && typeof handleAIAssistantUpdate === 'function') {
+        handleAIAssistantUpdate(docSnap.data);
+      }
+    };
+    loadAI();
+    window._aiChannel = sb.channel('lesson_ctrl_rt')
+      .on('postgres_changes', {event: '*', schema: 'public', table: 'lesson_control', filter: 'id=eq.ai_assistant'}, loadAI)
+      .subscribe();
+    aiAssistantUnsubscribe = () => { sb.removeChannel(window._aiChannel); };
+  })
 };
 
 window.askAI = async function() {
@@ -6568,14 +6568,14 @@ window.saveReflection = async function() {
   if (typeof browseMode !== 'undefined' && browseMode) return;
   const savedDiv = document.getElementById('reflectionSaved');
   try {
-    await db.collection('lesson_reflection').add({
+    await sbInsert('lesson_reflection', {
       achievement: reflectionData.achievement,
       challenges: reflectionData.challenges,
       plans: reflectionData.plans,
       grade: typeof selectedGrade !== 'undefined' ? selectedGrade : null,
       cls: typeof selectedClass !== 'undefined' ? selectedClass : null,
       lessonDate: new Date().toISOString().split('T')[0],
-      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      timestamp: firebase.firestore.FieldValue.new Date().toISOString()
     });
     if (savedDiv) {
       savedDiv.style.display = 'block';
@@ -7123,15 +7123,15 @@ async function saveAllStudentAchievements() {
       const grade = typeof currentGrade !== 'undefined' ? currentGrade : '';
       const cls = typeof currentClass !== 'undefined' ? currentClass : '';
       if (browseMode) return;
-      await db.collection('lesson_observation_results').doc(currentStudent + '_final').set({
+      await sbUpsert('lesson_observation_results', { id: currentStudent + '_final', 
         name: currentStudent,
         grade: grade,
         class: cls,
         score: typeof studentScore !== 'undefined' ? studentScore : 0,
         maxScore: typeof studentMaxScore !== 'undefined' ? studentMaxScore : 0,
-        savedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        savedAt: firebase.firestore.FieldValue.new Date().toISOString(),
         reason: 'timer_end'
-      }, { merge: true });
+      });
       console.log('✅ Student achievements saved on timer end');
     }
   } catch(e) { console.warn('Could not save achievements:', e); }

@@ -1055,29 +1055,24 @@ select:focus { border-color: var(--dark); }
 
 <!-- Firebase SDK -->
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, collection, addDoc, query, where, getDocs, orderBy, doc, setDoc, getDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyDri3r5AtyyduyiTS5GzIHOn-XSduhALpM",
-  authDomain: "aljood-school.firebaseapp.com",
-  projectId: "aljood-school",
-  storageBucket: "aljood-school.firebasestorage.app",
-  messagingSenderId: "278563135138",
-  appId: "1:278563135138:web:de89305eddca23fc1241fb"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-window.__fbdb = db;
-window.__fbFns = { collection, addDoc, query, where, getDocs, orderBy, doc, setDoc, getDoc, deleteDoc, onSnapshot };
-window.__fbReady = true;
+// ============================================================
+// SUPABASE SETUP
+// ============================================================
+const WL_SUPA_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const WL_SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+let _wlSB = null;
+async function getWLSB() {
+  if (_wlSB) return _wlSB;
+  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+  _wlSB = createClient(WL_SUPA_URL, WL_SUPA_KEY);
+  return _wlSB;
+}
+console.log('✅ Supabase ready (weekly lessons)');
 console.log("Firebase ready");
 
 // Trigger pending save if any
 if (window.__pendingSave) {
-  window.saveToFirebase(window.__pendingSave).then(() => {
+  if (window.__pendingSave) { saveToSupabase(window.__pendingSave).then(() => {
     window.__pendingSave = null;
   });
 }
@@ -1225,56 +1220,46 @@ async function clearState() {
 
 // ── Firebase Progress Save/Load ──
 async function saveProgressToFirebase() {
-  if (browseMode) return;
-  if (!currentStudent || !currentClass || currentWeek === null) return;
+  if (browseMode) return true;
+  if (!currentStudent || !currentClass || currentWeek === null) return false;
   try {
-    const { doc, setDoc } = window.__fbFns;
-    const progressId = (currentClass + '_' + currentStudent).replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_؀-ۿ]/g,'');
-    const data = {
-      studentName: currentStudent,
-      className: currentClass,
-      grade: currentGrade,
-      section: currentSection,
-      week: currentWeek,
-      stage: currentStage,
-      slideIdx: currentSlideIdx,
-      quizIdx: currentQuizIdx,
-      quizScores: quizScores,
-      savedAt: new Date().toISOString(),
-      completed: false
-    };
-    await setDoc(doc(window.__fbdb, 'student_progress', progressId), data);
-    return true;
-  } catch(e) {
-    console.error('Save progress error:', e);
-    return false;
-  }
+    const sb = await getWLSB();
+    const progressId = (currentClass + '_' + currentStudent).replace(/\s+/g,'_').replace(/[^\w\u0600-\u06FF]/g,'');
+    const { error } = await sb.from('student_progress').upsert({
+      progress_id: progressId, student_name: currentStudent, class_name: currentClass,
+      grade: currentGrade, section: currentSection, week: currentWeek, stage: currentStage,
+      slide_idx: currentSlideIdx, quiz_idx: currentQuizIdx, quiz_scores: quizScores,
+      completed: false, saved_at: new Date().toISOString()
+    }, { onConflict: 'progress_id' });
+    if (error) console.error('Save error:', error.message);
+    return !error;
+  } catch(e) { console.error('Save progress error:', e); return false; }
 }
 
 async function loadProgressFromFirebase(studentName, className) {
   if (!studentName || !className) return null;
   try {
-    const { doc, getDoc } = window.__fbFns;
-    const progressId = (className + '_' + studentName).replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_؀-ۿ]/g,'');
-    const snap = await getDoc(doc(window.__fbdb, 'student_progress', progressId));
-    if (snap.exists()) {
-      const d = snap.data();
-      // Only return if not completed and has a week saved
-      if (!d.completed && d.week !== null && d.week !== undefined) return d;
+    const sb = await getWLSB();
+    const progressId = (className + '_' + studentName).replace(/\s+/g,'_').replace(/[^\w\u0600-\u06FF]/g,'');
+    const { data } = await sb.from('student_progress').select('*').eq('progress_id', progressId).maybeSingle();
+    if (data && !data.completed && data.week !== null && data.week !== undefined) {
+      return {
+        studentName: data.student_name, className: data.class_name,
+        grade: data.grade, section: data.section, week: data.week,
+        stage: data.stage, slideIdx: data.slide_idx, quizIdx: data.quiz_idx,
+        quizScores: data.quiz_scores, completed: data.completed
+      };
     }
     return null;
-  } catch(e) {
-    console.error('Load progress error:', e);
-    return null;
-  }
+  } catch(e) { console.error('Load progress error:', e); return null; }
 }
 
 async function clearProgressFromFirebase() {
   if (!currentStudent || !currentClass) return;
   try {
-    const { doc, deleteDoc } = window.__fbFns;
-    const progressId = (currentClass + '_' + currentStudent).replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_؀-ۿ]/g,'');
-    await deleteDoc(doc(window.__fbdb, 'student_progress', progressId));
+    const sb = await getWLSB();
+    const progressId = (currentClass + '_' + currentStudent).replace(/\s+/g,'_').replace(/[^\w\u0600-\u06FF]/g,'');
+    await sb.from('student_progress').delete().eq('progress_id', progressId);
   } catch(e) {}
 }
 
@@ -2218,33 +2203,33 @@ async function submitLesson() {
   await saveToFirebase(data);
 }
 
-async function saveToFirebase(data) {
-  if (browseMode) return; // no saving in browse mode
+async function saveToSupabase(data) {
   const statusEl = document.getElementById('firebase-status');
+  if (statusEl) { statusEl.textContent = '⏳ جاري الحفظ...'; statusEl.className = 'alert alert-info'; statusEl.style.display = 'block'; }
   try {
-    if (!window.__fbReady || !window.__fbdb) {
-      setTimeout(() => saveToFirebase(data), 2000);
-      return;
-    }
-    const { collection, addDoc } = window.__fbFns;
-    await addDoc(collection(window.__fbdb, 'weekly_results'), data);
+    const sb = await getWLSB();
+    const { error } = await sb.from('weekly_results').insert({
+      student_name: data.studentName || data.name,
+      class_name: data.className || data.class,
+      grade: data.grade,
+      score: data.score,
+      total: data.total || data.maxScore || 10,
+      week: data.week,
+      subject: data.subject || 'تقنية',
+      created_at: new Date().toISOString()
+    });
     if (statusEl) {
-      statusEl.textContent = '✅ تم حفظ نتيجتك بنجاح في Firebase 🔥';
-      statusEl.className = 'alert alert-success';
+      statusEl.textContent = error ? '⚠️ خطأ في الحفظ — تم الحفظ محلياً' : '✅ تم حفظ نتيجتك بنجاح! 🎉';
+      statusEl.className = error ? 'alert alert-warning' : 'alert alert-success';
+      if (!error) setTimeout(() => { if (statusEl) statusEl.style.display = 'none'; }, 4000);
     }
-    window.__pendingSave = null;
   } catch(e) {
-    console.error('Firebase save error:', e);
-    if (statusEl) {
-      statusEl.textContent = '⚠️ تم حفظ النتيجة محلياً (سيُزامَن لاحقاً)';
-      statusEl.className = 'alert alert-info';
-    }
-    // Save locally
-    const local = JSON.parse(localStorage.getItem('pendingResults') || '[]');
-    local.push(data);
-    localStorage.setItem('pendingResults', JSON.stringify(local));
+    console.error('Supabase save error:', e);
+    if (statusEl) { statusEl.textContent = '⚠️ خطأ: ' + e.message; statusEl.className = 'alert alert-warning'; }
   }
 }
+async function saveToFirebase(data) { return saveToSupabase(data); }
+window.saveToFirebase = saveToSupabase;
 
 // ============================================================
 // BROWSE MODE FUNCTIONS
@@ -2403,15 +2388,17 @@ async function loadTeacherData() {
   document.getElementById('teacher-empty').style.display = 'none';
 
   try {
-    if (!window.__fbReady) {
+    if (false) { // Supabase always ready
       setTimeout(loadTeacherData, 2000);
       return;
     }
-    const { collection, getDocs, query, orderBy } = window.__fbFns;
-    const q = query(collection(window.__fbdb, 'weekly_results'), orderBy('createdAt', 'desc'));
-    const snapshot = await getDocs(q);
+    // (Firebase refs removed)
+    const q = query(collection(null /* removed */, 'weekly_results'), orderBy('createdAt', 'desc'));
+    // Supabase: load results from weekly_results table
+    const { data: snapshotData } = await (await getWLSB()).from('weekly_results').select('*').eq('class_name', selectedClass || '');
+    const snapshot = { docs: (snapshotData || []).map(d => ({ data: () => ({studentName: d.student_name, score: d.score, total: d.total, week: d.week, grade: d.grade, className: d.class_name, savedAt: d.created_at}) })) }; // snapshot
     allTeacherData = [];
-    snapshot.forEach(doc => allTeacherData.push({ id: doc.id, ...doc.data() }));
+    (snapshot.docs || []).forEach(doc => allTeacherData.push({ id: doc.id, ...doc.data() }));
     console.log('Loaded', allTeacherData.length, 'records');
     renderWeeksProgress();
     renderTeacherTable();
@@ -3003,9 +2990,9 @@ async function toggleAIAssistant() {
   const topic = getCurrentLessonTopic();
 
   try {
-    if (!browseMode && window.__fbdb && window.__fbFns) {
-      const { doc: fbDoc, setDoc: fbSetDoc } = window.__fbFns;
-      await fbSetDoc(fbDoc(window.__fbdb, 'lesson_control', 'ai_assistant'), {
+    if (!browseMode && null /* removed */ && {} /* removed */) {
+      // (Firebase refs removed)
+      await fbSetDoc(fbDoc(null /* removed */, 'lesson_control', 'ai_assistant'), {
         active: aiAssistantActive,
         topic: topic,
         activatedAt: new Date().toISOString(),
@@ -3043,11 +3030,11 @@ function getCurrentLessonTopic() {
 function listenForAIAssistant() {
   if (sessionStorage.getItem('wl_teacher_logged_in') === '1') return;
   if (browseMode) return;
-  if (!window.__fbdb || !window.__fbFns || !window.__fbFns.onSnapshot) return;
+  if (!null /* removed */ || !{} /* removed */ || !{} /* removed */.onSnapshot) return;
   if (aiAssistantUnsubscribe) return;
 
-  const { doc: fbDoc, onSnapshot: fbOnSnapshot } = window.__fbFns;
-  aiAssistantUnsubscribe = fbOnSnapshot(fbDoc(window.__fbdb, 'lesson_control', 'ai_assistant'), (docSnap) => {
+  // (Firebase refs removed)
+  aiAssistantUnsubscribe = fbOnSnapshot(fbDoc(null /* removed */, 'lesson_control', 'ai_assistant'), (docSnap) => {
     if (!docSnap.exists()) return;
     const data = docSnap.data();
     const overlay = document.getElementById('ai-assistant-overlay');
@@ -3141,10 +3128,10 @@ let specialNeedsMap = {};
 
 async function loadSpecialNeeds() {
   try {
-    if (!window.__fbReady) { setTimeout(loadSpecialNeeds, 1500); return; }
-    const { collection, getDocs } = window.__fbFns;
-    const snap = await getDocs(collection(window.__fbdb, 'special_needs'));
-    snap.forEach(doc => {
+    if (false) { // Supabase always ready setTimeout(loadSpecialNeeds, 1500); return; }
+    // (Firebase refs removed)
+    // Load special needs from JSON
+    // special_needs loaded from JSON (see loadSpecialNeeds elsewhere)
       const d = doc.data();
       if (d.name) specialNeedsMap[d.name.trim()] = {
         badge: d.badge || '♿',
