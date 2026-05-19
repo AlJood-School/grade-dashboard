@@ -945,6 +945,18 @@ footer {
   60% { transform: translateX(-6px); }
   80% { transform: translateX(6px); }
 }
+@keyframes bounce {
+  0%   { transform: translateY(0); }
+  100% { transform: translateY(-14px); }
+}
+@keyframes popIn {
+  from { transform: scale(.5); opacity: 0; }
+  to   { transform: scale(1);  opacity: 1; }
+}
+@keyframes pulseGreen {
+  0%,100% { box-shadow: 0 6px 20px rgba(34,197,94,.4); }
+  50%     { box-shadow: 0 8px 30px rgba(34,197,94,.7); transform: scale(1.02); }
+}
 </style>
 </head>
 <body>
@@ -1982,9 +1994,32 @@ function renderRegistration() {
       </div>
     </div>
 
-    <button class="btn-primary" style="width:100%;font-size:1.3rem;padding:18px;margin-top:16px;" onclick="startLesson()" id="startBtn" disabled>
-      🤖 Start STREAM Day!
+    <button class="btn-primary" id="startBtn" disabled
+      onclick="markPresent()"
+      style="width:100%;font-size:1.4rem;padding:20px;margin-top:16px;
+             background:linear-gradient(135deg,#22c55e,#16a34a);
+             border:none;border-radius:16px;color:white;
+             font-family:'Fredoka One',cursive;cursor:pointer;
+             box-shadow:0 6px 20px rgba(34,197,94,.4);
+             transition:transform .1s,box-shadow .1s;
+             animation:pulseGreen 2s ease-in-out infinite;"
+      onmouseover="this.style.transform='scale(1.03)'"
+      onmouseout="this.style.transform='scale(1)'">
+      ✋ أنا هنا! · I'm Here! 🎉
     </button>
+    <!-- Attendance Celebration Overlay -->
+    <div id="attendanceCelebration" style="display:none;position:fixed;inset:0;
+         background:rgba(0,0,0,.7);z-index:9999;
+         display:none;align-items:center;justify-content:center;">
+      <div style="background:white;border-radius:24px;padding:40px;text-align:center;
+                  max-width:340px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3);
+                  animation:popIn .4s cubic-bezier(.34,1.56,.64,1);">
+        <div style="font-size:4rem;animation:bounce 0.6s ease infinite alternate;">✋</div>
+        <div style="font-family:'Fredoka One',cursive;font-size:2rem;color:#16a34a;margin-top:12px;" id="celebName">مرحباً!</div>
+        <div style="font-size:1rem;color:#555;margin-top:8px;">✅ Attendance recorded · تم تسجيل حضورك</div>
+        <div style="margin-top:16px;font-size:2rem;letter-spacing:6px;">🎉 🤖 🚀</div>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -2083,6 +2118,64 @@ async function checkSpecialNeeds(name, section) {
       document.getElementById('snIndicator').style.display = 'block';
     }
   } catch(e) { isSpecialNeeds = false; }
+}
+
+// ============================================================
+// ATTENDANCE — "أنا هنا" / "I'm Here" System
+// ============================================================
+async function markPresent() {
+  const sec = document.getElementById('sectionSelect').value;
+  const name = document.getElementById('nameSelect').value;
+  if (!sec || !name) return;
+  const btn = document.getElementById('startBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Saving...'; }
+
+  // Play join chime
+  playJoinChime();
+
+  // Save to obs_attendance
+  try {
+    await db.collection('obs_attendance').add({
+      studentName: name,
+      section: sec,
+      grade: GRADE,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      status: 'present'
+    });
+  } catch(e) { console.warn('Attendance save error:', e); }
+
+  // Show celebration overlay
+  const cel = document.getElementById('attendanceCelebration');
+  const nameEl = document.getElementById('celebName');
+  if (cel) {
+    if (nameEl) nameEl.textContent = '👋 مرحباً ' + name + '!';
+    cel.style.display = 'flex';
+  }
+
+  // After 2 seconds → hide and start lesson
+  setTimeout(() => {
+    if (cel) cel.style.display = 'none';
+    startLesson();
+  }, 2000);
+}
+
+function playJoinChime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const notes = [523, 659, 784, 1047]; // C5 E5 G5 C6
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.15);
+      gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + i * 0.15 + 0.05);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + i * 0.15 + 0.3);
+      osc.start(ctx.currentTime + i * 0.15);
+      osc.stop(ctx.currentTime + i * 0.15 + 0.35);
+    });
+  } catch(e) {}
 }
 
 async function startLesson() {
@@ -3811,6 +3904,37 @@ async function updateObserverData() {
   const luEl = document.getElementById('obsLastUpdate');
   if (luEl) luEl.textContent = '🔄 Last updated: ' + now.toLocaleTimeString('en-GB');
 
+  // ── Attendance Live ──
+  try {
+    const todayA = new Date(); todayA.setHours(0,0,0,0);
+    const attSnap = await db.collection('obs_attendance')
+      .where('grade', '==', GRADE)
+      .where('timestamp', '>=', firebase.firestore.Timestamp.fromDate(todayA))
+      .orderBy('timestamp', 'desc')
+      .get();
+    const listEl = document.getElementById('obsAttendanceList');
+    const cntBadge = document.getElementById('obsAttCount');
+    if (listEl) {
+      if (attSnap.empty) {
+        listEl.innerHTML = '<div style="color:rgba(255,255,255,.35);font-size:.85rem;text-align:center;">No students yet</div>';
+      } else {
+        let html = '';
+        attSnap.forEach(doc => {
+          const d = doc.data();
+          const timeStr = d.timestamp ? d.timestamp.toDate().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '--:--';
+          html += `<div style="display:flex;justify-content:space-between;align-items:center;
+                               padding:7px 12px;background:rgba(255,255,255,.1);
+                               border-radius:10px;font-size:.88rem;">
+            <span style="color:#86efac;font-weight:700;">✅ ${d.studentName}</span>
+            <span style="color:rgba(255,255,255,.5);">${d.section} · ${timeStr}</span>
+          </div>`;
+        });
+        listEl.innerHTML = html;
+        if (cntBadge) cntBadge.textContent = `(${attSnap.size} طالب)`;
+      }
+    }
+  } catch(e) { console.warn('Attendance fetch error:', e); }
+
   // Firestore live stats
   try {
     const today = new Date();
@@ -4226,6 +4350,19 @@ function returnToLesson() {
     <div style="font-family:'Fredoka One',cursive;font-size:1.7rem;color:#f0c96b;" id="obsCurrentPhase">—</div>
     <div style="font-size:0.85rem;color:rgba(255,255,255,0.5);margin-top:6px;" id="obsCurrentDesc"></div>
   </div>
+
+  <!-- ── Attendance Live List ── -->
+  <div style="margin:16px 0;padding:16px;background:rgba(255,255,255,.07);border-radius:16px;">
+    <div style="font-family:'Fredoka One',cursive;font-size:1.1rem;color:#f0c96b;margin-bottom:10px;">
+      ✋ Attendance · الحضور
+      <span style="font-size:.85rem;color:rgba(255,255,255,.5);font-family:inherit;margin-right:8px;" id="obsAttCount"></span>
+    </div>
+    <div id="obsAttendanceList"
+         style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
+      <div style="color:rgba(255,255,255,.35);font-size:.85rem;text-align:center;">No students yet</div>
+    </div>
+  </div>
+
   <div class="obs-tech-badges">
     <div class="obs-tech-badge">Gemini AI 🤖</div>
     <div class="obs-tech-badge">Firebase ☁️</div>
