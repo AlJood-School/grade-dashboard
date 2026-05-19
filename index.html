@@ -1782,7 +1782,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     <div class="admin-only" id="adminMenu" style="display:none">
       <div class="nav-section-title" style="color:rgba(201,162,39,0.7)">⚙ لوحة المدير</div>
       <div class="nav-item" onclick="showSection('admin_panel');loadBackupLog()"><i class="fas fa-cog"></i><span>إعدادات البوابة</span><span class="admin-badge">ADMIN</span></div>
-      <div class="nav-item" onclick="showSection('data_mgmt')"><i class="fas fa-database"></i><span>إدارة البيانات</span><span class="admin-badge">ADMIN</span></div>
+      <div class="nav-item" onclick="showSection('data_mgmt'); if(typeof dmInitSection==='function') setTimeout(dmInitSection,100);"><i class="fas fa-database"></i><span>إدارة البيانات</span><span class="admin-badge">ADMIN</span></div>
     </div>
 
     <button class="logout-btn" id="exportDataBtn" onclick="exportPortalData()" style="background:rgba(201,168,76,0.15);border-color:rgba(201,168,76,0.4);color:var(--accent);margin-bottom:8px;display:none"><i class="fas fa-download"></i> تصدير البيانات</button>
@@ -31077,5 +31077,510 @@ document.addEventListener('DOMContentLoaded', function(){
 
 </script>
 
+
+<script>
+// ═══════════════════════════════════════════════════
+// ═══  DATA MANAGEMENT SECTION (dm*) FUNCTIONS  ═══
+// ═══════════════════════════════════════════════════
+
+var _dmStuSearch = '', _dmStuClass = '', _dmStuPage = 0;
+var _dmStaffSearch = '', _dmStaffRole = '', _dmStaffPage = 0;
+var _dmTchSearch = '', _dmTchPage = 0;
+var _DM_PAGE = 25;
+var _dmStuEditId = null, _dmStaffEditId = null, _dmTchEditId = null;
+
+async function dmInitSection() {
+  try {
+    // Fill class filter
+    var classSelect = document.getElementById('dmStuClassFilter');
+    if (classSelect && classSelect.children.length <= 1) {
+      var grades = ['KG1','KG2','1','2','3','4','5','6','7','8'];
+      var sects = ['A','B','C'];
+      grades.forEach(function(g){ sects.forEach(function(s){ var o=document.createElement('option'); o.value=g+s; o.textContent=g+s; classSelect.appendChild(o); }); });
+    }
+    // Render default tab (students)
+    await dmRenderStudents();
+    await dmLoadStats();
+  } catch(e) { console.warn('dmInitSection error',e); }
+}
+
+async function dmLoadStats() {
+  try {
+    var r = await fetch(SUPA_URL+'/rest/v1/students?select=id', {
+      headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Prefer':'count=exact','Range':'0-0'}
+    });
+    var stuCount = r.headers.get('Content-Range') ? r.headers.get('Content-Range').split('/')[1] : '—';
+    
+    var r2 = await fetch(SUPA_URL+'/rest/v1/staff?select=id', {
+      headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Prefer':'count=exact','Range':'0-0'}
+    });
+    var staffCount = r2.headers.get('Content-Range') ? r2.headers.get('Content-Range').split('/')[1] : '—';
+
+    var r3 = await fetch(SUPA_URL+'/rest/v1/staff?select=id&role=eq.teacher', {
+      headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Prefer':'count=exact','Range':'0-0'}
+    });
+    var tchCount = r3.headers.get('Content-Range') ? r3.headers.get('Content-Range').split('/')[1] : '—';
+
+    var el; 
+    if((el=document.getElementById('dmStatStudents'))) el.textContent = stuCount;
+    if((el=document.getElementById('dmStatStaff'))) el.textContent = staffCount;
+    if((el=document.getElementById('dmStatTeachers'))) el.textContent = tchCount;
+    if((el=document.getElementById('dmExpStuCount'))) el.textContent = stuCount + ' طالب';
+    if((el=document.getElementById('dmExpStaffCount'))) el.textContent = staffCount + ' موظف';
+    if((el=document.getElementById('dmExpTchCount'))) el.textContent = tchCount + ' معلمة';
+  } catch(e) {}
+}
+
+function dmShowTab(tab) {
+  var tabs = ['students','staff','teachers','export'];
+  tabs.forEach(function(t) {
+    var btn = document.getElementById('dmTab-'+t);
+    var pane = document.getElementById('dmPane-'+t);
+    if(btn) btn.className = 'dm-tab' + (t===tab?' dm-tab-active':'');
+    if(pane) pane.style.display = t===tab?'':'none';
+  });
+  if(tab==='students') dmRenderStudents();
+  else if(tab==='staff') dmRenderStaff();
+  else if(tab==='teachers') dmRenderTeachers();
+}
+
+async function dmRenderStudents() {
+  var tbody = document.getElementById('dmStuBody');
+  var pager = document.getElementById('dmStuPager');
+  if(!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999;"><i class="fas fa-spinner fa-spin"></i> جارٍ التحميل...</td></tr>';
+  
+  var q = '/rest/v1/students?select=id,name,grade,class_name,parent_phone&order=class_name,name';
+  if(_dmStuSearch) q += '&or=(name.ilike.*'+encodeURIComponent(_dmStuSearch)+'*,class_name.ilike.*'+encodeURIComponent(_dmStuSearch)+'*)';
+  if(_dmStuClass) q += '&class_name=eq.'+encodeURIComponent(_dmStuClass);
+
+  var r = await fetch(SUPA_URL+q+'&limit=1', {
+    headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Prefer':'count=exact','Range':'0-0'}
+  });
+  var total = parseInt((r.headers.get('Content-Range')||'0/0').split('/')[1])||0;
+  var offset = _dmStuPage * _DM_PAGE;
+  if(offset >= total && total > 0) { _dmStuPage = 0; offset = 0; }
+
+  var data = await supaFetch(q+'&limit='+_DM_PAGE+'&offset='+offset);
+  if(!data) data = [];
+
+  tbody.innerHTML = data.length ? data.map(function(s,i) {
+    return '<tr>'
+      +'<td>'+(offset+i+1)+'</td>'
+      +'<td>'+escHtml(s.name||'—')+'</td>'
+      +'<td><span style="background:#e8f4fd;color:#1A2A4A;padding:3px 10px;border-radius:12px;font-size:0.8rem;font-weight:700;">'+escHtml(s.class_name||'—')+'</span></td>'
+      +'<td>'+escHtml(s.grade||'—')+'</td>'
+      +'<td style="direction:ltr;">'+escHtml(s.parent_phone||'—')+'</td>'
+      +'<td>'
+        +'<button onclick="dmOpenAddStudent(\''+s.id+'\')" style="padding:4px 10px;background:#1A2A4A;color:#C9A84C;border:none;border-radius:6px;cursor:pointer;font-size:0.78rem;margin-left:4px;">✏️ تعديل</button>'
+        +'<button onclick="dmDeleteStudent(\''+s.id+'\',\''+escHtml(s.name||'')+'\')" style="padding:4px 10px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;font-size:0.78rem;">🗑️</button>'
+      +'</td>'
+    +'</tr>';
+  }).join('') : '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999;">لا توجد نتائج</td></tr>';
+
+  // Pager
+  if(pager) {
+    var pages = Math.ceil(total/_DM_PAGE);
+    pager.innerHTML = '<span style="color:#666;font-size:0.8rem;">إجمالي: '+total+'</span>';
+    if(pages > 1) {
+      if(_dmStuPage>0) pager.innerHTML += '<button onclick="_dmStuPage--;dmRenderStudents()" style="padding:4px 12px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;margin-right:4px;">◀</button>';
+      pager.innerHTML += '<span style="padding:4px 12px;font-size:0.85rem;">'+(_dmStuPage+1)+' / '+pages+'</span>';
+      if(_dmStuPage<pages-1) pager.innerHTML += '<button onclick="_dmStuPage++;dmRenderStudents()" style="padding:4px 12px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;margin-left:4px;">▶</button>';
+    }
+  }
+}
+
+async function dmRenderStaff() {
+  var tbody = document.getElementById('dmStaffBody');
+  var pager = document.getElementById('dmStaffPager');
+  if(!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
+
+  var q = '/rest/v1/staff?select=id,name_ar,job_title,role,email,ministry_id&order=name_ar';
+  if(_dmStaffSearch) q += '&or=(name_ar.ilike.*'+encodeURIComponent(_dmStaffSearch)+'*,email.ilike.*'+encodeURIComponent(_dmStaffSearch)+'*)';
+  if(_dmStaffRole) q += '&role=eq.'+encodeURIComponent(_dmStaffRole);
+
+  var r = await fetch(SUPA_URL+q+'&limit=1', {
+    headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Prefer':'count=exact','Range':'0-0'}
+  });
+  var total = parseInt((r.headers.get('Content-Range')||'0/0').split('/')[1])||0;
+  var offset = _dmStaffPage * _DM_PAGE;
+  if(offset >= total && total > 0) { _dmStaffPage = 0; offset = 0; }
+
+  var data = await supaFetch(q+'&limit='+_DM_PAGE+'&offset='+offset);
+  if(!data) data = [];
+
+  var roleLabels = {admin:'مدير',principal:'مديرة',teacher:'معلمة',admin_staff:'إداري',parent:'ولي أمر'};
+  tbody.innerHTML = data.length ? data.map(function(s,i) {
+    return '<tr>'
+      +'<td>'+(offset+i+1)+'</td>'
+      +'<td>'+escHtml(s.name_ar||'—')+'</td>'
+      +'<td>'+escHtml(s.job_title||'—')+'</td>'
+      +'<td><span style="background:#e8f4fd;color:#1A2A4A;padding:2px 8px;border-radius:10px;font-size:0.78rem;">'+escHtml(roleLabels[s.role]||s.role||'—')+'</span></td>'
+      +'<td style="direction:ltr;font-size:0.8rem;">'+escHtml(s.email||'—')+'</td>'
+      +'<td>'
+        +'<button onclick="dmOpenAddStaff(\''+s.id+'\')" style="padding:4px 10px;background:#1A2A4A;color:#C9A84C;border:none;border-radius:6px;cursor:pointer;font-size:0.78rem;margin-left:4px;">✏️ تعديل</button>'
+        +'<button onclick="dmDeleteStaff(\''+s.id+'\',\''+escHtml(s.name_ar||'')+'\')" style="padding:4px 10px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;font-size:0.78rem;">🗑️</button>'
+      +'</td>'
+    +'</tr>';
+  }).join('') : '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999;">لا توجد نتائج</td></tr>';
+
+  if(pager) {
+    var pages = Math.ceil(total/_DM_PAGE);
+    pager.innerHTML = '<span style="color:#666;font-size:0.8rem;">إجمالي: '+total+'</span>';
+    if(pages>1) {
+      if(_dmStaffPage>0) pager.innerHTML += '<button onclick="_dmStaffPage--;dmRenderStaff()" style="padding:4px 12px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;margin-right:4px;">◀</button>';
+      pager.innerHTML += '<span style="padding:4px 12px;font-size:0.85rem;">'+(_dmStaffPage+1)+' / '+pages+'</span>';
+      if(_dmStaffPage<pages-1) pager.innerHTML += '<button onclick="_dmStaffPage++;dmRenderStaff()" style="padding:4px 12px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;margin-left:4px;">▶</button>';
+    }
+  }
+}
+
+async function dmRenderTeachers() {
+  var tbody = document.getElementById('dmTchBody');
+  if(!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
+
+  var q = '/rest/v1/staff?select=id,name_ar,name_en,email,subjects,cycle,ministry_id&role=eq.teacher&order=name_ar';
+  if(_dmTchSearch) q += '&or=(name_ar.ilike.*'+encodeURIComponent(_dmTchSearch)+'*,email.ilike.*'+encodeURIComponent(_dmTchSearch)+'*)';
+
+  var r = await fetch(SUPA_URL+q+'&limit=1', {
+    headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Prefer':'count=exact','Range':'0-0'}
+  });
+  var total = parseInt((r.headers.get('Content-Range')||'0/0').split('/')[1])||0;
+  var offset = _dmTchPage * _DM_PAGE;
+  if(offset >= total && total > 0) { _dmTchPage = 0; offset = 0; }
+
+  var data = await supaFetch(q+'&limit='+_DM_PAGE+'&offset='+offset);
+  if(!data) data = [];
+
+  tbody.innerHTML = data.length ? data.map(function(s,i) {
+    return '<tr>'
+      +'<td>'+(offset+i+1)+'</td>'
+      +'<td>'+escHtml(s.name_ar||'—')+'</td>'
+      +'<td style="direction:ltr;font-size:0.8rem;">'+escHtml(s.email||'—')+'</td>'
+      +'<td style="font-size:0.8rem;">'+escHtml(Array.isArray(s.subjects)?s.subjects.join(', '):(s.subjects||'—'))+'</td>'
+      +'<td>'+escHtml(s.cycle||'—')+'</td>'
+      +'<td>'
+        +'<button onclick="dmOpenAddTeacher(\''+s.id+'\')" style="padding:4px 10px;background:#1A2A4A;color:#C9A84C;border:none;border-radius:6px;cursor:pointer;font-size:0.78rem;margin-left:4px;">✏️ تعديل</button>'
+        +'<button onclick="dmDeleteTeacher(\''+s.id+'\',\''+escHtml(s.name_ar||'')+'\')" style="padding:4px 10px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;font-size:0.78rem;">🗑️</button>'
+      +'</td>'
+    +'</tr>';
+  }).join('') : '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999;">لا توجد نتائج</td></tr>';
+}
+
+// ─── Export ───
+async function dmExport(type) {
+  var paths = {
+    students:'/rest/v1/students?select=*&order=class_name,name',
+    staff:'/rest/v1/staff?select=*&order=name_ar',
+    teachers:'/rest/v1/staff?select=*&role=eq.teacher&order=name_ar',
+    schedules:'/rest/v1/schedules?select=*'
+  };
+  var path = paths[type];
+  if(!path){ if(typeof showToast==='function')showToast('نوع غير معروف'); return; }
+  
+  if(typeof showToast==='function') showToast('⏳ جارٍ التحميل...');
+  
+  // Fetch all pages
+  var all = [], offset = 0, limit = 1000;
+  while(true) {
+    var batch = await supaFetch(path+'&limit='+limit+'&offset='+offset);
+    if(!batch||!batch.length) break;
+    all = all.concat(batch);
+    if(batch.length < limit) break;
+    offset += limit;
+  }
+  
+  var blob = new Blob([JSON.stringify(all, null, 2)], {type:'application/json'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = type+'.json'; a.click();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  if(typeof showToast==='function') showToast('✅ تم تحميل '+all.length+' سجل');
+}
+
+// ─── Import ───
+function dmImport(type, input) {
+  if(!input.files||!input.files[0]) return;
+  var file = input.files[0];
+  var reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      var data = JSON.parse(e.target.result);
+      if(!Array.isArray(data)){ if(typeof showToast==='function')showToast('❌ الملف غير صالح'); return; }
+      if(!confirm('سيتم استيراد '+data.length+' سجل لـ '+type+'. هل تريدين المتابعة؟')) return;
+      // Upsert in batches of 100
+      var paths = {students:'/rest/v1/students', staff:'/rest/v1/staff', teachers:'/rest/v1/staff', schedules:'/rest/v1/schedules'};
+      var path = paths[type]||('/rest/v1/'+type);
+      var done = 0;
+      for(var i=0; i<data.length; i+=100) {
+        var batch = data.slice(i, i+100);
+        var r = await fetch(SUPA_URL+path, {
+          method:'POST',
+          headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'}
+          ,body:JSON.stringify(batch)
+        });
+        if(r.ok) done += batch.length;
+      }
+      if(typeof showToast==='function') showToast('✅ تم استيراد '+done+' سجل بنجاح');
+      if(type==='students') dmRenderStudents();
+      else if(type==='staff'||type==='teachers') dmRenderStaff();
+    } catch(ex) {
+      if(typeof showToast==='function') showToast('❌ خطأ: '+ex.message);
+    }
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+
+// ─── Add/Edit Student ───
+async function dmOpenAddStudent(id) {
+  _dmStuEditId = id||null;
+  var modal = document.getElementById('dmStuModal');
+  var title = document.getElementById('dmStuModalTitle');
+  if(!modal) return;
+  document.getElementById('dmStuName').value = '';
+  document.getElementById('dmStuClass').value = '';
+  document.getElementById('dmStuNum').value = '';
+  if(id) {
+    title.textContent = '✏️ تعديل بيانات الطالب';
+    var data = await supaFetch('/rest/v1/students?select=*&id=eq.'+id);
+    if(data&&data[0]) {
+      document.getElementById('dmStuName').value = data[0].name||'';
+      document.getElementById('dmStuClass').value = data[0].class_name||'';
+      document.getElementById('dmStuNum').value = data[0].number||'';
+    }
+  } else {
+    title.textContent = 'إضافة طالب جديد';
+  }
+  modal.classList.add('active');
+}
+
+async function dmSaveStudent() {
+  var name = document.getElementById('dmStuName').value.trim();
+  var cls = document.getElementById('dmStuClass').value;
+  var num = document.getElementById('dmStuNum').value;
+  if(!name||!cls){ if(typeof showToast==='function')showToast('❌ الاسم والصف إلزاميان'); return; }
+  
+  var gradeMap = {KG1:'KG',KG2:'KG','1':'1','2':'2','3':'3','4':'4','5':'5','6':'6','7':'7','8':'8'};
+  var gradeNum = cls.replace(/[ABC]$/,'');
+  var grade = gradeMap[gradeNum]||gradeNum;
+  
+  var payload = {name:name, class_name:cls, grade:grade};
+  if(num) payload.number = parseInt(num);
+  
+  var r;
+  if(_dmStuEditId) {
+    r = await fetch(SUPA_URL+'/rest/v1/students?id=eq.'+_dmStuEditId, {
+      method:'PATCH', headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify(payload)
+    });
+  } else {
+    r = await fetch(SUPA_URL+'/rest/v1/students', {
+      method:'POST', headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify(payload)
+    });
+  }
+  
+  if(r&&(r.ok||r.status===201)) {
+    if(typeof showToast==='function') showToast(_dmStuEditId?'✅ تم تحديث الطالب':'✅ تمت إضافة الطالب');
+    document.getElementById('dmStuModal').classList.remove('active');
+    await dmRenderStudents();
+    await dmLoadStats();
+  } else {
+    if(typeof showToast==='function') showToast('❌ حدث خطأ عند الحفظ');
+  }
+}
+
+async function dmDeleteStudent(id, name) {
+  if(!confirm('هل تريدين حذف الطالب "'+name+'" نهائياً؟')) return;
+  var r = await fetch(SUPA_URL+'/rest/v1/students?id=eq.'+id, {
+    method:'DELETE', headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON}
+  });
+  if(r&&r.ok) {
+    if(typeof showToast==='function') showToast('✅ تم حذف الطالب');
+    await dmRenderStudents();
+    await dmLoadStats();
+  }
+}
+
+// ─── Add/Edit Staff ───
+async function dmOpenAddStaff(id) {
+  _dmStaffEditId = id||null;
+  var modal = document.getElementById('dmStaffModal');
+  var title = document.getElementById('dmStaffModalTitle');
+  if(!modal) return;
+  document.getElementById('dmStaffNameAr').value = '';
+  document.getElementById('dmStaffNameEn').value = '';
+  document.getElementById('dmStaffEmail').value = '';
+  document.getElementById('dmStaffJob').value = '';
+  document.getElementById('dmStaffMinId').value = '';
+  document.getElementById('dmStaffPw').value = '';
+  document.getElementById('dmStaffRole').value = 'teacher';
+  if(id) {
+    title.textContent = '✏️ تعديل بيانات الموظف';
+    var data = await supaFetch('/rest/v1/staff?select=*&id=eq.'+id);
+    if(data&&data[0]) {
+      var s = data[0];
+      document.getElementById('dmStaffNameAr').value = s.name_ar||'';
+      document.getElementById('dmStaffNameEn').value = s.name_en||'';
+      document.getElementById('dmStaffEmail').value = s.email||'';
+      document.getElementById('dmStaffJob').value = s.job_title||'';
+      document.getElementById('dmStaffMinId').value = s.ministry_id||'';
+      document.getElementById('dmStaffRole').value = s.role||'teacher';
+    }
+  } else {
+    title.textContent = 'إضافة موظف جديد';
+  }
+  modal.classList.add('active');
+}
+
+async function dmSaveStaff() {
+  var nameAr = document.getElementById('dmStaffNameAr').value.trim();
+  var email = document.getElementById('dmStaffEmail').value.trim();
+  var job = document.getElementById('dmStaffJob').value.trim();
+  var role = document.getElementById('dmStaffRole').value;
+  if(!nameAr||!email){ if(typeof showToast==='function')showToast('❌ الاسم والإيميل إلزاميان'); return; }
+  
+  var payload = {
+    name_ar:nameAr,
+    name_en:document.getElementById('dmStaffNameEn').value.trim()||null,
+    email:email, job_title:job, role:role,
+    ministry_id:document.getElementById('dmStaffMinId').value.trim()||null
+  };
+  var pw = document.getElementById('dmStaffPw').value.trim();
+  if(pw && typeof hashPass==='function') payload.password_hash = hashPass(pw);
+  
+  var r;
+  if(_dmStaffEditId) {
+    r = await fetch(SUPA_URL+'/rest/v1/staff?id=eq.'+_dmStaffEditId, {
+      method:'PATCH', headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify(payload)
+    });
+  } else {
+    // Generate username from email
+    payload.username = email.split('@')[0];
+    r = await fetch(SUPA_URL+'/rest/v1/staff', {
+      method:'POST', headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify(payload)
+    });
+  }
+  
+  if(r&&(r.ok||r.status===201)) {
+    if(typeof showToast==='function') showToast(_dmStaffEditId?'✅ تم تحديث الموظف':'✅ تمت إضافة الموظف');
+    document.getElementById('dmStaffModal').classList.remove('active');
+    await dmRenderStaff();
+    await dmLoadStats();
+  } else {
+    if(typeof showToast==='function') showToast('❌ حدث خطأ: تأكد من أن الإيميل غير مكرر');
+  }
+}
+
+async function dmDeleteStaff(id, name) {
+  if(!confirm('هل تريدين حذف الموظف "'+name+'" نهائياً؟')) return;
+  var r = await fetch(SUPA_URL+'/rest/v1/staff?id=eq.'+id, {
+    method:'DELETE', headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON}
+  });
+  if(r&&r.ok) {
+    if(typeof showToast==='function') showToast('✅ تم الحذف');
+    await dmRenderStaff();
+    await dmLoadStats();
+  }
+}
+
+// ─── Add/Edit Teacher ───
+async function dmOpenAddTeacher(id) {
+  _dmTchEditId = id||null;
+  var modal = document.getElementById('dmTchModal');
+  var title = document.getElementById('dmTchModalTitle');
+  if(!modal) return;
+  document.getElementById('dmTchNameAr').value = '';
+  document.getElementById('dmTchNameEn').value = '';
+  document.getElementById('dmTchEmail').value = '';
+  document.getElementById('dmTchSubjects').value = '';
+  document.getElementById('dmTchCycle').value = '';
+  document.getElementById('dmTchMinId').value = '';
+  if(id) {
+    title.textContent = '✏️ تعديل بيانات المعلمة';
+    var data = await supaFetch('/rest/v1/staff?select=*&id=eq.'+id);
+    if(data&&data[0]) {
+      var t = data[0];
+      document.getElementById('dmTchNameAr').value = t.name_ar||'';
+      document.getElementById('dmTchNameEn').value = t.name_en||'';
+      document.getElementById('dmTchEmail').value = t.email||'';
+      document.getElementById('dmTchSubjects').value = Array.isArray(t.subjects)?t.subjects.join(', '):(t.subjects||'');
+      document.getElementById('dmTchCycle').value = t.cycle||'';
+      document.getElementById('dmTchMinId').value = t.ministry_id||'';
+    }
+  } else {
+    title.textContent = 'إضافة معلمة جديدة';
+  }
+  modal.classList.add('active');
+}
+
+async function dmSaveTeacher() {
+  var nameAr = document.getElementById('dmTchNameAr').value.trim();
+  var email = document.getElementById('dmTchEmail').value.trim();
+  if(!nameAr||!email){ if(typeof showToast==='function')showToast('❌ الاسم والإيميل إلزاميان'); return; }
+  
+  var subjectsRaw = document.getElementById('dmTchSubjects').value.trim();
+  var subjects = subjectsRaw ? subjectsRaw.split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
+  
+  var payload = {
+    name_ar:nameAr, name_en:document.getElementById('dmTchNameEn').value.trim()||null,
+    email:email, role:'teacher',
+    subjects:subjects.length?subjects:null,
+    cycle:document.getElementById('dmTchCycle').value||null,
+    ministry_id:document.getElementById('dmTchMinId').value.trim()||null
+  };
+  
+  var r;
+  if(_dmTchEditId) {
+    r = await fetch(SUPA_URL+'/rest/v1/staff?id=eq.'+_dmTchEditId, {
+      method:'PATCH', headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify(payload)
+    });
+  } else {
+    payload.username = email.split('@')[0];
+    r = await fetch(SUPA_URL+'/rest/v1/staff', {
+      method:'POST', headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify(payload)
+    });
+  }
+  
+  if(r&&(r.ok||r.status===201)) {
+    if(typeof showToast==='function') showToast(_dmTchEditId?'✅ تم التحديث':'✅ تمت الإضافة');
+    document.getElementById('dmTchModal').classList.remove('active');
+    await dmRenderTeachers();
+    await dmLoadStats();
+  } else {
+    if(typeof showToast==='function') showToast('❌ خطأ: تأكد من عدم تكرار الإيميل');
+  }
+}
+
+async function dmDeleteTeacher(id, name) {
+  if(!confirm('هل تريدين حذف المعلمة "'+name+'" نهائياً؟')) return;
+  var r = await fetch(SUPA_URL+'/rest/v1/staff?id=eq.'+id, {
+    method:'DELETE', headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON}
+  });
+  if(r&&r.ok) {
+    if(typeof showToast==='function') showToast('✅ تم الحذف');
+    await dmRenderTeachers();
+    await dmLoadStats();
+  }
+}
+
+// ─── Clear Overrides ───
+function dmClearOverrides() {
+  if(!confirm('سيتم مسح جميع التعديلات المحلية. هل تريدين المتابعة؟')) return;
+  var keys = ['data_override_staff','data_override_students','data_override_teachers','empOverrides','aljood_staff_additions','aljood_students_extended'];
+  keys.forEach(function(k){ try{localStorage.removeItem(k);}catch(e){} });
+  if(typeof showToast==='function') showToast('✅ تم مسح التعديلات المحلية');
+  dmRenderStudents();
+}
+
+
+</script>
 </body>
 </html>
