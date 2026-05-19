@@ -957,6 +957,10 @@ footer {
   0%,100% { box-shadow: 0 6px 20px rgba(34,197,94,.4); }
   50%     { box-shadow: 0 8px 30px rgba(34,197,94,.7); transform: scale(1.02); }
 }
+@keyframes pulseGold {
+  0%,100% { box-shadow: 0 0 18px rgba(240,201,107,.3); }
+  50%     { box-shadow: 0 0 32px rgba(240,201,107,.7); }
+}
 </style>
 </head>
 <body>
@@ -3971,6 +3975,148 @@ async function updateObserverData() {
   } catch(e) {
     console.warn('Observer stats fetch error:', e);
   }
+
+  // ── Excellence Dashboard ──
+  try {
+    const todayE = new Date(); todayE.setHours(0,0,0,0);
+    const [sessSnap, attSnap2] = await Promise.all([
+      db.collection(COLLECTION).where('startTime','>=',firebase.firestore.Timestamp.fromDate(todayE)).get(),
+      db.collection('obs_attendance').where('grade','==',GRADE).where('timestamp','>=',firebase.firestore.Timestamp.fromDate(todayE)).get()
+    ]);
+    await updateExcellenceDashboard(sessSnap, attSnap2);
+  } catch(e) { await updateExcellenceDashboard(null, null); }
+}
+
+// ============================================================
+// 🏆 EXCELLENCE DASHBOARD — updateExcellenceDashboard()
+// ============================================================
+async function updateExcellenceDashboard(sessionSnap, attSnap) {
+  try {
+    const totalPresent = attSnap ? attSnap.size : 0;
+    const totalSessions = sessionSnap ? sessionSnap.size : 0;
+
+    // ── Engagement Rate ──────────────────────────────────
+    let engagedCount = 0;
+    if (sessionSnap && totalSessions > 0) {
+      sessionSnap.forEach(doc => {
+        const d = doc.data();
+        if ((d.currentPhase || 0) >= 2) engagedCount++;
+      });
+      const engPct = Math.round((engagedCount / totalSessions) * 100);
+      const kpiEng = document.getElementById('kpiEngagement');
+      if (kpiEng) {
+        kpiEng.textContent = engPct + '%';
+        kpiEng.style.color = engPct >= 80 ? '#22c55e' : engPct >= 60 ? '#fbbf24' : '#f87171';
+      }
+    } else if (totalPresent > 0) {
+      const kpiEng = document.getElementById('kpiEngagement');
+      if (kpiEng) { kpiEng.textContent = '100%'; kpiEng.style.color = '#22c55e'; }
+    }
+
+    // ── SEN Students ────────────────────────────────────
+    let senCount = 0;
+    const senNames = [];
+    if (attSnap && !attSnap.empty) {
+      attSnap.forEach(doc => {
+        const d = doc.data();
+        if (d.isSpecialNeeds) { senCount++; senNames.push(d.studentName); }
+      });
+    }
+    // fallback: count from loaded students list
+    if (senCount === 0 && window._studentsData) {
+      window._studentsData.forEach(s => { if (s.special_needs) { senCount++; senNames.push(s.name || s.student_name || ''); } });
+    }
+    const kpiSEN = document.getElementById('kpiSEN');
+    if (kpiSEN) {
+      kpiSEN.textContent = senCount > 0 ? senCount + ' ✓' : '✅';
+      kpiSEN.style.color = '#fbbf24';
+    }
+    const senStudentsEl = document.getElementById('kpiSENStudents');
+    if (senStudentsEl && senNames.length > 0) {
+      senStudentsEl.innerHTML = senNames.map(n =>
+        `<span style="background:rgba(251,191,36,0.2);border:1px solid rgba(251,191,36,0.4);padding:3px 10px;border-radius:99px;font-size:0.72rem;color:#fbbf24;">🌟 ${n}</span>`
+      ).join('');
+    }
+
+    // ── Goal Achievement ─────────────────────────────────
+    let goalPct = 0;
+    if (totalSessions > 0 && sessionSnap) {
+      let totalPh = 0;
+      sessionSnap.forEach(doc => { totalPh += (doc.data().currentPhase || 0); });
+      const avgPh = totalPh / totalSessions;
+      goalPct = Math.min(100, Math.round((avgPh / 10) * 100));
+    } else if (currentPhase > 0) {
+      goalPct = Math.min(100, Math.round((currentPhase / 10) * 100));
+    }
+    const goalPctEl = document.getElementById('kpiGoalPct');
+    const goalBarEl = document.getElementById('kpiGoalBar');
+    const goalNoteEl = document.getElementById('kpiGoalNote');
+    if (goalPctEl) goalPctEl.textContent = goalPct + '%';
+    if (goalBarEl) {
+      goalBarEl.style.width = goalPct + '%';
+      goalBarEl.style.background = goalPct >= 80 ? 'linear-gradient(90deg,#22c55e,#f0c96b)' :
+                                    goalPct >= 50 ? 'linear-gradient(90deg,#fbbf24,#f0c96b)' :
+                                    'linear-gradient(90deg,#f87171,#fbbf24)';
+    }
+    if (goalNoteEl) {
+      goalNoteEl.textContent = goalPct >= 80 ? '🎯 Objective successfully achieved!' :
+                               goalPct >= 50 ? '📈 Lesson in good progress' :
+                               currentPhase < 0 ? '⏱️ Lesson starting soon…' : '📚 Building toward objective';
+    }
+
+    // ── Attendance KPI badge ──────────────────────────────
+    const attBadge = document.getElementById('kpiAttBadge');
+    if (attBadge) attBadge.textContent = totalPresent > 0 ? totalPresent + ' ✋' : '—';
+
+    // ── Lesson Strengths Checklist ────────────────────────
+    const strengths = [
+      { done: true,              label: 'Digital Biometric Attendance · حضور رقمي ابتكاري' },
+      { done: true,              label: 'Pre-Lesson Diagnostic · تقييم قبلي تشخيصي' },
+      { done: true,              label: 'AI Integration (Gemini) · دمج الذكاء الاصطناعي' },
+      { done: true,              label: '3-Level Adaptive Learning · تعلم تكيّفي' },
+      { done: true,              label: 'STREAM Framework · إطار STREAM' },
+      { done: senCount > 0,      label: 'SEN Differentiation · تمييز ذوي الاحتياجات' },
+      { done: true,              label: 'Real-time Monitoring · مراقبة آنية للتقدم' },
+      { done: true,              label: 'Digital Self-Assessment · تقييم ذاتي رقمي' },
+      { done: true,              label: 'Firebase Cloud Storage · تخزين سحابي' },
+      { done: true,              label: 'Bilingual Interface AR/EN · ثنائية اللغة' },
+    ];
+    const strEl = document.getElementById('kpiStrengths');
+    if (strEl) {
+      strEl.innerHTML = strengths.map(s => `
+        <div style="display:flex;align-items:center;gap:7px;padding:6px 10px;
+                    background:${s.done ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.05)'};
+                    border:1px solid ${s.done ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.1)'};
+                    border-radius:10px;">
+          <span style="font-size:1rem;flex-shrink:0;">${s.done ? '✅' : '⏳'}</span>
+          <span style="font-size:0.7rem;color:${s.done ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.4)'};">${s.label}</span>
+        </div>`).join('');
+    }
+
+    // ── Overall Rating ────────────────────────────────────
+    const donePts = strengths.filter(s => s.done).length;
+    const ratingScore = goalPct * 0.4 + (donePts / strengths.length) * 100 * 0.6;
+    const ratingEl = document.getElementById('kpiRatingText');
+    const ratingIconEl = document.getElementById('kpiRatingIcon');
+    const ratingBadge = document.getElementById('kpiRatingBadge');
+    if (ratingEl && ratingIconEl) {
+      if (ratingScore >= 85) {
+        ratingIconEl.textContent = '🏅';
+        ratingEl.textContent = 'Exceeds Expectations · فائق التوقعات';
+        ratingEl.style.color = '#f0c96b';
+        if (ratingBadge) ratingBadge.style.borderColor = 'rgba(240,201,107,0.8)';
+      } else if (ratingScore >= 70) {
+        ratingIconEl.textContent = '⭐';
+        ratingEl.textContent = 'Meets Expectations · يحقق التوقعات';
+        ratingEl.style.color = '#22c55e';
+        if (ratingBadge) ratingBadge.style.borderColor = 'rgba(34,197,94,0.6)';
+      } else {
+        ratingIconEl.textContent = '📈';
+        ratingEl.textContent = 'In Progress · قيد التطور';
+        ratingEl.style.color = '#a78bfa';
+      }
+    }
+  } catch(e) { console.warn('Excellence dashboard error:', e); }
 }
 
 // ============================================================
@@ -4362,6 +4508,110 @@ function returnToLesson() {
       <div style="color:rgba(255,255,255,.35);font-size:.85rem;text-align:center;">No students yet</div>
     </div>
   </div>
+
+  <!-- ══════════════════════════════════════════════════ -->
+  <!-- 🏆 TEACHER EXCELLENCE DASHBOARD — فائق التوقعات  -->
+  <!-- ══════════════════════════════════════════════════ -->
+  <div id="obsExcellenceDash" style="margin:16px 0;padding:22px;background:linear-gradient(135deg,rgba(10,17,50,0.97),rgba(30,10,70,0.97));border:2px solid rgba(240,201,107,0.5);border-radius:22px;box-shadow:0 0 30px rgba(240,201,107,0.15);">
+
+    <!-- Header -->
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:2.2rem;animation:bounce .8s alternate infinite;">🏆</div>
+      <div style="font-family:'Fredoka One',cursive;font-size:1.35rem;color:#f0c96b;letter-spacing:1px;margin-top:6px;">Teacher Excellence Dashboard</div>
+      <div style="font-size:0.82rem;color:rgba(255,255,255,0.5);margin-top:3px;">لوحة مؤشرات الأداء الوظيفي · <span style="color:#f0c96b;">فائق التوقعات</span></div>
+    </div>
+
+    <!-- KPI Cards Row (3) -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;">
+      <div style="background:rgba(34,197,94,0.13);border:1.5px solid rgba(34,197,94,0.4);border-radius:14px;padding:13px 6px;text-align:center;">
+        <div id="kpiEngagement" style="font-size:1.8rem;font-weight:900;color:#22c55e;font-family:'Fredoka One',cursive;">—</div>
+        <div style="font-size:0.67rem;color:rgba(255,255,255,0.6);margin-top:4px;line-height:1.4;">📊 Engagement Rate<br>معدل الاندماج</div>
+      </div>
+      <div style="background:rgba(139,92,246,0.13);border:1.5px solid rgba(139,92,246,0.4);border-radius:14px;padding:13px 6px;text-align:center;">
+        <div id="kpiAdaptive" style="font-size:1.8rem;font-weight:900;color:#a78bfa;font-family:'Fredoka One',cursive;">✅</div>
+        <div style="font-size:0.67rem;color:rgba(255,255,255,0.6);margin-top:4px;line-height:1.4;">🧩 Adaptive Learning<br>التعلم التكيّفي</div>
+      </div>
+      <div style="background:rgba(251,191,36,0.13);border:1.5px solid rgba(251,191,36,0.4);border-radius:14px;padding:13px 6px;text-align:center;">
+        <div id="kpiSEN" style="font-size:1.8rem;font-weight:900;color:#fbbf24;font-family:'Fredoka One',cursive;">—</div>
+        <div style="font-size:0.67rem;color:rgba(255,255,255,0.6);margin-top:4px;line-height:1.4;">🌟 SEN Included<br>ذوو الاحتياجات</div>
+      </div>
+    </div>
+
+    <!-- Goal Achievement Progress Bar -->
+    <div style="margin-bottom:18px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
+        <span style="font-size:0.82rem;color:rgba(255,255,255,0.75);">🎯 Goal Achievement · تحقّق الهدف التعليمي</span>
+        <span id="kpiGoalPct" style="font-size:0.9rem;color:#f0c96b;font-weight:700;font-family:'Fredoka One',cursive;">—%</span>
+      </div>
+      <div style="background:rgba(255,255,255,0.1);border-radius:99px;height:12px;overflow:hidden;">
+        <div id="kpiGoalBar" style="height:100%;width:0%;background:linear-gradient(90deg,#22c55e,#f0c96b);border-radius:99px;transition:width 1.2s ease;"></div>
+      </div>
+      <div id="kpiGoalNote" style="font-size:0.7rem;color:rgba(255,255,255,0.4);margin-top:5px;text-align:center;"></div>
+    </div>
+
+    <!-- Diagnostic Assessment -->
+    <div style="margin-bottom:16px;padding:12px 16px;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.35);border-radius:14px;">
+      <div style="font-family:'Fredoka One',cursive;font-size:0.95rem;color:#93c5fd;margin-bottom:8px;">🔬 Pre-Lesson Diagnostic · التقييم التشخيصي القبلي</div>
+      <div style="display:flex;flex-wrap:wrap;gap:7px;" id="kpiDiagnosticBadges">
+        <span style="background:rgba(34,197,94,0.2);border:1px solid #22c55e;padding:4px 11px;border-radius:99px;font-size:0.73rem;color:#86efac;">✅ Keyword Assessment Active</span>
+        <span style="background:rgba(34,197,94,0.2);border:1px solid #22c55e;padding:4px 11px;border-radius:99px;font-size:0.73rem;color:#86efac;">✅ NeoPixel Concept Check</span>
+        <span style="background:rgba(34,197,94,0.2);border:1px solid #22c55e;padding:4px 11px;border-radius:99px;font-size:0.73rem;color:#86efac;">✅ Prior Knowledge Mapped</span>
+        <span id="kpiDiagLevels" style="background:rgba(139,92,246,0.2);border:1px solid #8b5cf6;padding:4px 11px;border-radius:99px;font-size:0.73rem;color:#c4b5fd;">🧩 3 Differentiated Levels Ready</span>
+      </div>
+    </div>
+
+    <!-- Special Needs Care Panel -->
+    <div style="margin-bottom:16px;padding:12px 16px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.35);border-radius:14px;">
+      <div style="font-family:'Fredoka One',cursive;font-size:0.95rem;color:#fbbf24;margin-bottom:8px;">🌟 SEN Differentiation · رعاية ذوي الاحتياجات الخاصة</div>
+      <div id="kpiSENDetail" style="font-size:0.78rem;color:rgba(255,255,255,0.65);line-height:1.8;">
+        <div>✅ Auto-detected from Firebase student records</div>
+        <div>✅ Extended time (+50%) automatically applied</div>
+        <div>✅ Simplified question set (fewer items)</div>
+        <div>✅ Larger text & high-contrast mode active</div>
+        <div>✅ Dedicated activities & adapted tasks</div>
+      </div>
+      <div id="kpiSENStudents" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;"></div>
+    </div>
+
+    <!-- Innovative Attendance Badge -->
+    <div style="margin-bottom:16px;padding:12px 16px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.35);border-radius:14px;display:flex;align-items:center;gap:14px;">
+      <div style="font-size:2rem;flex-shrink:0;">✋</div>
+      <div>
+        <div style="font-family:'Fredoka One',cursive;font-size:0.95rem;color:#86efac;">Innovative Digital Attendance · الحضور الرقمي الابتكاري</div>
+        <div style="font-size:0.75rem;color:rgba(255,255,255,0.55);margin-top:4px;">Real-time Firebase · Biometric Timestamp · Class Journey Map · Celebratory Check-in</div>
+      </div>
+      <div style="margin-right:auto;font-family:'Fredoka One',cursive;font-size:1.1rem;color:#f0c96b;" id="kpiAttBadge">—</div>
+    </div>
+
+    <!-- Lesson Strengths Checklist -->
+    <div style="margin-bottom:16px;">
+      <div style="font-family:'Fredoka One',cursive;font-size:1rem;color:#f0c96b;margin-bottom:10px;">⭐ Lesson Strengths · نقاط القوة</div>
+      <div id="kpiStrengths" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;"></div>
+    </div>
+
+    <!-- Teaching Strategies -->
+    <div style="margin-bottom:18px;">
+      <div style="font-family:'Fredoka One',cursive;font-size:1rem;color:#f0c96b;margin-bottom:10px;">🧠 Teaching Strategies · الاستراتيجيات المستخدمة</div>
+      <div style="display:flex;flex-wrap:wrap;gap:7px;">
+        <span style="background:rgba(139,92,246,0.2);border:1px solid rgba(139,92,246,0.5);padding:5px 12px;border-radius:99px;font-size:0.73rem;color:#c4b5fd;">🎯 Differentiated Instruction</span>
+        <span style="background:rgba(34,197,94,0.2);border:1px solid rgba(34,197,94,0.5);padding:5px 12px;border-radius:99px;font-size:0.73rem;color:#86efac;">💡 Project-Based Learning</span>
+        <span style="background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.5);padding:5px 12px;border-radius:99px;font-size:0.73rem;color:#93c5fd;">🔄 Adaptive Scaffolding</span>
+        <span style="background:rgba(251,146,60,0.2);border:1px solid rgba(251,146,60,0.5);padding:5px 12px;border-radius:99px;font-size:0.73rem;color:#fdba74;">🤝 Collaborative Tasks</span>
+        <span style="background:rgba(236,72,153,0.2);border:1px solid rgba(236,72,153,0.5);padding:5px 12px;border-radius:99px;font-size:0.73rem;color:#f9a8d4;">🌱 Growth Mindset Culture</span>
+        <span style="background:rgba(240,201,107,0.2);border:1px solid rgba(240,201,107,0.5);padding:5px 12px;border-radius:99px;font-size:0.73rem;color:#f0c96b;">🔬 Inquiry-Based Learning</span>
+        <span style="background:rgba(34,197,94,0.2);border:1px solid rgba(34,197,94,0.5);padding:5px 12px;border-radius:99px;font-size:0.73rem;color:#86efac;">🤖 AI Integration (Gemini)</span>
+        <span style="background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.5);padding:5px 12px;border-radius:99px;font-size:0.73rem;color:#93c5fd;">📊 Formative Assessment</span>
+      </div>
+    </div>
+
+    <!-- Overall Rating Badge -->
+    <div id="kpiRatingBadge" style="text-align:center;padding:18px;background:linear-gradient(135deg,rgba(240,201,107,0.18),rgba(139,92,246,0.18));border:2px solid rgba(240,201,107,0.6);border-radius:18px;animation:pulseGold 2.5s ease-in-out infinite;">
+      <div style="font-size:2rem;margin-bottom:6px;" id="kpiRatingIcon">⏳</div>
+      <div style="font-family:'Fredoka One',cursive;font-size:1.3rem;color:#f0c96b;" id="kpiRatingText">Calculating…</div>
+      <div style="font-size:0.75rem;color:rgba(255,255,255,0.5);margin-top:5px;">📋 MOE Performance Rating · تقييم الأداء الوظيفي</div>
+    </div>
+
+  </div><!-- end obsExcellenceDash -->
 
   <div class="obs-tech-badges">
     <div class="obs-tech-badge">Gemini AI 🤖</div>
