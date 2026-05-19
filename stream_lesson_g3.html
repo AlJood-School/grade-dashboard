@@ -751,6 +751,26 @@ footer {
 .jm-card .jm-check { position: absolute; top: 8px; right: 10px; font-size: 1.4rem; opacity: 0; transition: opacity 0.3s; }
 .jm-card.confirmed .jm-check { opacity: 1; }
 .jm-card .jm-tap-hint { font-size: 0.72rem; color: rgba(255,255,255,0.5); margin-top: 4px; }
+.jm-step-num {
+  position: absolute; top: 8px; left: 10px;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: linear-gradient(135deg, #c9a84c, #f0c96b);
+  color: #1a2744; font-weight: 900; font-size: 0.9rem;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Fredoka One', cursive; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.jm-card.confirmed .jm-step-num { background: linear-gradient(135deg, #22c55e, #4ade80); }
+/* Snake path connector arrows between cards */
+.jm-arrow {
+  display: flex; align-items: center; justify-content: center;
+  color: #c9a84c; font-size: 1.8rem; grid-column: span 2;
+  margin: -4px 0; opacity: 0.7;
+}
+.jm-arrow-right {
+  display: flex; align-items: center; justify-content: flex-end;
+  color: #c9a84c; font-size: 1.5rem; padding-right: 8px;
+  margin: -4px 0; opacity: 0.7;
+}
 .jm-ready-btn {
   display: none; margin: 0 auto;
   background: linear-gradient(135deg, #8b5cf6, #c9a84c);
@@ -764,6 +784,10 @@ footer {
 @keyframes pulse-glow {
   0%,100% { box-shadow: 0 4px 24px rgba(139,92,246,0.4); }
   50% { box-shadow: 0 4px 40px rgba(201,168,76,0.7); }
+}
+@keyframes pulse-hint {
+  0%,100% { box-shadow: 0 0 0 3px rgba(139,92,246,0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(139,92,246,0.8), 0 0 20px rgba(139,92,246,0.4); }
 }
 /* ============================================================ */
 /* AI USAGE EXPLANATION BANNER */
@@ -827,6 +851,7 @@ footer {
   border-radius: 50px; padding: 11px 18px; cursor: pointer;
   font-size: 0.88rem; font-weight: 700;
   box-shadow: 0 4px 16px rgba(0,0,0,0.35); transition: all 0.3s;
+  display: none !important;
 }
 #observerBtn:hover { background: #c9a84c; color: #1a2744; }
 #observerOverlay {
@@ -1068,6 +1093,11 @@ let totalSecondsLeft = 45 * 60;
 let totalTimerInterval = null;
 let currentActivityTimer = null;
 let teacherModeActive = false;
+// Show observer button only for teachers
+function setTeacherVisuals(active) {
+  const btn = document.getElementById('observerBtn');
+  if (btn) btn.style.setProperty('display', active ? 'flex' : 'none', 'important');
+}
 let teacherUnsubscribe = null;
 let helpUnsubscribe = null;
 let teacherSeqStr = '';
@@ -1276,11 +1306,20 @@ async function saveHelpRequest(type) {
 // LANGUAGE TOGGLE
 // ============================================================
 function toggleLang() {
+  // Save timer state before re-render (to avoid reset)
+  const savedRem = currentActivityTimer ? currentActivityTimer.remaining : null;
+  const savedTot = currentActivityTimer ? currentActivityTimer.total : null;
   isLangAR = !isLangAR;
   document.getElementById('langBtn').textContent = isLangAR ? '🌐 EN' : '🌐 AR';
   document.body.classList.toggle('lang-ar', isLangAR);
   document.getElementById('kbLang').textContent = isLangAR ? 'AR' : 'EN';
   renderPhase(currentPhase);
+  // Restore timer after re-render resets it
+  if (savedRem !== null && savedRem > 0 && currentActivityTimer) {
+    currentActivityTimer.remaining = savedRem;
+    currentActivityTimer.total = savedTot;
+    updateTimerDisplay(savedRem, savedTot, 'activityTimer');
+  }
 }
 function toggleKeyboard() {
   isLangAR = !isLangAR;
@@ -1340,6 +1379,8 @@ function tryGoToPhase(target) {
 }
 
 function goToPhase(phase) {
+  phaseWrongCount = 0; // Reset wrong count for new phase
+  tfAnswers = {};       // Reset TF answers
   if (currentActivityTimer) currentActivityTimer.stop();
   currentPhase = phase;
   updateProgressBar();
@@ -1441,6 +1482,7 @@ function toggleTeacherMode() {
 
 function openTeacherPanel() {
   teacherModeActive = true;
+  setTeacherVisuals(true);
   document.getElementById('teacherPanel').classList.add('open');
   loadTeacherData();
   subscribeHelpRequests();
@@ -2116,6 +2158,23 @@ function renderTrueFalse() {
 }
 
 let tfAnswers = {};
+let phaseWrongCount = 0;
+function updateObserverAdaptive(level, score, total) {
+  // Update observer panel if open
+  const obsLevel = document.getElementById('obsAdaptiveLevel');
+  if (obsLevel) obsLevel.textContent = level + ' (score ' + score + '/' + total + ')';
+  // Save to Firebase
+  if (window._sessionRef) {
+    try {
+      const body = JSON.stringify({ fields: {
+        adaptiveLevel: { stringValue: level },
+        p3Score: { integerValue: score }
+      }});
+      fetch(window._sessionRef + '?updateMask.fieldPaths=adaptiveLevel&updateMask.fieldPaths=p3Score',
+        { method: 'PATCH', headers: {'Content-Type':'application/json'}, body });
+    } catch(e) {}
+  }
+}
 function answerTF(idx, answer, correct) {
   const isCorrect = answer === correct;
   const fb = document.getElementById('tfFb'+idx);
@@ -2128,8 +2187,21 @@ function answerTF(idx, answer, correct) {
     playSuccess();
     (answer ? trueBtn : falseBtn).style.boxShadow = '0 0 0 4px var(--success)';
   } else {
+    phaseWrongCount++;
     fb.className = 'feedback-box wrong';
-    fb.textContent = `❌ ${t('wrong')} Answer: ${correct ? 'TRUE ✅' : 'FALSE ❌'} — ${TF_QUESTIONS[idx].exp}`;
+    let wrongMsg = `❌ ${t('wrong')} Answer: ${correct ? 'TRUE ✅' : 'FALSE ❌'} — ${TF_QUESTIONS[idx].exp}`;
+    if (phaseWrongCount === 2) {
+      wrongMsg += `<br><div style="margin-top:8px;padding:8px;background:rgba(251,191,36,0.15);border-radius:8px;color:#f59e0b;font-size:0.88rem;">
+        💡 <strong>Hint:</strong> ${TF_QUESTIONS[idx].hint || 'Think carefully — read the question again slowly! 🤔'}
+      </div>`;
+    } else if (phaseWrongCount >= 3) {
+      wrongMsg += `<br><div style="margin-top:8px;padding:8px;background:rgba(139,92,246,0.15);border-radius:8px;color:#8b5cf6;font-size:0.88rem;">
+        🤗 <strong>It's okay!</strong> You're learning. The remaining questions have been simplified for you. Keep going! 💪
+      </div>`;
+      // Mark remaining unanswered as "hint mode" — highlight true/false buttons
+      setTimeout(() => highlightRemainingTF(), 300);
+    }
+    fb.innerHTML = wrongMsg;
     playWrong();
   }
   tfAnswers[idx] = isCorrect;
@@ -2139,13 +2211,51 @@ function answerTF(idx, answer, correct) {
     const score = Object.values(tfAnswers).filter(Boolean).length;
     const area = document.getElementById('tfScoreArea');
     area.style.display = 'block';
-    area.innerHTML = `<div class="score-badge">⭐ Score: ${score}/${qs.length}</div>`;
+    const emoji = score === qs.length ? '🌟' : score >= qs.length * 0.6 ? '⭐' : '💪';
+    area.innerHTML = `<div class="score-badge">${emoji} Score: ${score}/${qs.length}</div>`;
     phaseData.p3_score = score;
-    document.getElementById('nextTFBtn').disabled = false;
+    // Adaptive: if too many wrong, record level
+    if (phaseWrongCount >= 3) {
+      programmingLevel = 'basic';
+      phaseData.adaptiveLevel = 'basic';
+      saveSession();
+      updateObserverAdaptive('basic', score, qs.length);
+    } else if (phaseWrongCount >= 2) {
+      programmingLevel = programmingLevel === 'advanced' ? 'intermediate' : programmingLevel;
+      phaseData.adaptiveLevel = programmingLevel;
+      saveSession();
+      updateObserverAdaptive(programmingLevel, score, qs.length);
+    }
+    const nextBtn = document.getElementById('nextTFBtn');
+    nextBtn.disabled = false;
     if (score >= qs.length * 0.6) launchConfetti(30);
+    // Auto-advance after 3 seconds
+    let cdSecs = 3;
+    nextBtn.textContent = `${t('next_btn')} (${cdSecs})`;
+    const cdInterval = setInterval(() => {
+      cdSecs--;
+      if (nextBtn && nextBtn.isConnected) {
+        nextBtn.textContent = cdSecs > 0 ? `${t('next_btn')} (${cdSecs})` : t('next_btn');
+      }
+      if (cdSecs <= 0) { clearInterval(cdInterval); nextPhase(); }
+    }, 1000);
   }
 }
 function toggleTfAr(idx) { /* placeholder */ }
+function highlightRemainingTF() {
+  const qs = isSpecialNeeds ? TF_QUESTIONS.slice(0,3) : TF_QUESTIONS;
+  qs.forEach((q, i) => {
+    if (tfAnswers[i] === undefined) {
+      // Not yet answered - add gentle hint glow to correct answer button
+      const correct = q.answer;
+      const correctBtn = document.getElementById(correct ? 'tfTrue'+i : 'tfFalse'+i);
+      if (correctBtn && !correctBtn.disabled) {
+        correctBtn.style.animation = 'pulse-hint 1.5s ease-in-out 3';
+        correctBtn.style.boxShadow = '0 0 0 3px rgba(139,92,246,0.5)';
+      }
+    }
+  });
+}
 
 // ============================================================
 // PHASE 4 — PLAN
@@ -3175,16 +3285,27 @@ function renderJourneyMap() {
 function renderJMCards() {
   const grid = document.getElementById('jmGrid');
   if (!grid) return;
-  grid.innerHTML = JM_PHASES_G3.map((p, i) => {
+  let items = [];
+  JM_PHASES_G3.forEach((p, i) => {
     const confirmed = jmConfirmed.has(i);
-    return '<div class="jm-card' + (confirmed ? ' confirmed' : '') + '" id="jmCard' + i + '" onclick="confirmJMCard(' + i + ')">' +
+    const stepNum = i + 1;
+    items.push(
+      '<div class="jm-card' + (confirmed ? ' confirmed' : '') + '" id="jmCard' + i + '" onclick="confirmJMCard(' + i + ')">' +
       '<span class="jm-check">✅</span>' +
+      '<span class="jm-step-num">' + stepNum + '</span>' +
       '<div class="jm-emoji">' + p.emoji + '</div>' +
       '<div class="jm-name">' + (jmLangAR ? p.nameAr : p.name) + '</div>' +
       '<div class="jm-dur">⏱️ ' + p.dur + '</div>' +
-      (!confirmed ? '<div class="jm-tap-hint">Tap to confirm</div>' : '<div class="jm-tap-hint" style="color:#22c55e;">Understood! ✓</div>') +
-      '</div>';
-  }).join('');
+      (!confirmed ? '<div class="jm-tap-hint">' + (jmLangAR ? 'اضغط لتأكيد الفهم' : 'Tap to confirm') + '</div>' :
+        '<div class="jm-tap-hint" style="color:#22c55e;">' + (jmLangAR ? 'فهمت! ✓' : 'Understood! ✓') + '</div>') +
+      '</div>'
+    );
+    // Add down-arrow after every 2 cards (between rows), except last row
+    if (i % 2 === 1 && i < JM_PHASES_G3.length - 2) {
+      items.push('<div class="jm-arrow">⬇️</div>');
+    }
+  });
+  grid.innerHTML = items.join('');
 }
 
 function confirmJMCard(i) {
@@ -3709,7 +3830,8 @@ function returnToLesson() {
 <button id="observerBtn" onclick="openObserverMode()">👁️ Observer Mode</button>
 <div id="observerOverlay">
   <button class="obs-close-btn" onclick="closeObserverMode()">✕ Close</button>
-  <div class="obs-header">
+  <div id="obsAdaptiveLevel" style="display:none;position:absolute;top:10px;left:20px;background:rgba(139,92,246,0.2);padding:6px 12px;border-radius:8px;color:#c4b5fd;font-size:0.82rem;"></div>
+<div class="obs-header">
     <div style="font-family:'Fredoka One',cursive;font-size:1.5rem;color:white;">🏫 Al-Jood School</div>
     <div style="font-family:'Fredoka One',cursive;font-size:1.1rem;color:rgba(255,255,255,0.7);margin-top:4px;">
       Grade 3 · Section <span id="obsSection">—</span>
