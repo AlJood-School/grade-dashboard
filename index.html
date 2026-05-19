@@ -7006,6 +7006,107 @@ async function hashPass(pw) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
+// ─── Supabase Auth Functions ───────────────────────────────────────
+const SUPA_URL_AUTH = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPA_ANON_AUTH = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+
+async function supaFetch(path, opts={}) {
+  const r = await fetch(SUPA_URL_AUTH + path, {
+    ...opts,
+    headers: { 'apikey': SUPA_ANON_AUTH, 'Authorization': 'Bearer ' + SUPA_ANON_AUTH, 'Content-Type': 'application/json', ...(opts.headers||{}) }
+  });
+  return r;
+}
+
+async function checkStaffPassword(username, passHash) {
+  try {
+    const r = await supaFetch('/rest/v1/staff_passwords?username=eq.' + encodeURIComponent(username) + '&limit=1');
+    if (!r.ok) return null;
+    const data = await r.json();
+    if (!data.length) return null;
+    const rec = data[0];
+    if (rec.password_hash !== passHash) return null;
+    return rec;
+  } catch(e) { return null; }
+}
+
+async function setFirstLoginAt(pwId) {
+  try {
+    await supaFetch('/rest/v1/staff_passwords?id=eq.' + pwId, {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ first_login_at: new Date().toISOString() })
+    });
+  } catch(e) {}
+}
+
+async function checkParentLogin(username, passHash) {
+  if (!/^\d{14,16}$/.test(username)) return null;
+  try {
+    const r = await supaFetch('/rest/v1/parents?national_id=eq.' + username + '&limit=1');
+    if (!r.ok) return null;
+    const data = await r.json();
+    if (!data.length) return null;
+    if (data[0].password_hash !== passHash) return null;
+    return data[0];
+  } catch(e) { return null; }
+}
+
+async function getParentStudents(nationalId) {
+  try {
+    const r = await supaFetch('/rest/v1/students?parent_national_id=eq.' + nationalId + '&select=id,name,grade,class_name,student_number');
+    if (!r.ok) return [];
+    return await r.json();
+  } catch(e) { return []; }
+}
+
+// ─── Password Change Screen ────────────────────────────────────────
+let _cpPwRecord = null; let _cpPwUsername = null;
+function showChangePasswordScreen(rec, uname) {
+  _cpPwRecord = rec; _cpPwUsername = uname;
+  let el = document.getElementById('supaChangePasswordScreen');
+  if (!el) { buildChangePasswordModal(); el = document.getElementById('supaChangePasswordScreen'); }
+  el.style.display = 'flex';
+}
+function buildChangePasswordModal() {
+  const div = document.createElement('div');
+  div.id = 'supaChangePasswordScreen';
+  div.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:99999;align-items:center;justify-content:center;';
+  div.innerHTML = `
+    <div style="background:#1a1a2e;border-radius:16px;padding:40px;max-width:420px;width:90%;border:2px solid #f59e0b;text-align:center;font-family:Cairo,Tajawal,sans-serif;direction:rtl;">
+      <div style="font-size:3rem;margin-bottom:12px;">🔐</div>
+      <h2 style="color:#f59e0b;margin-bottom:8px;font-size:1.4rem;">تغيير كلمة المرور</h2>
+      <p style="color:#aaa;margin-bottom:24px;font-size:13px;">لأمان حسابكِ، يجب تغيير كلمة المرور المؤقتة قبل المتابعة</p>
+      <input type="password" id="cpNewPass1" placeholder="كلمة المرور الجديدة"
+        style="width:100%;padding:12px;border-radius:8px;border:1px solid #444;background:#0f0f23;color:white;margin-bottom:10px;font-family:Cairo,sans-serif;font-size:15px;text-align:center;box-sizing:border-box;" />
+      <input type="password" id="cpNewPass2" placeholder="تأكيد كلمة المرور"
+        style="width:100%;padding:12px;border-radius:8px;border:1px solid #444;background:#0f0f23;color:white;margin-bottom:16px;font-family:Cairo,sans-serif;font-size:15px;text-align:center;box-sizing:border-box;" />
+      <div id="cpErrMsg" style="color:#ef4444;font-size:13px;min-height:18px;margin-bottom:10px;"></div>
+      <button onclick="submitNewPassword()" style="width:100%;padding:14px;background:linear-gradient(135deg,#f59e0b,#d97706);color:white;border:none;border-radius:8px;font-size:16px;font-family:Cairo,sans-serif;cursor:pointer;font-weight:bold;">💾 حفظ كلمة المرور الجديدة</button>
+      <p style="color:#555;font-size:11px;margin-top:14px;">كلمة المرور يجب أن تحتوي على 8 أحرف على الأقل</p>
+    </div>`;
+  document.body.appendChild(div);
+}
+async function submitNewPassword() {
+  const p1 = document.getElementById('cpNewPass1').value;
+  const p2 = document.getElementById('cpNewPass2').value;
+  const err = document.getElementById('cpErrMsg');
+  if (p1.length < 8) { err.textContent = 'كلمة المرور يجب أن تكون 8 أحرف على الأقل'; return; }
+  if (p1 !== p2) { err.textContent = 'كلمتا المرور غير متطابقتين'; return; }
+  err.textContent = ''; 
+  const newHash = await hashPass(p1);
+  try {
+    await supaFetch('/rest/v1/staff_passwords?id=eq.' + _cpPwRecord.id, {
+      method: 'PATCH', headers: {'Prefer':'return=minimal'},
+      body: JSON.stringify({ password_hash: newHash, must_change_password: false, last_changed_at: new Date().toISOString() })
+    });
+    document.getElementById('supaChangePasswordScreen').style.display = 'none';
+    // المتابعة بعد تغيير كلمة المرور — إعادة تسجيل الدخول
+    doLogin();
+  } catch(e) { err.textContent = 'خطأ في الحفظ، حاولي مرة أخرى'; }
+}
+
+
 // Direct hash comparison — used by session restore (hash already in localStorage)
 function getStaffFromDBByHash(hash) {
   return STAFF_DB.find(e => e.password === hash) || null;
@@ -7303,6 +7404,56 @@ async function doLogin() {
 
   // Hash input password once for all comparisons
   const passHash = await hashPass(pass);
+
+
+  // ─── Parent Login (National ID) ─────────────────────────────────
+  if (/^\d{14,16}$/.test(enteredUsername)) {
+    const parentRec = await checkParentLogin(enteredUsername, passHash);
+    if (parentRec) {
+      const parentStudents = await getParentStudents(enteredUsername);
+      localStorage.setItem('aljood_session_role', 'parent');
+      localStorage.setItem('aljood_session_username', parentRec.name_ar || enteredUsername);
+      localStorage.setItem('aljood_session_parent_id', enteredUsername);
+      localStorage.setItem('aljood_last_active', Date.now());
+      currentRole = 'parent';
+      currentUsername = parentRec.name_ar || 'ولي أمر';
+      // تفعيل وضع ولي الأمر
+      if (typeof enterParentMode === 'function') {
+        enterParentMode(parentRec, parentStudents);
+      } else {
+        // Fallback: عرض شاشة ولي الأمر
+        const ls = document.getElementById('loginScreen');
+        const ms = document.getElementById('mainScreen');
+        if (ls) ls.style.display = 'none';
+        if (ms) { ms.style.display = ''; ms.style.opacity = '1'; }
+        if (typeof loadParentView === 'function') loadParentView(parentRec, parentStudents);
+      }
+      return;
+    } else {
+      document.getElementById('loginError').style.display = 'block';
+      setTimeout(() => document.getElementById('loginError').style.display = 'none', 3000);
+      return;
+    }
+  }
+
+  // ─── Staff Login via Supabase staff_passwords ────────────────────
+  const supaStaffRec = await checkStaffPassword(enteredUsername, passHash);
+  if (supaStaffRec) {
+    // تسجيل أول دخول
+    if (!supaStaffRec.first_login_at) {
+      await setFirstLoginAt(supaStaffRec.id);
+      supaStaffRec.first_login_at = new Date().toISOString();
+    }
+    // فحص إجبار تغيير كلمة المرور (بعد 7 أيام)
+    if (supaStaffRec.must_change_password) {
+      const daysSince = (Date.now() - new Date(supaStaffRec.first_login_at).getTime()) / 86400000;
+      if (daysSince >= 7) {
+        showChangePasswordScreen(supaStaffRec, enteredUsername);
+        return;
+      }
+    }
+    // المتابعة للدخول الطبيعي — دع الكود الموجود يكمل
+  }
 
   // Tab-to-role compatibility map
   // vice-principals (admin_staff) may use principal tab
