@@ -1752,9 +1752,11 @@
 // ============================================================
 // CONFIGURATION
 // ============================================================
+const SUPA_URL  = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+// Legacy Firebase constants (kept for reference)
 const FIREBASE_PROJECT = 'aljood-school';
 const FIREBASE_API_KEY = 'AIzaSyDri3r5AtyyduyiTS5GzIHOn-XSduhALpM';
-const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT}/databases/(default)/documents/`;
 const COLLECTION = 'worksheets_grade3';
 // ═══════════════════════════════════════
 // BILINGUAL SUPPORT — AR / EN
@@ -2094,7 +2096,7 @@ async function onStudentSelect() {
       if (status === 'in_progress' || status === 'submitted') {
         document.getElementById('resumeBanner').classList.add('show');
         // Pre-load data
-        appState.savedDoc = doc.fields;
+        appState.savedDoc = doc.fields || doc; // Supabase: fields wrapper or raw
       }
     }
   } catch (e) { /* ignore */ }
@@ -2118,27 +2120,33 @@ function startWorksheet() {
     section: appState.section
   };
 
-  // Pre-fill saved data if available
+  // Pre-fill saved data if available (Supabase flat row format)
   if (appState.savedDoc) {
     const d = appState.savedDoc;
-    if (d.robotName) document.getElementById('robotNameInput').value = d.robotName.stringValue || '';
-    updateCharCount(document.getElementById('robotNameInput'));
-    if (d.materials?.arrayValue?.values) {
-      const mats = d.materials.arrayValue.values.map(v => v.stringValue);
+    // Support both Supabase flat row and legacy Firebase fields wrapper
+    const robotName = d._supabase ? d.robot_name : (d.robotName?.stringValue || '');
+    const robotFn   = d._supabase ? d.robot_function : (d.robotFunction?.stringValue || '');
+    const robotSz   = d._supabase ? d.robot_size : (d.robotSize?.stringValue || '');
+    let mats = [];
+    if (d._supabase) {
+      try { mats = d.materials ? JSON.parse(d.materials) : []; } catch { mats = []; }
+    } else {
+      mats = (d.materials?.arrayValue?.values || []).map(v => v.stringValue);
+    }
+    if (robotName) { document.getElementById('robotNameInput').value = robotName; updateCharCount(document.getElementById('robotNameInput')); }
+    if (mats.length) {
       document.querySelectorAll('.mat-card').forEach(c => {
         if (mats.includes(c.dataset.val)) { c.classList.add('selected'); appState.materials.push(c.dataset.val); }
       });
     }
-    if (d.robotFunction) {
-      const val = d.robotFunction.stringValue;
+    if (robotFn) {
       document.querySelectorAll('#funcGrid .opt-card').forEach(c => {
-        if (c.dataset.val === val) { c.classList.add('selected'); appState.robotFunction = val; }
+        if (c.dataset.val === robotFn) { c.classList.add('selected'); appState.robotFunction = robotFn; }
       });
     }
-    if (d.robotSize) {
-      const val = d.robotSize.stringValue;
+    if (robotSz) {
       document.querySelectorAll('#sizeGrid .opt-card').forEach(c => {
-        if (c.dataset.val === val) { c.classList.add('selected'); appState.robotSize = val; }
+        if (c.dataset.val === robotSz) { c.classList.add('selected'); appState.robotSize = robotSz; }
       });
     }
   }
@@ -2555,44 +2563,56 @@ function launchConfetti(count = 60) {
 }
 
 // ============================================================
-// FIREBASE
+// SUPABASE (replaces Firebase)
 // ============================================================
 async function saveToFirebase(data, silent = false) {
   if (!appState.student) return false;
-  // Final submissions (not silent) → new document each time (POST with auto ID)
-  // Auto-saves (silent) → update existing doc with PATCH
   const docId = `${appState.section}_${appState.student.id}`;
   const isFinal = !silent && data.status === 'submitted';
-  const url = isFinal
-    ? `${FIRESTORE_BASE}${COLLECTION}?key=${FIREBASE_API_KEY}`  // POST → new doc
-    : `${FIRESTORE_BASE}${COLLECTION}/${docId}?key=${FIREBASE_API_KEY}`; // PATCH → update
 
-  const fields = {};
-  for (const [k, v] of Object.entries(data)) {
-    if (Array.isArray(v)) {
-      fields[k] = { arrayValue: { values: v.map(i => ({ stringValue: String(i) })) } };
-    } else if (typeof v === 'number') {
-      fields[k] = { integerValue: String(v) };
-    } else {
-      fields[k] = { stringValue: String(v ?? '') };
-    }
-  }
+  const row = {
+    student_id:   appState.student.id,
+    student_name: appState.student.name || data.studentName || '',
+    grade:        '3',
+    class:        appState.section,
+    subject:      'technology',
+    teacher_id:   'T036',
+    status:       data.status || 'in_progress',
+  };
 
-  // Merge with existing doc only for auto-saves (not final submissions)
-  if (!isFinal) {
-    try {
-      const existing = await getFirestoreDoc(docId);
-      if (existing?.fields) Object.assign(fields, existing.fields, fields);
-    } catch (e) { /* new doc */ }
+  if (data.robotName      !== undefined) row.robot_name      = data.robotName;
+  if (data.materials      !== undefined) row.materials       = JSON.stringify(data.materials);
+  if (data.robotFunction  !== undefined) row.robot_function  = data.robotFunction;
+  if (data.robotSize      !== undefined) row.robot_size      = data.robotSize;
+  if (data.drawingData    !== undefined) row.drawing_data    = data.drawingData;
+  if (data.q_score        !== undefined) row.score           = parseInt(data.q_score) || 0;
+
+  const ans = {};
+  for (let i = 1; i <= 10; i++) {
+    if (data[`q${i}`] !== undefined) ans[`q${i}`] = data[`q${i}`];
   }
+  if (Object.keys(ans).length > 0) row.answers = ans;
 
   try {
-    const resp = await fetch(url, {
-      method: isFinal ? 'POST' : 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields })
-    });
-    if (!resp.ok) throw new Error('save failed');
+    if (isFinal) {
+      // Final submission → new row (doc_id = null → no UPSERT conflict)
+      row.submitted_at = new Date().toISOString();
+      const resp = await fetch(`${SUPA_URL}/rest/v1/worksheets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPA_ANON, 'Authorization': `Bearer ${SUPA_ANON}`, 'Prefer': 'return=minimal' },
+        body: JSON.stringify(row)
+      });
+      if (!resp.ok) throw new Error('save failed');
+    } else {
+      // Auto-save → UPSERT by doc_id (draft record)
+      row.doc_id = docId;
+      const resp = await fetch(`${SUPA_URL}/rest/v1/worksheets?on_conflict=doc_id`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPA_ANON, 'Authorization': `Bearer ${SUPA_ANON}`, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify(row)
+      });
+      if (!resp.ok) throw new Error('save failed');
+    }
     if (!silent) showToast('Saved successfully ✅', 'success');
     return true;
   } catch (e) {
@@ -2602,11 +2622,17 @@ async function saveToFirebase(data, silent = false) {
 }
 
 async function getFirestoreDoc(docId) {
-  const url = `${FIRESTORE_BASE}${COLLECTION}/${docId}?key=${FIREBASE_API_KEY}`;
+  // Supabase replacement — reads draft record by doc_id
   try {
-    const resp = await fetch(url);
+    const resp = await fetch(`${SUPA_URL}/rest/v1/worksheets?doc_id=eq.${docId}&select=*&limit=1`, {
+      headers: { 'apikey': SUPA_ANON, 'Authorization': `Bearer ${SUPA_ANON}` }
+    });
     if (!resp.ok) return null;
-    return await resp.json();
+    const rows = await resp.json();
+    if (!rows.length) return null;
+    // Return in a wrapper so callers can check .fields
+    const row = rows[0];
+    return { fields: row, _supabase: true };
   } catch (e) { return null; }
 }
 

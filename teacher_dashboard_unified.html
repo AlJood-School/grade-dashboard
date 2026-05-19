@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Force redeploy: 2026-05-18 20:49:33 -->
+<!-- Force redeploy: 2026-05-19 11:30:00 — Supabase worksheets migration -->
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
@@ -748,6 +748,8 @@ th .th-check{width:16px;height:16px;cursor:pointer;accent-color:#ef4444}
 const FB   = 'aljood-school';
 const FBKEY= 'AIzaSyDri3r5AtyyduyiTS5GzIHOn-XSduhALpM';
 const COL  = 'worksheets_grade3';
+const SUPA_URL  = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
 const STURL= 'https://grade-dashboard-beta.vercel.app/data/students.json';
 const PWD  = 'AlJood@2026';
 
@@ -986,30 +988,31 @@ function openSB() { document.getElementById('sidebar').classList.add('open'); do
 function closeSB() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('mobOv').classList.remove('show'); }
 
 // ═══════════════════════════════════════
-// FIREBASE LOAD
+// SUPABASE LOAD
 // ═══════════════════════════════════════
 async function loadData() {
   try {
-    const url = `https://firestore.googleapis.com/v1/projects/${FB}/databases/(default)/documents/${COL}?key=${FBKEY}&pageSize=500`;
-    const r   = await fetch(url);
-    const d   = await r.json();
+    const url = `${SUPA_URL}/rest/v1/worksheets?select=*&order=created_at.desc&limit=500`;
+    const r   = await fetch(url, { headers: { 'apikey': SUPA_ANON, 'Authorization': `Bearer ${SUPA_ANON}` } });
+    const rows = await r.json();
     subs = [];
-    if (d.documents) {
-      d.documents.forEach(doc => {
-        const f = doc.fields || {};
+    if (Array.isArray(rows)) {
+      rows.forEach(row => {
+        let mats = [];
+        try { mats = row.materials ? JSON.parse(row.materials) : []; } catch { mats = []; }
         subs.push({
-          id:        doc.name.split('/').pop(),
-          name:      f.studentName?.stringValue || f.name?.stringValue || '—',
-          section:   f.section?.stringValue || f.class?.stringValue || '—',
-          robotName: f.robotName?.stringValue || f.data?.mapValue?.fields?.robotName?.stringValue || '—',
-          materials: parseMats(f),
-          fn:        f.robotFunction?.stringValue || f.data?.mapValue?.fields?.robotFunction?.stringValue || '—',
-          size:      f.robotSize?.stringValue || f.data?.mapValue?.fields?.robotSize?.stringValue || '—',
-          drawing:   f.drawingData?.stringValue || f.drawing?.stringValue || f.data?.mapValue?.fields?.drawingData?.stringValue || '',
-          ts:        f.timestamp?.timestampValue || f.submittedAt?.timestampValue || doc.createTime || '',
-          status:    f.status?.stringValue || 'submitted',
-          score:     parseInt(f.q_score?.integerValue || f.q_score?.doubleValue || 0),
-          answers:   parseAnswers(f)
+          id:        row.id,
+          name:      row.student_name || '—',
+          section:   row.class || '—',
+          robotName: row.robot_name || '—',
+          materials: mats,
+          fn:        row.robot_function || '—',
+          size:      row.robot_size || '—',
+          drawing:   row.drawing_data || '',
+          ts:        row.submitted_at || row.created_at || '',
+          status:    row.status || 'submitted',
+          score:     parseInt(row.score || 0),
+          answers:   row.answers || {}
         });
       });
     }
@@ -1027,20 +1030,8 @@ async function loadData() {
   } catch(e) { console.warn('students load failed', e); }
 }
 
-function parseMats(f) {
-  try {
-    const arr = f.materials?.arrayValue?.values || f.data?.mapValue?.fields?.materials?.arrayValue?.values || [];
-    return arr.map(v => v.stringValue || '').filter(Boolean);
-  } catch { return []; }
-}
-function parseAnswers(f) {
-  const a = {};
-  for (let i = 1; i <= 10; i++) {
-    const v = f[`q${i}`]?.stringValue;
-    a[`q${i}`] = (v !== undefined && v !== '') ? parseInt(v) : -1;
-  }
-  return a;
-}
+function parseMats(f) { return []; }  // legacy - not used with Supabase
+function parseAnswers(f) { return {}; }  // legacy - not used with Supabase
 
 // ═══════════════════════════════════════
 // OVERVIEW
@@ -1344,7 +1335,7 @@ function closeM() { document.getElementById('modalOv').classList.remove('open');
 async function delDoc(id) {
   if (!confirm('هل تريدين حذف هذه الورقة نهائياً؟')) return;
   try {
-    await fetch(`https://firestore.googleapis.com/v1/projects/${FB}/databases/(default)/documents/${COL}/${id}?key=${FBKEY}`, {method:'DELETE'});
+    await fetch(`${SUPA_URL}/rest/v1/worksheets?id=eq.${id}`, {method:'DELETE', headers:{'apikey':SUPA_ANON,'Authorization':`Bearer ${SUPA_ANON}`,'Prefer':'return=minimal'}});
     subs = subs.filter(s=>s.id!==id);
     document.getElementById('wsBadge').textContent = subs.filter(s=>s.status==='submitted').length;
     renderTbl(); renderOverview(); closeM();
@@ -1417,7 +1408,7 @@ async function bulkDelete() {
   let deleted = 0, failed = 0;
   for (const id of ids) {
     try {
-      await fetch(`https://firestore.googleapis.com/v1/projects/${FB}/databases/(default)/documents/${COL}/${id}?key=${FBKEY}`, {method:'DELETE'});
+      await fetch(`${SUPA_URL}/rest/v1/worksheets?id=eq.${id}`, {method:'DELETE', headers:{'apikey':SUPA_ANON,'Authorization':`Bearer ${SUPA_ANON}`,'Prefer':'return=minimal'}});
       subs = subs.filter(s => s.id !== id);
       deleted++;
     } catch(e) { failed++; }
