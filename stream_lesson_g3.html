@@ -1225,12 +1225,122 @@ function formatTime(s) {
   return `${m}:${sec.toString().padStart(2,'0')}`;
 }
 
+// ============================================================
+// STATE PERSISTENCE (survives page refresh)
+// ============================================================
+const SESS_KEY = 'streamG3_state';
+
+function saveState() {
+  if (currentPhase < 0) return; // don't save registration state
+  try {
+    const state = {
+      currentPhase,
+      studentName,
+      studentSection,
+      isSpecialNeeds,
+      sessionId,
+      programmingLevel,
+      isLangAR,
+      phaseData: JSON.parse(JSON.stringify(phaseData)),
+      tfAnswers: JSON.parse(JSON.stringify(tfAnswers)),
+      _neoIntroSeen,
+      _bonusActive,
+      activityTimerRemaining: currentActivityTimer ? currentActivityTimer.remaining : null,
+      activityTimerTotal: currentActivityTimer ? currentActivityTimer.total : null,
+      totalSecondsLeft,
+      savedAt: Date.now()
+    };
+    sessionStorage.setItem(SESS_KEY, JSON.stringify(state));
+  } catch(e) { /* silent */ }
+}
+
+function clearSavedState() {
+  sessionStorage.removeItem(SESS_KEY);
+}
+
+function restoreState() {
+  // Don't restore for teacher/observer
+  if (new URLSearchParams(window.location.search).get('teacher') === '1') return false;
+  try {
+    const raw = sessionStorage.getItem(SESS_KEY);
+    if (!raw) return false;
+    const s = JSON.parse(raw);
+    // Expire after 3 hours (one lesson max)
+    if (!s.savedAt || Date.now() - s.savedAt > 3 * 60 * 60 * 1000) {
+      clearSavedState();
+      return false;
+    }
+    // Restore variables
+    currentPhase      = s.currentPhase;
+    studentName       = s.studentName       || '';
+    studentSection    = s.studentSection    || '';
+    isSpecialNeeds    = s.isSpecialNeeds    || false;
+    sessionId         = s.sessionId         || '';
+    programmingLevel  = s.programmingLevel  || 'advanced';
+    isLangAR          = s.isLangAR          || false;
+    phaseData         = s.phaseData         || {};
+    tfAnswers         = s.tfAnswers         || {};
+    _neoIntroSeen     = s._neoIntroSeen     || false;
+    _bonusActive      = s._bonusActive      || false;
+    totalSecondsLeft  = s.totalSecondsLeft  || 45 * 60;
+
+    // Apply special needs mode
+    applySpecialNeeds();
+    // Apply language
+    document.body.classList.toggle('lang-ar', isLangAR);
+    const lb = document.getElementById('langBtn');
+    if (lb) lb.textContent = isLangAR ? '🌐 EN' : '🌐 AR';
+
+    // Show help button
+    const helpBtn = document.getElementById('helpBtn');
+    if (helpBtn) helpBtn.style.display = '';
+
+    // Start total timer with saved remaining time
+    startTotalTimer();
+    document.getElementById('totalTimerDisplay').textContent = formatTime(totalSecondsLeft);
+
+    // Render the saved phase
+    updateProgressBar();
+    const mc = document.getElementById('mainContent');
+    mc.innerHTML = '';
+    renderPhase(currentPhase);
+
+    // Restore activity timer with saved remaining time
+    if (s.activityTimerRemaining !== null && s.activityTimerRemaining > 0) {
+      const rem  = s.activityTimerRemaining;
+      const tot  = s.activityTimerTotal || PHASE_TIMERS[currentPhase] || 180;
+      // Stop any timer renderPhase may have started, then set correct remaining
+      setTimeout(() => {
+        if (currentActivityTimer) {
+          currentActivityTimer.remaining = rem;
+          currentActivityTimer.total     = tot;
+          updateTimerDisplay(rem, tot, 'activityTimer');
+        }
+      }, 100);
+    }
+
+    // Show restore toast
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#1e3a5f,#d4a830);color:#fff;padding:10px 24px;border-radius:30px;font-size:0.9rem;font-weight:700;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.3);font-family:Tajawal,sans-serif;';
+    toast.textContent = '↩️ Welcome back! Continuing from where you left off...';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3500);
+
+    return true;
+  } catch(e) {
+    clearSavedState();
+    return false;
+  }
+}
+
 function startTotalTimer() {
   if (totalTimerInterval) clearInterval(totalTimerInterval);
   totalTimerInterval = setInterval(() => {
     if (!timersPaused) {
       totalSecondsLeft = Math.max(0, totalSecondsLeft - 1);
       document.getElementById('totalTimerDisplay').textContent = formatTime(totalSecondsLeft);
+      // Save every 5 seconds to avoid excessive writes
+      if (totalSecondsLeft % 5 === 0) saveState();
     }
   }, 1000);
 }
@@ -1447,6 +1557,7 @@ function goToPhase(phase) {
   mc.innerHTML = '';
   renderPhase(phase);
   mc.scrollIntoView({behavior:'smooth', block:'start'});
+  saveState(); // Persist phase change immediately
 }
 
 function nextPhase() {
@@ -1795,7 +1906,11 @@ function startPhaseTimer(seconds) {
   if (isSpecialNeeds) seconds = Math.floor(seconds * 1.5);
   if (currentActivityTimer) currentActivityTimer.stop();
   currentActivityTimer = new ActivityTimer(seconds,
-    (rem, tot) => updateTimerDisplay(rem, tot, 'activityTimer'),
+    (rem, tot) => {
+      updateTimerDisplay(rem, tot, 'activityTimer');
+      // Save timer remaining every 5 seconds
+      if (rem % 5 === 0) saveState();
+    },
     onTimerEnd
   );
   currentActivityTimer.start();
@@ -1990,6 +2105,7 @@ async function startLesson() {
     }); } catch(e) {}
   }
   currentPhase = 0;
+  saveState();
   updateProgressBar();
   renderJourneyMap();
   document.getElementById('helpBtn').style.display = 'flex';
@@ -2440,6 +2556,7 @@ function answerTF(idx, answer, correct) {
   }
   tfAnswers[idx] = isCorrect;
   phaseData.p3_tf = tfAnswers;
+  saveState();
   const qs = isSpecialNeeds ? TF_QUESTIONS.slice(0,3) : TF_QUESTIONS;
   if (Object.keys(tfAnswers).length === qs.length) {
     const score = Object.values(tfAnswers).filter(Boolean).length;
@@ -2554,6 +2671,7 @@ function togglePlanMat(i) {
     playClick();
   }
   phaseData.p4_matChecks = [...planMatChecks];
+  saveState();
 }
 
 // Canvas drawing
@@ -3154,6 +3272,7 @@ function renderCelebration() {
   const score = calculateTotalScore();
   phaseData.totalScore = score;
   saveSession({ status:'completed', totalScore: score });
+  clearSavedState(); // Lesson finished — no need to restore on next visit
   return `
   <div class="celebration-screen">
     <div class="robot-art">🤖</div>
@@ -3476,15 +3595,25 @@ function initPhaseLogic(phase) {
 // INIT APP
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
-  // Hide help button until started
-  document.getElementById('helpBtn').style.display = 'none';
-  renderRegistration();
-  updateProgressBar();
-  // Total timer shows static until started
-  document.getElementById('totalTimerDisplay').textContent = '45:00';
-  // Handle URL param teacher
+  // Handle URL param teacher — always show teacher panel, skip state restore
   if (new URLSearchParams(window.location.search).get('teacher') === '1') {
+    document.getElementById('helpBtn').style.display = 'none';
+    renderRegistration();
+    updateProgressBar();
+    document.getElementById('totalTimerDisplay').textContent = '45:00';
     setTimeout(openTeacherPanel, 300);
+    return;
+  }
+
+  // Try to restore saved state (survives page refresh)
+  const restored = restoreState();
+
+  if (!restored) {
+    // Fresh start
+    document.getElementById('helpBtn').style.display = 'none';
+    renderRegistration();
+    updateProgressBar();
+    document.getElementById('totalTimerDisplay').textContent = '45:00';
   }
 });
 
