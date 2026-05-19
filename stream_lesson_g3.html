@@ -1264,37 +1264,52 @@ function onTimerEnd() {
   }
   _bonusActive = true;
   playAlert();
-  // Give 60s bonus time
-  if (window._currentActivityTimer) {
-    window._currentActivityTimer.remaining = 60;
-    window._currentActivityTimer.total = 60;
-    window._currentActivityTimer.onEnd = onTimerEnd;
-    window._currentActivityTimer.start();
+  // Give 60s bonus time — fix: use currentActivityTimer (not window._currentActivityTimer)
+  if (currentActivityTimer) {
+    currentActivityTimer.stop();
+    currentActivityTimer.remaining = 60;
+    currentActivityTimer.total = 60;
+    currentActivityTimer.onEnd = onTimerEnd;
+    currentActivityTimer.start();
+    updateTimerDisplay(60, 60, 'activityTimer');
   }
-  // Show bonus banner
+  // Show bonus banner — stays visible throughout the whole bonus minute
   const banner = document.getElementById('timeUpBanner');
   if (banner) {
-    banner.innerHTML = '⏰ Time's up! <strong>+1 bonus minute</strong> — finish up! 🏁';
+    banner.innerHTML = '⏰ Time\'s up! <strong>+1 bonus minute ⏳</strong> — wrap it up! 🏁';
     banner.style.background = 'linear-gradient(135deg,#f59e0b,#ef4444)';
     banner.style.display = 'block';
-    setTimeout(() => { banner.style.display='none'; banner.innerHTML = '⏰ Time\'s up! You can continue...'; banner.style.background=''; }, 8000);
+    // Banner hides only when bonus also ends (handled in autoUnlockCurrentPhaseNext)
   }
 }
 function autoUnlockCurrentPhaseNext() {
+  // Hide bonus banner
+  const banner = document.getElementById('timeUpBanner');
+  if (banner) banner.style.display = 'none';
+
   // Unlock whatever Next button is currently visible
   const btns = ['nextTFBtn','nextMatBtn','nextKeyBtn','nextPlanBtn','nextCodeBtn','nextTestBtn','nextSelfBtn'];
+  let unlocked = false;
   btns.forEach(id => {
     const btn = document.getElementById(id);
-    if (btn && btn.disabled) {
+    if (btn) {
       btn.disabled = false;
       btn.style.animation = 'pulse 1s infinite';
-      btn.title = 'Time is up — tap to continue!';
+      btn.style.background = 'linear-gradient(135deg,#f59e0b,#ef4444)';
+      btn.textContent = '▶ Next — Time\'s up!';
+      unlocked = true;
     }
   });
   // Also generic next button
-  const genericNext = document.querySelector('.nav-row .btn-primary[disabled]');
-  if (genericNext) { genericNext.disabled = false; genericNext.style.animation = 'pulse 1s infinite'; }
-  showModal('⏰ <strong>Time's up!</strong><br>It's okay — tap Next to continue! 🙂');
+  const genericNext = document.querySelector('.nav-row .btn-primary');
+  if (genericNext) {
+    genericNext.disabled = false;
+    genericNext.style.animation = 'pulse 1s infinite';
+    genericNext.style.background = 'linear-gradient(135deg,#f59e0b,#ef4444)';
+    unlocked = true;
+  }
+  // Show friendly message
+  showModal('⏰ <strong>Time\'s up!</strong><br><br>Well done for trying! 💪<br>Tap <strong>Next</strong> to continue to the next activity 🙂');
 }
 
 // ============================================================
@@ -2266,7 +2281,81 @@ const TF_QUESTIONS = [
   { q:'An EVENT is something that happens to start an action.', qAr:'الحدث هو شيء يحدث لبدء إجراء معين.', answer:true, exp:'Exactly! Like pressing a button to make the robot do something.' }
 ];
 
+let _neoIntroSeen = false;
+
+function startTFQuestions() {
+  _neoIntroSeen = true;
+  document.getElementById('phaseContent').innerHTML = renderTrueFalseQuestions();
+  const secs = PHASE_TIMERS[3] * (isSpecialNeeds ? 1.5 : 1);
+  startPhaseTimer(secs);
+}
+
 function renderTrueFalse() {
+  const secs = PHASE_TIMERS[3] * (isSpecialNeeds ? 1.5 : 1);
+  if (!_neoIntroSeen) {
+    return `
+  <div style="text-align:center;padding:10px 0 6px;">
+    <div style="font-size:1.1rem;font-weight:700;color:#1e3a5f;font-family:'Tajawal',sans-serif;">
+      📖 قبل الأسئلة — تعرّف على NeoPixels
+      <span style="display:block;font-size:0.85rem;font-weight:400;color:#555;">Before we start — learn about NeoPixels</span>
+    </div>
+  </div>
+  <div style="background:linear-gradient(135deg,#1e3a5f 0%,#2d5a8e 100%);border-radius:20px;padding:22px 20px;color:#fff;margin-bottom:14px;box-shadow:0 6px 24px rgba(30,58,95,0.25);">
+    <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:18px;flex-wrap:wrap;">
+      <div style="font-size:3.2rem;filter:drop-shadow(0 0 12px #fbbf24);">💡</div>
+      <div style="text-align:left;">
+        <div style="font-size:1.5rem;font-weight:800;letter-spacing:1px;">NeoPixels</div>
+        <div style="font-size:0.85rem;opacity:0.8;">Smart Colorful LED Lights</div>
+      </div>
+    </div>
+    <!-- Visual demo -->
+    <div style="display:flex;justify-content:center;gap:10px;margin-bottom:18px;">
+      ${['#ef4444','#f97316','#fbbf24','#22c55e','#3b82f6','#a855f7','#ec4899','#f97316'].map((c,i)=>`
+        <div style="width:28px;height:28px;border-radius:50%;background:${c};box-shadow:0 0 10px ${c};animation:npPulse ${0.6+i*0.1}s infinite alternate;"></div>
+      `).join('')}
+    </div>
+    <style>@keyframes npPulse{from{transform:scale(0.8);opacity:0.6}to{transform:scale(1.1);opacity:1}}</style>
+    <!-- Info cards -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px;">
+      <div style="background:rgba(255,255,255,0.12);border-radius:12px;padding:12px;text-align:center;">
+        <div style="font-size:1.6rem;margin-bottom:4px;">🎨</div>
+        <div style="font-size:0.85rem;font-weight:700;">They show COLORS</div>
+        <div style="font-size:0.78rem;opacity:0.8;font-family:'Tajawal',sans-serif;">تُضيء بألوان مختلفة</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.12);border-radius:12px;padding:12px;text-align:center;">
+        <div style="font-size:1.6rem;margin-bottom:4px;">💻</div>
+        <div style="font-size:0.85rem;font-weight:700;">We PROGRAM them</div>
+        <div style="font-size:0.78rem;opacity:0.8;font-family:'Tajawal',sans-serif;">نبرمجها بالكمبيوتر</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.12);border-radius:12px;padding:12px;text-align:center;">
+        <div style="font-size:1.6rem;margin-bottom:4px;">🤖</div>
+        <div style="font-size:0.85rem;font-weight:700;">They are on the ROBOT</div>
+        <div style="font-size:0.78rem;opacity:0.8;font-family:'Tajawal',sans-serif;">توجد على الروبوت</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.12);border-radius:12px;padding:12px;text-align:center;">
+        <div style="font-size:1.6rem;margin-bottom:4px;">🔴🟢🔵</div>
+        <div style="font-size:0.85rem;font-weight:700;">NOT sensors</div>
+        <div style="font-size:0.78rem;opacity:0.8;font-family:'Tajawal',sans-serif;">ليست حساسات — هي أضواء!</div>
+      </div>
+    </div>
+    <!-- Key fact highlight -->
+    <div style="background:rgba(251,191,36,0.2);border:2px solid #fbbf24;border-radius:12px;padding:12px 16px;text-align:center;">
+      <div style="font-size:0.95rem;font-weight:700;color:#fbbf24;">⚡ Remember!</div>
+      <div style="font-size:0.88rem;margin-top:4px;">NeoPixels = <strong>Colorful LED lights</strong> — NOT sensors or speakers</div>
+      <div style="font-size:0.82rem;font-family:'Tajawal',sans-serif;color:#fde68a;margin-top:3px;">NeoPixels = أضواء LED ملونة — وليست حساسات أو مكبرات صوت</div>
+    </div>
+  </div>
+  <div style="text-align:center;">
+    <button onclick="startTFQuestions()" style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;border:none;border-radius:14px;padding:14px 40px;font-size:1.1rem;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(34,197,94,0.4);font-family:'Tajawal',sans-serif;">
+      ✅ فهمت — ابدأ الأسئلة!
+      <span style="display:block;font-size:0.8rem;font-weight:400;opacity:0.9;">I understand — Start Questions!</span>
+    </button>
+  </div>`;
+  }
+  return renderTrueFalseQuestions();
+}
+
+function renderTrueFalseQuestions() {
   const secs = PHASE_TIMERS[3] * (isSpecialNeeds ? 1.5 : 1);
   const qs = isSpecialNeeds ? TF_QUESTIONS.slice(0,3) : TF_QUESTIONS;
   const saved = phaseData.p3_tf || {};
@@ -3336,7 +3425,8 @@ function initPhaseLogic(phase) {
       updateMatCount();
       break;
     case 3:
-      startPhaseTimer(PHASE_TIMERS[3]);
+      // Timer starts only AFTER NeoPixels intro is dismissed
+      if (_neoIntroSeen) startPhaseTimer(PHASE_TIMERS[3]);
       // restore T/F answers
       const savedTF = phaseData.p3_tf || {};
       Object.entries(savedTF).forEach(([idx,correct]) => {
