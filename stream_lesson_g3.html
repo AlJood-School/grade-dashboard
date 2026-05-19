@@ -1254,9 +1254,47 @@ function updateTimerDisplay(remaining, total, timerId) {
   }
 }
 
+let _bonusActive = false;
 function onTimerEnd() {
+  if (_bonusActive) {
+    // Bonus also ended → auto-unlock Next for current phase
+    _bonusActive = false;
+    autoUnlockCurrentPhaseNext();
+    return;
+  }
+  _bonusActive = true;
+  playAlert();
+  // Give 60s bonus time
+  if (window._currentActivityTimer) {
+    window._currentActivityTimer.remaining = 60;
+    window._currentActivityTimer.total = 60;
+    window._currentActivityTimer.onEnd = onTimerEnd;
+    window._currentActivityTimer.start();
+  }
+  // Show bonus banner
   const banner = document.getElementById('timeUpBanner');
-  if (banner) { banner.style.display = 'block'; playAlert(); setTimeout(()=>banner.style.display='none', 4000); }
+  if (banner) {
+    banner.innerHTML = '⏰ Time's up! <strong>+1 bonus minute</strong> — finish up! 🏁';
+    banner.style.background = 'linear-gradient(135deg,#f59e0b,#ef4444)';
+    banner.style.display = 'block';
+    setTimeout(() => { banner.style.display='none'; banner.innerHTML = '⏰ Time\'s up! You can continue...'; banner.style.background=''; }, 8000);
+  }
+}
+function autoUnlockCurrentPhaseNext() {
+  // Unlock whatever Next button is currently visible
+  const btns = ['nextTFBtn','nextMatBtn','nextKeyBtn','nextPlanBtn','nextCodeBtn','nextTestBtn','nextSelfBtn'];
+  btns.forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn && btn.disabled) {
+      btn.disabled = false;
+      btn.style.animation = 'pulse 1s infinite';
+      btn.title = 'Time is up — tap to continue!';
+    }
+  });
+  // Also generic next button
+  const genericNext = document.querySelector('.nav-row .btn-primary[disabled]');
+  if (genericNext) { genericNext.disabled = false; genericNext.style.animation = 'pulse 1s infinite'; }
+  showModal('⏰ <strong>Time's up!</strong><br>It's okay — tap Next to continue! 🙂');
 }
 
 // ============================================================
@@ -1340,15 +1378,21 @@ function applySpecialNeeds() {
 }
 
 // Read aloud
-function readAloud(text) {
+function readAloud(text, lang) {
   if (!window.speechSynthesis) return;
+  lang = lang || 'en-US';
+  window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(text);
-  utt.lang = isLangAR ? 'ar-AE' : 'en-US';
-  utt.rate = 0.85;
+  utt.lang = lang || (isLangAR ? 'ar-AE' : 'en-US');
+  utt.rate = (utt.lang.startsWith('ar')) ? 0.80 : 0.90;
+  // Try to find matching voice
+  const voices = window.speechSynthesis.getVoices();
+  const match = voices.find(v => v.lang && v.lang.startsWith(utt.lang.substring(0,2)));
+  if (match) utt.voice = match;
   window.speechSynthesis.speak(utt);
 }
 function mkReadBtn(text) {
-  return `<button class="read-aloud-btn" onclick="readAloud(${JSON.stringify(text)})">🔊 Read</button>`;
+  return `<button class="read-aloud-btn" onclick="readAloud(${JSON.stringify(text)},' en-US')">🔊 Read</button>`;
 }
 
 // ============================================================
@@ -1391,6 +1435,34 @@ function goToPhase(phase) {
 }
 
 function nextPhase() {
+  // Phase 3 (TF): warn if unanswered questions exist
+  if (currentPhase === 3 && typeof TF_QUESTIONS !== 'undefined') {
+    const qs = isSpecialNeeds ? TF_QUESTIONS.slice(0,3) : TF_QUESTIONS;
+    const unanswered = qs.map((q,i) => i).filter(i => tfAnswers[i] === undefined);
+    if (unanswered.length > 0) {
+      // Highlight unanswered
+      unanswered.forEach(i => {
+        const card = document.getElementById('tfCard'+i);
+        if (card) {
+          card.style.border = '2px solid #ef4444';
+          card.style.boxShadow = '0 0 14px rgba(239,68,68,0.4)';
+        }
+      });
+      const firstCard = document.getElementById('tfCard'+unanswered[0]);
+      if (firstCard) firstCard.scrollIntoView({behavior:'smooth',block:'center'});
+      showModal(\`⚠️ <strong style="color:#ef4444;">Wait! \${unanswered.length} question\${unanswered.length>1?'s':''} not answered yet!</strong><br><br>
+        The \${unanswered.length>1?'questions are':'question is'} <strong>highlighted in red</strong> — please try before moving on! 🙏<br><br>
+        <small style="color:#888;">You can skip if you\'re really stuck 👇</small><br><br>
+        <button onclick="closeModal();forceNextPhase();" style="background:#ef4444;color:white;border:none;padding:8px 20px;border-radius:20px;cursor:pointer;font-size:0.9rem;">
+          Skip & Continue anyway →
+        </button>\`);
+      return;
+    }
+  }
+  _doNextPhase();
+}
+function forceNextPhase() { _doNextPhase(); }
+function _doNextPhase() {
   saveCurrentPhaseData();
   saveSession();
   const next = currentPhase + 1;
@@ -1459,9 +1531,80 @@ async function requestHelp(type) {
   statusEl.style.display = 'block';
   setTimeout(closeHelp, 2500);
 }
-function showHint() { showModal('💡 <strong>Hint:</strong> Look at the question carefully. Think about what you know from class! 🤔'); }
-function showExplanation() { showModal('📖 <strong>Explanation:</strong> Remember what we learned in class. Ask your teacher if you need more help! 📚'); }
-function skipQuestion() { showModal('🔄 No worries! Move on and come back later. 😊'); }
+function showHint() {
+  // Phase 3 = TF questions → use actual question hint
+  if (currentPhase === 3 && typeof TF_QUESTIONS !== 'undefined') {
+    const qs = isSpecialNeeds ? TF_QUESTIONS.slice(0,3) : TF_QUESTIONS;
+    // Find first unanswered or last interacted question
+    let idx = typeof _lastTFIdx !== 'undefined' ? _lastTFIdx : 0;
+    // If already answered, find first unanswered
+    const unanswered = qs.map((q,i) => i).filter(i => tfAnswers[i] === undefined);
+    if (unanswered.length > 0) idx = unanswered[0];
+    const q = qs[idx];
+    if (q) {
+      const hintTxt = q.hint || '🤔 Read the question slowly... and think about what you learned in class!';
+      showModal(\`💡 <strong style="color:#f59e0b;">Hint for Q\${idx+1}:</strong><br><br>
+        <div style="background:rgba(251,191,36,0.1);border-left:4px solid #f59e0b;padding:12px;border-radius:8px;text-align:left;">
+          📌 <em>"\${q.q}"</em>
+        </div>
+        <br>\${hintTxt}
+        <br><br><small style="color:#888;">Arabic: \${q.qAr}</small>\`);
+      return;
+    }
+  }
+  showModal('💡 <strong>Hint:</strong> Read each question slowly and think about what you learned today! 🤔');
+}
+function showExplanation() {
+  if (currentPhase === 3 && typeof TF_QUESTIONS !== 'undefined') {
+    const qs = isSpecialNeeds ? TF_QUESTIONS.slice(0,3) : TF_QUESTIONS;
+    let idx = typeof _lastTFIdx !== 'undefined' ? _lastTFIdx : 0;
+    const unanswered = qs.map((q,i) => i).filter(i => tfAnswers[i] === undefined);
+    if (unanswered.length > 0) idx = unanswered[0];
+    const q = qs[idx];
+    if (q) {
+      showModal(\`📖 <strong style="color:#6366f1;">Explanation for Q\${idx+1}:</strong><br><br>
+        <div style="background:rgba(99,102,241,0.08);border-left:4px solid #6366f1;padding:12px;border-radius:8px;">
+          \${q.exp}
+        </div>
+        <br><small style="color:#888;">Remember: \${q.q}</small>\`);
+      return;
+    }
+  }
+  showModal('📖 <strong>Explanation:</strong> Think about the key words in the question. You can do it! 💪');
+}
+function skipQuestion() {
+  if (currentPhase === 3 && typeof TF_QUESTIONS !== 'undefined') {
+    // Highlight unanswered questions and softly unlock Next
+    const qs = isSpecialNeeds ? TF_QUESTIONS.slice(0,3) : TF_QUESTIONS;
+    const unanswered = qs.map((q,i) => i).filter(i => tfAnswers[i] === undefined);
+    if (unanswered.length === 0) {
+      closeHelp();
+      return;
+    }
+    // Highlight unanswered cards
+    unanswered.forEach(i => {
+      const card = document.getElementById('tfCard'+i);
+      if (card) {
+        card.style.border = '2px solid #f59e0b';
+        card.style.boxShadow = '0 0 12px rgba(245,158,11,0.4)';
+        card.scrollIntoView({ behavior:'smooth', block:'center' });
+      }
+    });
+    // If only 1 left → soft unlock Next
+    const nextBtn = document.getElementById('nextTFBtn');
+    if (unanswered.length <= 1 && nextBtn) {
+      nextBtn.disabled = false;
+      nextBtn.style.background = 'linear-gradient(135deg,#f59e0b,#f97316)';
+      nextBtn.title = 'You can skip and continue';
+    }
+    closeHelp();
+    showModal(\`🔄 <strong>Unanswered: \${unanswered.length} question\${unanswered.length>1?'s':''}</strong><br><br>
+      The \${unanswered.length>1?'questions have':'question has'} been <strong>highlighted in orange</strong> for you!<br><br>
+      Try your best — there's no wrong answer in learning! 💛\`);
+    return;
+  }
+  showModal('🔄 No worries! Look at the highlighted questions and try again. You got this! 😊');
+}
 
 // ============================================================
 // TEACHER MODE
@@ -2131,15 +2274,15 @@ function renderTrueFalse() {
   ${makePhaseHeader('❓ True or False?', secs, 'Phase 4 — Ask')}
   <div id="tfQuestions">
     ${qs.map((q,i) => `
-      <div class="question-card" id="tfCard${i}">
+      <div class="question-card" id="tfCard${i}" onclick="_lastTFIdx=${i}">
         <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;">
           <span class="question-number">${i+1}</span>
           <div>
             <div class="question-text">${q.q}</div>
             <div style="font-family:'Tajawal',sans-serif;font-size:0.9rem;color:#888;">${q.qAr}</div>
             <div style="margin-top:4px;">
-              <button class="read-aloud-btn" onclick="readAloud('${q.q.replace(/'/g,"\\'")}')">🔊 Read</button>
-              <button class="read-aloud-btn" style="margin-left:6px;" onclick="toggleTfAr(${i})">🌐 ترجم</button>
+              <button class="read-aloud-btn" onclick="readAloud('${q.q.replace(/'/g,"\\'")}')">🔊 EN</button>
+              <button class="read-aloud-btn" style="margin-left:6px;" onclick="readAloud('${q.qAr.replace(/'/g,'\\\'')}',' ar-AE')>🔊 عر</button>
             </div>
           </div>
         </div>
@@ -2175,7 +2318,9 @@ function updateObserverAdaptive(level, score, total) {
     } catch(e) {}
   }
 }
+let _lastTFIdx = 0;
 function answerTF(idx, answer, correct) {
+  _lastTFIdx = idx;
   const isCorrect = answer === correct;
   const fb = document.getElementById('tfFb'+idx);
   const trueBtn = document.getElementById('tfTrue'+idx);
