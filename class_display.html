@@ -1,0 +1,1575 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>📺 لوحة الحصة — روضة ومدرسة الجود</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&family=Fredoka+One&display=swap" rel="stylesheet" />
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+    import {
+      getFirestore, collection, query, where, onSnapshot, getDocs, doc, getDoc
+    } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+    /* ══════════════════════════════════════════
+       FIREBASE CONFIG
+    ══════════════════════════════════════════ */
+    const firebaseConfig = {
+      apiKey: "AIzaSyDri3r5AtyyduyiTS5GzIHOn-XSduhALpM",
+      authDomain: "aljood-school.firebaseapp.com",
+      projectId: "aljood-school",
+      storageBucket: "aljood-school.firebasestorage.app",
+      messagingSenderId: "278563135138",
+      appId: "1:278563135138:web:de89305eddca23fc1241fb"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+
+    /* ══════════════════════════════════════════
+       STATE
+    ══════════════════════════════════════════ */
+    let selectedGrade    = null;
+    let selectedSection  = null;
+    let durationMinutes  = 45;
+    let timerInterval    = null;
+    let totalSeconds     = 45 * 60;
+    let timerRunning     = false;
+    let alertsFired      = { ten: false, five: false, zero: false };
+    let unsubscribeFns   = [];
+
+    // In-memory cache
+    let allStudents      = [];   // {name, gender, section}
+    let presentStudents  = [];   // {name, section, timestamp}
+    let sessionData      = {};   // studentId → {currentPhase, score, name}
+
+    /* ══════════════════════════════════════════
+       FALLBACK DATA
+    ══════════════════════════════════════════ */
+    const FALLBACK_OBJECTIVES = [
+      "بناء روبوت من مواد إعادة التدوير ♻️",
+      "برمجة الروبوت باستخدام MakeCode 💻",
+      "تطبيق مفهوم التصميم والابتكار 🎨"
+    ];
+
+    const FALLBACK_INDICATORS = [
+      "يختار المواد المناسبة لبناء الروبوت",
+      "يكتب كود برمجي صحيح",
+      "يختبر الروبوت ويسجل النتائج",
+      "يقدم مشروعه بثقة"
+    ];
+
+    const PHASES = [
+      { icon: "✋", label: "الحضور والتجهيز" },
+      { icon: "🎯", label: "بطاقة الهدف" },
+      { icon: "🔤", label: "الكلمات المفتاحية" },
+      { icon: "♻️", label: "اختيار المواد" },
+      { icon: "❓", label: "صح وخطأ" },
+      { icon: "📝", label: "التخطيط" },
+      { icon: "💻", label: "البرمجة" },
+      { icon: "🖥️", label: "MakeCode" },
+      { icon: "✅", label: "الاختبار" },
+      { icon: "⭐", label: "التقييم الذاتي" },
+      { icon: "🚪", label: "بطاقة الخروج" }
+    ];
+
+    const VOCAB = [
+      { en: "EVENT",        ar: "حدث" },
+      { en: "DISPLAY",      ar: "عرض" },
+      { en: "STRING",       ar: "نص" },
+      { en: "NEOPIXELS",    ar: "مصابيح ذكية" },
+      { en: "RECYCLING",    ar: "إعادة التدوير" },
+      { en: "PRESENTATION", ar: "تقديم" }
+    ];
+
+    const FALLBACK_STUDENTS_G3 = {
+      "3A": ["أحمد محمد","سارة علي","محمد خالد","فاطمة أحمد","عبدالله سعيد","مريم يوسف","يوسف عمر","نورة ناصر","علي حسن","لينا محمد","خالد عبدالله","هند راشد","عمر سلطان","ريم جاسم","ناصر فهد"],
+      "3B": ["سلمى حمد","بدر عيسى","منى سالم","فيصل طارق","وفاء إبراهيم","حمد جمال","دانة نواف","سعد مبارك","رنا وليد","محمود حسين"],
+      "3C": ["نادية كريم","أنس شريف","سلوى أمين","زياد نعمان","عائشة قاسم","باسم صلاح","هلا جاسر","أمجد رؤوف","شيماء فؤاد","طارق حمدان"],
+      "3D": ["لمى طه","حارث منذر","ميار رمزي","كريم حافظ","سنا بكر","إياد نبيل","هيفاء توفيق","ماجد صبري","نغم حسام","يزن شاكر"],
+      "3E": ["رهف عادل","سامر لطفي","غادة وجدي","أيمن أسامة","ندى رفيق","فارس فادي","ألاء حمزة","قيس مازن","روان زاهر","منذر بلال"]
+    };
+
+    /* ══════════════════════════════════════════
+       GENDER DETECTION
+    ══════════════════════════════════════════ */
+    function detectGender(nameAr) {
+      if (!nameAr) return 'male';
+      const first = nameAr.trim().split(' ')[0];
+      return /[ةىاء]$/.test(first) ? 'female' : 'male';
+    }
+
+    /* ══════════════════════════════════════════
+       URL PARAMS
+    ══════════════════════════════════════════ */
+    function parseUrlParams() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        grade:    params.get('grade'),
+        section:  params.get('section'),
+        duration: params.get('duration')
+      };
+    }
+
+    /* ══════════════════════════════════════════
+       AUDIO ALERTS (Web Audio API)
+    ══════════════════════════════════════════ */
+    let audioCtx = null;
+    function getAudioCtx() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      return audioCtx;
+    }
+    function playBeep(freq = 880, duration = 0.3, times = 1, gap = 0.15) {
+      try {
+        const ctx = getAudioCtx();
+        for (let i = 0; i < times; i++) {
+          const osc  = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type      = 'sine';
+          osc.frequency.value = freq;
+          const start = ctx.currentTime + i * (duration + gap);
+          osc.start(start);
+          gain.gain.setValueAtTime(0.5, start);
+          gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+          osc.stop(start + duration);
+        }
+      } catch(e) { console.warn('Audio error:', e); }
+    }
+
+    /* ══════════════════════════════════════════
+       TIMER
+    ══════════════════════════════════════════ */
+    function updateTimerDisplay() {
+      const m = Math.floor(totalSeconds / 60);
+      const s = totalSeconds % 60;
+      const display = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      const el = document.getElementById('timerDisplay');
+      if (!el) return;
+      el.textContent = display;
+
+      // Color logic
+      el.classList.remove('timer-green','timer-yellow','timer-orange','timer-red','timer-pulse','timer-flash');
+      if (totalSeconds > 10 * 60) {
+        el.classList.add('timer-green');
+      } else if (totalSeconds > 5 * 60) {
+        el.classList.add('timer-yellow','timer-pulse');
+      } else if (totalSeconds > 0) {
+        el.classList.add('timer-orange','timer-pulse');
+      } else {
+        el.classList.add('timer-red','timer-flash');
+      }
+    }
+
+    function checkAlerts() {
+      if (totalSeconds === 10 * 60 && !alertsFired.ten) {
+        alertsFired.ten = true;
+        showBanner('ten');
+        playBeep(660, 0.2, 2, 0.1);
+      }
+      if (totalSeconds === 5 * 60 && !alertsFired.five) {
+        alertsFired.five = true;
+        showBanner('five');
+        playBeep(880, 0.25, 3, 0.1);
+      }
+      if (totalSeconds === 0 && !alertsFired.zero) {
+        alertsFired.zero = true;
+        showBanner('zero');
+        playBeep(440, 0.5, 5, 0.15);
+        clearInterval(timerInterval);
+        timerRunning = false;
+      }
+    }
+
+    function startTimer() {
+      if (timerRunning) return;
+      timerRunning = true;
+      // Resume audio context on user gesture
+      try { getAudioCtx().resume(); } catch(e) {}
+      timerInterval = setInterval(() => {
+        if (totalSeconds > 0) {
+          totalSeconds--;
+          updateTimerDisplay();
+          checkAlerts();
+        }
+      }, 1000);
+      document.getElementById('btnStart').disabled = true;
+      document.getElementById('btnPause').disabled = false;
+    }
+
+    function pauseTimer() {
+      if (!timerRunning) return;
+      clearInterval(timerInterval);
+      timerRunning = false;
+      document.getElementById('btnStart').disabled = false;
+      document.getElementById('btnPause').disabled = true;
+    }
+
+    function resetTimer() {
+      clearInterval(timerInterval);
+      timerRunning  = false;
+      totalSeconds  = durationMinutes * 60;
+      alertsFired   = { ten: false, five: false, zero: false };
+      document.getElementById('btnStart').disabled = false;
+      document.getElementById('btnPause').disabled = true;
+      updateTimerDisplay();
+      hideBanners();
+    }
+
+    /* ══════════════════════════════════════════
+       BANNERS / OVERLAYS
+    ══════════════════════════════════════════ */
+    function showBanner(type) {
+      hideBanners();
+      const b = document.getElementById(`banner-${type}`);
+      if (b) {
+        b.style.display = 'flex';
+        if (type === 'zero') {
+          setTimeout(() => { b.style.display = 'none'; }, 6000);
+        } else {
+          setTimeout(() => { b.style.display = 'none'; }, 8000);
+        }
+      }
+    }
+    function hideBanners() {
+      ['ten','five','zero'].forEach(t => {
+        const b = document.getElementById(`banner-${t}`);
+        if (b) b.style.display = 'none';
+      });
+    }
+
+    /* ══════════════════════════════════════════
+       DATE DISPLAY
+    ══════════════════════════════════════════ */
+    function renderDate() {
+      const now = new Date();
+      const fmt = new Intl.DateTimeFormat('ar-AE', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+      });
+      const el = document.getElementById('currentDate');
+      if (el) el.textContent = fmt.format(now);
+    }
+
+    /* ══════════════════════════════════════════
+       RENDER HELPERS
+    ══════════════════════════════════════════ */
+    function renderObjectives(list) {
+      const el = document.getElementById('objectivesList');
+      if (!el) return;
+      el.innerHTML = list.map(o => `<li class="obj-item"><span>${o}</span></li>`).join('');
+    }
+
+    function renderIndicators(list) {
+      const el = document.getElementById('indicatorsList');
+      if (!el) return;
+      el.innerHTML = list.map((ind, i) =>
+        `<div class="indicator-row"><span class="indicator-num">${i+1}</span><span>${ind}</span></div>`
+      ).join('');
+    }
+
+    function renderPhases(currentPhaseIdx) {
+      const el = document.getElementById('phasesList');
+      if (!el) return;
+      el.innerHTML = PHASES.map((p, i) => {
+        let cls = 'phase-upcoming';
+        let statusIcon = '⭕';
+        if (i < currentPhaseIdx) { cls = 'phase-done'; statusIcon = '✅'; }
+        else if (i === currentPhaseIdx) { cls = 'phase-current'; statusIcon = '🔄'; }
+        return `<div class="phase-item ${cls}">
+          <span class="phase-status">${statusIcon}</span>
+          <span class="phase-icon">${p.icon}</span>
+          <span class="phase-label">${p.label}</span>
+        </div>`;
+      }).join('');
+    }
+
+    function renderStats(present, total, absent, males, females, specialNeeds) {
+      const setEl = (id, val) => { const e = document.getElementById(id); if(e) e.textContent = val; };
+      setEl('statPresent', present);
+      setEl('statAbsent',  absent.length);
+      setEl('statMale',    males);
+      setEl('statFemale',  females);
+      setEl('statSpecial', specialNeeds);
+      document.getElementById('specialNeedsRow').style.display = specialNeeds > 0 ? 'flex' : 'none';
+
+      // Absent list
+      const absentEl = document.getElementById('absentList');
+      if (absentEl) {
+        absentEl.innerHTML = absent.length === 0
+          ? '<span class="no-absent">لا يوجد غياب اليوم 🎉</span>'
+          : absent.map(n => `<span class="absent-name">${n}</span>`).join('');
+      }
+    }
+
+    function renderTopPerformers(performers) {
+      const el = document.getElementById('topPerformers');
+      if (!el) return;
+      const medals = ['🥇','🥈','🥉'];
+      if (!performers || performers.length === 0) {
+        el.innerHTML = '<div class="no-data">في انتظار البيانات…</div>'; return;
+      }
+      el.innerHTML = performers.slice(0,3).map((s, i) => {
+        const pct = Math.min(100, Math.max(0, (s.score || 0) * 10));
+        return `<div class="performer-row">
+          <span class="performer-medal">${medals[i]||''}</span>
+          <span class="performer-name">${s.name}</span>
+          <div class="performer-bar-wrap"><div class="performer-bar" style="width:${pct}%"></div></div>
+          <span class="performer-score">${s.score ?? '—'}</span>
+        </div>`;
+      }).join('');
+    }
+
+    function renderNeedsSupport(performers) {
+      const el = document.getElementById('needsSupport');
+      if (!el) return;
+      const bottom = [...performers].sort((a,b) => (a.score||0)-(b.score||0)).slice(0,3);
+      if (!bottom || bottom.length === 0) {
+        el.innerHTML = '<div class="no-data">في انتظار البيانات…</div>'; return;
+      }
+      el.innerHTML = bottom.map(s => {
+        const pct = Math.min(100, Math.max(0, (s.score || 0) * 10));
+        return `<div class="support-row">
+          <span class="support-icon">💪</span>
+          <span class="support-name">${s.name}</span>
+          <div class="performer-bar-wrap"><div class="performer-bar support-bar" style="width:${pct}%"></div></div>
+          <span class="performer-score">${s.score ?? '—'}</span>
+        </div>`;
+      }).join('');
+    }
+
+    /* ══════════════════════════════════════════
+       FIREBASE LISTENERS
+    ══════════════════════════════════════════ */
+    function subscribeAttendance() {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const q = query(
+        collection(db, 'obs_attendance'),
+        where('section', '==', selectedSection),
+        where('grade',   '==', String(selectedGrade))
+      );
+
+      const unsub = onSnapshot(q, (snap) => {
+        presentStudents = [];
+        snap.forEach(docSnap => {
+          const d = docSnap.data();
+          // Filter to today
+          const ts = d.timestamp?.toDate ? d.timestamp.toDate() : (d.timestamp ? new Date(d.timestamp) : null);
+          if (ts && ts >= today && ts < tomorrow) {
+            presentStudents.push({ name: d.name || d.studentName || '', section: d.section });
+          }
+        });
+        updateStatsDisplay();
+      }, err => { console.warn('Attendance listener error:', err); });
+
+      unsubscribeFns.push(unsub);
+    }
+
+    function subscribeSessionData() {
+      const collName = selectedGrade == 4 ? 'stream_sessions_g4' : 'stream_sessions_g3';
+      const q = query(
+        collection(db, collName),
+        where('section', '==', selectedSection)
+      );
+
+      const unsub = onSnapshot(q, (snap) => {
+        sessionData = {};
+        snap.forEach(docSnap => {
+          const d   = docSnap.data();
+          const id  = docSnap.id;
+          sessionData[id] = {
+            name:         d.name || d.studentName || id,
+            currentPhase: d.currentPhase ?? 0,
+            score:        d.score ?? d.totalScore ?? 0
+          };
+        });
+        updateSessionDisplay();
+      }, err => { console.warn('Session listener error:', err); });
+
+      unsubscribeFns.push(unsub);
+    }
+
+    function updateSessionDisplay() {
+      const entries = Object.values(sessionData);
+      if (entries.length === 0) {
+        renderPhases(0);
+        renderTopPerformers([]);
+        renderNeedsSupport([]);
+        return;
+      }
+
+      // Mode of currentPhase
+      const phaseCounts = {};
+      entries.forEach(e => {
+        const p = e.currentPhase ?? 0;
+        phaseCounts[p] = (phaseCounts[p] || 0) + 1;
+      });
+      const modePhase = parseInt(Object.keys(phaseCounts).reduce((a,b) => phaseCounts[a]>phaseCounts[b]?a:b));
+      renderPhases(modePhase);
+
+      // Top/bottom performers
+      const sorted = [...entries].sort((a,b) => (b.score||0)-(a.score||0));
+      renderTopPerformers(sorted.slice(0,3));
+      renderNeedsSupport(sorted);
+    }
+
+    function updateStatsDisplay() {
+      // Build from allStudents + presentStudents
+      const presentNames = new Set(presentStudents.map(p => p.name));
+      const sectionStudents = allStudents.filter(s => s.section === selectedSection);
+      const total   = sectionStudents.length;
+      const present = Math.min(presentStudents.length, total || presentStudents.length);
+      const absentList = sectionStudents.filter(s => !presentNames.has(s.name)).map(s => s.name);
+      const males   = sectionStudents.filter(s => s.gender === 'male').length;
+      const females = sectionStudents.filter(s => s.gender === 'female').length;
+      renderStats(present, total, absentList, males, females, 0);
+    }
+
+    async function loadStudents() {
+      // Try Firebase first
+      try {
+        const docRef = doc(db, 'students', `grade${selectedGrade}_sections`);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          const names = data[selectedSection] || [];
+          allStudents = names.map(n => ({ name: n, gender: detectGender(n), section: selectedSection }));
+          updateStatsDisplay();
+          return;
+        }
+      } catch(e) { console.warn('Students fetch error:', e); }
+
+      // Fallback
+      const fallback = selectedGrade == 3 ? FALLBACK_STUDENTS_G3 : {};
+      const names = fallback[selectedSection] || [];
+      allStudents = names.map(n => ({ name: n, gender: detectGender(n), section: selectedSection }));
+      updateStatsDisplay();
+    }
+
+    async function loadLessonConfig() {
+      try {
+        const docRef = doc(db, 'lesson_display_config', String(selectedGrade));
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const d = docSnap.data();
+          if (d.objectives)  renderObjectives(d.objectives);
+          if (d.indicators)  renderIndicators(d.indicators);
+          return;
+        }
+      } catch(e) { console.warn('Lesson config error:', e); }
+      // Fallback
+      renderObjectives(FALLBACK_OBJECTIVES);
+      renderIndicators(FALLBACK_INDICATORS);
+    }
+
+    /* ══════════════════════════════════════════
+       INIT DISPLAY
+    ══════════════════════════════════════════ */
+    function initDisplay(grade, section, duration) {
+      selectedGrade   = grade;
+      selectedSection = section;
+      durationMinutes = parseInt(duration) || 45;
+      totalSeconds    = durationMinutes * 60;
+
+      // Update UI
+      document.getElementById('sectionBadge').textContent = section;
+      document.getElementById('headerSection').textContent = section;
+      renderDate();
+      updateTimerDisplay();
+      renderPhases(0);
+
+      // Load data
+      loadLessonConfig();
+      loadStudents();
+      subscribeAttendance();
+      subscribeSessionData();
+
+      // Hide overlay, show main
+      document.getElementById('setupOverlay').style.display = 'none';
+      document.getElementById('mainContent').style.display  = 'flex';
+    }
+
+    /* ══════════════════════════════════════════
+       DOM READY
+    ══════════════════════════════════════════ */
+    window.addEventListener('DOMContentLoaded', () => {
+      renderDate();
+      renderPhases(0);
+      renderObjectives(FALLBACK_OBJECTIVES);
+      renderIndicators(FALLBACK_INDICATORS);
+      renderTopPerformers([]);
+      renderNeedsSupport([]);
+
+      const { grade, section, duration } = parseUrlParams();
+      if (grade && section) {
+        initDisplay(grade, section, duration || 45);
+      } else {
+        // Show setup overlay
+        document.getElementById('setupOverlay').style.display = 'flex';
+        document.getElementById('mainContent').style.display  = 'none';
+      }
+
+      // Setup form
+      document.getElementById('gradeSelect').addEventListener('change', function() {
+        const g = this.value;
+        const sectionSel = document.getElementById('sectionSelect');
+        sectionSel.innerHTML = '';
+        const opts = g === '3'
+          ? ['3A','3B','3C','3D','3E']
+          : ['4A','4B','4C','4D'];
+        opts.forEach(o => {
+          const opt = document.createElement('option');
+          opt.value = opt.textContent = o;
+          sectionSel.appendChild(opt);
+        });
+      });
+      // Trigger change to init sections
+      document.getElementById('gradeSelect').dispatchEvent(new Event('change'));
+
+      document.getElementById('startBtn').addEventListener('click', () => {
+        const grade    = document.getElementById('gradeSelect').value;
+        const section  = document.getElementById('sectionSelect').value;
+        const duration = document.getElementById('durationSelect').value;
+        initDisplay(grade, section, duration);
+      });
+
+      // Timer controls
+      document.getElementById('btnStart').addEventListener('click', startTimer);
+      document.getElementById('btnPause').addEventListener('click', pauseTimer);
+      document.getElementById('btnReset').addEventListener('click', resetTimer);
+
+      // Close banners on click
+      document.querySelectorAll('.banner-close').forEach(btn => {
+        btn.addEventListener('click', hideBanners);
+      });
+    });
+
+  </script>
+
+  <style>
+    /* ══════════════════════════════════════════
+       CSS VARIABLES & RESET
+    ══════════════════════════════════════════ */
+    :root {
+      --navy:       #1a2744;
+      --navy-dark:  #111c35;
+      --navy-light: #243460;
+      --gold:       #c9a84c;
+      --gold-light: #e8c96a;
+      --gold-dark:  #a07830;
+      --white:      #ffffff;
+      --off-white:  #f0f4ff;
+      --green:      #27ae60;
+      --green-light:#2ecc71;
+      --blue:       #2980b9;
+      --orange:     #e67e22;
+      --red:        #e74c3c;
+      --red-dark:   #c0392b;
+      --purple:     #8e44ad;
+      --gray:       #7f8c8d;
+      --gray-light: #bdc3c7;
+
+      --font-body:    'Tajawal', sans-serif;
+      --font-heading: 'Fredoka One', 'Tajawal', sans-serif;
+
+      --border-radius: 14px;
+      --shadow: 0 4px 20px rgba(0,0,0,0.25);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--navy-dark);
+      color: var(--white);
+      font-family: var(--font-body);
+      font-size: 16px;
+      direction: rtl;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ══════════════════════════════════════════
+       SETUP OVERLAY
+    ══════════════════════════════════════════ */
+    #setupOverlay {
+      position: fixed; inset: 0; z-index: 1000;
+      background: linear-gradient(135deg, var(--navy-dark) 0%, var(--navy) 60%, var(--navy-light) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .setup-card {
+      background: rgba(255,255,255,0.07);
+      border: 2px solid var(--gold);
+      border-radius: 24px;
+      padding: 3rem 4rem;
+      text-align: center;
+      max-width: 520px;
+      width: 90%;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    }
+
+    .setup-logo {
+      font-family: var(--font-heading);
+      font-size: 2rem;
+      color: var(--gold);
+      margin-bottom: 0.5rem;
+    }
+    .setup-logo .emoji { font-size: 2.5rem; display: block; margin-bottom: 0.3rem; }
+
+    .setup-subtitle {
+      color: var(--gold-light);
+      font-size: 1.05rem;
+      margin-bottom: 2rem;
+      opacity: 0.85;
+    }
+
+    .setup-form { display: flex; flex-direction: column; gap: 1.2rem; text-align: right; }
+
+    .setup-label {
+      font-size: 1.05rem;
+      color: var(--gold-light);
+      font-weight: 600;
+      margin-bottom: 0.3rem;
+      display: block;
+    }
+
+    .setup-select {
+      width: 100%;
+      padding: 0.7rem 1rem;
+      border-radius: 10px;
+      border: 1.5px solid var(--gold-dark);
+      background: var(--navy-dark);
+      color: var(--white);
+      font-family: var(--font-body);
+      font-size: 1.1rem;
+      cursor: pointer;
+      direction: rtl;
+    }
+    .setup-select:focus { outline: 2px solid var(--gold); }
+
+    #startBtn {
+      margin-top: 1.5rem;
+      padding: 1rem 2.5rem;
+      font-size: 1.4rem;
+      font-family: var(--font-heading);
+      background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+      color: var(--navy-dark);
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      box-shadow: 0 4px 18px rgba(201,168,76,0.4);
+      transition: transform 0.15s, box-shadow 0.15s;
+      font-weight: 700;
+    }
+    #startBtn:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(201,168,76,0.6); }
+    #startBtn:active { transform: translateY(0); }
+
+    /* ══════════════════════════════════════════
+       MAIN CONTENT
+    ══════════════════════════════════════════ */
+    #mainContent {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    /* ══════════════════════════════════════════
+       HEADER BAR
+    ══════════════════════════════════════════ */
+    .header-bar {
+      background: var(--navy);
+      border-bottom: 3px solid var(--gold);
+      padding: 0.5rem 1.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-shrink: 0;
+      height: 80px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.4);
+    }
+
+    .header-school {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+    .header-school .school-name {
+      font-family: var(--font-heading);
+      font-size: 1.1rem;
+      color: var(--gold);
+      white-space: nowrap;
+    }
+    .header-school .school-subject {
+      font-size: 0.8rem;
+      color: var(--gold-light);
+      opacity: 0.8;
+    }
+
+    .section-badge {
+      background: var(--gold);
+      color: var(--navy-dark);
+      font-family: var(--font-heading);
+      font-size: 1.6rem;
+      font-weight: 900;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 16px rgba(201,168,76,0.5);
+      flex-shrink: 0;
+    }
+
+    .header-date {
+      font-size: 1rem;
+      color: var(--gold-light);
+      text-align: center;
+      font-weight: 500;
+    }
+
+    .timer-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.2rem;
+    }
+    .timer-label {
+      font-size: 0.7rem;
+      color: var(--gold-light);
+      opacity: 0.8;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    #timerDisplay {
+      font-family: var(--font-heading);
+      font-size: 3rem;
+      font-weight: 900;
+      border: 3px solid currentColor;
+      border-radius: 16px;
+      padding: 0.1rem 0.7rem;
+      min-width: 140px;
+      text-align: center;
+      transition: color 0.5s, border-color 0.5s;
+      line-height: 1.1;
+    }
+
+    /* Timer colors */
+    .timer-green  { color: var(--green-light); }
+    .timer-yellow { color: #f1c40f; }
+    .timer-orange { color: var(--orange); }
+    .timer-red    { color: var(--red); }
+
+    @keyframes timerPulse {
+      0%,100% { transform: scale(1); opacity: 1; }
+      50%      { transform: scale(1.06); opacity: 0.85; }
+    }
+    .timer-pulse { animation: timerPulse 1s ease-in-out infinite; }
+
+    @keyframes timerFlash {
+      0%,100% { background: transparent; }
+      50%      { background: rgba(231,76,60,0.25); }
+    }
+    .timer-flash { animation: timerFlash 0.5s ease-in-out infinite; }
+
+    .timer-controls {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .ctrl-btn {
+      padding: 0.5rem 1rem;
+      border-radius: 10px;
+      border: 1.5px solid var(--gold-dark);
+      background: var(--navy-light);
+      color: var(--gold);
+      font-size: 1rem;
+      cursor: pointer;
+      font-family: var(--font-body);
+      font-weight: 600;
+      transition: background 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+    .ctrl-btn:hover:not(:disabled) { background: var(--navy-dark); transform: translateY(-1px); }
+    .ctrl-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .ctrl-btn.start-btn { background: rgba(39,174,96,0.3); border-color: var(--green); color: var(--green-light); }
+    .ctrl-btn.pause-btn { background: rgba(241,196,15,0.2); border-color: #f1c40f; color: #f1c40f; }
+    .ctrl-btn.reset-btn { background: rgba(231,76,60,0.2); border-color: var(--red); color: #ff7675; }
+
+    /* ══════════════════════════════════════════
+       MAIN GRID
+    ══════════════════════════════════════════ */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 0.6rem;
+      padding: 0.6rem;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .grid-col {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* ══════════════════════════════════════════
+       BOXES
+    ══════════════════════════════════════════ */
+    .box {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(201,168,76,0.25);
+      border-radius: var(--border-radius);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .box-header {
+      background: var(--navy);
+      color: var(--gold);
+      font-family: var(--font-heading);
+      font-size: 1.05rem;
+      padding: 0.45rem 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      border-bottom: 2px solid var(--gold-dark);
+      flex-shrink: 0;
+    }
+    .box-header .live-badge {
+      margin-right: auto;
+      background: var(--red);
+      color: white;
+      font-size: 0.65rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 20px;
+      animation: livePulse 2s ease-in-out infinite;
+      font-family: var(--font-body);
+      font-weight: 700;
+    }
+    @keyframes livePulse {
+      0%,100% { opacity: 1; }
+      50%      { opacity: 0.5; }
+    }
+
+    .box-body {
+      padding: 0.6rem 0.8rem;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    /* Scrollbar styling */
+    .box-body::-webkit-scrollbar { width: 4px; }
+    .box-body::-webkit-scrollbar-track { background: transparent; }
+    .box-body::-webkit-scrollbar-thumb { background: var(--gold-dark); border-radius: 4px; }
+
+    /* ══════════════════════════════════════════
+       BOX 1 — OBJECTIVES
+    ══════════════════════════════════════════ */
+    #objectivesList { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+    .obj-item {
+      background: rgba(201,168,76,0.12);
+      border-right: 3px solid var(--gold);
+      border-radius: 8px;
+      padding: 0.4rem 0.6rem 0.4rem 0.4rem;
+      font-size: 0.95rem;
+      line-height: 1.4;
+    }
+
+    /* ══════════════════════════════════════════
+       BOX 2 — PERFORMANCE LEVELS
+    ══════════════════════════════════════════ */
+    .perf-level {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.4rem 0.5rem;
+      border-radius: 8px;
+      margin-bottom: 0.4rem;
+      font-size: 0.9rem;
+    }
+    .perf-badge {
+      padding: 0.2rem 0.6rem;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      white-space: nowrap;
+      color: white;
+    }
+    .bg-green  { background: var(--green); }
+    .bg-blue   { background: var(--blue); }
+    .bg-orange { background: var(--orange); }
+    .bg-red    { background: var(--red); }
+    .perf-label { flex: 1; font-size: 0.9rem; }
+
+    /* ══════════════════════════════════════════
+       BOX 3 — INDICATORS
+    ══════════════════════════════════════════ */
+    .indicator-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      margin-bottom: 0.45rem;
+      font-size: 0.9rem;
+    }
+    .indicator-num {
+      background: var(--gold);
+      color: var(--navy-dark);
+      border-radius: 50%;
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    /* ══════════════════════════════════════════
+       BOX 4 — PHASES
+    ══════════════════════════════════════════ */
+    #phasesList { display: flex; flex-direction: column; gap: 0.3rem; }
+
+    .phase-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.3rem 0.5rem;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      transition: all 0.3s;
+    }
+    .phase-done    { opacity: 0.55; }
+    .phase-current {
+      background: rgba(201,168,76,0.2);
+      border: 1.5px solid var(--gold);
+      color: var(--gold);
+      font-weight: 700;
+      animation: phasePulse 2s ease-in-out infinite;
+    }
+    @keyframes phasePulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(201,168,76,0.4); }
+      50%      { box-shadow: 0 0 0 6px rgba(201,168,76,0); }
+    }
+    .phase-upcoming { opacity: 0.45; color: var(--gray-light); }
+    .phase-status { font-size: 1rem; flex-shrink: 0; }
+    .phase-icon   { font-size: 1rem; flex-shrink: 0; }
+    .phase-label  { font-size: 0.88rem; }
+
+    /* ══════════════════════════════════════════
+       BOX 5 — VOCABULARY
+    ══════════════════════════════════════════ */
+    .vocab-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+    }
+    .vocab-chip {
+      background: var(--navy);
+      border: 1.5px solid var(--gold-dark);
+      border-radius: 10px;
+      padding: 0.5rem 0.6rem;
+      text-align: center;
+    }
+    .vocab-en {
+      font-family: var(--font-heading);
+      color: var(--gold);
+      font-size: 1rem;
+      letter-spacing: 1px;
+    }
+    .vocab-ar {
+      font-size: 0.8rem;
+      color: var(--gold-light);
+      opacity: 0.8;
+      margin-top: 0.15rem;
+    }
+
+    /* ══════════════════════════════════════════
+       BOX 6 — STRATEGIES
+    ══════════════════════════════════════════ */
+    .strategy-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .strategy-badge {
+      background: rgba(201,168,76,0.18);
+      border: 1px solid var(--gold-dark);
+      color: var(--gold-light);
+      border-radius: 20px;
+      padding: 0.35rem 0.8rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    /* ══════════════════════════════════════════
+       BOX 7 — LIVE STATS
+    ══════════════════════════════════════════ */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
+      margin-bottom: 0.6rem;
+    }
+    .stat-card {
+      background: rgba(255,255,255,0.07);
+      border-radius: 10px;
+      padding: 0.5rem 0.6rem;
+      text-align: center;
+      border: 1px solid rgba(201,168,76,0.2);
+    }
+    .stat-number {
+      font-family: var(--font-heading);
+      font-size: 2.2rem;
+      line-height: 1;
+      font-weight: 900;
+    }
+    .stat-label { font-size: 0.8rem; margin-top: 0.15rem; opacity: 0.8; }
+    .stat-green  .stat-number { color: var(--green-light); }
+    .stat-red    .stat-number { color: var(--red); }
+    .stat-blue   .stat-number { color: #74b9ff; }
+    .stat-pink   .stat-number { color: #fd79a8; }
+    .stat-purple .stat-number { color: #a29bfe; }
+
+    .gender-row {
+      display: flex;
+      gap: 0.4rem;
+      margin-bottom: 0.5rem;
+    }
+    .gender-row .stat-card { flex: 1; }
+
+    .absent-section { margin-top: 0.4rem; }
+    .absent-label   { font-size: 0.8rem; color: var(--gold-light); margin-bottom: 0.3rem; opacity: 0.8; }
+    #absentList {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      max-height: 56px;
+      overflow-y: auto;
+    }
+    .absent-name {
+      background: rgba(231,76,60,0.2);
+      border: 1px solid var(--red);
+      color: #ff7675;
+      border-radius: 6px;
+      padding: 0.15rem 0.5rem;
+      font-size: 0.82rem;
+    }
+    .no-absent { color: var(--green-light); font-size: 0.9rem; }
+
+    /* ══════════════════════════════════════════
+       BOX 8 — TOP PERFORMERS
+    ══════════════════════════════════════════ */
+    .performer-row, .support-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+    }
+    .performer-medal { font-size: 1.3rem; flex-shrink: 0; }
+    .performer-name, .support-name { flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .performer-bar-wrap {
+      width: 80px;
+      height: 8px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .performer-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--gold-dark), var(--gold));
+      border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+    .support-bar { background: linear-gradient(90deg, #636e72, #74b9ff); }
+    .performer-score {
+      font-family: var(--font-heading);
+      color: var(--gold);
+      font-size: 1rem;
+      min-width: 28px;
+      text-align: left;
+    }
+    .support-icon { font-size: 1.1rem; flex-shrink: 0; }
+    .no-data { color: var(--gray-light); font-size: 0.9rem; opacity: 0.7; text-align: center; margin-top: 1rem; }
+
+    /* ══════════════════════════════════════════
+       BOTTOM BAR
+    ══════════════════════════════════════════ */
+    .bottom-bar {
+      background: var(--navy);
+      border-top: 2px solid var(--gold-dark);
+      padding: 0.4rem 0.8rem;
+      display: grid;
+      grid-template-columns: 2fr 1.5fr 1.5fr;
+      gap: 1rem;
+      flex-shrink: 0;
+      min-height: 0;
+    }
+
+    .bottom-section { display: flex; flex-direction: column; gap: 0.2rem; }
+    .bottom-title {
+      font-size: 0.8rem;
+      color: var(--gold);
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+      border-bottom: 1px solid rgba(201,168,76,0.3);
+      padding-bottom: 0.15rem;
+    }
+    .bottom-rules, .bottom-safety {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem 0.8rem;
+    }
+    .bottom-rule, .bottom-safety-item {
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.8);
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .project-card {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: rgba(201,168,76,0.1);
+      border-radius: 10px;
+      padding: 0.3rem 0.6rem;
+      font-size: 0.82rem;
+    }
+    .project-emoji { font-size: 1.5rem; }
+    .project-text  { color: var(--gold-light); line-height: 1.3; }
+
+    /* ══════════════════════════════════════════
+       FOOTER
+    ══════════════════════════════════════════ */
+    .footer {
+      background: var(--navy-dark);
+      border-top: 1px solid rgba(201,168,76,0.2);
+      text-align: center;
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.4);
+      padding: 0.2rem;
+      flex-shrink: 0;
+    }
+
+    /* ══════════════════════════════════════════
+       ALERT BANNERS
+    ══════════════════════════════════════════ */
+    .alert-banner {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 900;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem 2rem;
+      font-size: 1.8rem;
+      font-family: var(--font-heading);
+      gap: 1rem;
+      animation: bannerSlide 0.4s ease-out;
+    }
+    @keyframes bannerSlide {
+      from { transform: translateY(-100%); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+
+    #banner-ten {
+      background: linear-gradient(135deg, #f39c12, #e67e22);
+      color: white;
+    }
+    #banner-five {
+      background: linear-gradient(135deg, #e67e22, #d35400);
+      color: white;
+      animation: bannerSlide 0.4s ease-out, bannerPulse 1.2s ease-in-out infinite;
+    }
+    @keyframes bannerPulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(231,76,60,0.6); }
+      50%      { box-shadow: 0 0 30px 10px rgba(231,76,60,0.3); }
+    }
+
+    #banner-zero {
+      inset: 0;
+      background: rgba(192,57,43,0.92);
+      color: white;
+      font-size: 3rem;
+      flex-direction: column;
+      animation: zeroFlash 0.5s ease-in-out infinite;
+    }
+    @keyframes zeroFlash {
+      0%,100% { background: rgba(192,57,43,0.92); }
+      50%      { background: rgba(231,76,60,0.95); }
+    }
+
+    .banner-close {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: white;
+      border-radius: 50%;
+      width: 32px; height: 32px;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: auto;
+    }
+
+    /* ══════════════════════════════════════════
+       RESPONSIVE — 1280x720
+    ══════════════════════════════════════════ */
+    @media (max-width: 1400px) {
+      :root { font-size: 14px; }
+      #timerDisplay { font-size: 2.5rem; min-width: 120px; }
+      .header-bar { height: 72px; }
+      .stat-number { font-size: 1.8rem; }
+    }
+
+    @media (max-width: 1100px) {
+      :root { font-size: 13px; }
+      #timerDisplay { font-size: 2rem; min-width: 100px; }
+      .header-bar { height: 65px; padding: 0.3rem 0.8rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════
+       SETUP OVERLAY
+  ══════════════════════════════════════════ -->
+  <div id="setupOverlay">
+    <div class="setup-card">
+      <div class="setup-logo">
+        <span class="emoji">🏫</span>
+        روضة ومدرسة الجود
+      </div>
+      <div class="setup-subtitle">CCDI & AI — لوحة عرض الحصة التفاعلية</div>
+
+      <div class="setup-form">
+        <div>
+          <label class="setup-label" for="gradeSelect">📚 الصف</label>
+          <select id="gradeSelect" class="setup-select">
+            <option value="3">الصف الثالث</option>
+            <option value="4">الصف الرابع</option>
+          </select>
+        </div>
+        <div>
+          <label class="setup-label" for="sectionSelect">🏷️ الشعبة</label>
+          <select id="sectionSelect" class="setup-select"></select>
+        </div>
+        <div>
+          <label class="setup-label" for="durationSelect">⏱️ مدة الحصة</label>
+          <select id="durationSelect" class="setup-select">
+            <option value="45">45 دقيقة</option>
+            <option value="40">40 دقيقة</option>
+          </select>
+        </div>
+        <button id="startBtn">🚀 ابدأ العرض</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       ALERT BANNERS
+  ══════════════════════════════════════════ -->
+  <div id="banner-ten" class="alert-banner">
+    <button class="banner-close" onclick="document.getElementById('banner-ten').style.display='none'">✕</button>
+    ⏰ تبقى 10 دقائق من الحصة!
+  </div>
+  <div id="banner-five" class="alert-banner">
+    <button class="banner-close" onclick="document.getElementById('banner-five').style.display='none'">✕</button>
+    ⚠️ تبقى 5 دقائق فقط! أكملوا مشاريعكم
+  </div>
+  <div id="banner-zero" class="alert-banner">
+    🔔 انتهى وقت الحصة!<br/>
+    <small style="font-size:1.4rem;opacity:0.9">شكراً لجميع الطلاب على جهودهم الرائعة 🌟</small>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       MAIN CONTENT
+  ══════════════════════════════════════════ -->
+  <div id="mainContent" style="display:none;">
+
+    <!-- HEADER BAR -->
+    <header class="header-bar">
+      <!-- School + Subject -->
+      <div class="header-school">
+        <span class="school-name">🏫 روضة ومدرسة الجود</span>
+        <span class="school-subject">CCDI & AI · الصف الثالث — <span id="headerSection">3A</span></span>
+      </div>
+
+      <!-- Section Badge -->
+      <div class="section-badge" id="sectionBadge">3A</div>
+
+      <!-- Date -->
+      <div class="header-date" id="currentDate">جاري التحميل…</div>
+
+      <!-- Timer -->
+      <div class="timer-wrapper">
+        <span class="timer-label">⏱ الوقت المتبقي</span>
+        <div id="timerDisplay" class="timer-green">45:00</div>
+      </div>
+
+      <!-- Controls -->
+      <div class="timer-controls">
+        <button id="btnStart" class="ctrl-btn start-btn">▶ ابدأ</button>
+        <button id="btnPause" class="ctrl-btn pause-btn" disabled>⏸ إيقاف</button>
+        <button id="btnReset" class="ctrl-btn reset-btn">🔄 إعادة</button>
+      </div>
+    </header>
+
+    <!-- MAIN GRID -->
+    <main class="main-grid">
+
+      <!-- ═══ COLUMN 1 — LEFT ═══ -->
+      <div class="grid-col">
+
+        <!-- Box 1: Learning Objectives -->
+        <div class="box" style="flex: 1.2;">
+          <div class="box-header">🎯 أهداف التعلم</div>
+          <div class="box-body">
+            <ul id="objectivesList"></ul>
+          </div>
+        </div>
+
+        <!-- Box 2: Performance Levels -->
+        <div class="box" style="flex: 1.2;">
+          <div class="box-header">📏 مستويات الأداء</div>
+          <div class="box-body">
+            <div class="perf-level">
+              <span class="perf-badge bg-green">9–10</span>
+              <span class="perf-label">🌟 فائق التوقعات</span>
+            </div>
+            <div class="perf-level">
+              <span class="perf-badge bg-blue">7–8</span>
+              <span class="perf-label">✅ يلبي التوقعات</span>
+            </div>
+            <div class="perf-level">
+              <span class="perf-badge bg-orange">4–6</span>
+              <span class="perf-label">👍 يقترب من التوقعات</span>
+            </div>
+            <div class="perf-level">
+              <span class="perf-badge bg-red">0–3</span>
+              <span class="perf-label">📚 دون التوقعات</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Box 3: Performance Indicators -->
+        <div class="box" style="flex: 1.3;">
+          <div class="box-header">📊 مؤشرات الأداء</div>
+          <div class="box-body">
+            <div id="indicatorsList"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ═══ COLUMN 2 — CENTER ═══ -->
+      <div class="grid-col">
+
+        <!-- Box 4: Lesson Phases — LIVE -->
+        <div class="box" style="flex: 2.5;">
+          <div class="box-header">
+            📍 مراحل الحصة
+            <span class="live-badge">● مباشر</span>
+          </div>
+          <div class="box-body">
+            <div id="phasesList"></div>
+          </div>
+        </div>
+
+        <!-- Box 5: Key Vocabulary -->
+        <div class="box" style="flex: 1;">
+          <div class="box-header">🔤 الكلمات المفتاحية</div>
+          <div class="box-body">
+            <div class="vocab-grid">
+              <div class="vocab-chip">
+                <div class="vocab-en">EVENT</div>
+                <div class="vocab-ar">حدث</div>
+              </div>
+              <div class="vocab-chip">
+                <div class="vocab-en">DISPLAY</div>
+                <div class="vocab-ar">عرض</div>
+              </div>
+              <div class="vocab-chip">
+                <div class="vocab-en">STRING</div>
+                <div class="vocab-ar">نص</div>
+              </div>
+              <div class="vocab-chip">
+                <div class="vocab-en">NEOPIXELS</div>
+                <div class="vocab-ar">مصابيح ذكية</div>
+              </div>
+              <div class="vocab-chip">
+                <div class="vocab-en">RECYCLING</div>
+                <div class="vocab-ar">إعادة التدوير</div>
+              </div>
+              <div class="vocab-chip">
+                <div class="vocab-en">PRESENTATION</div>
+                <div class="vocab-ar">تقديم</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Box 6: Teaching Strategies -->
+        <div class="box" style="flex: 0.6;">
+          <div class="box-header">💡 استراتيجيات التدريس</div>
+          <div class="box-body">
+            <div class="strategy-grid">
+              <span class="strategy-badge">🤝 التفكير-الزوجي-التشاور</span>
+              <span class="strategy-badge">🔍 الاستقصاء</span>
+              <span class="strategy-badge">🛠️ التعلم بالمشروع</span>
+              <span class="strategy-badge">🌈 التمييز</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ═══ COLUMN 3 — RIGHT ═══ -->
+      <div class="grid-col">
+
+        <!-- Box 7: Live Class Stats -->
+        <div class="box" style="flex: 1.5;">
+          <div class="box-header">
+            👥 إحصائيات الصف الحية
+            <span class="live-badge">● مباشر</span>
+          </div>
+          <div class="box-body">
+            <div class="stats-grid">
+              <div class="stat-card stat-green">
+                <div class="stat-number" id="statPresent">—</div>
+                <div class="stat-label">✅ الحاضرون</div>
+              </div>
+              <div class="stat-card stat-red">
+                <div class="stat-number" id="statAbsent">—</div>
+                <div class="stat-label">❌ الغائبون</div>
+              </div>
+            </div>
+
+            <div class="gender-row">
+              <div class="stat-card stat-blue">
+                <div class="stat-number" id="statMale">—</div>
+                <div class="stat-label">👦 ذكور</div>
+              </div>
+              <div class="stat-card stat-pink">
+                <div class="stat-number" id="statFemale">—</div>
+                <div class="stat-label">👧 إناث</div>
+              </div>
+            </div>
+
+            <div id="specialNeedsRow" class="stat-card stat-purple" style="display:none; margin-bottom:0.5rem; flex-direction:row; align-items:center; gap:0.5rem;">
+              <div class="stat-number" id="statSpecial">0</div>
+              <div class="stat-label">🌈 أصحاب الهمم</div>
+            </div>
+
+            <div class="absent-section">
+              <div class="absent-label">أسماء الغائبين:</div>
+              <div id="absentList"><span class="no-absent">جاري التحميل…</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Box 8: Top Performers -->
+        <div class="box" style="flex: 1;">
+          <div class="box-header">
+            🏆 الأعلى تقدماً
+            <span class="live-badge">● مباشر</span>
+          </div>
+          <div class="box-body">
+            <div id="topPerformers"></div>
+          </div>
+        </div>
+
+        <!-- Box 9: Needs Support -->
+        <div class="box" style="flex: 1;">
+          <div class="box-header">
+            📚 يحتاج دعماً
+            <span class="live-badge">● مباشر</span>
+          </div>
+          <div class="box-body">
+            <div id="needsSupport"></div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- BOTTOM BAR -->
+    <div class="bottom-bar">
+
+      <!-- Section A: Classroom Rules -->
+      <div class="bottom-section">
+        <div class="bottom-title">📜 قوانين الصف</div>
+        <div class="bottom-rules">
+          <span class="bottom-rule">🤫 نستمع باحترام</span>
+          <span class="bottom-rule">🤝 نتعاون مع زملائنا</span>
+          <span class="bottom-rule">🙋 نرفع أيدينا للمشاركة</span>
+          <span class="bottom-rule">📱 نستخدم الأجهزة بمسؤولية</span>
+          <span class="bottom-rule">✨ نحترم ممتلكات الآخرين</span>
+        </div>
+      </div>
+
+      <!-- Section B: Digital Safety -->
+      <div class="bottom-section">
+        <div class="bottom-title">🔒 السلامة الرقمية</div>
+        <div class="bottom-safety">
+          <span class="bottom-safety-item">🛡️ لا تشارك معلوماتك الشخصية</span>
+          <span class="bottom-safety-item">📚 استخدم الإنترنت للتعلم فقط</span>
+          <span class="bottom-safety-item">⚠️ أخبر المعلمة عن أي محتوى مزعج</span>
+        </div>
+      </div>
+
+      <!-- Section C: Final Project -->
+      <div class="bottom-section">
+        <div class="bottom-title">🤖 المشروع النهائي</div>
+        <div class="project-card">
+          <span class="project-emoji">🤖</span>
+          <span class="project-text">
+            بناء روبوت من مواد إعادة التدوير
+            <br/>وبرمجته باستخدام MakeCode
+            <span style="font-size:1rem;"> ♻️ → 💡 → 🖥️ → ✅</span>
+          </span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+      ©️ منيرة علي محمد المري &nbsp;·&nbsp; munira.almarri@moe.sch.ae &nbsp;·&nbsp; © 2026
+    </footer>
+
+  </div><!-- /mainContent -->
+
+</body>
+</html>
