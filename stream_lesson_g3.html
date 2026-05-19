@@ -912,6 +912,14 @@ footer {
 .fdraw-color.active { border-color: #1a2744; transform: scale(1.25); }
 #fingerCanvas { border: 3px solid #e5e7eb; border-radius: 12px; touch-action: none; cursor: crosshair; max-width: 100%; }
 
+
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
 </style>
 </head>
 <body>
@@ -1612,19 +1620,54 @@ function renderRegistration() {
         <option>3A</option><option>3B</option><option>3C</option><option>3D</option><option>3E</option>
       </select>
     </div>
-    <div class="form-group">
-      <label>👤 Select your name / اختر اسمك:</label>
+    <!-- ── Class Code Entry ── -->
+    <div id="codeGroup" style="display:none;margin-bottom:16px;">
+      <label style="font-weight:700;color:var(--navy);margin-bottom:8px;display:block;font-size:1rem;">🔑 Class Code / كود الشعبة</label>
+      <div style="display:flex;gap:8px;align-items:stretch;">
+        <input type="text" id="codeInput"
+          style="flex:1;padding:14px 16px;border:2px solid #e2e8f0;border-radius:14px;font-size:1.4rem;
+                 text-transform:uppercase;text-align:center;letter-spacing:6px;font-weight:700;
+                 outline:none;transition:border-color .2s;font-family:'Fredoka One',cursive;"
+          placeholder="••••" maxlength="10"
+          oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"
+          onkeydown="if(event.key==='Enter')verifyCode()">
+        <button onclick="verifyCode()"
+          style="background:var(--navy);color:white;border:none;border-radius:14px;
+                 padding:0 22px;font-size:1.3rem;cursor:pointer;font-weight:700;
+                 transition:background .2s;font-family:'Fredoka One',cursive;"
+          onmouseover="this.style.background='#1a237e'" onmouseout="this.style.background='var(--navy)'">
+          ✓ Enter
+        </button>
+      </div>
+      <div id="codeError"
+        style="color:#e53e3e;font-size:.92rem;margin-top:8px;padding:10px 14px;
+               background:#fff5f5;border-radius:10px;border:1px solid #fed7d7;display:none;">
+        ❌ Wrong code! Please ask your teacher. / الكود غير صحيح!
+      </div>
+      <div id="codeSuccess"
+        style="color:#276749;font-size:.92rem;margin-top:8px;padding:10px 14px;
+               background:#f0fff4;border-radius:10px;border:1px solid #9ae6b4;display:none;">
+        ✅ Code verified! Choose your name below.
+      </div>
+    </div>
+
+    <!-- ── Name Selector (shown after code verified) ── -->
+    <div id="nameGroup" style="display:none;">
+      <label style="font-weight:700;color:var(--navy);margin-bottom:8px;display:block;">👤 Select your name / اختر اسمك:</label>
       <select class="form-select" id="nameSelect" disabled>
-        <option value="">— Choose section first —</option>
+        <option value="">— Choose your name —</option>
       </select>
+      <!-- Special Needs Auto-Detected Indicator -->
+      <div id="snIndicator"
+        style="display:none;background:linear-gradient(135deg,#6d28d9,#a855f7);
+               color:white;border-radius:14px;padding:14px 18px;margin-top:14px;
+               text-align:center;font-size:1rem;font-weight:700;box-shadow:0 4px 12px rgba(109,40,217,.3);">
+        🌈 Special Support Mode Activated / وضع الدعم الإضافي مفعّل ✅<br>
+        <span style="font-size:.82rem;font-weight:400;opacity:.9">Your activities are adjusted for you 💛</span>
+      </div>
     </div>
-    <div class="form-group">
-      <label class="sn-checkbox-label">
-        <input type="checkbox" id="snCheck" onchange="toggleSN()">
-        <span>🌈 أنا من أصحاب الهمم / I need extra support 🌈</span>
-      </label>
-    </div>
-    <button class="btn-primary" style="width:100%;font-size:1.3rem;padding:18px;" onclick="startLesson()" id="startBtn" disabled>
+
+    <button class="btn-primary" style="width:100%;font-size:1.3rem;padding:18px;margin-top:16px;" onclick="startLesson()" id="startBtn" disabled>
       🤖 Start STREAM Day!
     </button>
   </div>`;
@@ -1632,21 +1675,99 @@ function renderRegistration() {
 
 async function onSectionChange() {
   const sec = document.getElementById('sectionSelect').value;
+  if (!sec) {
+    document.getElementById('codeGroup').style.display = 'none';
+    document.getElementById('nameGroup').style.display = 'none';
+    document.getElementById('startBtn').disabled = true;
+    return;
+  }
+  // Reset state
+  isSpecialNeeds = false;
+  document.getElementById('codeError').style.display = 'none';
+  document.getElementById('codeSuccess').style.display = 'none';
+  document.getElementById('codeInput').value = '';
+  document.getElementById('nameGroup').style.display = 'none';
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('snIndicator').style.display = 'none';
+
+  // Check if class code is set for this section
+  try {
+    const codeDoc = await db.collection('class_codes').doc(sec).get();
+    if (codeDoc.exists && codeDoc.data().enabled && codeDoc.data().code) {
+      document.getElementById('codeGroup').style.display = 'block';
+      document.getElementById('codeInput').focus();
+      return; // Wait for code verification
+    }
+  } catch(e) { /* no code required */ }
+
+  // No code required — load names directly
+  document.getElementById('codeGroup').style.display = 'none';
+  await loadNameSelector(sec);
+}
+
+async function verifyCode() {
+  const sec = document.getElementById('sectionSelect').value;
+  const entered = document.getElementById('codeInput').value.trim().toUpperCase();
+  if (!entered) return;
+  const errEl = document.getElementById('codeError');
+  const okEl  = document.getElementById('codeSuccess');
+  errEl.style.display = 'none';
+  okEl.style.display  = 'none';
+  try {
+    const codeDoc = await db.collection('class_codes').doc(sec).get();
+    const correctCode = (codeDoc.exists ? codeDoc.data().code : '').toUpperCase();
+    if (correctCode && correctCode === entered) {
+      okEl.style.display = 'block';
+      document.getElementById('codeGroup').querySelector('input').disabled = true;
+      document.getElementById('codeGroup').querySelector('button').disabled = true;
+      await loadNameSelector(sec);
+    } else {
+      errEl.style.display = 'block';
+      document.getElementById('codeInput').value = '';
+      document.getElementById('codeInput').focus();
+      // Shake
+      const inp = document.getElementById('codeInput');
+      inp.style.borderColor = '#e53e3e';
+      inp.style.transform = 'translateX(-8px)';
+      setTimeout(() => { inp.style.transform = 'translateX(8px)'; }, 100);
+      setTimeout(() => { inp.style.transform = 'translateX(0)'; }, 200);
+      setTimeout(() => { inp.style.borderColor = '#e2e8f0'; }, 1500);
+    }
+  } catch(e) {
+    await loadNameSelector(sec); // fallback
+  }
+}
+
+async function loadNameSelector(sec) {
+  document.getElementById('nameGroup').style.display = 'block';
   const nameSelect = document.getElementById('nameSelect');
-  if (!sec) { nameSelect.disabled = true; return; }
   nameSelect.innerHTML = '<option value="">Loading... 📚</option>';
   nameSelect.disabled = true;
   loadedStudents = await loadStudents(sec);
   nameSelect.innerHTML = '<option value="">— Choose your name —</option>' +
     loadedStudents.map(n => `<option>${n}</option>`).join('');
   nameSelect.disabled = false;
-  nameSelect.onchange = () => {
-    document.getElementById('startBtn').disabled = !nameSelect.value;
+  nameSelect.onchange = async () => {
+    const name = nameSelect.value;
+    document.getElementById('startBtn').disabled = !name;
+    document.getElementById('snIndicator').style.display = 'none';
+    if (name) await checkSpecialNeeds(name, sec);
   };
 }
 
-function toggleSN() {
-  isSpecialNeeds = document.getElementById('snCheck').checked;
+async function checkSpecialNeeds(name, section) {
+  isSpecialNeeds = false;
+  try {
+    const snap = await db.collection('special_needs_students')
+      .where('studentName', '==', name)
+      .where('section', '==', section)
+      .where('enabled', '==', true)
+      .get();
+    if (!snap.empty) {
+      isSpecialNeeds = true;
+      document.getElementById('snIndicator').style.display = 'block';
+    }
+  } catch(e) { isSpecialNeeds = false; }
 }
 
 async function startLesson() {
@@ -1655,7 +1776,7 @@ async function startLesson() {
   if (!sec || !name) return;
   studentSection = sec;
   studentName = name;
-  isSpecialNeeds = document.getElementById('snCheck').checked;
+  // isSpecialNeeds already set by checkSpecialNeeds()
   sessionId = `${sec}_${name.replace(/\s+/g,'_')}_${Date.now()}`;
   applySpecialNeeds();
   await saveSession({ startTime: firebase.firestore.FieldValue.serverTimestamp() });
@@ -1672,6 +1793,17 @@ async function startLesson() {
   updateProgressBar();
   renderJourneyMap();
   document.getElementById('helpBtn').style.display = 'flex';
+
+  // ── KIOSK MODE: Request fullscreen ──
+  try {
+    const el = document.documentElement;
+    if (el.requestFullscreen) await el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    else if (el.mozRequestFullScreen) el.mozRequestFullScreen();
+  } catch(e) { /* fullscreen denied - continue anyway */ }
+
+  // ── Setup exit detection ──
+  setupExitDetection();
 }
 
 // ============================================================
@@ -3383,6 +3515,142 @@ function clearFingerCanvas() {
   fingerCtx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
+
+
+// ════════════════════════════════════════════════════
+// KIOSK MODE — Exit Detection & Alarm
+// ════════════════════════════════════════════════════
+let exitAlertShown = false;
+
+function setupExitDetection() {
+  // 1. Page visibility change (tab switch, lock screen, etc.)
+  document.addEventListener('visibilitychange', handleExitAttempt);
+
+  // 2. Window blur (alt+tab, click outside)
+  window.addEventListener('blur', handleExitAttempt);
+
+  // 3. Fullscreen escape (student presses Esc)
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement && currentPhase >= 0 && currentPhase < 10) {
+      handleExitAttempt();
+    }
+  });
+  document.addEventListener('webkitfullscreenchange', () => {
+    if (!document.webkitFullscreenElement && currentPhase >= 0 && currentPhase < 10) {
+      handleExitAttempt();
+    }
+  });
+
+  // 4. Before page unload
+  window.addEventListener('beforeunload', (e) => {
+    if (currentPhase >= 0 && currentPhase < 10) {
+      e.preventDefault();
+      e.returnValue = 'Are you sure you want to leave? Your progress may be lost.';
+      playExitAlarm();
+      return e.returnValue;
+    }
+  });
+}
+
+function handleExitAttempt() {
+  if (currentPhase < 0 || currentPhase >= 10) return; // Lesson not started or finished
+  if (exitAlertShown) return; // Don't stack alerts
+  exitAlertShown = true;
+  playExitAlarm();
+  notifyTeacherExit();
+  showExitWarningOverlay();
+}
+
+function playExitAlarm() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Triple beep alarm
+    [0, 0.35, 0.7].forEach((delay) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(880, ctx.currentTime + delay);
+      gain.gain.setValueAtTime(0.7, ctx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.3);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + 0.3);
+    });
+  } catch(e) {}
+}
+
+async function notifyTeacherExit() {
+  if (!studentName || !studentSection) return;
+  try {
+    await db.collection(HELP_COLLECTION).add({
+      studentName,
+      section: studentSection,
+      grade: GRADE,
+      phase: currentPhase,
+      type: 'left_lesson',
+      message: `⚠️ ${studentName} left the lesson page!`,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      resolved: false
+    });
+  } catch(e) {}
+}
+
+function showExitWarningOverlay() {
+  // Remove existing if any
+  let existing = document.getElementById('exitWarnOv');
+  if (existing) { existing.remove(); }
+
+  const ov = document.createElement('div');
+  ov.id = 'exitWarnOv';
+  ov.style.cssText = `
+    position:fixed;inset:0;z-index:99999;
+    background:linear-gradient(135deg,rgba(30,0,60,.97),rgba(0,0,80,.97));
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Fredoka One',cursive;
+  `;
+  ov.innerHTML = `
+    <div style="text-align:center;padding:40px 30px;max-width:500px;">
+      <div style="font-size:5rem;animation:pulse 1s infinite">🚨</div>
+      <h1 style="color:#ff4444;font-size:2.2rem;margin:16px 0 8px;">
+        You Left the Lesson!
+      </h1>
+      <p style="color:#ffcccc;font-size:1.1rem;margin-bottom:8px;">
+        خرجت من الحصة — تم إبلاغ المعلمة
+      </p>
+      <p style="color:#ffd700;font-size:1.4rem;font-weight:700;margin-bottom:28px;">
+        👩‍🏫 Your teacher has been notified!
+      </p>
+      <button onclick="returnToLesson()"
+        style="background:linear-gradient(135deg,#4f46e5,#7c3aed);
+               color:white;border:none;border-radius:20px;
+               padding:18px 48px;font-size:1.4rem;cursor:pointer;
+               font-family:'Fredoka One',cursive;
+               box-shadow:0 6px 20px rgba(79,70,229,.5);
+               transition:transform .2s;"
+        onmouseover="this.style.transform='scale(1.05)'"
+        onmouseout="this.style.transform='scale(1)'">
+        ↩ Return to Lesson / العودة للحصة
+      </button>
+      <p style="color:#9999cc;font-size:.82rem;margin-top:20px;">
+        Press the button to continue your lesson
+      </p>
+    </div>
+  `;
+  document.body.appendChild(ov);
+}
+
+function returnToLesson() {
+  exitAlertShown = false;
+  const ov = document.getElementById('exitWarnOv');
+  if (ov) ov.remove();
+  // Re-request fullscreen
+  try {
+    const el = document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  } catch(e) {}
+}
 
 </script>
 
