@@ -338,6 +338,10 @@ th .th-check{width:16px;height:16px;cursor:pointer;accent-color:#ef4444}
       <button class="nav-btn" onclick="go('worksheets',this)"><span class="nav-ico">📋</span><span>أوراق الطلاب</span><span class="nav-badge" id="wsBadge">0</span></button>
       <button class="nav-btn" onclick="go('parents',this)"><span class="nav-ico">👨‍👩‍👧</span><span>تفاعل أولياء الأمور</span><span class="nav-badge green" id="pBadge">—</span></button>
       <button class="nav-btn" onclick="go('ai',this)"><span class="nav-ico">🤖</span><span>مساعد الذكاء الاصطناعي</span></button>
+      <button class="nav-btn" onclick="go('vark',this)"><span class="nav-ico">🧠</span><span>VARK أنماط التعلم</span></button>
+      <button class="nav-btn" onclick="go('attendance',this)"><span class="nav-ico">✅</span><span>حضور الحصة</span><span class="nav-badge green" id="attBadge">—</span></button>
+      <button class="nav-btn" onclick="go('prediction',this)"><span class="nav-ico">🔮</span><span>التنبؤ الأكاديمي</span></button>
+      <button class="nav-btn" onclick="go('smartcreator',this)"><span class="nav-ico">✨</span><span>منشئ أوراق العمل الذكي</span></button>
     </div>
     <div class="nav-sec">
       <div class="nav-sec-lbl">المحتوى التعليمي</div>
@@ -2151,6 +2155,576 @@ async function removeSN(docId) {
 
 // Navigation hook merged into main go() function above
 
+
+
+// ══════════ VARK SYSTEM ══════════
+let allStudentsVARK = [];
+let varkData = {};
+
+// Load VARK from localStorage (client-side for now)
+function initVARK() {
+  varkData = JSON.parse(localStorage.getItem('vark_data') || '{}');
+}
+
+async function loadVARKSection() {
+  initVARK();
+  try {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/students?select=id,name,grade,class&order=name&limit=200', {
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON }
+    });
+    allStudentsVARK = await res.json();
+  } catch(e) {
+    allStudentsVARK = [];
+  }
+  renderVARK(allStudentsVARK);
+  updateVARKStats(allStudentsVARK);
+}
+
+function getVARKBadge(v) {
+  const map = {
+    'V': '<span style="background:#FEE2E2;color:#991B1B;padding:3px 8px;border-radius:20px;font-size:.75rem;font-weight:700">👁️ بصري</span>',
+    'A': '<span style="background:#DBEAFE;color:#1E40AF;padding:3px 8px;border-radius:20px;font-size:.75rem;font-weight:700">👂 سمعي</span>',
+    'R': '<span style="background:#DCFCE7;color:#166534;padding:3px 8px;border-radius:20px;font-size:.75rem;font-weight:700">📖 قرائي</span>',
+    'K': '<span style="background:#FEF3C7;color:#92400E;padding:3px 8px;border-radius:20px;font-size:.75rem;font-weight:700">🤸 حركي</span>'
+  };
+  return map[v] || '<span style="background:var(--g100);color:var(--g500);padding:3px 8px;border-radius:20px;font-size:.75rem">❓ غير محدد</span>';
+}
+
+function updateVARKStats(students) {
+  const counts = {V:0, A:0, R:0, K:0};
+  students.forEach(s => { const v = (varkData[s.id] || {}).primary; if(counts[v] !== undefined) counts[v]++; });
+  document.getElementById('vCountV').textContent = counts.V;
+  document.getElementById('vCountA').textContent = counts.A;
+  document.getElementById('vCountR').textContent = counts.R;
+  document.getElementById('vCountK').textContent = counts.K;
+}
+
+function renderVARK(students) {
+  const specialNeeds = JSON.parse(localStorage.getItem('special_needs_ids') || '[]');
+  const rows = students.map(s => {
+    const vd = varkData[s.id] || {};
+    const snBadge = specialNeeds.includes(s.id) ? '<span style="background:#F3E8FF;color:#7E22CE;padding:3px 8px;border-radius:20px;font-size:.75rem;font-weight:700">♾️ أصحاب الهمم</span>' : '';
+    return `<tr>
+      <td style="font-weight:600">${s.name}</td>
+      <td>${s.grade || '—'}</td>
+      <td>${s.class || '—'}</td>
+      <td>${getVARKBadge(vd.primary)}</td>
+      <td>${getVARKBadge(vd.secondary)}</td>
+      <td>${snBadge}</td>
+      <td>
+        <button onclick="setVARK('${s.id}','${s.name}')" style="padding:5px 10px;background:var(--primary-light);color:var(--primary);border:none;border-radius:6px;cursor:pointer;font-size:.78rem;font-weight:700">
+          ✏️ تعيين
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+  document.getElementById('varkBody').innerHTML = rows || '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--g400)">لا توجد بيانات</td></tr>';
+}
+
+function filterVARK(type, btn) {
+  document.querySelectorAll('#sec-vark .filter-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  let filtered = allStudentsVARK;
+  if (type === 'none') filtered = allStudentsVARK.filter(s => !(varkData[s.id] || {}).primary);
+  else if (type !== 'all') filtered = allStudentsVARK.filter(s => (varkData[s.id] || {}).primary === type);
+  renderVARK(filtered);
+}
+
+function setVARK(id, name) {
+  const opts = ['V — 👁️ بصري', 'A — 👂 سمعي', 'R — 📖 قرائي', 'K — 🤸 حركي'];
+  const choice = prompt(`نمط التعلم الرئيسي لـ ${name}:\n\n` + opts.map((o,i) => `${i+1}. ${o}`).join('\n') + '\n\nأدخلي رقم النمط:');
+  if (!choice) return;
+  const map = {'1':'V','2':'A','3':'R','4':'K'};
+  const primary = map[choice.trim()];
+  if (!primary) { showToast('اختيار غير صحيح', 'error'); return; }
+  varkData[id] = { ...(varkData[id]||{}), primary };
+  localStorage.setItem('vark_data', JSON.stringify(varkData));
+  renderVARK(allStudentsVARK);
+  updateVARKStats(allStudentsVARK);
+  showToast(`تم تعيين نمط ${primary} لـ ${name}`, 'success');
+}
+
+function openVARKAssign() {
+  showToast('اختاري طالبة وانقري "تعيين" في الجدول', 'info');
+}
+
+function exportVARK() {
+  const rows = [['الاسم','الصف','الفصل','النمط الرئيسي','النمط الثانوي']];
+  allStudentsVARK.forEach(s => {
+    const vd = varkData[s.id] || {};
+    rows.push([s.name, s.grade||'', s.class||'', vd.primary||'', vd.secondary||'']);
+  });
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csv);
+  a.download = 'VARK_styles.csv';
+  a.click();
+}
+
+// ══════════ PREDICTION SYSTEM ══════════
+async function loadPredictions() {
+  const grade = document.getElementById('predGrade').value;
+  document.getElementById('predBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px">جارٍ التحميل...</td></tr>';
+  
+  try {
+    let params = 'select=student_name,grade,class,score&order=student_name&limit=500';
+    if (grade) params += '&grade=ilike.*' + encodeURIComponent(grade) + '*';
+    
+    const res = await fetch(SUPABASE_URL + '/rest/v1/worksheets?' + params, {
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON }
+    });
+    const worksheets = await res.json();
+    
+    // Group by student
+    const studentMap = {};
+    worksheets.forEach(w => {
+      if (!studentMap[w.student_name]) studentMap[w.student_name] = { name: w.student_name, grade: w.grade, cls: w.class, scores: [] };
+      if (w.score !== null && w.score !== undefined) studentMap[w.student_name].scores.push(w.score);
+    });
+    
+    const students = Object.values(studentMap);
+    renderPredictions(students);
+  } catch(e) {
+    document.getElementById('predBody').innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--danger)">${e.message}</td></tr>`;
+  }
+}
+
+function getPrediction(scores) {
+  if (!scores || scores.length === 0) return { pred: '—', color: 'var(--g400)', trend: '—', rec: 'لا توجد بيانات كافية' };
+  const avg = scores.reduce((a,b) => a+b, 0) / scores.length;
+  const last = scores[scores.length-1];
+  const trend = scores.length >= 2 ? (last - scores[scores.length-2] > 0 ? '📈 صاعد' : last - scores[scores.length-2] < 0 ? '📉 نازل' : '➡️ ثابت') : '➡️ ثابت';
+  
+  let pred, color, rec;
+  if (avg >= 85) { pred = '🌟 ممتاز'; color = '#10B981'; rec = 'استمري في التقدم!'; }
+  else if (avg >= 70) { pred = '👍 جيد جداً'; color = '#3B82F6'; rec = 'تشجيع ومتابعة'; }
+  else if (avg >= 55) { pred = '📊 جيد'; color = '#F59E0B'; rec = 'تعزيز وتدريب إضافي'; }
+  else { pred = '⚠️ يحتاج تدخل'; color = '#EF4444'; rec = 'خطة دعم فورية'; }
+  
+  return { pred, color, trend, rec, avg: Math.round(avg) };
+}
+
+function renderPredictions(students) {
+  const counts = { excellent:0, good:0, avg:0, risk:0 };
+  
+  const rows = students.map(s => {
+    const p = getPrediction(s.scores);
+    if (p.avg >= 85) counts.excellent++;
+    else if (p.avg >= 70) counts.good++;
+    else if (p.avg >= 55) counts.avg++;
+    else if (s.scores.length > 0) counts.risk++;
+    
+    return `<tr>
+      <td style="font-weight:600">${s.name}</td>
+      <td>${s.grade||'—'}</td>
+      <td>${s.cls||'—'}</td>
+      <td>${s.scores.length > 0 ? p.avg + '%' : '—'}</td>
+      <td>${s.scores.length}</td>
+      <td>${p.trend}</td>
+      <td><span style="color:${p.color};font-weight:700">${p.pred}</span></td>
+      <td style="font-size:.78rem;color:var(--g600)">${p.rec}</td>
+    </tr>`;
+  }).join('');
+  
+  document.getElementById('predBody').innerHTML = rows || '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--g400)">لا توجد بيانات</td></tr>';
+  document.getElementById('predExcellent').textContent = counts.excellent;
+  document.getElementById('predGood').textContent = counts.good;
+  document.getElementById('predAvg').textContent = counts.avg;
+  document.getElementById('predRisk').textContent = counts.risk;
+}
+
+function exportPredictions() {
+  showToast('تصدير التقرير...', 'info');
+}
+
+// ══════════ SMART WORKSHEET CREATOR ══════════
+function loadSCClasses() {
+  const grade = document.getElementById('scGrade').value;
+  const sel = document.getElementById('scClass');
+  sel.innerHTML = '<option value="">— اختاري الفصل —</option>';
+  const map = { 'الثالث':['أ','ب','ج','د','هـ','و'], 'الرابع':['أ','ب','ج','د','هـ','و','ز'], 'الخامس':['أ','ب','ج','د','هـ'], 'السادس':['أ','ب','ج','د','هـ'] };
+  (map[grade]||[]).forEach(c => { const o = document.createElement('option'); o.value=c; o.textContent=`${grade} / ${c}`; sel.appendChild(o); });
+}
+
+function generateWorksheet() {
+  const subject = document.getElementById('scSubject').value.trim();
+  const topic = document.getElementById('scTopic').value.trim();
+  const grade = document.getElementById('scGrade').value;
+  const cls = document.getElementById('scClass').value;
+  const vark = document.querySelector('input[name="scVARK"]:checked')?.value || 'R';
+  const level = document.getElementById('scLevel').value;
+  const qcount = parseInt(document.getElementById('scQCount').value) || 5;
+  const includeSpecial = document.getElementById('scIncludeSpecial').checked;
+  
+  if (!subject) { showToast('يرجى إدخال المادة الدراسية', 'error'); return; }
+  
+  const varkNames = { V:'بصري 👁️', A:'سمعي 👂', R:'قرائي 📖', K:'حركي 🤸' };
+  const varkActivities = {
+    V: ['رسم مخطط', 'رسم تخطيطي', 'خريطة مفاهيم', 'صور توضيحية', 'جدول مقارنة'],
+    A: ['اكتبي ما سمعتِه', 'استمعي وسجلي', 'ناقشي مع زميلتك', 'اشرحي بصوتك', 'أغنية تعليمية'],
+    R: ['اقرئي وأجيبي', 'لخصي بكلماتك', 'اكتبي 3 معلومات', 'ابحثي وسجلي', 'أكملي الفراغات'],
+    K: ['جربي بنفسك', 'رتبي الخطوات', 'تجربة عملية', 'حركي الأشياء', 'اصنعي نموذجاً']
+  };
+  
+  const questionTypes = {
+    'سهل': ['✏️ أكملي الفراغ:', '⭕ دائرة الإجابة الصحيحة:', '✅ صح أم خطأ:'],
+    'متوسط': ['💡 أجيبي عن السؤال:', '🔗 صلي بين العمودين:', '📝 اذكري ثلاثة أمثلة:'],
+    'متقدم': ['🌟 حللي وأجيبي:', '🤔 علام تستدلين؟', '🎯 قارني بين مفهومين:']
+  };
+  
+  const acts = varkActivities[vark] || varkActivities['R'];
+  const qTypes = questionTypes[level] || questionTypes['متوسط'];
+  
+  let questions = '';
+  for (let i = 1; i <= qcount; i++) {
+    const act = acts[(i-1) % acts.length];
+    const qtype = qTypes[(i-1) % qTypes.length];
+    questions += `<div style="margin-bottom:16px;padding:12px;background:var(--g50);border-radius:var(--r);border-right:3px solid var(--primary)">
+      <div style="font-weight:700;margin-bottom:8px">${i}. ${qtype}</div>
+      <div style="color:var(--g500);font-size:.85rem">النشاط: ${act} — ${topic || subject}</div>
+      <div style="margin-top:8px;height:32px;border-bottom:1px dashed var(--g300)"></div>
+    </div>`;
+  }
+  
+  let specialSection = '';
+  if (includeSpecial) {
+    specialSection = `<div style="margin-top:20px;padding:16px;background:#F3E8FF;border-radius:var(--r);border:1px solid #DDD6FE">
+      <div style="font-weight:700;color:#7E22CE;margin-bottom:10px">♾️ نشاط خاص لأصحاب الهمم</div>
+      <div style="font-size:.85rem;color:#6D28D9">أكملي النشاط بمساعدة معلمتك أو باستخدام الأدوات المساعدة</div>
+      <div style="margin-top:10px;height:40px;border-bottom:1px dashed #DDD6FE"></div>
+    </div>`;
+  }
+  
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('ar-EG', { year:'numeric', month:'long', day:'numeric' });
+  
+  document.getElementById('wsPreview').innerHTML = `
+    <div style="text-align:center;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid var(--g200)">
+      <div style="font-size:1.1rem;font-weight:900">مدرسة الجود — بوابة الجود الذكية</div>
+      <div style="font-size:.95rem;font-weight:700;margin-top:4px">ورقة عمل — ${subject}</div>
+      ${topic ? `<div style="font-size:.85rem;color:var(--g500);margin-top:2px">الموضوع: ${topic}</div>` : ''}
+      <div style="display:flex;justify-content:center;gap:16px;margin-top:10px;font-size:.8rem;color:var(--g500)">
+        <span>📅 ${dateStr}</span>
+        ${grade ? `<span>🎓 الصف ${grade}${cls ? ' / ' + cls : ''}</span>` : ''}
+        <span>${getVARKBadge2(vark)}</span>
+        <span>📊 ${level}</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;margin-bottom:16px;font-size:.82rem">
+      <div style="flex:1;padding:8px 12px;background:var(--g50);border-radius:8px">الاسم: _________________</div>
+      <div style="flex:1;padding:8px 12px;background:var(--g50);border-radius:8px">التاريخ: _________________</div>
+    </div>
+    <div>${questions}</div>
+    ${specialSection}
+  `;
+  
+  document.getElementById('scPrintBtn').style.display = 'inline-block';
+  document.getElementById('scSaveBtn').style.display = 'inline-block';
+  
+  showToast('✅ تم توليد ورقة العمل!', 'success');
+}
+
+function getVARKBadge2(v) {
+  const map = { V:'👁️ بصري', A:'👂 سمعي', R:'📖 قرائي', K:'🤸 حركي' };
+  return map[v] || '—';
+}
+
+function printWorksheet() {
+  const content = document.getElementById('wsPreview').innerHTML;
+  const w = window.open('', '_blank');
+  w.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet"><style>*{font-family:'Cairo',sans-serif;box-sizing:border-box}body{padding:30px;max-width:800px;margin:0 auto}@media print{body{padding:20px}}</style></head><body>${content}<script>window.onload=()=>window.print()<\/script></body></html>`);
+  w.document.close();
+}
+
+async function saveWorksheet() {
+  showToast('يمكن ربطها بـ Supabase لحفظ ورقة العمل وإسنادها للطلاب', 'info');
+}
+
+// ══════════ SECTION INIT HOOKS ══════════
+const _origGo = window.go;
+window.go = function(sec, btn) {
+  if (typeof _origGo === 'function') _origGo(sec, btn);
+  if (sec === 'vark') loadVARKSection();
+  if (sec === 'prediction') loadPredictions();
+  if (sec === 'attendance') loadAttendanceToday();
+};
+
+async function loadAttendanceToday() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/duties?select=*&date=eq.${today}&limit=50`, {
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON }
+    });
+    const data = await res.json();
+    // Just show a simple message
+    if (data.length > 0) {
+      document.getElementById('attPresent').textContent = data.length;
+      document.getElementById('attAbsent').textContent = '—';
+      document.getElementById('attRate').textContent = '—';
+    }
+  } catch(e) {}
+}
 </script>
+
+
+<!-- ═══════ VARK SECTION ═══════ -->
+<div id="sec-vark" class="sec">
+  <div class="page-header">
+    <div>
+      <h2 class="page-title">🧠 VARK — أنماط التعلم</h2>
+      <p class="page-sub">تحديد أسلوب تعلم كل طالبة (بصري / سمعي / قرائي / حركي)</p>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-outline" onclick="exportVARK()">📥 تصدير CSV</button>
+      <button class="btn btn-primary" onclick="openVARKAssign()">➕ تعيين نمط</button>
+    </div>
+  </div>
+
+  <!-- VARK Stats -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px">
+    <div class="stat-card" style="border-top:4px solid #EF4444">
+      <div style="font-size:1.8rem;margin-bottom:6px">👁️</div>
+      <div style="font-size:1.6rem;font-weight:900;color:#EF4444" id="vCountV">—</div>
+      <div style="font-size:.75rem;color:var(--g500)">بصري Visual</div>
+    </div>
+    <div class="stat-card" style="border-top:4px solid #3B82F6">
+      <div style="font-size:1.8rem;margin-bottom:6px">👂</div>
+      <div style="font-size:1.6rem;font-weight:900;color:#3B82F6" id="vCountA">—</div>
+      <div style="font-size:.75rem;color:var(--g500)">سمعي Auditory</div>
+    </div>
+    <div class="stat-card" style="border-top:4px solid #10B981">
+      <div style="font-size:1.8rem;margin-bottom:6px">📖</div>
+      <div style="font-size:1.6rem;font-weight:900;color:#10B981" id="vCountR">—</div>
+      <div style="font-size:.75rem;color:var(--g500)">قرائي Read/Write</div>
+    </div>
+    <div class="stat-card" style="border-top:4px solid #F59E0B">
+      <div style="font-size:1.8rem;margin-bottom:6px">🤸</div>
+      <div style="font-size:1.6rem;font-weight:900;color:#F59E0B" id="vCountK">—</div>
+      <div style="font-size:.75rem;color:var(--g500)">حركي Kinesthetic</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+    <button class="filter-chip active" onclick="filterVARK('all',this)">الكل</button>
+    <button class="filter-chip" onclick="filterVARK('V',this)">👁️ بصري</button>
+    <button class="filter-chip" onclick="filterVARK('A',this)">👂 سمعي</button>
+    <button class="filter-chip" onclick="filterVARK('R',this)">📖 قرائي</button>
+    <button class="filter-chip" onclick="filterVARK('K',this)">🤸 حركي</button>
+    <button class="filter-chip" onclick="filterVARK('none',this)">❓ غير محدد</button>
+  </div>
+
+  <div class="card" style="overflow:hidden">
+    <div style="overflow-x:auto">
+      <table class="data-table" id="varkTable">
+        <thead><tr>
+          <th>الاسم</th><th>الصف</th><th>الفصل</th>
+          <th>نمط التعلم</th><th>النمط الثانوي</th>
+          <th>أصحاب الهمم</th><th>إجراءات</th>
+        </tr></thead>
+        <tbody id="varkBody"><tr><td colspan="7" style="text-align:center;padding:40px;color:var(--g400)">جارٍ التحميل...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ ATTENDANCE SECTION ═══════ -->
+<div id="sec-attendance" class="sec">
+  <div class="page-header">
+    <div>
+      <h2 class="page-title">✅ حضور الحصة</h2>
+      <p class="page-sub">متابعة حضور الطالبات في الوقت الفعلي</p>
+    </div>
+    <div style="display:flex;gap:10px">
+      <a href="/observer.html" target="_blank" class="btn btn-primary">🚀 فتح نظام الحضور</a>
+      <a href="/worksheet.html" target="_blank" class="btn btn-outline">📝 بوابة أوراق العمل</a>
+    </div>
+  </div>
+
+  <!-- Today Stats -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px">
+    <div class="stat-card" style="border-top:4px solid #10B981">
+      <div style="font-size:1.8rem;margin-bottom:6px">✅</div>
+      <div style="font-size:1.6rem;font-weight:900;color:#10B981" id="attPresent">—</div>
+      <div style="font-size:.75rem;color:var(--g500)">حاضر اليوم</div>
+    </div>
+    <div class="stat-card" style="border-top:4px solid #EF4444">
+      <div style="font-size:1.8rem;margin-bottom:6px">❌</div>
+      <div style="font-size:1.6rem;font-weight:900;color:#EF4444" id="attAbsent">—</div>
+      <div style="font-size:.75rem;color:var(--g500)">غائب اليوم</div>
+    </div>
+    <div class="stat-card" style="border-top:4px solid #3B82F6">
+      <div style="font-size:1.8rem;margin-bottom:6px">📊</div>
+      <div style="font-size:1.6rem;font-weight:900;color:#3B82F6" id="attRate">—</div>
+      <div style="font-size:.75rem;color:var(--g500)">نسبة الحضور</div>
+    </div>
+  </div>
+
+  <!-- Attendance List -->
+  <div class="card" style="padding:20px;text-align:center">
+    <div style="font-size:3rem;margin-bottom:12px">🖥️</div>
+    <h3 style="font-size:1rem;font-weight:700;margin-bottom:8px">نظام الحضور التفاعلي</h3>
+    <p style="font-size:.85rem;color:var(--g500);margin-bottom:16px">
+      الطالبات يسجلن حضورهن من أجهزتهن — تظهر هنا في الوقت الفعلي
+    </p>
+    <a href="/observer.html" target="_blank" class="btn btn-primary" style="display:inline-block;padding:12px 28px;text-decoration:none">
+      🚀 فتح نظام الحضور
+    </a>
+    <div style="margin-top:20px;padding:16px;background:var(--g50);border-radius:var(--r)">
+      <div style="font-size:.82rem;color:var(--g500);margin-bottom:12px">📋 الحصص اليوم</div>
+      <div id="todayAttList" style="font-size:.85rem;color:var(--g700)">لا توجد بيانات حضور لليوم بعد</div>
+    </div>
+    <div style="margin-top:16px" id="attRealtimeList"></div>
+  </div>
+</div>
+
+<!-- ═══════ PREDICTION SECTION ═══════ -->
+<div id="sec-prediction" class="sec">
+  <div class="page-header">
+    <div>
+      <h2 class="page-title">🔮 التنبؤ الأكاديمي الذكي</h2>
+      <p class="page-sub">تحليل مسار الطالبات وتوقع الأداء الأكاديمي</p>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-outline" onclick="exportPredictions()">📥 تصدير التقرير</button>
+      <select id="predGrade" class="inp" style="width:auto" onchange="loadPredictions()">
+        <option value="">كل الصفوف</option>
+        <option value="الثالث">الصف الثالث</option>
+        <option value="الرابع">الصف الرابع</option>
+        <option value="الخامس">الصف الخامس</option>
+        <option value="السادس">الصف السادس</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Prediction Stats -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px">
+    <div class="stat-card" style="border-top:4px solid #10B981">
+      <div style="font-size:1.8rem;margin-bottom:6px">🌟</div>
+      <div style="font-size:1.6rem;font-weight:900;color:#10B981" id="predExcellent">—</div>
+      <div style="font-size:.75rem;color:var(--g500)">متوقع ممتاز</div>
+    </div>
+    <div class="stat-card" style="border-top:4px solid #3B82F6">
+      <div style="font-size:1.8rem;margin-bottom:6px">👍</div>
+      <div style="font-size:1.6rem;font-weight:900;color:#3B82F6" id="predGood">—</div>
+      <div style="font-size:.75rem;color:var(--g500)">متوقع جيد</div>
+    </div>
+    <div class="stat-card" style="border-top:4px solid #F59E0B">
+      <div style="font-size:1.8rem;margin-bottom:6px">📊</div>
+      <div style="font-size:1.6rem;font-weight:900;color:#F59E0B" id="predAvg">—</div>
+      <div style="font-size:.75rem;color:var(--g500)">يحتاج متابعة</div>
+    </div>
+    <div class="stat-card" style="border-top:4px solid #EF4444">
+      <div style="font-size:1.8rem;margin-bottom:6px">⚠️</div>
+      <div style="font-size:1.6rem;font-weight:900;color:#EF4444" id="predRisk">—</div>
+      <div style="font-size:.75rem;color:var(--g500)">في خطر أكاديمي</div>
+    </div>
+  </div>
+
+  <div class="card" style="overflow:hidden">
+    <div style="overflow-x:auto">
+      <table class="data-table" id="predTable">
+        <thead><tr>
+          <th>الاسم</th><th>الصف</th><th>الفصل</th>
+          <th>متوسط الدرجات</th><th>عدد الأوراق</th>
+          <th>الاتجاه</th><th>التنبؤ</th><th>التوصية</th>
+        </tr></thead>
+        <tbody id="predBody"><tr><td colspan="8" style="text-align:center;padding:40px;color:var(--g400)">اختاري صفاً لتحميل التنبؤات</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ SMART CREATOR SECTION ═══════ -->
+<div id="sec-smartcreator" class="sec">
+  <div class="page-header">
+    <div>
+      <h2 class="page-title">✨ منشئ أوراق العمل الذكي</h2>
+      <p class="page-sub">إنشاء أوراق عمل مخصصة حسب نمط VARK وأصحاب الهمم</p>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+    
+    <!-- Creator Form -->
+    <div class="card" style="padding:24px">
+      <h3 style="font-size:1rem;font-weight:700;margin-bottom:18px">⚙️ إعدادات ورقة العمل</h3>
+      
+      <label class="form-lbl">المادة الدراسية</label>
+      <input type="text" class="inp" id="scSubject" placeholder="مثال: العلوم — الطاقة الشمسية">
+      
+      <label class="form-lbl" style="margin-top:12px">الموضوع / الدرس</label>
+      <input type="text" class="inp" id="scTopic" placeholder="مثال: أنواع الطاقة المتجددة">
+      
+      <label class="form-lbl" style="margin-top:12px">الصف</label>
+      <select class="inp" id="scGrade" onchange="loadSCClasses()">
+        <option value="">— اختاري الصف —</option>
+        <option value="الثالث">الصف الثالث</option>
+        <option value="الرابع">الصف الرابع</option>
+        <option value="الخامس">الصف الخامس</option>
+        <option value="السادس">الصف السادس</option>
+      </select>
+      
+      <label class="form-lbl" style="margin-top:12px">الفصل</label>
+      <select class="inp" id="scClass">
+        <option value="">— اختاري الفصل —</option>
+      </select>
+      
+      <label class="form-lbl" style="margin-top:12px">نمط التعلم الرئيسي للمجموعة</label>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px">
+        <label class="vark-opt" style="display:flex;align-items:center;gap:8px;padding:10px;border:2px solid var(--g200);border-radius:var(--r);cursor:pointer">
+          <input type="radio" name="scVARK" value="V"> 👁️ بصري
+        </label>
+        <label class="vark-opt" style="display:flex;align-items:center;gap:8px;padding:10px;border:2px solid var(--g200);border-radius:var(--r);cursor:pointer">
+          <input type="radio" name="scVARK" value="A"> 👂 سمعي
+        </label>
+        <label class="vark-opt" style="display:flex;align-items:center;gap:8px;padding:10px;border:2px solid var(--g200);border-radius:var(--r);cursor:pointer">
+          <input type="radio" name="scVARK" value="R" checked> 📖 قرائي
+        </label>
+        <label class="vark-opt" style="display:flex;align-items:center;gap:8px;padding:10px;border:2px solid var(--g200);border-radius:var(--r);cursor:pointer">
+          <input type="radio" name="scVARK" value="K"> 🤸 حركي
+        </label>
+      </div>
+      
+      <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:600;cursor:pointer;margin-bottom:14px">
+        <input type="checkbox" id="scIncludeSpecial"> 
+        ♾️ تضمين نشاطات خاصة لأصحاب الهمم
+      </label>
+      
+      <label class="form-lbl">مستوى الصعوبة</label>
+      <select class="inp" id="scLevel">
+        <option value="سهل">🟢 سهل — للدعم</option>
+        <option value="متوسط" selected>🟡 متوسط — الأساس</option>
+        <option value="متقدم">🔴 متقدم — الإثراء</option>
+      </select>
+      
+      <label class="form-lbl" style="margin-top:12px">عدد الأسئلة</label>
+      <input type="number" class="inp" id="scQCount" value="5" min="3" max="15">
+      
+      <button class="btn btn-primary" style="margin-top:16px;width:100%" onclick="generateWorksheet()">
+        ✨ توليد ورقة العمل الذكية
+      </button>
+    </div>
+    
+    <!-- Preview -->
+    <div class="card" style="padding:24px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 style="font-size:1rem;font-weight:700">📄 معاينة ورقة العمل</h3>
+        <div style="display:flex;gap:8px" id="scActions" style="display:none">
+          <button class="btn btn-outline" onclick="printWorksheet()" id="scPrintBtn" style="display:none">🖨️ طباعة</button>
+          <button class="btn btn-primary" onclick="saveWorksheet()" id="scSaveBtn" style="display:none">💾 حفظ</button>
+        </div>
+      </div>
+      <div id="wsPreview" style="min-height:400px;background:var(--g50);border-radius:var(--r);padding:20px;font-size:.88rem;line-height:1.8">
+        <div style="text-align:center;color:var(--g400);padding:60px 20px">
+          <div style="font-size:3rem;margin-bottom:12px">✨</div>
+          <div style="font-weight:700;margin-bottom:8px">جاهز لتوليد ورقة العمل</div>
+          <div style="font-size:.8rem">اضغطي "توليد ورقة العمل الذكية" لبدء الإنشاء</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
