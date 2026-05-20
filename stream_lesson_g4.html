@@ -1643,6 +1643,8 @@ let selfAssessData = {};
 let exitRating = 0;
 let testChecked = [false,false,false,false,false];
 let mcqAnswers = [];
+let currentMCQIndex = 0;
+let _mcqActiveQs = [];
 let tfAnswers = [];
 let goalCorrect = false;
 let exitCorrect = false;
@@ -2216,35 +2218,41 @@ function checkGoal(idx){
 
 // ===== PHASE 2: MCQ =====
 function renderMCQ(){
-  const container=document.getElementById('mcqContainer');
-  const qs=isSpecialNeeds?mcqQuestions.slice(0,3):mcqQuestions;
-  container.innerHTML='';
-  mcqAnswers=[];
-  qs.forEach((q,qi)=>{
-    mcqAnswers.push(null);
-    const div=document.createElement('div');
-    div.className='question-card';
-    div.innerHTML=`<div class="question-text">Q${qi+1}: ${q.q}<button class="translate-btn" onclick="toggleArabicQ('mcq${qi}')">🌐 ترجم</button></div><div class="arabic-hint" id="mcq${qi}">${q.ar}</div><div class="choices-grid" id="mcq_choices_${qi}"></div><div class="feedback-msg" id="mcq_fb_${qi}"></div>`;
-    const choicesDiv=div.querySelector('#mcq_choices_'+qi);
-    q.opts.forEach((opt,oi)=>{
-      const btn=document.createElement('div');
-      btn.className='choice-card';
-      btn.innerHTML=`<span class="choice-icon">${['🅐','🅑','🅒','🅓'][oi]}</span>${opt.replace(' ✅','')}`;
-      btn.onclick=()=>checkMCQ(qi,oi,q.correct,btn,div.querySelector('#mcq_fb_'+qi),div.querySelector('#mcq_choices_'+qi));
-      choicesDiv.appendChild(btn);
-    });
-    container.appendChild(div);
-    if(isSpecialNeeds){
-      const ab=document.createElement('button');
-      ab.className='audio-btn';
-      ab.textContent='🔊 Listen';
-      ab.onclick=()=>speak(q.q);
-      div.querySelector('.question-text').appendChild(ab);
-    }
+  _mcqActiveQs = isSpecialNeeds ? mcqQuestions.slice(0,3) : mcqQuestions;
+  mcqAnswers = _mcqActiveQs.map(()=>null);
+  currentMCQIndex = 0;
+  showMCQQuestion(0);
+}
+
+function showMCQQuestion(qi){
+  const container = document.getElementById('mcqContainer');
+  const q = _mcqActiveQs[qi];
+  const total = _mcqActiveQs.length;
+  container.innerHTML = `
+    <div class="question-card" style="animation:fadeIn 0.35s ease">
+      <div style="text-align:center;font-size:0.78rem;color:#8899bb;margin-bottom:6px;font-weight:600;">
+        Question ${qi+1} of ${total}
+        <span style="display:inline-block;width:${Math.round((qi/total)*100)}%;height:4px;background:var(--gold,#e6b800);border-radius:2px;margin-left:8px;vertical-align:middle;"></span>
+      </div>
+      <div class="question-text">Q${qi+1}: ${q.q}
+        <button class="translate-btn" onclick="toggleArabicQ('mcq${qi}')">🌐 ترجم</button>
+        ${isSpecialNeeds?`<button class="audio-btn" onclick="speak(_mcqActiveQs[${qi}].q)">🔊 Listen</button>`:''}
+      </div>
+      <div class="arabic-hint" id="mcq${qi}" style="display:none">${q.ar}</div>
+      <div class="choices-grid" id="mcq_choices_${qi}"></div>
+      <div class="feedback-msg" id="mcq_fb_${qi}"></div>
+    </div>`;
+  const choicesDiv = container.querySelector('#mcq_choices_'+qi);
+  q.opts.forEach((opt,oi)=>{
+    const btn = document.createElement('div');
+    btn.className = 'choice-card';
+    btn.innerHTML = `<span class="choice-icon">${['🅐','🅑','🅒','🅓'][oi]}</span>${opt.replace(' ✅','')}`;
+    btn.onclick = ()=>checkMCQ(qi,oi,q.correct,choicesDiv);
+    choicesDiv.appendChild(btn);
   });
 }
 
-function checkMCQ(qi,oi,correct,btn,fb,choicesDiv){
+function checkMCQ(qi,oi,correct,choicesDiv){
   if(mcqAnswers[qi]!==null) return;
   mcqAnswers[qi]={given:oi,correct:oi===correct};
   Array.from(choicesDiv.children).forEach((c,i)=>{
@@ -2252,16 +2260,21 @@ function checkMCQ(qi,oi,correct,btn,fb,choicesDiv){
     if(i===correct) c.classList.add('correct');
     else if(i===oi&&oi!==correct) c.classList.add('incorrect');
   });
+  const fb=document.getElementById('mcq_fb_'+qi);
   if(oi===correct){ fb.className='feedback-msg feedback-correct'; fb.textContent='✅ Correct! / صحيح!'; successSound(); }
-  else { fb.className='feedback-msg feedback-incorrect'; fb.textContent='❌ Not quite! The correct answer is highlighted. / راجع الإجابة الصحيحة!'; errorSound(); }
-  const allAnswered=mcqAnswers.every(a=>a!==null);
-  if(allAnswered){
-    const score=mcqAnswers.filter(a=>a&&a.correct).length;
-    const badge=document.getElementById('mcqScoreBadge');
-    if(badge) badge.textContent=`Score: ${score}/${mcqAnswers.length} ${score>=mcqAnswers.length*0.8?'🌟':'👍'}`;
-    document.getElementById('mcqScore').style.display='block';
-    document.getElementById('nextMCQ').style.display='inline-block';
-    if(score===mcqAnswers.length) successSound();
+  else { fb.className='feedback-msg feedback-incorrect'; fb.textContent='❌ '+_mcqActiveQs[qi].opts[correct].replace(' ✅',''); errorSound(); }
+  const nextQi = qi+1;
+  if(nextQi < _mcqActiveQs.length){
+    setTimeout(()=>showMCQQuestion(nextQi), 1400);
+  } else {
+    setTimeout(()=>{
+      const score=mcqAnswers.filter(a=>a&&a.correct).length;
+      const badge=document.getElementById('mcqScoreBadge');
+      if(badge) badge.textContent=`Score: ${score}/${mcqAnswers.length} ${score>=mcqAnswers.length*0.8?'🌟':'👍'}`;
+      document.getElementById('mcqScore').style.display='block';
+      document.getElementById('nextMCQ').style.display='inline-block';
+      if(score===mcqAnswers.length) successSound();
+    }, 1400);
   }
 }
 
