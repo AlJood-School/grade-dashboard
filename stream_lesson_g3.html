@@ -31,7 +31,10 @@ body {
   font-family: 'Tajawal', sans-serif;
   font-size: 18px;
   background: linear-gradient(135deg, #e0e8ff 0%, #f0e6ff 100%);
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   color: var(--navy);
   overflow-x: hidden;
   max-width: 100vw;
@@ -52,7 +55,7 @@ h1,h2,h3,.title-font { font-family: 'Tajawal', sans-serif; }
   flex-wrap: wrap;
   gap: 10px;
   box-shadow: 0 4px 12px rgba(26,39,68,0.3);
-  position: sticky; top: 0; z-index: 100;
+  flex-shrink: 0; z-index: 100;
 }
 #appHeader .logo { font-family:'Tajawal', sans-serif; font-size:1.4rem; color:var(--gold); }
 #totalTimer { font-size:0.9rem; color:var(--gold-light); }
@@ -75,6 +78,7 @@ h1,h2,h3,.title-font { font-family: 'Tajawal', sans-serif; }
   padding: 8px 16px;
   overflow-x: auto;
   overflow-y: visible;
+  flex-shrink: 0;
   display: flex;
   gap: 4px;
   align-items: center;
@@ -104,8 +108,13 @@ h1,h2,h3,.title-font { font-family: 'Tajawal', sans-serif; }
 /* MAIN CONTENT */
 #mainContent {
   max-width: 1000px;
-  margin: 24px auto;
-  padding: 0 16px 80px;
+  margin: 0 auto;
+  padding: 16px 16px 80px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
 }
 
 /* PHASE HEADER */
@@ -891,6 +900,16 @@ footer {
 }
 .goal-card h2 { font-family:'Tajawal', sans-serif; font-size:2rem; color:var(--gold-light); margin-bottom:16px; }
 .goal-card p { font-size:1.15rem; line-height:1.7; margin-bottom:10px; }
+
+/* T/F grid layout */
+#tfQuestions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 700px) {
+  #tfQuestions { grid-template-columns: 1fr; }
+}
 
 /* QUESTION CARD */
 .question-card {
@@ -3002,11 +3021,17 @@ function startPhaseTimer(seconds) {
     }, 50);
     return;
   }
+  // Restore saved remaining time for this phase (so timer continues if student went back)
+  const _phaseTimerKey = `p${currentPhase}_timerLeft`;
+  if (phaseData[_phaseTimerKey] && phaseData[_phaseTimerKey] > 15) {
+    seconds = phaseData[_phaseTimerKey];
+  }
   if (isSpecialNeeds) seconds = Math.floor(seconds * 1.5);
   if (currentActivityTimer) currentActivityTimer.stop();
   currentActivityTimer = new ActivityTimer(seconds,
     (rem, tot) => {
       updateTimerDisplay(rem, tot, 'activityTimer');
+      phaseData[`p${currentPhase}_timerLeft`] = rem;
       // Save timer remaining every 5 seconds
       if (rem % 5 === 0) saveState();
     },
@@ -3772,8 +3797,60 @@ function renderPlan() {
   const PLAN_MATERIALS = ['Cardboard box (body)','Plastic bottle (head)','Paper cups (feet)','Aluminum foil (decoration)','Rubber bands','Markers','Tape/Glue'];
   const savedChecks = phaseData.p4_matChecks || [];
   const savedName = phaseData.p4_robotName || '';
+  const savedWho = phaseData.p4_whoHelp || '';
+  const savedHow = phaseData.p4_howHelp || '';
+  const WHO_OPTIONS = [
+    { id:'elderly', emoji:'👴', en:'Elderly', ar:'كبار السن' },
+    { id:'children', emoji:'👧', en:'Children', ar:'الأطفال' },
+    { id:'sick', emoji:'🏥', en:'Sick People', ar:'المرضى' },
+    { id:'teacher', emoji:'👩‍🏫', en:'Teachers', ar:'المعلمين' },
+    { id:'animals', emoji:'🐾', en:'Animals', ar:'الحيوانات' },
+    { id:'family', emoji:'👨‍👩‍👧', en:'Family', ar:'العائلة' },
+  ];
+  const HOW_OPTIONS = [
+    { id:'carry', emoji:'📦', en:'Carry things', ar:'حمل الأشياء' },
+    { id:'medicine', emoji:'💊', en:'Remember medicine', ar:'تذكير الدواء' },
+    { id:'clean', emoji:'🧹', en:'Clean up', ar:'التنظيف' },
+    { id:'cook', emoji:'🍳', en:'Help with cooking', ar:'المساعدة في الطهي' },
+    { id:'read', emoji:'📚', en:'Read & learn', ar:'القراءة والتعلم' },
+    { id:'guide', emoji:'🗺️', en:'Guide & navigate', ar:'التوجيه والإرشاد' },
+  ];
   return `
   ${makePhaseHeader('📝 Plan Your Robot!', secs, 'Phase 5 — Plan')}
+
+  <!-- MISSION DEFINITION -->
+  <div class="card" style="margin-bottom:20px;border-top:5px solid var(--gold);background:linear-gradient(135deg,#fffbeb,#fff);">
+    <h3 style="font-family:'Tajawal',sans-serif;color:var(--navy);margin-bottom:6px;font-size:1.3rem;">🎯 My Robot's Mission — مهمة روبوتي</h3>
+    <p style="color:#64748b;font-size:0.9rem;margin-bottom:16px;">Choose who your robot helps and how it helps — اختر من يساعد روبوتك وكيف يساعده</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+      <div>
+        <div style="font-weight:700;color:var(--navy);margin-bottom:10px;font-family:'Tajawal',sans-serif;">👥 Who does it help? — من يساعد؟</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;" id="whoCards">
+          ${WHO_OPTIONS.map(w => `
+            <div onclick="selectMission('who','${w.id}',this)" class="mission-card ${savedWho===w.id?'selected':''}" data-id="${w.id}" style="text-align:center;padding:10px 6px;border:2px solid ${savedWho===w.id?'var(--gold)':'#e2e8f0'};border-radius:12px;cursor:pointer;background:${savedWho===w.id?'#fffbeb':'white'};transition:all 0.2s;">
+              <div style="font-size:1.6rem;">${w.emoji}</div>
+              <div style="font-size:0.78rem;font-weight:600;color:var(--navy);margin-top:4px;">${w.en}</div>
+              <div style="font-size:0.72rem;color:#64748b;font-family:'Tajawal',sans-serif;">${w.ar}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+      <div>
+        <div style="font-weight:700;color:var(--navy);margin-bottom:10px;font-family:'Tajawal',sans-serif;">🤖 How does it help? — كيف يساعد؟</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;" id="howCards">
+          ${HOW_OPTIONS.map(h => `
+            <div onclick="selectMission('how','${h.id}',this)" class="mission-card ${savedHow===h.id?'selected':''}" data-id="${h.id}" style="text-align:center;padding:10px 6px;border:2px solid ${savedHow===h.id?'#3b82f6':'#e2e8f0'};border-radius:12px;cursor:pointer;background:${savedHow===h.id?'#eff6ff':'white'};transition:all 0.2s;">
+              <div style="font-size:1.6rem;">${h.emoji}</div>
+              <div style="font-size:0.78rem;font-weight:600;color:var(--navy);margin-top:4px;">${h.en}</div>
+              <div style="font-size:0.72rem;color:#64748b;font-family:'Tajawal',sans-serif;">${h.ar}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div id="missionSummary" style="margin-top:14px;padding:10px 14px;background:linear-gradient(90deg,rgba(26,39,68,0.06),rgba(201,168,76,0.1));border-radius:10px;font-family:'Tajawal',sans-serif;color:var(--navy);font-weight:600;display:${savedWho&&savedHow?'block':'none'};">
+      🤖 My robot helps <span id="missionWhoText">${WHO_OPTIONS.find(w=>w.id===savedWho)?.en||''}</span> by <span id="missionHowText">${HOW_OPTIONS.find(h=>h.id===savedHow)?.en||''}</span> — روبوتي يساعد <span id="missionWhoTextAr">${WHO_OPTIONS.find(w=>w.id===savedWho)?.ar||''}</span> عن طريق <span id="missionHowTextAr">${HOW_OPTIONS.find(h=>h.id===savedHow)?.ar||''}</span>
+    </div>
+  </div>
+
   <div class="questions-grid">
     <div class="card card-colored">
       <h3 style="font-family:'Tajawal', sans-serif;color:var(--navy);margin-bottom:16px;">🧰 Materials Checklist</h3>
@@ -3801,8 +3878,14 @@ function renderPlan() {
         <canvas id="drawCanvas" width="380" height="280" ontouchstart="canvasTouch(event)" ontouchmove="canvasTouch(event)" ontouchend="canvasTouchEnd()"></canvas>
       </div>
       <div style="margin-top:12px;">
-        <label style="font-weight:700;color:var(--navy);">🤖 My robot's name is:</label>
-        <input type="text" class="form-input" id="robotNameInput" placeholder="e.g. RoboX, Zoro, Star..." value="${savedName}" oninput="phaseData.p4_robotName=this.value" style="margin-top:6px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <label style="font-weight:700;color:var(--navy);">🤖 My robot's name is: <span style="font-family:'Tajawal',sans-serif;color:#ef4444;font-size:0.8rem;">* required</span></label>
+          <button onclick="document.getElementById('robotNameInput').focus();showArHint()" style="background:var(--navy);color:var(--gold);border:none;border-radius:8px;padding:3px 10px;font-size:0.75rem;cursor:pointer;font-family:'Tajawal',sans-serif;" title="Switch keyboard language">⌨️ عر/EN</button>
+        </div>
+        <input type="text" class="form-input" id="robotNameInput" placeholder="e.g. RoboX, روبو نجم, Star..." value="${savedName}" oninput="phaseData.p4_robotName=this.value;this.style.border='';this.style.boxShadow='';" style="margin-top:0;border:2px solid #e2e8f0;font-size:1.1rem;">
+        <div id="arHint" style="display:none;font-family:'Tajawal',sans-serif;font-size:0.8rem;color:#64748b;margin-top:4px;padding:6px 10px;background:#f8fafc;border-radius:8px;">
+          💡 On iPad: tap 🌐 on the keyboard to switch to Arabic / على الآيباد: اضغط 🌐 على لوحة المفاتيح للتبديل للعربية
+        </div>
       </div>
     </div>
   </div>
@@ -3902,8 +3985,81 @@ function clearCanvas() {
   phaseData.p4_drawing = null;
 }
 
+const _WHO_OPTIONS_DATA = [
+  { id:'elderly', emoji:'👴', en:'Elderly', ar:'كبار السن' },
+  { id:'children', emoji:'👧', en:'Children', ar:'الأطفال' },
+  { id:'sick', emoji:'🏥', en:'Sick People', ar:'المرضى' },
+  { id:'teacher', emoji:'👩‍🏫', en:'Teachers', ar:'المعلمين' },
+  { id:'animals', emoji:'🐾', en:'Animals', ar:'الحيوانات' },
+  { id:'family', emoji:'👨‍👩‍👧', en:'Family', ar:'العائلة' },
+];
+const _HOW_OPTIONS_DATA = [
+  { id:'carry', emoji:'📦', en:'Carry things', ar:'حمل الأشياء' },
+  { id:'medicine', emoji:'💊', en:'Remember medicine', ar:'تذكير الدواء' },
+  { id:'clean', emoji:'🧹', en:'Clean up', ar:'التنظيف' },
+  { id:'cook', emoji:'🍳', en:'Help with cooking', ar:'المساعدة في الطهي' },
+  { id:'read', emoji:'📚', en:'Read & learn', ar:'القراءة والتعلم' },
+  { id:'guide', emoji:'🗺️', en:'Guide & navigate', ar:'التوجيه والإرشاد' },
+];
+
+function showArHint() {
+  const hint = document.getElementById('arHint');
+  if (hint) { hint.style.display = 'block'; setTimeout(() => hint.style.display='none', 4000); }
+}
+
+function selectMission(type, id, el) {
+  // Deselect all cards in same group
+  const group = type === 'who' ? 'whoCards' : 'howCards';
+  document.querySelectorAll(`#${group} .mission-card`).forEach(c => {
+    c.style.border = '2px solid #e2e8f0';
+    c.style.background = 'white';
+  });
+  // Select clicked
+  const color = type === 'who' ? 'var(--gold)' : '#3b82f6';
+  const bg = type === 'who' ? '#fffbeb' : '#eff6ff';
+  el.style.border = `2px solid ${color}`;
+  el.style.background = bg;
+  // Save
+  if (type === 'who') phaseData.p4_whoHelp = id;
+  else phaseData.p4_howHelp = id;
+  // Update summary
+  const whoId = phaseData.p4_whoHelp || '';
+  const howId = phaseData.p4_howHelp || '';
+  const whoData = _WHO_OPTIONS_DATA.find(w => w.id === whoId);
+  const howData = _HOW_OPTIONS_DATA.find(h => h.id === howId);
+  const summary = document.getElementById('missionSummary');
+  if (summary && whoData && howData) {
+    summary.style.display = 'block';
+    const wt = document.getElementById('missionWhoText');
+    const ht = document.getElementById('missionHowText');
+    const wta = document.getElementById('missionWhoTextAr');
+    const hta = document.getElementById('missionHowTextAr');
+    if(wt) wt.textContent = whoData.en;
+    if(ht) ht.textContent = howData.en;
+    if(wta) wta.textContent = whoData.ar;
+    if(hta) hta.textContent = howData.ar;
+  }
+  saveState();
+  playClick();
+}
+
 function finishPlan() {
-  const robotName = document.getElementById('robotNameInput')?.value || '';
+  const robotName = (document.getElementById('robotNameInput')?.value || '').trim();
+  if (!robotName) {
+    const input = document.getElementById('robotNameInput');
+    if (input) {
+      input.style.border = '2px solid #ef4444';
+      input.style.boxShadow = '0 0 0 3px rgba(239,68,68,0.2)';
+      input.placeholder = '⚠️ Please enter your robot\'s name! / أدخل اسم الروبوت!';
+      input.focus();
+      input.scrollIntoView({behavior: 'smooth', block: 'center'});
+      setTimeout(() => {
+        input.style.border = '';
+        input.style.boxShadow = '';
+      }, 3000);
+    }
+    return;
+  }
   phaseData.p4_robotName = robotName;
   const canvas = document.getElementById('drawCanvas');
   if (canvas) phaseData.p4_drawing = canvas.toDataURL();
@@ -4522,7 +4678,8 @@ function calculateTotalScore() {
 async function generatePosterDescription(studentData) {
   try {
     const apiKey = 'AIzaSyAShS1jFceLd0jr-fbfz2hEvTFLiwfWloE';
-    const prompt = `Write a short encouraging 2-sentence description for a Grade 3 student named ${studentData.name} who built a robot called "${studentData.robotName}" using materials and programmed it at ${studentData.level} level. Keep it celebratory and child-friendly.`;
+    const missionText = studentData.whoHelp && studentData.howHelp ? `whose robot helps ${studentData.whoHelp} by helping them ${studentData.howHelp}` : 'who built a helper robot';
+    const prompt = `Write a short encouraging 2-sentence description for a Grade 3 student named ${studentData.name} who built a robot called "${studentData.robotName}" ${missionText}, programmed it using micro:bit at ${studentData.level} level. Keep it celebratory and child-friendly.`;
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({contents:[{parts:[{text:prompt}]}]})
@@ -4537,6 +4694,8 @@ async function generateAndShowPoster() {
     name: studentName,
     section: studentSection,
     robotName: phaseData.p4_robotName || 'My Robot',
+    whoHelp: phaseData.p4_whoHelp || '',
+    howHelp: phaseData.p4_howHelp || '',
     level: programmingLevel,
     score: calculateTotalScore(),
     screenshot: window._robotPhotoData || phaseData.p6_screenshot || phaseData.p4_drawing || null,
@@ -4561,102 +4720,313 @@ async function generateAndShowPoster() {
 async function generatePoster(studentData) {
   const canvas = document.getElementById('posterCanvas');
   if (!canvas) return null;
-  canvas.width = 800; canvas.height = 600;
+  canvas.width = 800; canvas.height = 1050;
   const ctx = canvas.getContext('2d');
-  // Navy gradient background
-  const grad = ctx.createLinearGradient(0,0,800,600);
-  grad.addColorStop(0,'#1a2744'); grad.addColorStop(1,'#243461');
-  ctx.fillStyle = grad; ctx.fillRect(0,0,800,600);
-  // Gold border
-  ctx.strokeStyle='#c9a84c'; ctx.lineWidth=8;
-  ctx.strokeRect(20,20,760,560);
-  // Stars decoration
-  for(let i=0;i<30;i++){
-    ctx.fillStyle=`rgba(201,168,76,${0.1+Math.random()*0.3})`;
-    ctx.font=`${10+Math.random()*16}px Arial`;
-    ctx.fillText('★',Math.random()*800,Math.random()*600);
-  }
-  // Title
-  ctx.fillStyle='#c9a84c'; ctx.font='bold 34px Arial';
-  ctx.textAlign='center'; ctx.fillText('🤖 STREAM Day Achievement 🤖',400,75);
-  // Divider
-  ctx.strokeStyle='rgba(201,168,76,0.4)'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(40,95); ctx.lineTo(760,95); ctx.stroke();
-  // Student name
-  ctx.fillStyle='#ffffff'; ctx.font='bold 30px Arial';
-  ctx.fillText(studentData.name,400,135);
-  ctx.fillStyle='rgba(255,255,255,0.7)'; ctx.font='18px Arial';
-  ctx.fillText(`Grade 3 — Section ${studentData.section} | ${studentData.date}`,400,165);
-  // Robot name
-  ctx.fillStyle='#f0c96b'; ctx.font='italic 18px Arial';
-  ctx.fillText(`Robot: "${studentData.robotName}"`,400,195);
-  // Screenshot or drawing
+
+  // ── BACKGROUND ──────────────────────────────────────
+  ctx.fillStyle = '#f8faff';
+  ctx.fillRect(0, 0, 800, 1050);
+
+  // ── TOP HEADER BAND ─────────────────────────────────
+  const headerGrad = ctx.createLinearGradient(0, 0, 800, 0);
+  headerGrad.addColorStop(0, '#1a2744');
+  headerGrad.addColorStop(1, '#243461');
+  ctx.fillStyle = headerGrad;
+  ctx.fillRect(0, 0, 800, 130);
+
+  // Gold accent line
+  ctx.fillStyle = '#c9a84c';
+  ctx.fillRect(0, 130, 800, 5);
+
+  // School name
+  ctx.fillStyle = '#c9a84c';
+  ctx.font = 'bold 20px "Tajawal", Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('روضة ومدرسة الجود  |  Al Jood School', 400, 40);
+
+  // Subject line
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.font = '16px Arial';
+  ctx.fillText('CCDI & AI — Computing, Creative Design & Innovation', 400, 68);
+
+  // Event title
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 28px Arial';
+  ctx.fillText('🤖 STREAM Day Achievement', 400, 108);
+
+  // ── STUDENT INFO SECTION ─────────────────────────────
+  ctx.fillStyle = '#1a2744';
+  ctx.font = 'bold 32px "Tajawal", Arial';
+  ctx.fillText(studentData.name, 400, 175);
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = '16px Arial';
+  ctx.fillText(`Grade 3  ·  Section ${studentData.section}  ·  ${studentData.date}`, 400, 200);
+
+  // ── MISSION SECTION ──────────────────────────────────
+  const missionY = 220;
+  // Mission card background
+  const missionGrad = ctx.createLinearGradient(0, missionY, 0, missionY + 110);
+  missionGrad.addColorStop(0, '#fffbeb');
+  missionGrad.addColorStop(1, '#fef9e7');
+  ctx.fillStyle = missionGrad;
+  roundRectPath(ctx, 30, missionY, 740, 110, 14);
+  ctx.fill();
+  ctx.strokeStyle = '#c9a84c';
+  ctx.lineWidth = 2;
+  roundRectPath(ctx, 30, missionY, 740, 110, 14);
+  ctx.stroke();
+
+  ctx.fillStyle = '#1a2744';
+  ctx.font = 'bold 16px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText('🎯 MY ROBOT\'S MISSION', 50, missionY + 26);
+
+  // WHO
+  const whoId = studentData.whoHelp || '';
+  const howId = studentData.howHelp || '';
+  const WHO_LABELS = { elderly:'👴 Elderly', children:'👧 Children', sick:'🏥 Sick People', teacher:'👩‍🏫 Teachers', animals:'🐾 Animals', family:'👨‍👩‍👧 Family' };
+  const HOW_LABELS = { carry:'📦 Carry things', medicine:'💊 Medicine reminders', clean:'🧹 Clean up', cook:'🍳 Help cooking', read:'📚 Read & learn', guide:'🗺️ Guide & navigate' };
+  const WHO_AR = { elderly:'كبار السن', children:'الأطفال', sick:'المرضى', teacher:'المعلمين', animals:'الحيوانات', family:'العائلة' };
+  const HOW_AR = { carry:'حمل الأشياء', medicine:'تذكير الدواء', clean:'التنظيف', cook:'المساعدة في الطهي', read:'القراءة والتعلم', guide:'التوجيه والإرشاد' };
+
+  // Who box
+  ctx.fillStyle = '#eff6ff';
+  roundRectPath(ctx, 50, missionY + 38, 310, 58, 10);
+  ctx.fill();
+  ctx.strokeStyle = '#3b82f6';
+  ctx.lineWidth = 1.5;
+  roundRectPath(ctx, 50, missionY + 38, 310, 58, 10);
+  ctx.stroke();
+  ctx.fillStyle = '#1e40af';
+  ctx.font = 'bold 13px Arial';
+  ctx.fillText('Helps:', 65, missionY + 58);
+  ctx.fillStyle = '#1a2744';
+  ctx.font = 'bold 17px Arial';
+  ctx.fillText(WHO_LABELS[whoId] || '—', 110, missionY + 58);
+  ctx.fillStyle = '#64748b';
+  ctx.font = '13px "Tajawal", Arial';
+  ctx.fillText(WHO_AR[whoId] || '', 65, missionY + 82);
+
+  // How box
+  ctx.fillStyle = '#f0fdf4';
+  roundRectPath(ctx, 380, missionY + 38, 380, 58, 10);
+  ctx.fill();
+  ctx.strokeStyle = '#22c55e';
+  ctx.lineWidth = 1.5;
+  roundRectPath(ctx, 380, missionY + 38, 380, 58, 10);
+  ctx.stroke();
+  ctx.fillStyle = '#166534';
+  ctx.font = 'bold 13px Arial';
+  ctx.fillText('By:', 395, missionY + 58);
+  ctx.fillStyle = '#1a2744';
+  ctx.font = 'bold 17px Arial';
+  ctx.fillText(HOW_LABELS[howId] || '—', 420, missionY + 58);
+  ctx.fillStyle = '#64748b';
+  ctx.font = '13px "Tajawal", Arial';
+  ctx.fillText(HOW_AR[howId] || '', 395, missionY + 82);
+
+  ctx.textAlign = 'center';
+
+  // ── ROBOT IMAGE + NAME SECTION ───────────────────────
+  const imgY = 350;
+
+  // Left: image/drawing
+  ctx.fillStyle = '#f1f5f9';
+  roundRectPath(ctx, 30, imgY, 340, 240, 14);
+  ctx.fill();
+  ctx.strokeStyle = '#c9a84c';
+  ctx.lineWidth = 2.5;
+  roundRectPath(ctx, 30, imgY, 340, 240, 14);
+  ctx.stroke();
+
   if (studentData.screenshot) {
     try {
-      await new Promise((res,rej)=>{
-        const img = new Image(); img.crossOrigin='anonymous';
-        img.onload=()=>{ ctx.save(); ctx.beginPath();
-          roundRectPath(ctx,50,210,260,180,12); ctx.clip();
-          ctx.drawImage(img,50,210,260,180); ctx.restore(); res(); };
-        img.onerror=res;
-        img.src=studentData.screenshot;
+      await new Promise((res) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          ctx.save();
+          roundRectPath(ctx, 30, imgY, 340, 240, 14);
+          ctx.clip();
+          // Cover-fit
+          const scale = Math.max(340 / img.width, 240 / img.height);
+          const iw = img.width * scale, ih = img.height * scale;
+          ctx.drawImage(img, 30 + (340 - iw) / 2, imgY + (240 - ih) / 2, iw, ih);
+          ctx.restore();
+          res();
+        };
+        img.onerror = res;
+        img.src = studentData.screenshot;
       });
-    } catch(e) {}
+    } catch (e) {}
+  } else {
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '64px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('🤖', 200, imgY + 130);
   }
-  // CDT Stages
-  const stages=[['ASK ✅','IMAGINE ✅'],['PLAN ✅','CREATE ✅'],['TEST ✅','IMPROVE ✅']];
-  ctx.textAlign='left';
-  stages.forEach((row,ri)=>{
-    row.forEach((stage,ci)=>{
-      const x = 340+ci*200, y = 230+ri*45;
-      ctx.fillStyle='#22c55e'; ctx.font='bold 17px Arial';
-      ctx.fillText(stage,x,y);
-    });
+
+  // Right: robot name + description
+  const rightX = 390;
+  ctx.textAlign = 'left';
+
+  // Robot name label
+  ctx.fillStyle = '#64748b';
+  ctx.font = '13px Arial';
+  ctx.fillText('ROBOT NAME', rightX, imgY + 28);
+
+  // Robot name value
+  ctx.fillStyle = '#1a2744';
+  ctx.font = 'bold 28px "Tajawal", Arial';
+  const rName = studentData.robotName || 'My Robot';
+  // Wrap if too long
+  if (ctx.measureText(rName).width > 370) {
+    ctx.font = 'bold 20px "Tajawal", Arial';
+  }
+  ctx.fillText(rName, rightX, imgY + 60);
+
+  // Gold line under robot name
+  ctx.fillStyle = '#c9a84c';
+  ctx.fillRect(rightX, imgY + 70, 360, 3);
+
+  // STREAM phases on right side
+  ctx.fillStyle = '#1a2744';
+  ctx.font = 'bold 13px Arial';
+  ctx.fillText('STREAM JOURNEY', rightX, imgY + 100);
+
+  const stages = [
+    { label: 'ASK', desc: 'Identified the problem' },
+    { label: 'IMAGINE', desc: 'Brainstormed ideas' },
+    { label: 'PLAN', desc: 'Designed the robot' },
+    { label: 'CREATE', desc: 'Built with materials' },
+    { label: 'TEST', desc: 'Tested the prototype' },
+    { label: 'IMPROVE', desc: 'Reflected & improved' },
+  ];
+  const stageColors = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6'];
+  stages.forEach((s, i) => {
+    const sx = rightX + (i % 2) * 185;
+    const sy = imgY + 120 + Math.floor(i / 2) * 48;
+    ctx.fillStyle = stageColors[i];
+    ctx.beginPath(); roundRectPath(ctx, sx, sy, 170, 36, 8); ctx.fill();
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 13px Arial';
+    ctx.fillText(`✅ ${s.label}`, sx + 10, sy + 15);
+    ctx.font = '10px Arial';
+    ctx.fillText(s.desc, sx + 10, sy + 28);
   });
+
+  ctx.textAlign = 'center';
+
+  // ── SCORE & LEVEL BAR ────────────────────────────────
+  const scoreY = 610;
+  ctx.fillStyle = '#f1f5f9';
+  roundRectPath(ctx, 30, scoreY, 740, 70, 14);
+  ctx.fill();
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1.5;
+  roundRectPath(ctx, 30, scoreY, 740, 70, 14);
+  ctx.stroke();
+
   // Level badge
-  const levelColors={advanced:'#c9a84c',intermediate:'#3b82f6',basic:'#22c55e'};
-  ctx.fillStyle=levelColors[studentData.level]||'#c9a84c';
-  ctx.beginPath(); roundRectPath(ctx,290,390,220,44,22); ctx.fill();
-  ctx.fillStyle='#fff'; ctx.font='bold 19px Arial'; ctx.textAlign='center';
-  ctx.fillText(`💻 Level: ${studentData.level.toUpperCase()}`,400,418);
+  const levelColors = { advanced: '#c9a84c', intermediate: '#3b82f6', basic: '#22c55e' };
+  const levelBg = levelColors[studentData.level] || '#c9a84c';
+  ctx.fillStyle = levelBg;
+  roundRectPath(ctx, 50, scoreY + 12, 200, 44, 22);
+  ctx.fill();
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 17px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(`💻 ${studentData.level.toUpperCase()}`, 150, scoreY + 38);
+
   // Score
-  ctx.fillStyle='rgba(255,255,255,0.15)';
-  ctx.beginPath(); roundRectPath(ctx,290,445,220,40,20); ctx.fill();
-  ctx.fillStyle='white'; ctx.font='bold 19px Arial'; ctx.textAlign='center';
-  ctx.fillText(`⭐ Score: ${studentData.score}/10`,400,470);
+  ctx.fillStyle = '#1a2744';
+  ctx.font = 'bold 22px Arial';
+  ctx.fillText(`⭐ ${studentData.score}/10`, 400, scoreY + 38);
+
   // Special needs badge
   if (studentData.isSpecialNeeds) {
-    ctx.fillStyle='#8b5cf6';
-    ctx.beginPath(); roundRectPath(ctx,310,495,180,36,18); ctx.fill();
-    ctx.fillStyle='white'; ctx.font='bold 17px Arial';
-    ctx.fillText('بطل اليوم 🏆',400,518);
+    ctx.fillStyle = '#8b5cf6';
+    roundRectPath(ctx, 570, scoreY + 12, 180, 44, 22);
+    ctx.fill();
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 16px "Tajawal", Arial';
+    ctx.fillText('بطل اليوم 🏆', 660, scoreY + 38);
   }
-  // AI description
+
+  // ── MATERIALS USED ───────────────────────────────────
+  const matsY = 700;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#1a2744';
+  ctx.font = 'bold 14px Arial';
+  ctx.fillText('🧰 Materials Used:', 50, matsY);
+  const PLAN_MATS = ['Cardboard box','Plastic bottle','Paper cups','Aluminum foil','Rubber bands','Markers','Tape/Glue'];
+  const usedMats = (studentData.materials || []).map(i => PLAN_MATS[i]).filter(Boolean);
+  if (usedMats.length === 0) usedMats.push('Recycled materials');
+  ctx.fillStyle = '#475569';
+  ctx.font = '13px Arial';
+  ctx.fillText(usedMats.join('  ·  '), 50, matsY + 22);
+  ctx.textAlign = 'center';
+
+  // ── AI DESCRIPTION ───────────────────────────────────
+  const aiY = 750;
+  ctx.fillStyle = '#f8f9ff';
+  roundRectPath(ctx, 30, aiY, 740, 90, 12);
+  ctx.fill();
+  ctx.strokeStyle = '#c7d2fe';
+  ctx.lineWidth = 1.5;
+  roundRectPath(ctx, 30, aiY, 740, 90, 12);
+  ctx.stroke();
+
   try {
     const desc = await generatePosterDescription(studentData);
     if (desc) {
-      ctx.fillStyle='rgba(201,168,76,0.8)'; ctx.font='italic 14px Arial'; ctx.textAlign='center';
-      wrapText(ctx,desc,400,studentData.isSpecialNeeds?550:530,700,20);
+      ctx.fillStyle = '#3730a3';
+      ctx.font = 'italic 14px Arial';
+      wrapText(ctx, desc, 400, aiY + 28, 700, 22);
+    } else {
+      ctx.fillStyle = '#64748b';
+      ctx.font = 'italic 14px Arial';
+      ctx.fillText(`${studentData.name} designed an amazing helper robot using STREAM skills!`, 400, aiY + 45);
     }
-  } catch(e) {}
-  // Footer
-  ctx.fillStyle='rgba(255,255,255,0.4)'; ctx.font='12px Arial'; ctx.textAlign='center';
-  ctx.fillText('©️ منيرة علي محمد المري · munira.almarri@moe.sch.ae · © 2026',400,588);
+  } catch (e) {
+    ctx.fillStyle = '#64748b';
+    ctx.font = 'italic 14px Arial';
+    ctx.fillText(`${studentData.name} showed creativity and innovation in building a helper robot!`, 400, aiY + 45);
+  }
+
+  // ── GOLD BORDER ──────────────────────────────────────
+  ctx.strokeStyle = '#c9a84c';
+  ctx.lineWidth = 6;
+  roundRectPath(ctx, 8, 8, 784, 1034, 18);
+  ctx.stroke();
+
+  // Inner thin border
+  ctx.strokeStyle = 'rgba(201,168,76,0.3)';
+  ctx.lineWidth = 1.5;
+  roundRectPath(ctx, 16, 16, 768, 1018, 14);
+  ctx.stroke();
+
+  // ── FOOTER ───────────────────────────────────────────
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '11px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('© منيرة علي محمد المري  ·  munira.almarri@moe.sch.ae  ·  © 2026', 400, 1035);
 
   const pngData = canvas.toDataURL('image/png');
   // Show poster in modal canvas
   const modalCanvas = document.querySelector('#posterModal canvas');
   if (modalCanvas && modalCanvas !== canvas) {
-    modalCanvas.width=800; modalCanvas.height=600;
-    const mCtx=modalCanvas.getContext('2d');
-    const img=new Image(); img.onload=()=>mCtx.drawImage(img,0,0); img.src=pngData;
+    modalCanvas.width = 800; modalCanvas.height = 1050;
+    const mCtx = modalCanvas.getContext('2d');
+    const img = new Image(); img.onload = () => mCtx.drawImage(img, 0, 0); img.src = pngData;
   }
   // Save to Firestore
   try { await db.collection(COLLECTION).doc(sessionId).update({ posterPng: pngData }); } catch(e) {}
   window._posterData = pngData;
   // Show in the modal poster canvas
   const posterModalCanvas = document.getElementById('posterCanvas');
-  if (posterModalCanvas) { posterModalCanvas.style.display='block'; }
+  if (posterModalCanvas) { posterModalCanvas.style.display = 'block'; }
   return pngData;
 }
 
