@@ -377,28 +377,30 @@ footer{text-align:center;padding:20px;color:#64748b;font-size:.85rem;border-top:
     <div class="special-corner" id="specialCorner0">
       <p>🌈 Special mode active! +50% time, larger text, fewer questions</p>
     </div>
-    <div class="questions-grid">
-      <div>
-        <label class="input-label" id="lbl_section">📚 Select Your Section / اختر فصلك</label>
-        <select class="form-select" id="sectionSelect" onchange="loadStudents()">
-          <option value="">-- Choose / اختر --</option>
-          <option value="4A">4A</option>
-          <option value="4B">4B</option>
-          <option value="4C">4C</option>
-          <option value="4D">4D</option>
-          <option value="4E">4E</option>
-        </select>
-      </div>
-      <div>
-        <label class="input-label" id="lbl_name">👤 Select Your Name / اختر اسمك</label>
-        <select class="form-select" id="nameSelect">
-          <option value="">-- Choose section first --</option>
-        </select>
-      </div>
-    </div>
-    <div style="margin:20px 0;padding:16px;background:#eff6ff;border-radius:12px;display:flex;align-items:center;gap:12px;">
-      <input type="checkbox" id="specialNeeds" style="width:24px;height:24px;cursor:pointer" onchange="toggleSpecialMode()">
-      <label for="specialNeeds" style="font-size:1rem;cursor:pointer;color:var(--special-needs);font-weight:700">🌈 أصحاب الهمم / I need extra support 🌈</label>
+     <div class="questions-grid">
+       <div>
+         <label class="input-label" id="lbl_code">🔑 Class Code / كود الفصل</label>
+         <input type="text" class="form-select" id="classCodeInput"
+           placeholder="e.g. ROBOT4A"
+           oninput="this.value=this.value.toUpperCase()"
+           onkeydown="if(event.key==='Enter') loadStudentsByCode()"
+           style="text-align:center;font-size:1.3rem;font-weight:700;letter-spacing:3px;text-transform:uppercase"/>
+         <button onclick="loadStudentsByCode()"
+           style="margin-top:10px;width:100%;padding:12px;background:linear-gradient(135deg,#1e40af,#3b82f6);color:white;border:none;border-radius:12px;font-size:1.1rem;font-family:'Fredoka One',cursive;cursor:pointer;">
+           🔍 Find My Class / ابحث عن فصلي
+         </button>
+         <div id="codeError" style="color:#ef4444;margin-top:8px;font-size:0.9rem;display:none"></div>
+       </div>
+       <div id="nameDiv" style="display:none">
+         <label class="input-label" id="lbl_name">👤 Select Your Name / اختر اسمك</label>
+         <select class="form-select" id="nameSelect">
+           <option value="">-- Choose / اختر --</option>
+         </select>
+       </div>
+     </div>
+     <input type="hidden" id="sectionSelect" value="">
+    <div id="specialNeedsInfo" style="display:none;margin:20px 0;padding:16px;background:#fef9c3;border-radius:12px;border:2px solid #fbbf24;">
+      <span style="font-size:1.1rem;font-weight:700;color:#92400e">🌈 Special Support Mode will activate automatically / سيُفعَّل وضع الدعم تلقائياً</span>
     </div>
     <div style="text-align:center;margin-top:20px">
       <button id="startBtn"
@@ -1261,17 +1263,73 @@ footer{text-align:center;padding:20px;color:#64748b;font-size:.85rem;border-top:
 
 <!-- Teacher Panel -->
 <div class="teacher-panel" id="teacherPanel">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-    <h3 style="font-family:'Fredoka One';font-size:1.4rem;color:var(--gold-light)">👩‍🏫 Teacher Mode</h3>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <h3 style="font-family:'Fredoka One';font-size:1.3rem;color:var(--gold-light)">👩‍🏫 Teacher Mode — Grade 4</h3>
     <button onclick="closeTeacher()" style="background:none;border:none;color:white;font-size:1.4rem;cursor:pointer">✕</button>
   </div>
-  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-    <button class="btn btn-gold" onclick="pauseAllTimers()" style="font-size:.85rem;padding:8px 12px">⏸ Pause All</button>
-    <button class="btn btn-success" onclick="resumeAllTimers()" style="font-size:.85rem;padding:8px 12px">▶️ Resume All</button>
-    <button class="btn btn-orange" onclick="exportCSV()" style="font-size:.85rem;padding:8px 12px">📥 Export CSV</button>
+  <!-- Quick Actions -->
+  <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+    <button class="btn btn-gold" onclick="pauseAllTimers()" style="font-size:.8rem;padding:7px 10px">⏸ Pause</button>
+    <button class="btn btn-success" onclick="resumeAllTimers()" style="font-size:.8rem;padding:7px 10px">▶️ Resume</button>
+    <button class="btn btn-orange" onclick="exportCSV()" style="font-size:.8rem;padding:7px 10px">📥 CSV</button>
   </div>
-  <div id="teacherStudentList"></div>
-  <div id="helpRequestsList" style="margin-top:16px"></div>
+  <!-- Tabs -->
+  <div style="display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap">
+    <button id="tpTabStudents" onclick="switchTpTab('students')"
+      style="flex:1;padding:7px 4px;border:none;border-radius:8px;background:#1e40af;color:white;font-size:.75rem;cursor:pointer;font-weight:700">👥 Students</button>
+    <button id="tpTabHelp" onclick="switchTpTab('help')"
+      style="flex:1;padding:7px 4px;border:none;border-radius:8px;background:rgba(255,255,255,.15);color:white;font-size:.75rem;cursor:pointer">🆘 Help</button>
+    <button id="tpTabCodes" onclick="switchTpTab('codes')"
+      style="flex:1;padding:7px 4px;border:none;border-radius:8px;background:rgba(255,255,255,.15);color:white;font-size:.75rem;cursor:pointer">🔑 Codes</button>
+    <button id="tpTabPlan" onclick="switchTpTab('plan')"
+      style="flex:1;padding:7px 4px;border:none;border-radius:8px;background:rgba(255,255,255,.15);color:white;font-size:.75rem;cursor:pointer">📋 Plan</button>
+  </div>
+  <!-- Tab: Students -->
+  <div id="tpContentStudents">
+    <div id="teacherStudentList"></div>
+  </div>
+  <!-- Tab: Help -->
+  <div id="tpContentHelp" style="display:none">
+    <div id="helpRequestsList"></div>
+  </div>
+  <!-- Tab: Codes -->
+  <div id="tpContentCodes" style="display:none">
+    <p style="color:rgba(255,255,255,.7);font-size:.85rem;margin-bottom:12px">Share the code with your class 📢</p>
+    <div id="codesGrid4"></div>
+    <button onclick="loadG4Codes()" style="margin-top:10px;width:100%;padding:8px;background:rgba(255,255,255,.1);color:white;border:1px solid rgba(255,255,255,.2);border-radius:8px;cursor:pointer;font-size:.85rem">🔄 Refresh</button>
+  </div>
+  <!-- Tab: Plan -->
+  <div id="tpContentPlan" style="display:none">
+    <div style="color:rgba(255,255,255,.9);font-size:.85rem;line-height:1.6">
+      <div style="background:rgba(255,255,255,.08);border-radius:10px;padding:12px;margin-bottom:8px">
+        <strong style="color:var(--gold-light)">📚 Subject:</strong> CCDI & AI — Grade 4<br>
+        <strong style="color:var(--gold-light)">🎯 Topic:</strong> Line-Following Train / القطار ذاتي القيادة<br>
+        <strong style="color:var(--gold-light)">⏱️ Duration:</strong> 45 minutes
+      </div>
+      <div style="background:rgba(255,255,255,.08);border-radius:10px;padding:12px;margin-bottom:8px">
+        <strong style="color:#86efac">Learning Outcomes:</strong><br>
+        • Understand embedded systems & sensors<br>
+        • Program a line-following logic in Keiro<br>
+        • Apply while loops and conditionals<br>
+        • Build & test a physical robot train
+      </div>
+      <div style="background:rgba(255,255,255,.08);border-radius:10px;padding:12px">
+        <strong style="color:#fbbf24">Phases:</strong><br>
+        0. Attendance (5 min)<br>
+        1. Goal (2 min)<br>
+        2. Warm-up Q&A (4 min)<br>
+        3. T/F Quiz (3 min)<br>
+        4. Imagine (4 min)<br>
+        5. Plan (5 min)<br>
+        6. Build (5 min)<br>
+        7. Keiro Coding (7 min)<br>
+        8. Test (3 min)<br>
+        9. Improve (3 min)<br>
+        10. Self-Assessment (2 min)<br>
+        11. Exit Ticket (2 min)
+      </div>
+    </div>
+  </div>
 </div>
 
 <footer>©️ منيرة علي محمد المري · munira.almarri@moe.sch.ae · © 2026</footer>
@@ -1305,6 +1363,44 @@ let lessonTimerInterval = null;
 let allTimers = {};
 let phaseData = {};
 let teacherMode = false;
+
+// ===== TEACHER PANEL TABS =====
+function switchTpTab(tab){
+  ['students','help','codes','plan'].forEach(t=>{
+    document.getElementById('tpContent'+t.charAt(0).toUpperCase()+t.slice(1)).style.display = t===tab?'block':'none';
+    const btn = document.getElementById('tpTab'+t.charAt(0).toUpperCase()+t.slice(1));
+    if(btn) btn.style.background = t===tab ? '#1e40af' : 'rgba(255,255,255,.15)';
+  });
+  if(tab==='codes') loadG4Codes();
+}
+
+async function loadG4Codes(){
+  const grid = document.getElementById('codesGrid4');
+  if(!grid) return;
+  grid.innerHTML='<p style="color:rgba(255,255,255,.5);text-align:center">⏳ Loading...</p>';
+  const sections = ['4A','4B','4C','4D','4E','4F'];
+  const codeMap = {
+    '4A':'ROBOT4A','4B':'ROBOT4B','4C':'ROBOT4C',
+    '4D':'ROBOT4D','4E':'ROBOT4E','4F':'ROBOT4F'
+  };
+  let html2='';
+  for(const sec of sections){
+    const code = codeMap[sec]||('ROBOT'+sec);
+    html2+=`<div style="background:rgba(255,255,255,.1);border-radius:10px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:.8rem;color:rgba(255,255,255,.6)">${sec}</div>
+        <div style="font-family:'Fredoka One';font-size:1.3rem;color:#fbbf24;letter-spacing:2px">${code}</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span style="font-size:.7rem;color:#86efac">✅ Active</span>
+        <button onclick="navigator.clipboard.writeText('${code}').then(()=>{this.textContent='✅';setTimeout(()=>this.textContent='📋',1500)})"
+          style="background:rgba(255,255,255,.15);border:none;color:white;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:.75rem">📋</button>
+      </div>
+    </div>`;
+  }
+  grid.innerHTML=html2;
+}
+
 let teacherUnsubscribe = null;
 let helpUnsubscribe = null;
 let keiroScreenshotBase64 = '';
@@ -1330,14 +1426,9 @@ let _keiroIntroSeen = false;
 let _bonusActive = false;
 
 
-// Fallback students
-const fallbackStudents = {
-  '4A': ['Ahmed Al-Mansoori','Fatima Al-Ali','Mohammed Al-Zaabi','Mariam Al-Ketbi','Omar Al-Mazrouei','Shaikha Al-Nuaimi','Khalid Al-Rashdi','Hessa Al-Muhairi','Saeed Al-Shamsi','Noura Al-Falasi','Hamad Al-Dhaheri','Moza Al-Qubaisi','Rashid Al-Romaithi','Latifa Al-Hammadi','Zayed Al-Kindi','Aisha Al-Hameli','Sultan Al-Ketbi','Reem Al-Naqbi','Jaber Al-Yarmouk','Dana Al-Ameri','Majid Al-Blooshi','Sara Al-Mansouri','Faisal Al-Memari','Hind Al-Muhairi','Nasser Al-Zaabi'],
-  '4B': ['Ahmed Al-Shamsi','Fatima Al-Ketbi','Mohammed Al-Nuaimi','Mariam Al-Ali','Omar Al-Mansoori','Shaikha Al-Mazrouei','Khalid Al-Falasi','Hessa Al-Rashdi','Saeed Al-Muhairi','Noura Al-Zaabi','Hamad Al-Qubaisi','Moza Al-Dhaheri','Rashid Al-Hammadi','Latifa Al-Romaithi','Zayed Al-Ameri','Aisha Al-Kindi','Sultan Al-Naqbi','Reem Al-Hameli','Jaber Al-Blooshi','Dana Al-Mansouri','Majid Al-Memari','Sara Al-Muhairi','Faisal Al-Yarmouk','Hind Al-Ketbi','Nasser Al-Ali'],
-  '4C': ['Ahmed Al-Ali','Fatima Al-Zaabi','Mohammed Al-Mansoori','Mariam Al-Nuaimi','Omar Al-Ketbi','Shaikha Al-Shamsi','Khalid Al-Mazrouei','Hessa Al-Falasi','Saeed Al-Rashdi','Noura Al-Muhairi','Hamad Al-Hammadi','Moza Al-Romaithi','Rashid Al-Kindi','Latifa Al-Ameri','Zayed Al-Naqbi','Aisha Al-Hameli','Sultan Al-Blooshi','Reem Al-Mansouri','Jaber Al-Memari','Dana Al-Dhaheri','Majid Al-Qubaisi','Sara Al-Kaabi','Faisal Al-Zaabi','Hind Al-Nuaimi','Nasser Al-Mansoori'],
-  '4D': ['Ahmed Al-Falasi','Fatima Al-Rashdi','Mohammed Al-Muhairi','Mariam Al-Mazrouei','Omar Al-Nuaimi','Shaikha Al-Mansoori','Khalid Al-Ali','Hessa Al-Zaabi','Saeed Al-Ketbi','Noura Al-Shamsi','Hamad Al-Romaithi','Moza Al-Kindi','Rashid Al-Ameri','Latifa Al-Naqbi','Zayed Al-Muhairi','Aisha Al-Blooshi','Sultan Al-Mansouri','Reem Al-Memari','Jaber Al-Dhaheri','Dana Al-Qubaisi','Majid Al-Hammadi','Sara Al-Kaabi','Faisal Al-Nuaimi','Hind Al-Mansoori','Nasser Al-Shamsi'],
-  '4E': ['Ahmed Al-Hameli','Fatima Al-Blooshi','Mohammed Al-Mansouri','Mariam Al-Memari','Omar Al-Dhaheri','Shaikha Al-Qubaisi','Khalid Al-Hammadi','Hessa Al-Romaithi','Saeed Al-Kindi','Noura Al-Ameri','Hamad Al-Naqbi','Moza Al-Hameli','Rashid Al-Blooshi','Latifa Al-Mansouri','Zayed Al-Shamsi','Aisha Al-Ali','Sultan Al-Zaabi','Reem Al-Nuaimi','Jaber Al-Mansoori','Dana Al-Ketbi','Majid Al-Mazrouei','Sara Al-Falasi','Faisal Al-Rashdi','Hind Al-Muhairi']
-};
+// No fake fallback — names come from Firebase only
+const fallbackStudents = {};
+
 
 const phaseDefs = [
   {id:0,label:'👤 Attend',icon:'👤',time:300},
@@ -1664,17 +1755,50 @@ function buildProgressBar(){
 }
 
 // ===== STUDENT LOADING =====
-async function loadStudents(){
-  const section=document.getElementById('sectionSelect').value;
+async function loadStudentsByCode(){
+  const code = (document.getElementById('classCodeInput').value||'').trim().toUpperCase();
+  const errEl = document.getElementById('codeError');
+  errEl.style.display='none';
+  if(!code){ errEl.textContent='⚠️ Please enter the class code / أدخل كود الفصل'; errEl.style.display='block'; return; }
+
+  // Check Firebase class_codes
+  try{
+    const codeDoc = await db.collection('class_codes').doc(code).get();
+    if(!codeDoc.exists){
+      errEl.textContent='❌ Invalid code. Ask your teacher / كود غير صحيح. اسألي معلمتك'; errEl.style.display='block'; return;
+    }
+    const codeData = codeDoc.data();
+    const section = codeData.section || code.replace('ROBOT','');
+    document.getElementById('sectionSelect').value = section;
+    await loadStudents(section);
+    document.getElementById('nameDiv').style.display='block';
+  } catch(e){
+    errEl.textContent='⚠️ Connection error. Try again / خطأ في الاتصال'; errEl.style.display='block';
+    console.error(e);
+  }
+}
+
+async function loadStudents(section){
+  if(!section) section = document.getElementById('sectionSelect').value;
   const nameSelect=document.getElementById('nameSelect');
-  nameSelect.innerHTML='<option value="">Loading...</option>';
+  nameSelect.innerHTML='<option value="">⏳ Loading...</option>';
   if(!section){ nameSelect.innerHTML='<option value="">-- Choose section first --</option>'; return; }
   let names=[];
+  window._g4SpecialNeeds = {};
   try{
-    const doc=await db.collection('students').doc('grade4_sections').get();
-    if(doc.exists&&doc.data()[section]) names=doc.data()[section];
-    else names=fallbackStudents[section]||[];
-  }catch(e){ names=fallbackStudents[section]||[]; }
+    const doc=await db.collection('grade4_sections').doc(section).get();
+    if(doc.exists){
+      const arr = doc.data().students || [];
+      names = arr.map(n => typeof n==='object' ? (n.name||n.nameEn||'') : n).filter(Boolean);
+      arr.forEach(n => {
+        if(typeof n==='object' && n.special_needs){
+          window._g4SpecialNeeds[n.name||n.nameEn] = {badge: n.badge||'🌈', disability: n.disability||''};
+        }
+      });
+    } else {
+      console.warn('No data for section:', section);
+    }
+  }catch(e){ console.error('loadStudents error:', e); }
   nameSelect.innerHTML='<option value="">-- Select name --</option>';
   names.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; nameSelect.appendChild(o); });
 }
@@ -1696,7 +1820,7 @@ function toggleSpecialMode(){
 async function markPresent() {
   const sec = document.getElementById('sectionSelect').value;
   const name = document.getElementById('nameSelect').value;
-  if (!sec || !name) return;
+  if (!sec || !name){ showNotif('⚠️ Please select your name first! / اختر اسمك أولاً'); return; }
   const btn = document.getElementById('startBtn');
   if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Saving...'; }
 
@@ -1746,6 +1870,12 @@ function playJoinChime() {
 function startLesson(){
   sectionName=document.getElementById('sectionSelect').value;
   studentName=document.getElementById('nameSelect').value;
+  // Auto-detect special needs from Firebase data
+  if(window._g4SpecialNeeds && window._g4SpecialNeeds[studentName]){
+    isSpecialNeeds=true;
+    document.body.classList.add('special-mode');
+    document.querySelectorAll('.special-corner').forEach(e=>e.style.display='block');
+  }
   if(!sectionName||!studentName){ showNotif('⚠️ Please select section and name!'); return; }
   sessionId=sectionName+'_'+studentName.replace(/\s+/g,'_')+'_'+Date.now();
   document.getElementById('headerStudent').textContent=studentName+' | '+sectionName;
