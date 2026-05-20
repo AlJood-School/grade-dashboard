@@ -11,7 +11,10 @@
 :root{--navy:#1a2744;--navy-light:#243461;--gold:#c9a84c;--gold-light:#f0c96b;--orange:#f97316;--orange-light:#fed7aa;--white:#ffffff;--bg:#eef2ff;--success:#22c55e;--warning:#f59e0b;--danger:#ef4444;--special-needs:#8b5cf6;}
 *{box-sizing:border-box;margin:0;padding:0;}
 html{overflow-x:hidden;max-width:100vw;}
-body{font-family:'Tajawal', sans-serif;font-size:18px;background:var(--bg);min-height:100vh;color:var(--navy);overflow-x:hidden;max-width:100vw;width:100%;}
+body{font-family:'Tajawal', sans-serif;font-size:18px;background:var(--bg);height:100vh;overflow:hidden;display:flex;flex-direction:column;color:var(--navy);overflow-x:hidden;max-width:100vw;width:100%;}
+#mainWrapper{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+#tfContainer{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+@media(max-width:700px){#tfContainer{grid-template-columns:1fr;}}
 body.rtl{direction:rtl;}
 body.special-mode{font-size:25px;}
 .app-header{background:linear-gradient(135deg,var(--navy),var(--navy-light));color:white;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 4px 20px rgba(0,0,0,.3);}
@@ -385,6 +388,7 @@ footer{text-align:center;padding:20px;color:#64748b;font-size:.85rem;border-top:
 <!-- Time up banner -->
 <div class="time-up-banner" id="timeUpBanner">⏰ Time's up! You can still continue...</div>
 
+<div id="mainWrapper">
 <div class="main-content" id="mainContent">
   <!-- Phase 0: Attendance -->
   <div id="phase0" class="phase-container" style="display:none">
@@ -575,7 +579,7 @@ footer{text-align:center;padding:20px;color:#64748b;font-size:.85rem;border-top:
     <div id="imagineContainer"></div>
     <div class="nav-buttons">
       <button class="back-btn" onclick="goBack()">← Back</button>
-      <button class="btn btn-gold" id="nextImagine" onclick="nextPhase()">Next → المرحلة التالية</button>
+      <button class="btn btn-gold" id="nextImagine" onclick="nextPhase()" style="display:none">Next → المرحلة التالية</button>
     </div>
   </div>
 
@@ -2037,7 +2041,6 @@ function showPhase(idx){
     document.getElementById('keiroIntroCard').style.display = 'block';
     currentPhase = 3;
     buildProgressBar();
-    window.scrollTo({top:0,behavior:'smooth'});
     saveState();
     return; // Don't start timer until "Got it!" pressed
   } else if (idx === 3) {
@@ -2051,7 +2054,6 @@ function showPhase(idx){
   updatePhaseBadge();
   startPhaseTimer(idx);
   saveState();
-  window.scrollTo({top:0,behavior:'smooth'});
 }
 
 function nextPhase(){ if(currentPhase<12){ saveCurrentPhase(); showPhase(currentPhase+1); } }
@@ -2218,9 +2220,143 @@ function checkTF(qi,answer){
 // ===== PHASE 4: IMAGINE =====
 function renderImagine(){
   const container=document.getElementById('imagineContainer');
-  const qs=isSpecialNeeds?imagineQuestions.slice(0,2):imagineQuestions;
   container.innerHTML='';
-  phaseData.imagine={};
+  phaseData.imagine = phaseData.imagine || {};
+
+  // ── ROBOT MISSION SECTION ──
+  const ENV_PROBLEMS = [
+    { id:'water',  emoji:'🌊', en:'Water Pollution',    ar:'تلوث الماء' },
+    { id:'air',    emoji:'🌫️', en:'Air Pollution',      ar:'تلوث الهواء' },
+    { id:'waste',  emoji:'🗑️', en:'Waste Management',   ar:'إدارة النفايات' },
+    { id:'trees',  emoji:'🌳', en:'Deforestation',       ar:'قطع الأشجار' },
+    { id:'energy', emoji:'☀️', en:'Renewable Energy',   ar:'الطاقة المتجددة' },
+    { id:'factory',emoji:'🏭', en:'Factory Pollution',  ar:'تلوث المصانع' },
+  ];
+  const ENV_LOCATIONS = [
+    { id:'ocean',  emoji:'🌊', en:'Ocean',        ar:'المحيط' },
+    { id:'city',   emoji:'🏙️', en:'City',          ar:'المدينة' },
+    { id:'forest', emoji:'🌳', en:'Forest',        ar:'الغابة' },
+    { id:'factory',emoji:'🏭', en:'Factory',       ar:'المصنع' },
+    { id:'neighborhood',emoji:'🏡', en:'Neighborhood', ar:'الحي' },
+    { id:'school', emoji:'🏫', en:'School',        ar:'المدرسة' },
+  ];
+
+  const missionDiv = document.createElement('div');
+  missionDiv.id = 'missionSection';
+  missionDiv.innerHTML = `
+    <div style="background:linear-gradient(135deg,#e0f2fe,#f0fdf4);border-radius:18px;padding:24px;margin-bottom:24px;border:2px solid #22c55e;">
+      <h3 style="font-family:'Tajawal',sans-serif;color:#1a2744;text-align:center;margin-bottom:6px;font-size:1.4rem;">🌍 Robot Mission / مهمة روبوتك</h3>
+      <p style="text-align:center;color:#64748b;font-size:0.9rem;margin-bottom:20px;">Your robot will solve an environmental problem! اختر مشكلة بيئية يحلها روبوتك!</p>
+
+      <div style="margin-bottom:20px;">
+        <div style="font-weight:700;color:#1a2744;margin-bottom:10px;font-family:'Tajawal',sans-serif;">🔴 Environmental Problem / المشكلة البيئية</div>
+        <div id="envProblemGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+          ${ENV_PROBLEMS.map(p=>`
+            <div class="env-card" data-id="${p.id}" data-type="problem"
+              onclick="selectEnvCard(this,'problem')"
+              style="background:white;border:2px solid #e2e8f0;border-radius:14px;padding:14px 10px;text-align:center;cursor:pointer;transition:all .2s;user-select:none;">
+              <div style="font-size:1.8rem;">${p.emoji}</div>
+              <div style="font-size:0.8rem;font-weight:700;color:#1a2744;margin-top:4px;">${p.en}</div>
+              <div style="font-size:0.75rem;color:#64748b;font-family:'Tajawal',sans-serif;">${p.ar}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <div style="font-weight:700;color:#1a2744;margin-bottom:10px;font-family:'Tajawal',sans-serif;">📍 Location / المكان</div>
+        <div id="envLocationGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+          ${ENV_LOCATIONS.map(l=>`
+            <div class="env-card" data-id="${l.id}" data-type="location"
+              onclick="selectEnvCard(this,'location')"
+              style="background:white;border:2px solid #e2e8f0;border-radius:14px;padding:14px 10px;text-align:center;cursor:pointer;transition:all .2s;user-select:none;">
+              <div style="font-size:1.8rem;">${l.emoji}</div>
+              <div style="font-size:0.8rem;font-weight:700;color:#1a2744;margin-top:4px;">${l.en}</div>
+              <div style="font-size:0.75rem;color:#64748b;font-family:'Tajawal',sans-serif;">${l.ar}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <div style="font-weight:700;color:#1a2744;margin-bottom:8px;font-family:'Tajawal',sans-serif;">🤖 Robot Name / اسم روبوتك <span style="color:#ef4444;">*</span></div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="g4RobotName"
+            placeholder="e.g. EcoBot, روبو أخضر..."
+            value="${phaseData.p4_robotName||''}"
+            oninput="phaseData.p4_robotName=this.value.trim()"
+            style="flex:1;padding:12px;border:2px solid #e2e8f0;border-radius:12px;font-size:1rem;font-family:'Tajawal',sans-serif;"/>
+          <button onclick="toggleG4NameLang()" style="background:var(--navy);color:var(--gold);border:none;border-radius:10px;padding:10px 14px;cursor:pointer;font-size:0.85rem;font-family:'Tajawal',sans-serif;white-space:nowrap;">⌨️ AR/EN</button>
+        </div>
+        <div id="g4MissionError" style="color:#ef4444;font-size:0.85rem;margin-top:6px;display:none;">⚠️ Please complete all selections / أكمل جميع الاختيارات</div>
+      </div>
+
+      <button onclick="confirmMission()" id="missionConfirmBtn"
+        style="width:100%;padding:14px;background:linear-gradient(135deg,#22c55e,#16a34a);color:white;border:none;border-radius:14px;font-size:1.1rem;font-family:'Tajawal',sans-serif;cursor:pointer;font-weight:700;">
+        ✅ Confirm Mission / تأكيد المهمة
+      </button>
+    </div>
+  `;
+  container.appendChild(missionDiv);
+
+  // Restore previous selections if any
+  if(phaseData.p4_envProblem){
+    const prevP=missionDiv.querySelector(`.env-card[data-id="${phaseData.p4_envProblem}"][data-type="problem"]`);
+    if(prevP){prevP.style.background='#dcfce7';prevP.style.borderColor='#22c55e';}
+  }
+  if(phaseData.p4_envLocation){
+    const prevL=missionDiv.querySelector(`.env-card[data-id="${phaseData.p4_envLocation}"][data-type="location"]`);
+    if(prevL){prevL.style.background='#dbeafe';prevL.style.borderColor='#3b82f6';}
+  }
+
+  // If mission already confirmed, show MCQ immediately
+  if(phaseData.p4_missionConfirmed){
+    missionDiv.style.opacity='0.6';
+    document.getElementById('missionConfirmBtn').textContent='✅ Mission Set!';
+    document.getElementById('missionConfirmBtn').disabled=true;
+    renderImagineQuestions(container);
+  }
+}
+
+function selectEnvCard(el, type){
+  const grid = el.closest(`#envProblemGrid,#envLocationGrid`);
+  grid.querySelectorAll('.env-card').forEach(c=>{
+    c.style.background='white';
+    c.style.borderColor='#e2e8f0';
+    c.style.transform='';
+  });
+  el.style.background = type==='problem'?'#dcfce7':'#dbeafe';
+  el.style.borderColor = type==='problem'?'#22c55e':'#3b82f6';
+  el.style.transform = 'scale(1.05)';
+  if(type==='problem') phaseData.p4_envProblem = el.dataset.id;
+  else phaseData.p4_envLocation = el.dataset.id;
+}
+
+function toggleG4NameLang(){
+  const inp = document.getElementById('g4RobotName');
+  if(!inp) return;
+  if(inp.lang==='ar'){ inp.lang=''; inp.setAttribute('dir','ltr'); inp.focus(); }
+  else { inp.lang='ar'; inp.setAttribute('dir','rtl'); inp.focus(); }
+}
+
+function confirmMission(){
+  const name = (document.getElementById('g4RobotName')?.value||'').trim();
+  const errEl = document.getElementById('g4MissionError');
+  if(!phaseData.p4_envProblem || !phaseData.p4_envLocation || !name){
+    if(errEl){errEl.style.display='block';}
+    return;
+  }
+  if(errEl) errEl.style.display='none';
+  phaseData.p4_robotName = name;
+  phaseData.p4_missionConfirmed = true;
+  const btn = document.getElementById('missionConfirmBtn');
+  if(btn){btn.textContent='✅ Mission Set!';btn.disabled=true;}
+  const ms = document.getElementById('missionSection');
+  if(ms) ms.style.opacity='0.6';
+  // Show MCQ questions below
+  renderImagineQuestions(document.getElementById('imagineContainer'));
+}
+
+function renderImagineQuestions(container){
+  const qs=isSpecialNeeds?imagineQuestions.slice(0,2):imagineQuestions;
   qs.forEach((q,qi)=>{
     const div=document.createElement('div');
     div.className='question-card';
@@ -2243,6 +2379,11 @@ function renderImagine(){
     container.appendChild(div);
     if(isSpecialNeeds){const ab=document.createElement('button');ab.className='audio-btn';ab.textContent='🔊 Listen';ab.onclick=()=>speak(q.q);div.querySelector('.question-text').appendChild(ab);}
   });
+  // Show Next button after all questions appear
+  setTimeout(()=>{
+    const nxt=document.getElementById('nextImagine');
+    if(nxt) nxt.style.display='inline-block';
+  },500);
 }
 
 // ===== PHASE 5: PLAN =====
@@ -3938,5 +4079,6 @@ async function acknowledgeRecallG4() {
 }
 
 </script>
+</div>
 </body>
 </html>
