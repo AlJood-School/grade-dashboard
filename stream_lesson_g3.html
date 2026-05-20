@@ -1341,6 +1341,30 @@ footer {
     <button class="tp-btn tp-btn-print" onclick="window.print()">🖨️ Print Attendance</button>
   </div>
 
+
+  <!-- ── TAB BAR ── -->
+  <div class="tp-tab-bar">
+    <button class="tp-tab active" id="tabStudents" onclick="switchTPTab('students')">👥 الطلاب / Students</button>
+    <button class="tp-tab" id="tabCodes" onclick="switchTPTab('codes')">🔑 أكواد الشعب / Class Codes</button>
+  </div>
+
+  <!-- ── CODES PANEL ── -->
+  <div id="codesPanel">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+      <div style="font-size:1.1rem; font-weight:700; color:var(--gold);">🔑 أكواد دخول الطلاب — Student Entry Codes</div>
+      <button class="codes-refresh-btn" onclick="loadClassCodes()">🔄 تحديث / Refresh</button>
+    </div>
+    <div class="codes-note">
+      💡 اطلبي من الطلاب إدخال كود شعبتهم عند الدخول للحصة — Ask students to enter their class code to join the lesson
+    </div>
+    <div class="codes-grid" id="codesGrid">
+      <div style="text-align:center;color:#94a3b8;padding:40px;grid-column:1/-1;">جارٍ التحميل... Loading...</div>
+    </div>
+  </div>
+
+  <!-- ── STUDENTS VIEW wrapper ── -->
+  <div id="studentsView">
+
   <!-- ── PROGRESS BAR ── -->
   <div class="tp-progress-wrap">
     <span id="tpProgressLabel" style="white-space:nowrap;">تقدم الحصة</span>
@@ -1422,6 +1446,9 @@ footer {
     </div>
   </div>
 </div>
+
+  </div><!-- /studentsView -->
+</div><!-- /teacherPanel close -->
 
 <!-- GENERAL MODAL -->
 <div class="modal-overlay" id="generalModal">
@@ -5420,6 +5447,76 @@ function returnToLesson() {
   } catch(e) {}
 }
 
+
+  // ── TAB SWITCHING ──
+  function switchTPTab(tab) {
+    const studentsView = document.getElementById('studentsView');
+    const codesPanel = document.getElementById('codesPanel');
+    const tabStudents = document.getElementById('tabStudents');
+    const tabCodes = document.getElementById('tabCodes');
+
+    if (tab === 'students') {
+      studentsView.classList.remove('hidden');
+      codesPanel.classList.remove('active');
+      tabStudents.classList.add('active');
+      tabCodes.classList.remove('active');
+    } else {
+      studentsView.classList.add('hidden');
+      codesPanel.classList.add('active');
+      tabStudents.classList.remove('active');
+      tabCodes.classList.add('active');
+      loadClassCodes();
+    }
+  }
+
+  // ── LOAD CLASS CODES FROM FIREBASE ──
+  async function loadClassCodes() {
+    const grid = document.getElementById('codesGrid');
+    if (!grid) return;
+    grid.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:40px;grid-column:1/-1;">جارٍ التحميل... Loading...</div>';
+    try {
+      const snap = await db.collection('class_codes').get();
+      if (snap.empty) {
+        grid.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:40px;grid-column:1/-1;">لا توجد أكواد — No codes found</div>';
+        return;
+      }
+      const docs = [];
+      snap.forEach(d => docs.push({id: d.id, ...d.data()}));
+      docs.sort((a,b) => a.id.localeCompare(b.id));
+
+      grid.innerHTML = docs.map(d => `
+        <div class="code-card">
+          <div class="cc-section">🏫 شعبة ${d.id}</div>
+          <div class="cc-code" onclick="copyCode('${d.code || d.id}')" title="اضغط للنسخ / Click to copy">
+            ${d.code || d.id}
+          </div>
+          <div class="cc-copy">اضغط للنسخ / Click to copy</div>
+          <div class="cc-status ${d.enabled !== false ? 'on' : 'off'}">
+            ${d.enabled !== false ? '✅ مفعّل / Active' : '🔴 معطّل / Disabled'}
+          </div>
+        </div>
+      `).join('');
+    } catch(e) {
+      grid.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:40px;grid-column:1/-1;">خطأ في التحميل: ' + e.message + '</div>';
+    }
+  }
+
+  function copyCode(code) {
+    navigator.clipboard.writeText(code).then(() => {
+      showToast('✅ تم النسخ: ' + code);
+    }).catch(() => {
+      // fallback
+      const el = document.createElement('textarea');
+      el.value = code;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      showToast('✅ تم النسخ: ' + code);
+    });
+  }
+
+
 </script>
 
 
@@ -5506,6 +5603,111 @@ function returnToLesson() {
 .wu-card.wu-done::after { content: ' ✅'; }
 .wu-answer-chip:hover { background: rgba(240,201,107,0.2) !important; }
 .wu-answer-chip.selected { background: rgba(240,201,107,0.3) !important; border-color: #f0c96b !important; color: #f0c96b; font-weight: 700; }
+
+    /* ── CODES TAB ── */
+    .tp-tab-bar {
+      display: flex;
+      gap: 8px;
+      padding: 10px 20px 0;
+      background: var(--navy-dark);
+      border-bottom: 2px solid var(--navy-light);
+    }
+    .tp-tab {
+      padding: 8px 20px;
+      border-radius: 10px 10px 0 0;
+      border: none;
+      cursor: pointer;
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      font-weight: 600;
+      background: var(--navy-light);
+      color: var(--gray-light);
+      transition: all 0.2s;
+    }
+    .tp-tab.active {
+      background: var(--gold);
+      color: #1a2744;
+    }
+    .tp-tab:hover:not(.active) {
+      background: rgba(201,168,76,0.2);
+      color: var(--white);
+    }
+    #codesPanel {
+      display: none;
+      padding: 24px;
+      overflow-y: auto;
+      height: calc(100vh - 200px);
+    }
+    #codesPanel.active { display: block; }
+    #studentsView.hidden { display: none; }
+    .codes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+    .code-card {
+      background: var(--navy-light);
+      border-radius: 14px;
+      padding: 20px;
+      text-align: center;
+      border: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .code-card:hover { border-color: var(--gold); transform: translateY(-2px); }
+    .code-card .cc-section {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--gold);
+      margin-bottom: 8px;
+    }
+    .code-card .cc-code {
+      font-size: 1.8rem;
+      font-weight: 900;
+      color: var(--white);
+      letter-spacing: 2px;
+      background: var(--navy-dark);
+      padding: 10px 16px;
+      border-radius: 10px;
+      margin: 8px 0;
+      cursor: pointer;
+      user-select: all;
+    }
+    .code-card .cc-copy {
+      font-size: 0.75rem;
+      color: var(--gray);
+      margin-top: 4px;
+    }
+    .code-card .cc-status {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 3px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .code-card .cc-status.on { background: rgba(39,174,96,0.2); color: #2ecc71; }
+    .code-card .cc-status.off { background: rgba(231,76,60,0.2); color: #e74c3c; }
+    .codes-refresh-btn {
+      background: var(--gold);
+      color: #1a2744;
+      border: none;
+      padding: 8px 20px;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: var(--font-body);
+    }
+    .codes-note {
+      background: rgba(201,168,76,0.1);
+      border: 1px solid var(--gold);
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 0.85rem;
+      color: var(--gold-light);
+      margin-bottom: 16px;
+    }
+
 </style>
 
 <!-- ============================================================ -->
