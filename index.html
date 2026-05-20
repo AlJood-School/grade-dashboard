@@ -20928,9 +20928,59 @@ var BH_VIOLATION_TYPES = [
 
 function bhGetData(){try{return JSON.parse(localStorage.getItem(BH_KEY)||'{}');}catch(e){return{};}}
 function bhSaveData(d){localStorage.setItem(BH_KEY,JSON.stringify(d));}
+async function bhLoadFromSupabase(){
+  try {
+    var r = await supaFetch('/rest/v1/behavior_incidents?school_id=eq.aljood&order=created_at.desc&limit=2000', {method:'GET'});
+    if(!Array.isArray(r)) return;
+    var d = {};
+    r.forEach(function(inc){
+      var sid = inc.student_id;
+      if(!d[sid]) d[sid] = {degree:0, violations:[], degreeCounts:{1:0,2:0,3:0,4:0}};
+      var deg = inc.degree||1;
+      d[sid].degree = Math.max(d[sid].degree, deg);
+      d[sid].violations.push({
+        date: inc.created_at ? inc.created_at.slice(0,10) : '',
+        type: inc.violation_type||'',
+        note: inc.description||'',
+        action: inc.action_taken||'',
+        degree: deg,
+        degreeAtRecord: deg,
+        _synced: true
+      });
+      d[sid].degreeCounts[deg] = (d[sid].degreeCounts[deg]||0) + 1;
+    });
+    // Only update localStorage if we got data (don't overwrite with empty)
+    if(Object.keys(d).length > 0) {
+      localStorage.setItem(BH_KEY, JSON.stringify(d));
+    }
+  } catch(e){ console.log('bhLoadFromSupabase error:', e); }
+}
 function bhGetStudent(sid){var d=bhGetData();return d[sid]||{degree:0,violations:[],degreeCounts:{1:0,2:0,3:0,4:0}};}
 function bhSaveStudent(sid,s){var d=bhGetData();d[sid]=s;bhSaveData(d);bhSyncToSupabase(sid,s);}
-function bhSyncToSupabase(sid,s){if(!s||!s.violations||!s.violations.length)return;var allStudents=[];Object.values(STUDENTS_DATA||{}).forEach(function(a){allStudents=allStudents.concat(a);});var st=allStudents.find(function(x){return x.id===sid;})||{};var lastVio=s.violations[s.violations.length-1];if(!lastVio||lastVio._synced)return;supaFetch('/rest/v1/behavior_incidents',{method:'POST',body:JSON.stringify({student_id:sid,student_name:st.nameAr||st.name||sid,grade:st.grade||'',class_name:st.class||'',degree:lastVio.degree||s.degree||1,violation_type:lastVio.type||'',description:lastVio.note||'',action_taken:lastVio.action||'',teacher_id:(window.currentUser&&window.currentUser.id)||'',teacher_name:(window.currentUser&&window.currentUser.nameAr)||'',status:'open'})}).then(function(r){if(r){lastVio._synced=true;bhSaveData(bhGetData());}});}
+function bhSyncToSupabase(sid,s){if(!s||!s.violations||!s.violations.length)return;var allStudents=[];Object.values(STUDENTS_DATA||{}).forEach(function(a){allStudents=allStudents.concat(a);});var st=allStudents.find(function(x){return x.id===sid;})||{};var lastVio=s.violations[s.violations.length-1];if(!lastVio||lastVio._synced)return;supaFetch('/rest/v1/behavior_incidents',{method:'POST',body:JSON.stringify({student_id:sid,student_name:st.nameAr||st.name||sid,grade:st.grade||'',class_name:st.class||'',degree:lastVio.degree||s.degree||1,violation_type:lastVio.type||'',description:lastVio.note||'',action_taken:lastVio.action||'',teacher_id:(window.currentUser&&window.currentUser.id)||'',teacher_name:(window.currentUser&&window.currentUser.nameAr)||'',status:'open'})}).then(function(r){if(r){lastVio._synced=true;bhSaveData(bhGetData());
+    // Threshold check: if degree >= 3, notify SW
+    if((s.degree||0) >= 3){
+      var monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+      supaFetch('/rest/v1/notifications?select=id&type=eq.sw_threshold&reference_id=eq.'+encodeURIComponent(sid)+'&created_at=gte.'+monthStart.toISOString()+'&limit=1', {method:'GET'}).then(function(existing){
+        if(!existing || !existing.length){
+          var stName = st.nameAr||st.name||sid;
+          var stClass = (st.grade||'') + ' ' + (st.class||'');
+          supaFetch('/rest/v1/notifications', {
+            method: 'POST',
+            body: JSON.stringify({
+              type: 'sw_threshold',
+              title: '\u0637\u0627\u0644\u0628\u0629 \u062a\u062d\u062a\u0627\u062c \u0645\u062a\u0627\u0628\u0639\u0629 \u0627\u062c\u062a\u0645\u0627\u0639\u064a\u0629',
+              message: '\u0627\u0644\u0637\u0627\u0644\u0628\u0629 ' + stName + ' ('+stClass+') \u0648\u0635\u0644\u062a \u0644\u062f\u0631\u062c\u0629 \u0627\u0644\u0633\u0644\u0648\u0643 ' + (s.degree||3) + ' \u2014 \u064a\u064f\u0646\u0635\u062d \u0628\u0641\u062a\u062d \u062d\u0627\u0644\u0629 \u0645\u062a\u0627\u0628\u0639\u0629',
+              reference_id: sid,
+              target_role: 'admin_staff',
+              school_id: 'aljood',
+              is_read: false
+            })
+          });
+        }
+      });
+    }
+  }});}
 
 function bhAddViolation(studentId,violationType,description,recordedBy,classId,subject){
   var student=bhGetStudent(studentId);
@@ -21156,10 +21206,60 @@ var SW_CASE_STATUSES = {open:'مفتوحة',closed:'مغلقة',referred:'محو
 var SW_PRIORITIES = {low:'منخفضة',medium:'متوسطة',high:'عالية',critical:'حرجة'};
 var LA_KEY = 'aljood_lesson_attendance_v1';
 
-function swGetData(){try{return JSON.parse(localStorage.getItem(SW_KEY)||'{"cases":[]}');}catch(e){return{cases:[]};}}
-function swSaveData(d){localStorage.setItem(SW_KEY,JSON.stringify(d));}
-function swGetCases(){return swGetData().cases||[];}
-function swSaveCases(cases){var d=swGetData();d.cases=cases;swSaveData(d);}
+var _swCasesCache = null;
+function swGetData(){return {cases: _swCasesCache || []};}
+function swSaveData(d){_swCasesCache = d.cases||[];}
+function swGetCases(){return _swCasesCache || [];}
+function swSaveCases(cases){_swCasesCache=cases;}
+async function swLoadFromSupabase(){
+  try {
+    var r = await supaFetch('/rest/v1/sw_cases?school_id=eq.aljood&order=created_at.desc&limit=500', {method:'GET'});
+    if(Array.isArray(r)) {
+      _swCasesCache = r.map(function(row){
+        return {
+          id: row.id,
+          studentId: row.student_id,
+          studentName: row.student_name,
+          studentClass: row.student_class,
+          type: row.case_type,
+          status: row.status||'open',
+          priority: row.priority||'medium',
+          summary: row.description||'',
+          sessions: row.sessions||[],
+          parentContact: row.parent_contact||null,
+          createdBy: row.created_by||'',
+          openDate: row.created_at ? row.created_at.slice(0,10) : '',
+          createdAt: row.created_at||'',
+          updatedAt: row.updated_at||''
+        };
+      });
+    }
+  } catch(e){ console.log('swLoadFromSupabase error:', e); _swCasesCache = _swCasesCache||[]; }
+}
+async function swSaveCaseToSupabase(c){
+  try {
+    var payload = {
+      id: c.id,
+      student_id: c.studentId||'',
+      student_name: c.studentName||'',
+      student_class: c.studentClass||'',
+      case_type: c.type||'',
+      status: c.status||'open',
+      priority: c.priority||'medium',
+      description: c.summary||'',
+      sessions: c.sessions||[],
+      parent_contact: c.parentContact||null,
+      created_by: c.createdBy||'',
+      school_id: 'aljood',
+      updated_at: new Date().toISOString()
+    };
+    await supaFetch('/rest/v1/sw_cases', {
+      method: 'POST',
+      headers: {'Prefer': 'resolution=merge-duplicates'},
+      body: JSON.stringify(payload)
+    });
+  } catch(e){ console.log('swSaveCaseToSupabase error:', e); }
+}
 function swNewId(){var c=swGetCases();return'SWC-'+String(c.length+1).padStart(3,'0');}
 function swGetRole(){if(currentRole==='admin')return'admin';if(currentRole==='principal')return'principal';if(currentRole==='admin_staff'||currentRole==='staff'){if(currentStaff){var j=currentStaff.primary_job||'';if(j.includes('اخصائي')||j.includes('\u0623\u062e\u0635\u0627\u0626\u064a'))return'specialist';}return'admin_readonly';}if(currentRole==='teacher')return'teacher_readonly';return null;}
 var swCurrentTab='sw-cases';
@@ -21185,7 +21285,7 @@ function renderSocialWorker(){
   if(role==='admin'||role==='principal'){html+='<div id="sw-report" style="display:'+(swCurrentTab==='sw-report'?'block':'none')+';">'+swReportView()+'</div>';}
   container.innerHTML=html;
 }
-function swShowTab(t){swCurrentTab=t;['sw-cases','sw-add','sw-report'].forEach(function(x){var el=document.getElementById(x);if(el)el.style.display=x===t?'block':'none';});if(t==='sw-cases'){var el=document.getElementById('sw-cases');if(el)el.innerHTML=swCasesList(swGetCases(),swGetRole());}if(t==='sw-report'){var el=document.getElementById('sw-report');if(el)el.innerHTML=swReportView();}var map={'sw-cases':'swBtnCases','sw-add':'swBtnAdd','sw-report':'swBtnReport'};Object.keys(map).forEach(function(k){var btn=document.getElementById(map[k]);if(btn){btn.classList[k===t?'add':'remove']('bh-active');}});}
+function swShowTab(t){swCurrentTab=t;['sw-cases','sw-add','sw-report'].forEach(function(x){var el=document.getElementById(x);if(el)el.style.display=x===t?'block':'none';});if(t==='sw-cases'){var el=document.getElementById('sw-cases');swLoadFromSupabase().then(function(){if(el)el.innerHTML=swCasesList(swGetCases(),swGetRole());});}if(t==='sw-report'){var el=document.getElementById('sw-report');if(el)el.innerHTML=swReportView();}var map={'sw-cases':'swBtnCases','sw-add':'swBtnAdd','sw-report':'swBtnReport'};Object.keys(map).forEach(function(k){var btn=document.getElementById(map[k]);if(btn){btn.classList[k===t?'add':'remove']('bh-active');}});}
 function swCasesList(cases,role){
   if(!cases.length)return'<div style="text-align:center;padding:30px;color:#9ca3af;background:white;border-radius:12px;">\u0644\u0627 \u062a\u0648\u062c\u062f \u062d\u0627\u0644\u0627\u062a</div>';
   var sorted=cases.slice().sort(function(a,b){var pr={critical:4,high:3,medium:2,low:1};return(pr[b.priority]||0)-(pr[a.priority]||0);});
@@ -21233,10 +21333,10 @@ function swSaveCase(editId){
   var cases=swGetCases();
   if(editId&&editId!=='null'){
     var idx=cases.findIndex(function(c){return c.id===editId;});
-    if(idx!==-1){Object.assign(cases[idx],{studentId:sid,studentName:sName,studentClass:sCls,type:type,priority:priority,status:status,summary:summary,plan:plan,referredTo:referredTo,updatedAt:new Date().toISOString()});swSaveCases(cases);showToast('\u062a\u0645 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u062d\u0627\u0644\u0629','success');swCurrentTab='sw-cases';renderSocialWorker();return;}
+    if(idx!==-1){Object.assign(cases[idx],{studentId:sid,studentName:sName,studentClass:sCls,type:type,priority:priority,status:status,summary:summary,plan:plan,referredTo:referredTo,updatedAt:new Date().toISOString()});swSaveCases(cases);var _savedCase1=cases[idx];if(_savedCase1){swSaveCaseToSupabase(_savedCase1);}showToast('\u062a\u0645 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u062d\u0627\u0644\u0629','success');swCurrentTab='sw-cases';renderSocialWorker();return;}
   }
   cases.push({id:swNewId(),studentId:sid,studentName:sName,studentClass:sCls,type:type,priority:priority,status:status,summary:summary,plan:plan,referredTo:referredTo,sessions:[],openDate:new Date().toISOString().slice(0,10),createdBy:currentUsername,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
-  swSaveCases(cases);showToast('\u062a\u0645 \u0641\u062a\u062d \u0627\u0644\u062d\u0627\u0644\u0629','success');swCurrentTab='sw-cases';renderSocialWorker();
+  swSaveCases(cases);var _newCase=cases[cases.length-1];if(_newCase){swSaveCaseToSupabase(_newCase);}showToast('\u062a\u0645 \u0641\u062a\u062d \u0627\u0644\u062d\u0627\u0644\u0629','success');swCurrentTab='sw-cases';renderSocialWorker();
 }
 function swViewCase(caseId){
   var cases=swGetCases();var c=cases.find(function(x){return x.id===caseId;});if(!c)return;
@@ -21969,6 +22069,20 @@ function laSubmitContactSurvey(studentId, studentName, cls, dateISO, dateStr) {
     submittedAt: new Date().toISOString()
   });
   localStorage.setItem('aljood_parent_surveys', JSON.stringify(surveys));
+  // Save to Supabase parent_confirmations
+  supaFetch('/rest/v1/parent_confirmations', {
+    method: 'POST',
+    headers: {'Prefer': 'resolution=merge-duplicates'},
+    body: JSON.stringify({
+      token: token,
+      student_name: studentName,
+      student_class: cls,
+      contact_date: dateStr,
+      staff_name: currentUsername||'\u0627\u0644\u0625\u062f\u0627\u0631\u0629',
+      reason: reason,
+      q1: q1, q2: q2, q3: q3
+    })
+  }).catch(function(e){ console.log('parent_confirmations save error:', e); });
   // بناء رسالة واتساب
   var waText = 'مدرسة الجود 🌸\n\nأولياء أمور الطالبة: ' + studentName
     + '\nالصف: ' + cls + ' | التاريخ: ' + dateStr
