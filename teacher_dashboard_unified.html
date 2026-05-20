@@ -2421,6 +2421,30 @@ function generateWorksheet() {
   document.getElementById('scPrintBtn').style.display = 'inline-block';
   document.getElementById('scSaveBtn').style.display = 'inline-block';
   
+  // حفظ الأسئلة البنيوية عالمياً للإرسال لاحقاً
+  window._wsCurrentQuestions = [];
+  for (let i = 1; i <= qcount; i++) {
+    const act = acts[(i-1) % acts.length];
+    const qtype = qTypes[(i-1) % qTypes.length];
+    window._wsCurrentQuestions.push({
+      id: i,
+      type: qtype.split(' ')[1] || 'text',
+      text: qtype,
+      activity: act,
+      answer_line: true
+    });
+  }
+  if (includeSpecial) {
+    window._wsCurrentQuestions.push({
+      id: qcount + 1,
+      type: 'special',
+      text: '♾️ نشاط خاص لأصحاب الهمم',
+      activity: 'بمساعدة المعلمة أو الأدوات المساعدة',
+      answer_line: true
+    });
+  }
+  window._wsCurrentMeta = { subject, topic, grade, cls, vark, level };
+
   showToast('✅ تم توليد ورقة العمل!', 'success');
 }
 
@@ -2436,8 +2460,166 @@ function printWorksheet() {
   w.document.close();
 }
 
+function wsGenCode(len=7) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < len; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
 async function saveWorksheet() {
-  showToast('يمكن ربطها بـ Supabase لحفظ ورقة العمل وإسنادها للطلاب', 'info');
+  const q = window._wsCurrentQuestions;
+  const m = window._wsCurrentMeta;
+  if (!q || q.length === 0) {
+    showToast('يرجى توليد ورقة العمل أولاً', 'error');
+    return;
+  }
+
+  const me = window._currentStaff || {};
+  const teacherId = me.id || me.staff_id || 'T000';
+  const code = wsGenCode();
+  const title = `${m.subject}${m.topic ? ' — ' + m.topic : ''}`;
+  const baseUrl = window.location.origin;
+  const shareUrl = `${baseUrl}/student_worksheet.html?code=${code}`;
+
+  const payload = {
+    code,
+    teacher_id: teacherId,
+    title,
+    subject: m.subject,
+    grade: m.grade || null,
+    class_group: m.cls || null,
+    questions: q,
+    is_active: true
+  };
+
+  try {
+    const btn = document.getElementById('scSaveBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ جاري الحفظ...';
+
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/worksheet_templates`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_ANON,
+        'Authorization': 'Bearer ' + SUPABASE_ANON,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    btn.disabled = false;
+    btn.textContent = '💾 حفظ';
+
+    if (res.ok) {
+      showToast('✅ تم حفظ ورقة العمل!', 'success');
+      // عرض رابط المشاركة
+      showWSShareModal(code, shareUrl, title);
+      loadSavedWorksheets();
+    } else {
+      const err = await res.json();
+      console.error('Save error:', err);
+      showToast('خطأ في الحفظ: ' + (err.message || 'غير معروف'), 'error');
+    }
+  } catch(e) {
+    showToast('خطأ في الاتصال بالخادم', 'error');
+    document.getElementById('scSaveBtn').disabled = false;
+    document.getElementById('scSaveBtn').textContent = '💾 حفظ';
+  }
+}
+
+function showWSShareModal(code, url, title) {
+  const existing = document.getElementById('wsShareModal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'wsShareModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:32px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);font-family:inherit;direction:rtl">
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="font-size:2.5rem;margin-bottom:8px">🎉</div>
+        <h3 style="font-size:1.1rem;font-weight:800;margin:0 0 4px">تم حفظ ورقة العمل!</h3>
+        <p style="font-size:.85rem;color:#6B7280;margin:0">${title}</p>
+      </div>
+      <div style="background:#F0FDF4;border:2px solid #86EFAC;border-radius:12px;padding:16px;margin-bottom:16px">
+        <div style="font-size:.75rem;font-weight:700;color:#15803D;margin-bottom:6px">رمز الوصول:</div>
+        <div style="font-size:2rem;font-weight:900;color:#15803D;letter-spacing:4px;text-align:center">${code}</div>
+      </div>
+      <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:12px;margin-bottom:16px">
+        <div style="font-size:.75rem;font-weight:700;color:#64748B;margin-bottom:6px">رابط المشاركة للطلاب:</div>
+        <div style="font-size:.78rem;color:#1D4ED8;word-break:break-all;margin-bottom:8px">${url}</div>
+        <button onclick="navigator.clipboard.writeText('${url}');this.textContent='✅ تم النسخ!';setTimeout(()=>this.textContent='📋 نسخ الرابط',1500)" 
+          style="background:#1D4ED8;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:.8rem;font-weight:700;cursor:pointer;width:100%">
+          📋 نسخ الرابط
+        </button>
+      </div>
+      <button onclick="document.getElementById('wsShareModal').remove()" 
+        style="width:100%;background:#F1F5F9;border:none;border-radius:8px;padding:10px;font-size:.85rem;font-weight:700;cursor:pointer">
+        إغلاق
+      </button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+async function loadSavedWorksheets() {
+  const container = document.getElementById('savedWsList');
+  if (!container) return;
+  container.innerHTML = '<div style="text-align:center;color:var(--g400);padding:20px">⏳ جاري التحميل...</div>';
+
+  try {
+    const me = window._currentStaff || {};
+    const tid = me.id || me.staff_id || 'T000';
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/worksheet_templates?teacher_id=eq.${tid}&order=created_at.desc&limit=20`, {
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON }
+    });
+    const data = await res.json();
+
+    if (!data.length) {
+      container.innerHTML = '<div style="text-align:center;color:var(--g400);padding:24px">لا توجد أوراق عمل محفوظة بعد</div>';
+      return;
+    }
+
+    const baseUrl = window.location.origin;
+    container.innerHTML = data.map(w => {
+      const date = new Date(w.created_at).toLocaleDateString('ar', {day:'numeric',month:'short',year:'numeric'});
+      const shareUrl = `${baseUrl}/student_worksheet.html?code=${w.code}`;
+      const qCount = Array.isArray(w.questions) ? w.questions.length : 0;
+      return `
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border:1px solid var(--g200);border-radius:10px;margin-bottom:10px;background:#fff">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${w.title}</div>
+            <div style="font-size:.75rem;color:var(--g500);margin-top:2px">
+              ${w.grade ? '📚 ' + w.grade + (w.class_group ? ' / ' + w.class_group : '') + ' · ' : ''}
+              📝 ${qCount} أسئلة · 📅 ${date}
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-shrink:0">
+            <button onclick="navigator.clipboard.writeText('${shareUrl}');showToast('تم نسخ الرابط ✅','success')" 
+              style="background:var(--primary);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:.78rem;font-weight:700;cursor:pointer" title="نسخ رابط الطالب">
+              📋
+            </button>
+            <button onclick="showWSShareModal('${w.code}','${shareUrl}','${w.title.replace(/'/g,"\'")}'"
+              style="background:#F0FDF4;color:#15803D;border:1px solid #86EFAC;border-radius:6px;padding:6px 12px;font-size:.78rem;font-weight:700;cursor:pointer" title="عرض الرمز والرابط">
+              🔗
+            </button>
+            <a href="${baseUrl}/student_worksheet.html?code=${w.code}&preview=teacher" target="_blank"
+              style="background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;border-radius:6px;padding:6px 12px;font-size:.78rem;font-weight:700;cursor:pointer;text-decoration:none" title="معاينة">
+              👁
+            </a>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch(e) {
+    container.innerHTML = '<div style="color:#EF4444;padding:16px">خطأ في تحميل البيانات</div>';
+  }
+}
+
+async function loadSmartCreatorSection() {
+  loadSavedWorksheets();
 }
 
 // ══════════ SECTION INIT HOOKS ══════════
@@ -2445,6 +2627,7 @@ const _origGo = window.go;
 window.go = function(sec, btn) {
   if (typeof _origGo === 'function') _origGo(sec, btn);
   if (sec === 'vark') loadVARKSection();
+  if (sec === 'smartcreator') loadSmartCreatorSection();
   if (sec === 'prediction') loadPredictions();
   if (sec === 'attendance') loadAttendanceToday();
 };
@@ -2722,6 +2905,17 @@ async function loadAttendanceToday() {
           <div style="font-size:.8rem">اضغطي "توليد ورقة العمل الذكية" لبدء الإنشاء</div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ═══ أوراق العمل المحفوظة ═══ -->
+  <div class="card" style="margin-top:20px;padding:24px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="font-size:1rem;font-weight:700;margin:0">📂 أوراق العمل المحفوظة</h3>
+      <button class="btn btn-outline" onclick="loadSavedWorksheets()" style="font-size:.8rem;padding:6px 14px">🔄 تحديث</button>
+    </div>
+    <div id="savedWsList">
+      <div style="text-align:center;color:var(--g400);padding:24px">انتقلي لهذا القسم لتحميل الأوراق</div>
     </div>
   </div>
 </div>
