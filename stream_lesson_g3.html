@@ -1192,6 +1192,51 @@ footer {
   0%,100% { box-shadow: 0 0 18px rgba(240,201,107,.3); }
   50%     { box-shadow: 0 0 32px rgba(240,201,107,.7); }
 }
+
+/* ── TTS Styles ── */
+.tts-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0 4px;
+  flex-wrap: wrap;
+}
+.tts-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: 'Fredoka One', cursive;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+.tts-btn-en {
+  background: linear-gradient(135deg, #0f2756, #1a3a8f);
+  color: white;
+}
+.tts-btn-ar {
+  background: linear-gradient(135deg, #c9a227, #f0c96b);
+  color: #0f2756;
+  font-family: 'Tajawal', sans-serif;
+}
+.tts-btn-stop {
+  background: #fee2e2;
+  color: #dc2626;
+}
+.tts-btn:hover { transform: scale(1.05); }
+.tts-btn.speaking {
+  animation: ttsPulse 0.7s ease-in-out infinite alternate;
+  box-shadow: 0 0 0 3px rgba(255,200,0,0.5);
+}
+.tts-highlight { background: rgba(240,201,107,0.4); border-radius: 3px; transition: background 0.2s; }
+@keyframes ttsPulse { from { transform: scale(1); } to { transform: scale(1.06); } }
+@keyframes robotBounce { from { transform: translateY(0); } to { transform: translateY(-8px); } }
+
 </style>
 </head>
 <body>
@@ -1924,6 +1969,7 @@ function tryGoToPhase(target) {
 }
 
 function goToPhase(phase) {
+  updateTtsFabVisibility();
   phaseWrongCount = 0; // Reset wrong count for new phase
   tfAnswers = {};       // Reset TF answers
   if (currentActivityTimer) currentActivityTimer.stop();
@@ -1970,7 +2016,7 @@ function _doNextPhase() {
   const next = currentPhase + 1;
   if (next <= 10) {
     launchConfetti(30);
-    showModal(t('phase_complete'), () => goToPhase(next));
+    showAutoModal(t('phase_complete'), () => goToPhase(next), 3000);
   } else {
     showAIBannerThenCelebrate();
   }
@@ -2003,12 +2049,207 @@ function showModal(html, onClose) {
   document.getElementById('modalContent').innerHTML = `<div style="font-size:1.1rem;">${html}</div>`;
   document.getElementById('generalModal').classList.add('open');
   document._modalOnClose = onClose;
+  // Clear any existing auto-close timer
+  if (document._modalAutoTimer) { clearTimeout(document._modalAutoTimer); document._modalAutoTimer = null; }
+}
+function showAutoModal(html, onClose, delay = 3000) {
+  // Show modal with countdown bar that auto-dismisses
+  const countdownBar = `<div id="modalCountdownWrap" style="margin-top:14px;">
+    <div style="font-size:0.82rem;color:#888;margin-bottom:6px;">
+      <span id="modalCountdownSec">${Math.round(delay/1000)}</span>s — continuing automatically...
+    </div>
+    <div style="background:#e2e8f0;border-radius:99px;height:6px;overflow:hidden;">
+      <div id="modalCountdownBar" style="height:100%;background:linear-gradient(90deg,var(--gold),var(--navy));
+           border-radius:99px;width:100%;transition:width ${delay}ms linear;"></div>
+    </div>
+  </div>`;
+  document.getElementById('modalContent').innerHTML = `<div style="font-size:1.1rem;">${html}</div>${countdownBar}`;
+  document.getElementById('generalModal').classList.add('open');
+  document._modalOnClose = onClose;
+  // Start countdown
+  requestAnimationFrame(() => {
+    const bar = document.getElementById('modalCountdownBar');
+    if (bar) bar.style.width = '0%';
+  });
+  let remaining = Math.round(delay / 1000);
+  const tick = setInterval(() => {
+    remaining--;
+    const el = document.getElementById('modalCountdownSec');
+    if (el) el.textContent = remaining;
+    if (remaining <= 0) clearInterval(tick);
+  }, 1000);
+  if (document._modalAutoTimer) clearTimeout(document._modalAutoTimer);
+  document._modalAutoTimer = setTimeout(() => {
+    clearInterval(tick);
+    closeModal();
+  }, delay);
 }
 function closeModal() {
   document.getElementById('generalModal').classList.remove('open');
+  if (document._modalAutoTimer) { clearTimeout(document._modalAutoTimer); document._modalAutoTimer = null; }
   if (document._modalOnClose) { document._modalOnClose(); document._modalOnClose = null; }
 }
 function closePosterModal() { document.getElementById('posterModal').classList.remove('open'); }
+
+function toggleWuChip(el) { el.classList.toggle('selected'); }
+
+function showLessonPlan() {
+  document.getElementById('lessonPlanModal').style.display = 'block';
+}
+function closeLessonPlan() {
+  document.getElementById('lessonPlanModal').style.display = 'none';
+}
+
+function closeWarmup() {
+  const o = document.getElementById('warmupOverlay');
+  if (o) { o.style.opacity='0'; o.style.transition='opacity 0.4s'; setTimeout(() => { o.style.display='none'; }, 400); }
+  // Show journey map
+  const jm = document.getElementById('journeyMapOverlay');
+  if (jm) jm.classList.add('open');
+}
+function showWarmup() {
+  const o = document.getElementById('warmupOverlay');
+  if (o) { o.style.display='block'; o.style.opacity='1'; }
+}
+
+
+
+// ============================================================
+// TTS — Text-to-Speech System
+// ============================================================
+let _ttsSpeaking = false;
+let _ttsUtterance = null;
+
+function ttsStop() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  _ttsSpeaking = false;
+  document.querySelectorAll('.tts-btn').forEach(b => b.classList.remove('speaking'));
+  // Remove highlights
+  document.querySelectorAll('.tts-highlight').forEach(el => {
+    const parent = el.parentNode;
+    parent.replaceChild(document.createTextNode(el.textContent), el);
+    parent.normalize();
+  });
+}
+
+function ttsSpeak(text, lang, btnEl) {
+  if (!window.speechSynthesis) {
+    alert('Text-to-speech is not supported in this browser.');
+    return;
+  }
+  ttsStop();
+  if (!text) return;
+  _ttsSpeaking = true;
+  if (btnEl) btnEl.classList.add('speaking');
+
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = lang; // 'en-US' or 'ar-AE'
+  utter.rate = lang.startsWith('ar') ? 0.85 : 0.9;
+  utter.pitch = 1.0;
+
+  // Word boundary highlight
+  utter.onboundary = (e) => {
+    if (e.name !== 'word') return;
+    const word = text.substr(e.charIndex, e.charLength);
+    // Update a display element if present
+    const displayEl = document.getElementById('ttsReadingDisplay');
+    if (displayEl) {
+      displayEl.innerHTML = text.substring(0, e.charIndex) +
+        `<span class="tts-highlight">${word}</span>` +
+        text.substring(e.charIndex + e.charLength);
+    }
+  };
+  utter.onend = () => {
+    _ttsSpeaking = false;
+    if (btnEl) btnEl.classList.remove('speaking');
+    const displayEl = document.getElementById('ttsReadingDisplay');
+    if (displayEl) displayEl.textContent = text;
+  };
+  utter.onerror = () => {
+    _ttsSpeaking = false;
+    if (btnEl) btnEl.classList.remove('speaking');
+  };
+
+  _ttsUtterance = utter;
+  window.speechSynthesis.speak(utter);
+}
+
+function ttsReadQuestion(enText, arText) {
+  // Determine current language
+  const lang = document.documentElement.lang === 'ar' ? 'ar' : 'en';
+  if (lang === 'ar' && arText) {
+    ttsSpeak(arText, 'ar-AE', null);
+  } else if (enText) {
+    ttsSpeak(enText, 'en-US', null);
+  }
+}
+
+
+// TTS FAB (Floating Action Button)
+function toggleTtsFab() {
+  const menu = document.getElementById('ttsFabMenu');
+  menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+}
+function ttsFabSpeak(lang) {
+  // Collect all visible question text on screen
+  const mc = document.getElementById('mainContent');
+  if (!mc) return;
+  // Extract question text - look for h2, h3, .question-text, strong in question areas
+  let text = '';
+  const qEls = mc.querySelectorAll('h2,h3,.q-text,.question-text,.phase-title,p');
+  qEls.forEach(el => {
+    const t = el.innerText || el.textContent;
+    if (t && t.trim().length > 3) text += t.trim() + '. ';
+  });
+  // Also get option texts
+  const opts = mc.querySelectorAll('.mcq-option,.option-btn,.tf-btn,label');
+  opts.forEach(el => {
+    const t = el.innerText || el.textContent;
+    if (t && t.trim().length > 1) text += t.trim() + '. ';
+  });
+  if (!text) text = mc.innerText || mc.textContent || '';
+  // Limit to first 500 chars for TTS
+  text = text.trim().substring(0, 500);
+  
+  // Update display
+  const displayEl = document.getElementById('ttsReadingDisplay');
+  if (!displayEl) {
+    // Create a display element
+    const d = document.createElement('div');
+    d.id = 'ttsReadingDisplay';
+    d.style.cssText = 'position:fixed;bottom:155px;right:18px;z-index:7999;max-width:300px;background:white;border-radius:12px;padding:10px 14px;font-size:0.83rem;color:#333;box-shadow:0 4px 16px rgba(0,0,0,0.15);line-height:1.5;display:none;';
+    document.body.appendChild(d);
+  }
+  document.getElementById('ttsReadingDisplay').style.display = 'block';
+  document.getElementById('ttsReadingDisplay').textContent = text;
+
+  const btnEl = lang === 'en' ? document.getElementById('ttsFabEn') : document.getElementById('ttsFabAr');
+  ttsSpeak(text, lang === 'ar' ? 'ar-AE' : 'en-US', btnEl);
+  document.getElementById('ttsFabMenu').style.display = 'none';
+}
+// Show/hide TTS FAB based on phase
+function updateTtsFabVisibility() {
+  const fab = document.getElementById('ttsFab');
+  if (!fab) return;
+  // Show TTS during actual lesson phases (not registration/journey map)
+  const mainContent = document.getElementById('mainContent');
+  const inLesson = mainContent && mainContent.children.length > 0;
+  fab.style.display = inLesson ? 'flex' : 'none';
+}
+
+function buildTTSBar(enText, arText) {
+  return `<div class="tts-bar">
+    <button class="tts-btn tts-btn-en" id="ttsBtnEn" onclick="ttsSpeak(${JSON.stringify(enText||'')},'en-US',this)">
+      🔊 Read EN
+    </button>
+    ${arText ? `<button class="tts-btn tts-btn-ar" id="ttsBtnAr" onclick="ttsSpeak(${JSON.stringify(arText||'')},'ar-AE',this)">
+      🔊 اقرأ عربي
+    </button>` : ''}
+    <button class="tts-btn tts-btn-stop" onclick="ttsStop()">⏹ Stop</button>
+  </div>
+  <div id="ttsReadingDisplay" style="min-height:0;font-size:0.85rem;color:#888;margin-bottom:4px;line-height:1.5;"></div>`;
+}
+
 
 // ============================================================
 // HELP
@@ -2396,7 +2637,7 @@ async function applyStudentEdit(id) {
       lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
     });
     closeModal();
-    showModal('✅ Student updated successfully!');
+    showAutoModal('✅ Student updated successfully!', null, 2000);
   } catch(e) { showModal('❌ Error: ' + e.message); }
 }
 
@@ -2476,7 +2717,7 @@ async function recallStudent(sessionId, name) {
       message: '📣 المعلمة تطلب عودتك للحصة! Your teacher wants you back!',
       timestamp: firebase.firestore.FieldValue.serverTimestamp()
     });
-    showModal(`📣 <strong>Recall sent to ${name}!</strong><br><br>The student will see an alert to return to the lesson.`);
+    showAutoModal(`📣 <strong>Recall sent to ${name}!</strong><br><br>The student will see an alert to return to the lesson.`, null, 3000);
   } catch(e) { showModal('❌ Could not send recall: ' + e.message); }
 }
 
@@ -2681,20 +2922,13 @@ function renderRegistration() {
   const mc = document.getElementById('mainContent');
   mc.innerHTML = `
   <div style="text-align:center;padding:20px 0 10px;">
-    <div style="font-size:4rem;">🤖🚀</div>
+    <div style="font-size:4rem;animation:robotBounce 1.2s ease-in-out infinite alternate;">🤖🚀</div>
     <h1 style="font-family:'Fredoka One',cursive;font-size:2.5rem;color:var(--navy);margin:8px 0;">Welcome to STREAM Day!</h1>
     <p style="color:#666;font-size:1.1rem;">أهلاً بك في يوم STREAM</p>
   </div>
   <div class="reg-card">
-    <div class="form-group">
-      <label>📚 Select your class / اختر فصلك:</label>
-      <select class="form-select" id="sectionSelect" onchange="onSectionChange()">
-        <option value="">— Choose / اختر —</option>
-        <option>3A</option><option>3B</option><option>3C</option><option>3D</option><option>3E</option>
-      </select>
-    </div>
-    <!-- ── Class Code Entry ── -->
-    <div id="codeGroup" style="display:none;margin-bottom:16px;">
+    <!-- ── Class Code Entry (section auto-detected) ── -->
+    <div id="codeGroup" style="margin-bottom:16px;">
       <label style="font-weight:700;color:var(--navy);margin-bottom:8px;display:block;font-size:1rem;">🔑 Class Code / كود الشعبة</label>
       <div style="display:flex;gap:8px;align-items:stretch;">
         <input type="text" id="codeInput"
@@ -2704,7 +2938,7 @@ function renderRegistration() {
           placeholder="••••" maxlength="10"
           oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"
           onkeydown="if(event.key==='Enter')verifyCode()">
-        <button onclick="verifyCode()"
+        <button id="codeVerifyBtn" onclick="verifyCode()"
           style="background:var(--navy);color:white;border:none;border-radius:14px;
                  padding:0 22px;font-size:1.3rem;cursor:pointer;font-weight:700;
                  transition:background .2s;font-family:'Fredoka One',cursive;"
@@ -2769,68 +3003,55 @@ function renderRegistration() {
   </div>`;
 }
 
-async function onSectionChange() {
-  const sec = document.getElementById('sectionSelect').value;
-  if (!sec) {
-    document.getElementById('codeGroup').style.display = 'none';
-    document.getElementById('nameGroup').style.display = 'none';
-    document.getElementById('startBtn').disabled = true;
-    return;
-  }
-  // Reset state
-  isSpecialNeeds = false;
-  document.getElementById('codeError').style.display = 'none';
-  document.getElementById('codeSuccess').style.display = 'none';
-  document.getElementById('codeInput').value = '';
-  document.getElementById('nameGroup').style.display = 'none';
-  document.getElementById('startBtn').disabled = true;
-  document.getElementById('snIndicator').style.display = 'none';
-
-  // Check if class code is set for this section
-  try {
-    const codeDoc = await db.collection('class_codes').doc(sec).get();
-    if (codeDoc.exists && codeDoc.data().enabled && codeDoc.data().code) {
-      document.getElementById('codeGroup').style.display = 'block';
-      document.getElementById('codeInput').focus();
-      return; // Wait for code verification
-    }
-  } catch(e) { /* no code required */ }
-
-  // No code required — load names directly
-  document.getElementById('codeGroup').style.display = 'none';
-  await loadNameSelector(sec);
-}
+// onSectionChange kept for legacy compatibility but not used in UI
+async function onSectionChange() { /* section now auto-detected from code */ }
 
 async function verifyCode() {
-  const sec = document.getElementById('sectionSelect').value;
   const entered = document.getElementById('codeInput').value.trim().toUpperCase();
   if (!entered) return;
   const errEl = document.getElementById('codeError');
   const okEl  = document.getElementById('codeSuccess');
   errEl.style.display = 'none';
   okEl.style.display  = 'none';
+
+  // Show loading state
+  const btn = document.getElementById('codeVerifyBtn');
+  if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
+
+  let detectedSection = null;
   try {
-    const codeDoc = await db.collection('class_codes').doc(sec).get();
-    const correctCode = (codeDoc.exists ? codeDoc.data().code : '').toUpperCase();
-    if (correctCode && correctCode === entered) {
-      okEl.style.display = 'block';
-      document.getElementById('codeGroup').querySelector('input').disabled = true;
-      document.getElementById('codeGroup').querySelector('button').disabled = true;
-      await loadNameSelector(sec);
-    } else {
-      errEl.style.display = 'block';
-      document.getElementById('codeInput').value = '';
-      document.getElementById('codeInput').focus();
-      // Shake
-      const inp = document.getElementById('codeInput');
-      inp.style.borderColor = '#e53e3e';
-      inp.style.transform = 'translateX(-8px)';
-      setTimeout(() => { inp.style.transform = 'translateX(8px)'; }, 100);
-      setTimeout(() => { inp.style.transform = 'translateX(0)'; }, 200);
-      setTimeout(() => { inp.style.borderColor = '#e2e8f0'; }, 1500);
-    }
-  } catch(e) {
-    await loadNameSelector(sec); // fallback
+    // Search all class_codes documents to find matching code
+    const snap = await db.collection('class_codes').get();
+    snap.forEach(doc => {
+      const d = doc.data();
+      if (d.enabled && d.code && d.code.toUpperCase() === entered) {
+        detectedSection = doc.id; // section ID (3A, 3B, etc.)
+      }
+    });
+  } catch(e) { /* network issue */ }
+
+  if (btn) { btn.textContent = '✓ Enter'; btn.disabled = false; }
+
+  if (detectedSection) {
+    // Store detected section globally
+    window._detectedSection = detectedSection;
+    okEl.innerHTML = `✅ Code verified! Class: <strong>${detectedSection}</strong> — Choose your name below.`;
+    okEl.style.display = 'block';
+    document.getElementById('codeGroup').querySelector('input').disabled = true;
+    document.getElementById('codeGroup').querySelector('#codeVerifyBtn') &&
+      (document.getElementById('codeVerifyBtn').disabled = true);
+    await loadNameSelector(detectedSection);
+  } else {
+    errEl.style.display = 'block';
+    document.getElementById('codeInput').value = '';
+    document.getElementById('codeInput').focus();
+    // Shake animation
+    const inp = document.getElementById('codeInput');
+    inp.style.borderColor = '#e53e3e';
+    inp.style.transform = 'translateX(-8px)';
+    setTimeout(() => { inp.style.transform = 'translateX(8px)'; }, 100);
+    setTimeout(() => { inp.style.transform = 'translateX(0)'; }, 200);
+    setTimeout(() => { inp.style.borderColor = '#e2e8f0'; }, 1500);
   }
 }
 
@@ -2870,7 +3091,7 @@ async function checkSpecialNeeds(name, section) {
 // ATTENDANCE — "أنا هنا" / "I'm Here" System
 // ============================================================
 async function markPresent() {
-  const sec = document.getElementById('sectionSelect').value;
+  const sec = window._detectedSection || '';
   const name = document.getElementById('nameSelect').value;
   if (!sec || !name) return;
   const btn = document.getElementById('startBtn');
@@ -5201,6 +5422,92 @@ function returnToLesson() {
 
 </script>
 
+
+<!-- ============================================================ -->
+<!-- WARM-UP MOTIVATING OPENER -->
+<!-- ============================================================ -->
+<div id="warmupOverlay" style="display:none;position:fixed;inset:0;z-index:10500;
+  background:linear-gradient(135deg,#0f2756 0%,#1a3a8f 50%,#0f2756 100%);
+  overflow-y:auto;animation:fadeIn 0.4s ease;">
+  <div style="max-width:680px;margin:0 auto;padding:32px 20px;text-align:center;color:white;">
+
+    <!-- Title -->
+    <div style="font-size:3.5rem;margin-bottom:8px;animation:robotBounce 1s ease-in-out infinite alternate;">🤖</div>
+    <h1 style="font-family:'Fredoka One',cursive;font-size:2.2rem;color:#f0c96b;margin:0 0 6px;">
+      Today's Mission!
+    </h1>
+    <p style="font-size:1.1rem;opacity:0.85;font-family:'Tajawal',sans-serif;">
+      مهمتك اليوم 🚀
+    </p>
+
+    <!-- Mission Cards -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:24px 0;text-align:left;">
+      <div class="wu-card" onclick="this.classList.toggle('wu-done')" style="background:rgba(255,255,255,0.08);border:2px solid rgba(240,201,107,0.3);border-radius:18px;padding:18px 16px;cursor:pointer;transition:all 0.3s;">
+        <div style="font-size:2rem;">🦾</div>
+        <div style="font-family:'Fredoka One',cursive;font-size:1rem;color:#f0c96b;margin-top:8px;">Build a Robot</div>
+        <div style="font-size:0.85rem;opacity:0.8;margin-top:4px;">Design with recycled materials</div>
+        <div style="font-family:'Tajawal',sans-serif;font-size:0.8rem;opacity:0.7;margin-top:2px;">ابنِ روبوتاً من مواد إعادة التدوير</div>
+      </div>
+      <div class="wu-card" onclick="this.classList.toggle('wu-done')" style="background:rgba(255,255,255,0.08);border:2px solid rgba(240,201,107,0.3);border-radius:18px;padding:18px 16px;cursor:pointer;transition:all 0.3s;">
+        <div style="font-size:2rem;">💡</div>
+        <div style="font-family:'Fredoka One',cursive;font-size:1rem;color:#f0c96b;margin-top:8px;">Code with micro:bit</div>
+        <div style="font-size:0.85rem;opacity:0.8;margin-top:4px;">Program LED patterns</div>
+        <div style="font-family:'Tajawal',sans-serif;font-size:0.8rem;opacity:0.7;margin-top:2px;">برمج أضواء اللد</div>
+      </div>
+      <div class="wu-card" onclick="this.classList.toggle('wu-done')" style="background:rgba(255,255,255,0.08);border:2px solid rgba(240,201,107,0.3);border-radius:18px;padding:18px 16px;cursor:pointer;transition:all 0.3s;">
+        <div style="font-size:2rem;">🎨</div>
+        <div style="font-family:'Fredoka One',cursive;font-size:1rem;color:#f0c96b;margin-top:8px;">Design & Plan</div>
+        <div style="font-size:0.85rem;opacity:0.8;margin-top:4px;">Sketch your robot's blueprint</div>
+        <div style="font-family:'Tajawal',sans-serif;font-size:0.8rem;opacity:0.7;margin-top:2px;">ارسم مخطط روبوتك</div>
+      </div>
+      <div class="wu-card" onclick="this.classList.toggle('wu-done')" style="background:rgba(255,255,255,0.08);border:2px solid rgba(240,201,107,0.3);border-radius:18px;padding:18px 16px;cursor:pointer;transition:all 0.3s;">
+        <div style="font-size:2rem;">🤖✨</div>
+        <div style="font-family:'Fredoka One',cursive;font-size:1rem;color:#f0c96b;margin-top:8px;">AI Poster</div>
+        <div style="font-size:0.85rem;opacity:0.8;margin-top:4px;">Gemini AI creates your poster!</div>
+        <div style="font-family:'Tajawal',sans-serif;font-size:0.8rem;opacity:0.7;margin-top:2px;">الذكاء الاصطناعي يصنع ملصقك</div>
+      </div>
+    </div>
+
+    <!-- Think & Share Quick Question -->
+    <div style="background:rgba(240,201,107,0.12);border:2px solid rgba(240,201,107,0.4);border-radius:18px;padding:20px;margin:16px 0;">
+      <div style="font-size:1.5rem;">🤔</div>
+      <div style="font-family:'Fredoka One',cursive;font-size:1.1rem;color:#f0c96b;margin:8px 0 4px;">Quick Thought!</div>
+      <div style="font-size:1rem;opacity:0.9;line-height:1.6;">
+        Can you name <strong>3 things a robot needs</strong> to move?<br>
+        <span style="font-family:'Tajawal',sans-serif;font-size:0.9rem;opacity:0.8;">ما هي 3 أشياء يحتاجها الروبوت للحركة؟</span>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap;">
+        <div class="wu-answer-chip" onclick="toggleWuChip(this)" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:8px 16px;cursor:pointer;font-size:0.9rem;transition:all 0.2s;">⚡ Energy</div>
+        <div class="wu-answer-chip" onclick="toggleWuChip(this)" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:8px 16px;cursor:pointer;font-size:0.9rem;transition:all 0.2s;">🦿 Parts</div>
+        <div class="wu-answer-chip" onclick="toggleWuChip(this)" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:8px 16px;cursor:pointer;font-size:0.9rem;transition:all 0.2s;">💻 Code</div>
+        <div class="wu-answer-chip" onclick="toggleWuChip(this)" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:8px 16px;cursor:pointer;font-size:0.9rem;transition:all 0.2s;">🧠 Sensors</div>
+      </div>
+    </div>
+
+    <!-- Ready button -->
+    <button onclick="closeWarmup()"
+      style="background:linear-gradient(135deg,#22c55e,#16a34a);color:white;border:none;
+             border-radius:20px;padding:16px 48px;font-size:1.3rem;font-family:'Fredoka One',cursive;
+             cursor:pointer;box-shadow:0 6px 24px rgba(34,197,94,0.4);
+             margin-top:8px;animation:pulseGreen 2s ease-in-out infinite;transition:transform 0.1s;"
+      onmouseover="this.style.transform='scale(1.04)'"
+      onmouseout="this.style.transform='scale(1)'">
+      I'm Ready! Let's Go! 🚀
+    </button>
+    <div style="font-family:'Tajawal',sans-serif;font-size:0.9rem;opacity:0.6;margin-top:10px;">
+      جاهز؟ هيا نبدأ! 🎉
+    </div>
+  </div>
+</div>
+
+<style>
+.wu-card:hover { background: rgba(255,255,255,0.14) !important; transform: scale(1.02); }
+.wu-card.wu-done { background: rgba(34,197,94,0.15) !important; border-color: rgba(34,197,94,0.6) !important; }
+.wu-card.wu-done::after { content: ' ✅'; }
+.wu-answer-chip:hover { background: rgba(240,201,107,0.2) !important; }
+.wu-answer-chip.selected { background: rgba(240,201,107,0.3) !important; border-color: #f0c96b !important; color: #f0c96b; font-weight: 700; }
+</style>
+
 <!-- ============================================================ -->
 <!-- JOURNEY MAP OVERLAY -->
 <!-- ============================================================ -->
@@ -5441,6 +5748,102 @@ function returnToLesson() {
       <button class="btn-secondary" onclick="closeFingerDraw()">Cancel / إلغاء</button>
     </div>
   </div>
+</div>
+
+
+<!-- LESSON PLAN MODAL -->
+<div id="lessonPlanModal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.6);overflow-y:auto;padding:20px 0;">
+  <div style="background:white;border-radius:24px;max-width:780px;width:95%;margin:20px auto;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    <div style="background:linear-gradient(135deg,#0f2756,#1a3a8f);padding:24px 28px;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-family:'Fredoka One',cursive;font-size:1.5rem;color:#f0c96b;">📋 Lesson Plan — خطة الدرس</div>
+        <div style="font-size:0.9rem;color:rgba(255,255,255,0.75);margin-top:4px;">CCDI &amp; AI · Grade 3 · روضة ومدرسة الجود · العين</div>
+      </div>
+      <button onclick="document.getElementById('lessonPlanModal').style.display='none'" style="background:rgba(255,255,255,0.15);border:none;color:white;width:36px;height:36px;border-radius:50%;font-size:1.2rem;cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:28px;">
+      <!-- Overview -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:22px;">
+        <div style="background:#f0f4ff;border-radius:12px;padding:12px;text-align:center;font-size:0.83rem;"><div style="font-size:1.4rem;">🎯</div><b>Topic</b><br>Robots &amp; micro:bit</div>
+        <div style="background:#f0fff4;border-radius:12px;padding:12px;text-align:center;font-size:0.83rem;"><div style="font-size:1.4rem;">⏱️</div><b>Duration</b><br>55 min</div>
+        <div style="background:#fff8e1;border-radius:12px;padding:12px;text-align:center;font-size:0.83rem;"><div style="font-size:1.4rem;">👥</div><b>Grade</b><br>Grade 3</div>
+        <div style="background:#fdf4ff;border-radius:12px;padding:12px;text-align:center;font-size:0.83rem;"><div style="font-size:1.4rem;">📍</div><b>Location</b><br>Al Ain, UAE</div>
+      </div>
+      <!-- Learning Outcomes -->
+      <div style="margin-bottom:18px;">
+        <div style="font-family:'Fredoka One',cursive;font-size:1.05rem;color:#0f2756;margin-bottom:8px;">🎯 Learning Outcomes</div>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:0.85rem;">
+          <div style="background:#f8faff;border-radius:8px;padding:9px 12px;border-left:3px solid #0f2756;">1. Define robot components — تعريف مكونات الروبوت</div>
+          <div style="background:#f8faff;border-radius:8px;padding:9px 12px;border-left:3px solid #0f2756;">2. Select recycled materials for building — اختيار مواد إعادة التدوير</div>
+          <div style="background:#f8faff;border-radius:8px;padding:9px 12px;border-left:3px solid #0f2756;">3. Design and sketch robot blueprint — رسم مخطط الروبوت</div>
+          <div style="background:#f8faff;border-radius:8px;padding:9px 12px;border-left:3px solid #0f2756;">4. Write micro:bit program in MakeCode — برمجة micro:bit</div>
+          <div style="background:#f8faff;border-radius:8px;padding:9px 12px;border-left:3px solid #0f2756;">5. Self-assess using ⭐⭐⭐ rating — التقييم الذاتي</div>
+        </div>
+      </div>
+      <!-- Timeline -->
+      <div style="margin-bottom:18px;">
+        <div style="font-family:'Fredoka One',cursive;font-size:1.05rem;color:#0f2756;margin-bottom:8px;">📅 Lesson Timeline</div>
+        <table style="width:100%;border-collapse:collapse;font-size:0.83rem;">
+          <tr style="background:#0f2756;color:white;"><th style="padding:8px 10px;text-align:left;border-radius:8px 0 0 0;">Phase</th><th style="padding:8px 10px;text-align:left;">Activity</th><th style="padding:8px 10px;text-align:center;">Time</th><th style="padding:8px 10px;text-align:center;border-radius:0 8px 0 0;">Mode</th></tr>
+          <tr style="background:white;"><td style="padding:7px 10px;font-weight:700;">0</td><td style="padding:7px 10px;">Warm-Up + Registration</td><td style="padding:7px 10px;text-align:center;">5 min</td><td style="padding:7px 10px;text-align:center;">🖥️</td></tr>
+          <tr style="background:#f8faff;"><td style="padding:7px 10px;font-weight:700;">1</td><td style="padding:7px 10px;">Journey Map Preview</td><td style="padding:7px 10px;text-align:center;">3 min</td><td style="padding:7px 10px;text-align:center;">🗺️</td></tr>
+          <tr style="background:white;"><td style="padding:7px 10px;font-weight:700;">2</td><td style="padding:7px 10px;">What is a Robot? (MCQ)</td><td style="padding:7px 10px;text-align:center;">5 min</td><td style="padding:7px 10px;text-align:center;">📱</td></tr>
+          <tr style="background:#f8faff;"><td style="padding:7px 10px;font-weight:700;">3</td><td style="padding:7px 10px;">Keywords — Drag &amp; Drop</td><td style="padding:7px 10px;text-align:center;">5 min</td><td style="padding:7px 10px;text-align:center;">🤝</td></tr>
+          <tr style="background:white;"><td style="padding:7px 10px;font-weight:700;">4</td><td style="padding:7px 10px;">Materials Selection</td><td style="padding:7px 10px;text-align:center;">4 min</td><td style="padding:7px 10px;text-align:center;">📱</td></tr>
+          <tr style="background:#f8faff;"><td style="padding:7px 10px;font-weight:700;">5</td><td style="padding:7px 10px;">Design &amp; Blueprint</td><td style="padding:7px 10px;text-align:center;">8 min</td><td style="padding:7px 10px;text-align:center;">✏️</td></tr>
+          <tr style="background:white;"><td style="padding:7px 10px;font-weight:700;">6</td><td style="padding:7px 10px;">Pre-Coding Quiz</td><td style="padding:7px 10px;text-align:center;">5 min</td><td style="padding:7px 10px;text-align:center;">📱</td></tr>
+          <tr style="background:#f8faff;"><td style="padding:7px 10px;font-weight:700;">7</td><td style="padding:7px 10px;">🖥️ MakeCode Programming</td><td style="padding:7px 10px;text-align:center;">12 min</td><td style="padding:7px 10px;text-align:center;">💻</td></tr>
+          <tr style="background:white;"><td style="padding:7px 10px;font-weight:700;">8</td><td style="padding:7px 10px;">Self-Assessment ⭐⭐⭐</td><td style="padding:7px 10px;text-align:center;">3 min</td><td style="padding:7px 10px;text-align:center;">🪞</td></tr>
+          <tr style="background:#f8faff;"><td style="padding:7px 10px;font-weight:700;">9</td><td style="padding:7px 10px;">AI Poster + Exit Reflection</td><td style="padding:7px 10px;text-align:center;">5 min</td><td style="padding:7px 10px;text-align:center;">🤖</td></tr>
+        </table>
+      </div>
+      <!-- Resources -->
+      <div style="margin-bottom:16px;">
+        <div style="font-family:'Fredoka One',cursive;font-size:1.05rem;color:#0f2756;margin-bottom:8px;">🧰 Resources</div>
+        <div style="display:flex;flex-wrap:wrap;gap:7px;font-size:0.82rem;">
+          <span style="background:#f0f4ff;border-radius:20px;padding:5px 12px;border:1px solid #d1d9f0;">🤖 Student Robots</span>
+          <span style="background:#f0f4ff;border-radius:20px;padding:5px 12px;border:1px solid #d1d9f0;">💡 micro:bit</span>
+          <span style="background:#f0f4ff;border-radius:20px;padding:5px 12px;border:1px solid #d1d9f0;">🖥️ MakeCode</span>
+          <span style="background:#f0f4ff;border-radius:20px;padding:5px 12px;border:1px solid #d1d9f0;">📱 Student Tablets</span>
+          <span style="background:#f0f4ff;border-radius:20px;padding:5px 12px;border:1px solid #d1d9f0;">🤖 Gemini AI</span>
+          <span style="background:#f0f4ff;border-radius:20px;padding:5px 12px;border:1px solid #d1d9f0;">📡 Firebase</span>
+        </div>
+      </div>
+      <!-- Assessment -->
+      <div style="background:#f0fff4;border-radius:12px;padding:14px;margin-bottom:14px;font-size:0.85rem;">
+        <div style="font-family:'Fredoka One',cursive;font-size:1rem;color:#0f2756;margin-bottom:6px;">📊 Assessment</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div>✅ <b>Formative:</b> Adaptive quiz (10 pts)</div>
+          <div>⭐ <b>Self-Assessment:</b> 3-star per phase</div>
+          <div>📸 <b>Product:</b> Robot + AI Poster</div>
+          <div>👁️ <b>Observation:</b> Live teacher dashboard</div>
+        </div>
+      </div>
+      <!-- MOE Standards -->
+      <div style="background:#fff8e1;border-radius:12px;padding:14px;font-size:0.82rem;">
+        <div style="font-family:'Fredoka One',cursive;font-size:1rem;color:#0f2756;margin-bottom:6px;">📌 MOE Standards</div>
+        <div>• <b>CCDI.3.1:</b> Computational thinking for design solutions</div>
+        <div>• <b>CCDI.3.2:</b> Block-based programming</div>
+        <div>• <b>CCDI.3.3:</b> Creativity through digital &amp; physical making</div>
+        <div>• <b>AI.3.1:</b> Basic AI concepts and applications</div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;">
+        <button onclick="window.print()" style="background:linear-gradient(135deg,#0f2756,#1a3a8f);color:white;border:none;padding:10px 22px;border-radius:12px;font-size:0.88rem;font-weight:700;cursor:pointer;">🖨️ Print</button>
+        <button onclick="document.getElementById('lessonPlanModal').style.display='none'" style="background:#f0f0f0;border:none;padding:10px 22px;border-radius:12px;font-size:0.88rem;cursor:pointer;">✕ Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- Floating TTS Button -->
+<div id="ttsFab" style="position:fixed;bottom:90px;right:18px;z-index:8000;display:none;flex-direction:column;gap:8px;align-items:flex-end;">
+  <div id="ttsFabMenu" style="display:none;flex-direction:column;gap:6px;align-items:flex-end;margin-bottom:6px;">
+    <button class="tts-btn tts-btn-en" id="ttsFabEn" onclick="ttsFabSpeak('en')" style="white-space:nowrap;">🔊 Read in English</button>
+    <button class="tts-btn tts-btn-ar" id="ttsFabAr" onclick="ttsFabSpeak('ar')" style="white-space:nowrap;">🔊 اقرأ بالعربية</button>
+    <button class="tts-btn tts-btn-stop" onclick="ttsStop();document.getElementById('ttsFabMenu').style.display='none';" style="white-space:nowrap;">⏹ Stop</button>
+  </div>
+  <button onclick="toggleTtsFab()" style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#0f2756,#1a3a8f);border:none;color:white;font-size:1.4rem;cursor:pointer;box-shadow:0 4px 16px rgba(15,39,86,0.4);display:flex;align-items:center;justify-content:center;" title="Text to Speech / قراءة صوتية">🔊</button>
 </div>
 
 </body>
