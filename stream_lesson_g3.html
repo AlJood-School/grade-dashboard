@@ -4680,26 +4680,38 @@ function renderProgramming() {
 }
 
 function renderCodePartA() {
+  preAnswers = {};
+  _currentPreIdx = 0;
+  setTimeout(()=>showPreQuestion(0), 80);
   return `
   <div class="card card-colored">
-    <p style="color:#555;margin-bottom:20px;">Answer these 3 questions to choose your coding level!</p>
-    ${MCQ_PRE.map((q,i)=>`
-      <div class="question-card" id="preQ${i}">
-        <div class="question-text"><span class="question-number">${i+1}</span> ${q.q}</div>
-        <div style="font-family:'Tajawal', sans-serif;font-size:0.9rem;color:#888;margin:4px 0 12px;">${q.ar}</div>
-        <div class="choices-grid">
-          ${q.opts.map((o,j)=>`
-            <div class="choice-card" id="preOpt${i}_${j}" onclick="answerPre(${i},${j},${q.correct})">
-              ${o}
-            </div>`).join('')}
-        </div>
-        <div class="feedback-box" id="preFb${i}"></div>
-      </div>`).join('')}
-    <div id="preScoreArea" style="display:none;text-align:center;margin-top:20px;"></div>
+    <p style="color:#555;margin-bottom:12px;">Answer these 3 questions to choose your coding level!</p>
+    <div id="preQuestionsArea"></div>
   </div>`;
 }
 
 let preAnswers = {};
+let _currentPreIdx = 0;
+function showPreQuestion(qi){
+  _currentPreIdx = qi;
+  const q = MCQ_PRE[qi];
+  const total = MCQ_PRE.length;
+  const container = document.getElementById('preQuestionsArea');
+  if(!container) return;
+  container.innerHTML = `
+    <div class="question-card" style="animation:fadeIn 0.35s ease" id="preQ${qi}">
+      <div style="text-align:center;font-size:0.78rem;color:#8899bb;margin-bottom:6px;font-weight:600;">
+        Question ${qi+1} of ${total}
+      </div>
+      <div class="question-text"><span class="question-number">${qi+1}</span> ${q.q}</div>
+      <div style="font-family:'Tajawal',sans-serif;font-size:0.9rem;color:#888;margin:4px 0 12px;">${q.ar}</div>
+      <div class="choices-grid">
+        ${q.opts.map((o,j)=>`<div class="choice-card" id="preOpt${qi}_${j}" onclick="answerPre(${qi},${j},${q.correct})">${o}</div>`).join('')}
+      </div>
+      <div class="feedback-box" id="preFb${qi}"></div>
+    </div>
+    <div id="preScoreArea" style="display:none;text-align:center;margin-top:20px;"></div>`;
+}
 function answerPre(qIdx, optIdx, correct) {
   if (preAnswers[qIdx] !== undefined) return;
   const isCorrect = optIdx === correct;
@@ -4713,20 +4725,26 @@ function answerPre(qIdx, optIdx, correct) {
   fb.textContent = isCorrect ? t('correct') : t('wrong');
   if(isCorrect) playSuccess(); else playWrong();
   preAnswers[qIdx] = isCorrect;
-  if (Object.keys(preAnswers).length === 3) {
+  const nextIdx = qIdx + 1;
+  if(nextIdx < MCQ_PRE.length){
+    setTimeout(()=>showPreQuestion(nextIdx), 1400);
+  } else {
     preScore = Object.values(preAnswers).filter(Boolean).length;
-    // Global adaptive: Phase 5a pre-coding MCQ
     globalScores.p5a = preScore;
-    recalcOverallLevel(); // sets programmingLevel based on all phases
+    recalcOverallLevel();
     phaseData.p5_codeLevel = programmingLevel;
     phaseData.p5_preScore = preScore;
-    const area = document.getElementById('preScoreArea');
-    area.style.display = 'block';
-    area.innerHTML = `<div class="score-badge">Score: ${preScore}/3</div>
-      <p style="margin-top:12px;">Level: <strong style="color:var(--navy);font-size:1.1rem;">${programmingLevel.toUpperCase()} 🎯</strong></p>
-      ${programmingLevel !== 'advanced' ? '<p style="color:#888;margin-top:4px;">No worries! Let\'s try an easier level 😊</p>' : ''}
-      <button class="btn-primary" style="margin-top:16px;" onclick="openCodeBuilder()">🧱 Start Coding! ➡️</button>`;
-    if(preScore===3) launchConfetti(30);
+    setTimeout(()=>{
+      const area = document.getElementById('preScoreArea');
+      if(area){
+        area.style.display = 'block';
+        area.innerHTML = `<div class="score-badge">Score: ${preScore}/3</div>
+          <p style="margin-top:12px;">Level: <strong style="color:var(--navy);font-size:1.1rem;">${programmingLevel.toUpperCase()} 🎯</strong></p>
+          ${programmingLevel !== 'advanced' ? '<p style="color:#888;margin-top:4px;">No worries! Let\'s try an easier level 😊</p>' : ''}
+          <button class="btn-primary" style="margin-top:16px;" onclick="openCodeBuilder()">🧱 Start Coding! ➡️</button>`;
+        if(preScore===3) launchConfetti(30);
+      }
+    }, 1400);
   }
 }
 
