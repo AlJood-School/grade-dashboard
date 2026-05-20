@@ -3517,7 +3517,7 @@ body {
           <button class="btn-filter" onclick="filterAtt('4')" id="attFilterG4">📘 صف 4</button>
           <div id="attFilterClasses" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
           <div style="margin-right:auto;display:flex;gap:6px;flex-wrap:wrap;">
-            <button onclick="listenAttendance()" style="background:rgba(116,192,252,0.2);border:1px solid rgba(116,192,252,0.4);color:#74c0fc;padding:4px 10px;border-radius:8px;font-size:0.75rem;font-family:Cairo,sans-serif;cursor:pointer;" title="إعادة تحميل الحضور من Firebase">🔄 تحديث</button>
+            <button onclick="listenAttendance()" style="background:rgba(116,192,252,0.2);border:1px solid rgba(116,192,252,0.4);color:#74c0fc;padding:4px 10px;border-radius:8px;font-size:0.75rem;font-family:Cairo,sans-serif;cursor:pointer;" title="إعادة تحميل الحضور من Supabase">🔄 تحديث</button>
             <button onclick="clearAttendanceNow()" style="background:rgba(255,100,100,0.15);border:1px solid rgba(255,100,100,0.4);color:#ff8080;padding:4px 10px;border-radius:8px;font-size:0.75rem;font-family:Cairo,sans-serif;cursor:pointer;" title="مسح جميع سجلات الحضور">🗑️ مسح الحضور</button>
             <button class="btn-kick-all" onclick="kickAllStudents()" title="طرد جميع الطلاب من الحصة">🚫 طرد الجميع</button>
             <button class="btn-restore-all" onclick="restoreAllStudents()" title="إعادة جميع الطلاب">🔓 إعادة الجميع</button>
@@ -3819,7 +3819,7 @@ body {
       <div class="plan-section-body" style="font-size:0.85rem;line-height:2;color:#37474f">
         • جميع الطالبات يتفاعلن رقمياً — الحضور يُشاهد في الوقت الفعلي<br>
         • المعلمة تتحكم في إيقاع الحصة عبر لوحة التحكم<br>
-        • شاشات الطالبات تتحدث تلقائياً عند تغيير المرحلة (Firebase Sync)<br>
+        • شاشات الطالبات تتحدث تلقائياً عند تغيير المرحلة (Supabase Sync)<br>
         • التمييز بين المستويات مدمج في النموذج والأسئلة<br>
         • أداة الاختيار العشوائي تضمن تكافؤ الفرص في المشاركة
       </div>
@@ -3831,7 +3831,7 @@ body {
 <script type="module">
 // ============================================================
 // ============================================================
-// SUPABASE SETUP (Firebase → Supabase)
+// SUPABASE SETUP
 // ============================================================
 const SUPA_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
@@ -4243,7 +4243,7 @@ function startStudentSync() {
       const { data: snap } = await sb.from('obs_session').select('*').eq('id', 'current').maybeSingle();
       if (snap) {
         const data = snap;
-        // Process session data (same as Firebase snap.data())
+        // Process session data from Supabase
         if (data.phase !== undefined) {
           currentPhase = data.phase;
           updateStudentPhaseDisplay(currentPhase);
@@ -5352,7 +5352,7 @@ window.openGroupDistribution = async function() {
     groups['G' + gNum] = allStudents.slice(i, i + 4);
     gNum++;
   }
-  // Save to Firebase
+  // Save to Supabase
   try {
     await sbUpsert('obs_session', { id: 'current',  groups });
   } catch(e) { console.warn('Groups save failed:', e); }
@@ -6111,7 +6111,7 @@ window.startClassTimer = function() {
     if (classTimerSeconds > 0) {
       classTimerSeconds--;
       updateClassTimerDisplay();
-      // Sync to Firebase every 10 seconds
+      // Sync to Supabase every 10 seconds
       if (classTimerSeconds % 10 === 0) {
         try { setDoc(doc(db, 'obs_session', 'current'), { classTimerSeconds }); } catch(e){}
       }
@@ -6137,7 +6137,7 @@ window.resetClassTimer = function() {
   if (sw) sw.className = 'class-timer-wrap';
 };
 
-// Sync class timer to students via Firebase
+// Sync class timer to students via Supabase
 // (students pick it up in startStudentSync via obs_session.classTimerSeconds)
 const _origStartStudentSync = typeof startStudentSync === 'function' ? startStudentSync : null;
 
@@ -6308,7 +6308,7 @@ window.initDesignProcessAnimation = function() {
     if (!boostShownPhase3 && currentPhase === 3) {
       boostShownPhase3 = true;
       showBoostCard('phase3', (correct, total) => {
-        // Save to Firebase
+        // Save to Supabase
         try {
           const studentId = currentStudent ? currentStudent.id || currentStudent.name : 'unknown';
           sbUpsert('obs_boost_results', {
@@ -6575,19 +6575,14 @@ window.saveReflection = async function() {
       grade: typeof selectedGrade !== 'undefined' ? selectedGrade : null,
       cls: typeof selectedClass !== 'undefined' ? selectedClass : null,
       lessonDate: new Date().toISOString().split('T')[0],
-      timestamp: firebase.firestore.FieldValue.new Date().toISOString()
+      timestamp: new Date().toISOString()
     });
     if (savedDiv) {
       savedDiv.style.display = 'block';
       setTimeout(() => { savedDiv.style.display = 'none'; }, 3500);
     }
   } catch(e) {
-    console.warn('Reflection save error — trying alternative:', e);
-    // Try alternative Firebase v9 syntax
-    try {
-      const { addDoc, collection } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
-      // fallback - just show saved
-    } catch(e2) {}
+    console.warn('Reflection save error:', e);
     if (savedDiv) {
       savedDiv.textContent = '✅ Saved locally!';
       savedDiv.style.display = 'block';
@@ -7098,7 +7093,7 @@ function show8MinAlert() {
 
 // ---- On class time end ----
 async function onClassTimeEnd() {
-  // 1. Save all student achievements to Firebase
+  // 1. Save all student achievements to Supabase
   await saveAllStudentAchievements();
 
   // 2. On STUDENT screens: show end screen + clear memory
@@ -7129,7 +7124,7 @@ async function saveAllStudentAchievements() {
         class: cls,
         score: typeof studentScore !== 'undefined' ? studentScore : 0,
         maxScore: typeof studentMaxScore !== 'undefined' ? studentMaxScore : 0,
-        savedAt: firebase.firestore.FieldValue.new Date().toISOString(),
+        savedAt: new Date().toISOString(),
         reason: 'timer_end'
       });
       console.log('✅ Student achievements saved on timer end');

@@ -775,7 +775,7 @@ select:focus { border-color: var(--dark); }
       <tr><td style="padding:8px 0;">🚪 بطاقة الخروج</td><td id="r-exit" style="font-weight:700;text-align:left;"></td></tr>
     </table>
   </div>
-  <div id="firebase-status" class="alert alert-info" style="margin-top:8px;">
+  <div id="supabase-status" class="alert alert-info" style="margin-top:8px;">
     💾 جاري حفظ نتيجتك...
   </div>
   <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
@@ -992,7 +992,7 @@ select:focus { border-color: var(--dark); }
         <button class="btn btn-dark btn-sm" onclick="exportCSV()">📥 تصدير CSV</button>
       </div>
     </div>
-    <div id="teacher-loading" class="empty-state"><span class="loading-dots">⏳ جاري الاتصال بـ Firebase...</span></div>
+    <div id="teacher-loading" class="empty-state"><span class="loading-dots">⏳ جاري الاتصال بـ Supabase...</span></div>
     <div id="teacher-table-wrap" style="overflow-x:auto;display:none;">
       <table class="data-table" id="teacher-table">
         <thead>
@@ -1053,7 +1053,7 @@ select:focus { border-color: var(--dark); }
   © ٢٠٢٦ مدرسة الجود الحكومية — تسجيل المصنفة الفكرية البرمجية | تصميم: منيرة المري
 </div>
 
-<!-- Firebase SDK -->
+<!-- Supabase Setup -->
 <script type="module">
 // ============================================================
 // SUPABASE SETUP
@@ -1068,7 +1068,7 @@ async function getWLSB() {
   return _wlSB;
 }
 console.log('✅ Supabase ready (weekly lessons)');
-console.log("Firebase ready");
+// Supabase ready
 
 // Trigger pending save if any
 if (window.__pendingSave) {
@@ -1218,8 +1218,8 @@ async function clearState() {
   if (resumeCard) resumeCard.style.display = 'none';
 }
 
-// ── Firebase Progress Save/Load ──
-async function saveProgressToFirebase() {
+// ── Supabase Progress Save/Load ──
+async function saveProgressToSupabase() {
   if (browseMode) return true;
   if (!currentStudent || !currentClass || currentWeek === null) return false;
   try {
@@ -1236,7 +1236,7 @@ async function saveProgressToFirebase() {
   } catch(e) { console.error('Save progress error:', e); return false; }
 }
 
-async function loadProgressFromFirebase(studentName, className) {
+async function loadProgressFromSupabase(studentName, className) {
   if (!studentName || !className) return null;
   try {
     const sb = await getWLSB();
@@ -1254,7 +1254,7 @@ async function loadProgressFromFirebase(studentName, className) {
   } catch(e) { console.error('Load progress error:', e); return null; }
 }
 
-async function clearProgressFromFirebase() {
+async function clearProgressFromSupabase() {
   if (!currentStudent || !currentClass) return;
   try {
     const sb = await getWLSB();
@@ -1270,8 +1270,8 @@ async function logoutStudent() {
     : 'Your progress will be saved. Exit?';
   if (!confirm(confirmMsg)) return;
 
-  // Save to Firebase first
-  const saved = await saveProgressToFirebase();
+  // Save to Supabase first
+  const saved = await saveProgressToSupabase();
 
   // Also save to localStorage
   saveState();
@@ -1301,9 +1301,9 @@ async function onNameSelect(name) {
     confirmEl.style.display = 'block';
     goBtn.disabled = false;
 
-    // Check Firebase for saved progress
+    // Check Supabase for saved progress
     resumeCard.style.display = 'none';
-    _resumeData = await loadProgressFromFirebase(name, currentClass);
+    _resumeData = await loadProgressFromSupabase(name, currentClass);
     if (_resumeData) {
       const stageNames = ['Warm-Up | تهيئة', 'Content | محتوى', 'Quiz | اختبار', 'Activity | نشاط', 'Exit Card | خروج'];
       const stageName = stageNames[_resumeData.stage] || '';
@@ -1338,7 +1338,7 @@ async function resumeProgress() {
 }
 
 async function clearProgressAndStart() {
-  await clearProgressFromFirebase();
+  await clearProgressFromSupabase();
   clearState();
   document.getElementById('resume-card').style.display = 'none';
   _resumeData = null;
@@ -1538,7 +1538,7 @@ function goToNameSelect() {
   });
 }
 
-// onNameSelect defined above (async version with Firebase)
+// onNameSelect defined above (async version with Supabase)
 
 function goToWeeks() {
   if (!currentStudent) return;
@@ -2182,7 +2182,7 @@ async function submitLesson() {
   completedWeeks[key] = { done: true, score: total, max: 10 };
   localStorage.setItem('completedWeeks', JSON.stringify(completedWeeks));
 
-  // Save to Firebase
+  // Save to Supabase
   const data = {
     cls: currentClass || '',
     grade: currentGrade || '',
@@ -2200,21 +2200,21 @@ async function submitLesson() {
   };
 
   window.__pendingSave = data;
-  await saveToFirebase(data);
+  await saveToSupabase(data);
 }
 
 async function saveToSupabase(data) {
-  const statusEl = document.getElementById('firebase-status');
-  if (statusEl) { statusEl.textContent = '⏳ جاري الحفظ...'; statusEl.className = 'alert alert-info'; statusEl.style.display = 'block'; }
+  const statusEl = document.getElementById('supabase-status');
+  if (statusEl) { statusEl.textContent = '⏳ جاري الحفظ في Supabase...'; statusEl.className = 'alert alert-info'; statusEl.style.display = 'block'; }
   try {
     const sb = await getWLSB();
     const { error } = await sb.from('weekly_results').insert({
-      student_name: data.studentName || data.name,
-      class_name: data.className || data.class,
-      grade: data.grade,
-      score: data.score,
-      total: data.total || data.maxScore || 10,
-      week: data.week,
+      student_name: data.studentName || data.name || '',
+      class_name: data.cls || data.className || data.class || '',
+      grade: String(data.grade || ''),
+      score: data.totalScore ?? data.quizScore ?? data.score ?? 0,
+      total: data.max || data.total || 10,
+      week: String(data.week || ''),
       subject: data.subject || 'تقنية',
       created_at: new Date().toISOString()
     });
@@ -2228,8 +2228,7 @@ async function saveToSupabase(data) {
     if (statusEl) { statusEl.textContent = '⚠️ خطأ: ' + e.message; statusEl.className = 'alert alert-warning'; }
   }
 }
-async function saveToFirebase(data) { return saveToSupabase(data); }
-window.saveToFirebase = saveToSupabase;
+async function saveToFirebase(data) { return saveToSupabase(data); } // backward compat alias
 
 // ============================================================
 // BROWSE MODE FUNCTIONS
@@ -2271,7 +2270,7 @@ function exitBrowseMode() {
   showScreen('screen-teacher');
 }
 
-window.saveToFirebase = saveToFirebase;
+// saveToFirebase alias removed
 
 // =========== TEACHER DASHBOARD ===========
 let allTeacherData = [];
@@ -2514,7 +2513,7 @@ function renderWeeksProgress() {
   if (gFilter !== 'ALL') {
     data = data.filter(d => {
       const cls = d.cls || d.class || '';
-      // Support both "3A" and "Grade 3A" formats in Firebase
+      // Support both "3A" and "Grade 3A" formats
       return cls.startsWith('Grade ' + gFilter) || cls.startsWith(gFilter);
     });
   }
