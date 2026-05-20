@@ -4671,8 +4671,9 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     <div class="pp-login-card">
       <div class="pp-login-logo">👨‍👩‍👧</div>
       <div class="pp-login-title">بوابة ولي الأمر</div>
-      <div class="pp-login-sub">أدخل رقم جوالك المسجل لدى المدرسة</div>
-      <input type="tel" id="pp-phone-input" class="pp-input" placeholder="+971XXXXXXXXX" maxlength="15" oninput="ppValidatePhone()" />
+      <div class="pp-login-sub">أدخل رقم هويتك ورقم هاتفك المسجل</div>
+      <input type="text" id="pp-national-id-input" class="pp-input" placeholder="رقم الهوية (مثال: 784199135815308)" oninput="ppValidatePhone()" style="margin-bottom:10px" />
+      <input type="tel" id="pp-phone-input" class="pp-input" placeholder="رقم الهاتف (+971XXXXXXXXX)" maxlength="15" oninput="ppValidatePhone()" />
       <button class="pp-btn" id="pp-login-btn" onclick="ppLogin()" disabled>دخول</button>
       <div class="pp-error" id="pp-error-msg">رقم الجوال غير مسجل — تواصل مع المدرسة</div>
     </div>
@@ -4693,6 +4694,7 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
       <button class="pp-tab active" onclick="ppSwitchTab('overview')" id="pp-tab-overview">🏠 نظرة عامة</button>
       <button class="pp-tab" onclick="ppSwitchTab('worksheets')" id="pp-tab-worksheets">📄 أوراق العمل</button>
       <button class="pp-tab" onclick="ppSwitchTab('behavior')" id="pp-tab-behavior">🎭 السلوك</button>
+      <button id="pp-tab-reports" class="pp-tab" onclick="ppSwitchTab('reports')">📊 التقارير</button>
       <button class="pp-tab" onclick="ppSwitchTab('meetings')" id="pp-tab-meetings">📅 طلب اجتماع</button>
       <button class="pp-tab" onclick="ppSwitchTab('messages')" id="pp-tab-messages">✉️ رسائل وشكاوى</button>
       <button class="pp-tab" onclick="ppSwitchTab('notifications')" id="pp-tab-notifications">🔔 التنبيهات <span class="pp-tab-badge" id="pp-notif-badge" style="display:none">0</span></button>
@@ -4701,6 +4703,9 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
     <div id="pp-sec-overview" class="pp-section active"></div>
     <div id="pp-sec-worksheets" class="pp-section"></div>
     <div id="pp-sec-behavior" class="pp-section"></div>
+    <div id="pp-sec-reports" class="pp-section">
+      <div id="pp-reports-content"><div style="color:rgba(255,255,255,0.4);text-align:center;padding:20px">⏳ جارٍ التحميل...</div></div>
+    </div>
     <div id="pp-sec-meetings" class="pp-section"></div>
     <div id="pp-sec-messages" class="pp-section"></div>
     <div id="pp-sec-notifications" class="pp-section"></div>
@@ -31024,48 +31029,98 @@ function _notifGetSWUsernameForClass(classCode) {
 
 /* ======= PARENT PORTAL JS ======= */
 var ppCurrentPhone = null;
+var ppCurrentNationalId = null;
 var ppChildren = [];
 var ppCurrentChildIdx = 0;
 var ppCurrentTab = 'overview';
 
 function ppValidatePhone() {
-  var v = document.getElementById('pp-phone-input').value.trim();
-  document.getElementById('pp-login-btn').disabled = v.length < 9;
+  var ni = document.getElementById('pp-national-id-input').value.trim();
+  var ph = document.getElementById('pp-phone-input').value.trim();
+  document.getElementById('pp-login-btn').disabled = !(ni.length >= 10 && ph.length >= 9);
+}
+
+async function sha256(message) {
+  const msgBuffer = new TextEncoder().encode(message);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 async function ppLogin() {
+  var nationalId = document.getElementById('pp-national-id-input').value.trim();
   var phone = document.getElementById('pp-phone-input').value.trim();
   var btn = document.getElementById('pp-login-btn');
   var errEl = document.getElementById('pp-error-msg');
-  btn.disabled = true; btn.textContent = '\u062c\u0627\u0631\u064a \u0627\u0644\u062a\u062d\u0642\u0642...';
+  if (!nationalId || !phone) { errEl.style.display='block'; errEl.textContent='يرجى إدخال رقم الهوية ورقم الهاتف'; return; }
+  btn.disabled = true; btn.textContent = 'جارٍ التحقق...';
   errEl.style.display = 'none';
-  var data = await supaFetch('/rest/v1/students?select=id,name,grade,class_name,parent_phone&parent_phone=eq.' + encodeURIComponent(phone));
-  if (!data || !data.length) {
-    var phone2 = phone.replace(/^\+971/,'0').replace(/^971/,'0');
-    data = await supaFetch('/rest/v1/students?select=id,name,grade,class_name,parent_phone&parent_phone=eq.' + encodeURIComponent(phone2));
+  try {
+    // hash the phone number
+    var phoneHash = await sha256(phone);
+    // query parent_credentials
+    var creds = await supaFetch('/rest/v1/parent_credentials?select=id,national_id,password_hash,student_ids&national_id=eq.' + encodeURIComponent(nationalId));
+    if (!creds || !creds.length) {
+      errEl.style.display='block'; errEl.textContent='رقم الهوية غير مسجل';
+      btn.disabled=false; btn.textContent='دخول'; return;
+    }
+    var cred = creds[0];
+    if (cred.password_hash !== phoneHash) {
+      errEl.style.display='block'; errEl.textContent='رقم الهاتف غير صحيح';
+      btn.disabled=false; btn.textContent='دخول'; return;
+    }
+    // fetch children
+    var studentIds = cred.student_ids || [];
+    var children = [];
+    if (studentIds.length > 0) {
+      children = await supaFetch('/rest/v1/students?select=id,name,grade,class_name&id=in.(' + studentIds.map(function(id){return '"'+id+'"';}).join(',') + ')') || [];
+    }
+    if (!children.length) {
+      errEl.style.display='block'; errEl.textContent='لا يوجد طلاب مرتبطون بهذا الحساب';
+      btn.disabled=false; btn.textContent='دخول'; return;
+    }
+    ppCurrentPhone = phone;
+    ppCurrentNationalId = nationalId;
+    ppChildren = children;
+    ppCurrentChildIdx = 0;
+    sessionStorage.setItem('pp_national_id', nationalId);
+    sessionStorage.setItem('pp_phone', phone);
+    sessionStorage.setItem('pp_children', JSON.stringify(children));
+    ppShowDashboard();
+  } catch(e) {
+    errEl.style.display='block'; errEl.textContent='خطأ في الاتصال، حاولي مرة أخرى';
   }
-  if (!data || !data.length) {
-    errEl.style.display = 'block';
-    btn.disabled = false; btn.textContent = '\u062f\u062e\u0648\u0644';
-    return;
-  }
-  ppCurrentPhone = phone;
-  ppChildren = data;
-  ppCurrentChildIdx = 0;
-  sessionStorage.setItem('pp_phone', phone);
-  sessionStorage.setItem('pp_children', JSON.stringify(data));
-  ppShowDashboard();
-  btn.disabled = false; btn.textContent = '\u062f\u062e\u0648\u0644';
+  btn.disabled=false; btn.textContent='دخول';
 }
 
 function ppLogout() {
   ppCurrentPhone = null; ppChildren = [];
   sessionStorage.removeItem('pp_phone');
   sessionStorage.removeItem('pp_children');
+  sessionStorage.removeItem('pp_national_id');
   document.getElementById('pp-login-state').style.display = 'flex';
   document.getElementById('pp-dashboard-state').style.display = 'none';
   document.getElementById('pp-phone-input').value = '';
   document.getElementById('pp-login-btn').disabled = true;
+}
+
+
+async function ppRenderReports(child) {
+  var el = document.getElementById('pp-reports-content');
+  if(!el) return;
+  el.innerHTML = '<div style="color:rgba(255,255,255,0.4);text-align:center;padding:20px">⏳ جارٍ التحميل...</div>';
+  var data = await supaFetch('/rest/v1/reports?select=*&student_id=eq.' + child.id + '&order=created_at.desc') || [];
+  if (!data.length) {
+    el.innerHTML = '<div style="color:rgba(255,255,255,0.5);text-align:center;padding:30px">📋 لا توجد تقارير دورية بعد</div>';
+    return;
+  }
+  el.innerHTML = data.map(function(r) {
+    return '<div style="background:rgba(255,255,255,0.08);border-radius:12px;padding:15px;margin-bottom:12px">' +
+      '<div style="font-weight:bold;margin-bottom:5px">' + (r.title||'تقرير') + '</div>' +
+      '<div style="font-size:12px;opacity:.6;margin-bottom:8px">' + new Date(r.created_at).toLocaleDateString('ar-AE') + '</div>' +
+      (r.content ? '<div style="font-size:13px;opacity:.8">' + r.content + '</div>' : '') +
+    '</div>';
+  }).join('');
 }
 
 async function ppShowDashboard() {
@@ -31104,6 +31159,7 @@ async function ppLoadTab(tab) {
   else if(tab === 'behavior') await ppRenderBehavior(child);
   else if(tab === 'meetings') await ppRenderMeetings(child);
   else if(tab === 'messages') await ppRenderMessages(child);
+  else if(tab === 'reports') await ppRenderReports(child);
   else if(tab === 'notifications') await ppRenderNotifications(child);
 }
 
@@ -31228,6 +31284,7 @@ document.addEventListener('DOMContentLoaded', function(){
   if(savedPhone && savedChildren){
     try{
       ppCurrentPhone = savedPhone;
+      ppCurrentNationalId = sessionStorage.getItem('pp_national_id') || null;
       ppChildren = JSON.parse(savedChildren);
       ppCurrentChildIdx = 0;
       var origShowSection = window.showSection;
