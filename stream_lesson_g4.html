@@ -1574,6 +1574,14 @@ function startLessonTimer(){
 }
 
 function startPhaseTimer(phaseIdx){
+  // In review mode (going back), show expired indicator instead of restarting
+  if (_isReviewMode) {
+    setTimeout(()=>{
+      const el = document.getElementById('timer'+phaseIdx+'display');
+      if (el) { el.textContent = '🔍 Review'; el.style.opacity = '0.5'; el.title = 'Review mode'; }
+    }, 80);
+    return;
+  }
   const def=phaseDefs[phaseIdx];
   if(!def||def.time===0) return;
   const tid='timer'+phaseIdx;
@@ -1780,7 +1788,14 @@ function showPhase(idx){
 }
 
 function nextPhase(){ if(currentPhase<12){ saveCurrentPhase(); showPhase(currentPhase+1); } }
-function goBack(){ if(currentPhase<=1) return; saveCurrentPhase(); currentPhase--; showPhase(currentPhase); }
+function goBack(){
+  if(currentPhase<=1) return;
+  saveCurrentPhase();
+  _isReviewMode = true;
+  currentPhase--;
+  showPhase(currentPhase);
+  _isReviewMode = false;
+}
 function goToPhase(idx){ if(idx>=currentPhase) return; saveCurrentPhase(); showPhase(idx); }
 
 function saveCurrentPhase(){
@@ -2584,8 +2599,24 @@ function closeHelp(){ document.getElementById('helpModal').classList.remove('ope
 
 async function requestHelp(type){
   const resp=document.getElementById('helpResponse');
-  if(type==='hint'){ resp.style.display='block'; resp.textContent='💡 Hint: Look at the sensor conditions carefully. When BOTH sensors are ON, what direction should the train go?'; }
-  else if(type==='explanation'){ resp.style.display='block'; resp.textContent='📖 Explanation: In a line-following robot, sensors detect a dark line on the floor. When both sensors see the line, go forward. When only one sensor sees it, turn toward that side!'; }
+  if(type==='hint'){ resp.style.display='block'; const g4PhaseHints = {
+  1:  '💡 Look at the learning goal — what will you build today and why? / انظر لهدف الدرس — ماذا ستبني اليوم ولماذا؟',
+  2:  '💡 Read each question carefully — think about robots you have seen before! / اقرأ كل سؤال بعناية — فكّر في روبوتات رأيتها من قبل!',
+  3:  '💡 Remember: NeoPixels = LED lights (NOT sensors!) / تذكّر: NeoPixels = أضواء LED (وليست حساسات!)',
+  4:  '💡 Use your imagination — what problem does your robot solve? / استخدم خيالك — ما المشكلة التي يحلها روبوتك؟',
+  5:  '💡 Sketch the shape first, then decide materials for each part / ارسم الشكل أولاً ثم قرر مواد كل جزء',
+  6:  '💡 In MakeCode: "on button A" → "show string" to display text / في MakeCode: زر A → عرض نص',
+  7:  '💡 Build one part at a time — start with the main body / ابنِ جزءاً واحداً في كل مرة — ابدأ بالجسم الرئيسي',
+  8:  '💡 Test each button separately before testing everything together / اختبر كل زر بشكل منفصل قبل اختبار كل شيء معاً',
+  9:  '💡 Keiro: sensors detect the line — when both ON → go straight, one OFF → turn that direction / مستشعران يكتشفان الخط',
+  10: '💡 Think about what surprised you most today! / فكّر في أكثر شيء أدهشك اليوم!',
+};
+const hintText = g4PhaseHints[currentPhase] || '💡 Think about what you learned — you can do it! / فكّر في ما تعلمته — أنت تستطيع!';
+resp.textContent = hintText; }
+  else if(type==='explanation'){ resp.style.display='block'; const g4PhaseExp = {
+  9: '📖 A line-following robot has 2 sensors. Both ON = go straight ↑. Left OFF = turn left ←. Right OFF = turn right →. Both OFF = stop! / كلاهما تشغيل = للأمام | اليسار إيقاف = يسار | اليمين إيقاف = يمين',
+};
+resp.textContent = g4PhaseExp[currentPhase] || '📖 Think carefully about the question — what clues do you see? / فكّر جيداً — ما التلميحات التي تراها؟'; }
   else if(type==='different'){ resp.style.display='block'; resp.textContent='🔄 Skip to the next question and come back to this one later!'; }
   else if(type==='teacher'){
     resp.style.display='block';
@@ -2653,7 +2684,8 @@ function loadTeacherData(){
           Phase: ${d.lastPhase||0}/12 | Level: ${d.keiroLevel||'-'} | Score: ${d.totalScore||'-'}
         </div>
         <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">
-          <button onclick="teacherDelete('${doc.id}')" style="background:var(--danger);border:none;color:white;padding:3px 8px;border-radius:6px;font-size:.75rem;cursor:pointer">🗑️</button>
+          <button onclick="recallStudent('${d.sessionId||doc.id}','${d.studentName||'?'}')" style="background:linear-gradient(135deg,#f97316,#ef4444);border:none;color:white;padding:3px 8px;border-radius:6px;font-size:.75rem;cursor:pointer">📣 Recall</button>
+          <button onclick="teacherDelete('${doc.id}')" style="background:var(--danger);border:none;color:white;padding:3px 8px;border-radius:6px;font-size:.75rem;cursor:pointer">🗑️ Delete</button>
         </div>
       `;
       list.appendChild(card);
@@ -2670,7 +2702,10 @@ function loadTeacherData(){
         const d=doc.data();
         const div=document.createElement('div');
         div.style.cssText='background:rgba(239,68,68,.15);border-radius:8px;padding:8px;margin-bottom:6px;border-left:3px solid var(--danger)';
-        div.innerHTML=`<span style="font-size:.9rem">${d.studentName} (${d.section}) — Phase ${d.phase}</span><br><button onclick="resolveHelp('${doc.id}')" style="background:var(--success);border:none;color:white;padding:2px 8px;border-radius:6px;font-size:.75rem;cursor:pointer;margin-top:4px">تم المساعدة ✅</button>`;
+        div.innerHTML=`<span style="font-size:.9rem">${d.studentName} (${d.section}) — Phase ${d.phase}</span><br><div style="display:flex;gap:4px;margin-top:4px;">
+          ${!d.onWay?`<button onclick="markOnWay('${doc.id}')" style="background:#f59e0b;border:none;color:white;padding:2px 7px;border-radius:6px;font-size:.72rem;cursor:pointer">📍 On My Way</button>`:'<span style="font-size:.72rem;color:#f59e0b;">📍 On way</span>'}
+          <button onclick="resolveHelp('${doc.id}')" style="background:var(--success);border:none;color:white;padding:2px 7px;border-radius:6px;font-size:.72rem;cursor:pointer">✅ Done</button>
+        </div>`;
         helpList.appendChild(div);
       });
     });
@@ -2683,9 +2718,46 @@ async function teacherDelete(docId){
   catch(e){ showNotif('Error: '+e.message); }
 }
 
+async function markOnWay(id){
+  try {
+    await db.collection('help_requests').doc(id).update({onWay:true, onWayAt:firebase.firestore.FieldValue.serverTimestamp()});
+    // Notify student
+    const snap = await db.collection('help_requests').doc(id).get();
+    const d = snap.data();
+    if (d && d.sessionId) {
+      await db.collection(RECALL_COLLECTION).doc(d.sessionId).set({
+        active:true, type:'teacher_coming',
+        message:'👩‍🏫 المعلمة في طريقها إليك! Teacher is on the way! 📍',
+        timestamp:firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+    showNotif('📍 Marked as "On My Way"');
+  } catch(e){ showNotif('Error: '+e.message); }
+}
+
+async function recallStudent(sessionId, name){
+  if (!sessionId || sessionId==='undefined') { showNotif('❌ No active session for '+name); return; }
+  try {
+    await db.collection(RECALL_COLLECTION).doc(sessionId).set({
+      active:true, type:'recall',
+      message:'📣 المعلمة تطلب عودتك للحصة! Your teacher wants you back!',
+      timestamp:firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showNotif('📣 Recall sent to '+name+'!');
+  } catch(e){ showNotif('Error: '+e.message); }
+}
+
 async function resolveHelp(docId){
-  try{ await db.collection('help_requests').doc(docId).update({resolved:true}); showNotif('Help resolved ✅'); }
-  catch(e){}
+  try{
+    const snap = await db.collection('help_requests').doc(docId).get();
+    const d = snap.data();
+    await db.collection('help_requests').doc(docId).update({resolved:true, resolvedAt:firebase.firestore.FieldValue.serverTimestamp()});
+    if (d && d.sessionId) {
+      await db.collection(RECALL_COLLECTION).doc(d.sessionId).delete().catch(()=>{});
+    }
+    showNotif('Help resolved ✅');
+  }
+  catch(e){ showNotif('Error: '+e.message); }
 }
 
 function exportCSV(){
@@ -3258,3 +3330,38 @@ function generatePosterNow(){
 </script>
 </body>
 </html>
+
+// ============================================================
+// STUDENT RECALL LISTENER (g4)
+// ============================================================
+let _recallUnsubscribeG4 = null;
+function startRecallListenerG4() {
+  if (!sessionId || _recallUnsubscribeG4) return;
+  _recallUnsubscribeG4 = db.collection(RECALL_COLLECTION).doc(sessionId)
+    .onSnapshot(snap => {
+      if (snap.exists && snap.data().active) {
+        const msg = snap.data().message || '👩‍🏫 Your teacher wants you back!';
+        showRecallModalG4(msg);
+      }
+    });
+}
+function showRecallModalG4(msg) {
+  if (document.getElementById('recallModalG4')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'recallModalG4';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = `<div style="background:white;border-radius:20px;padding:32px;max-width:360px;width:90%;text-align:center;">
+    <div style="font-size:3.5rem;margin-bottom:12px;">📣</div>
+    <div style="font-size:1.3rem;font-weight:700;color:#1e3a5f;margin-bottom:8px;">Message from Teacher</div>
+    <div style="font-size:1.05rem;color:#374151;margin-bottom:20px;line-height:1.5;">${msg}</div>
+    <button onclick="acknowledgeRecallG4()" style="background:linear-gradient(135deg,#1e3a5f,#2d5a8e);color:white;border:none;border-radius:14px;padding:14px 36px;font-size:1rem;font-weight:700;cursor:pointer;">
+      🏃 I'm back! أنا هنا!
+    </button>
+  </div>`;
+  document.body.appendChild(overlay);
+  try { alertSound(); } catch(e) {}
+}
+async function acknowledgeRecallG4() {
+  const m = document.getElementById('recallModalG4'); if (m) m.remove();
+  if (sessionId) { try { await db.collection(RECALL_COLLECTION).doc(sessionId).delete(); } catch(e){} }
+}

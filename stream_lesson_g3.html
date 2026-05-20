@@ -1091,6 +1091,7 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const COLLECTION = 'stream_sessions_g3';
 const HELP_COLLECTION = 'help_requests';
+const RECALL_COLLECTION = 'recalls';
 const GRADE = 3;
 
 // ============================================================
@@ -1105,6 +1106,7 @@ let programmingLevel = 'advanced';
 let phaseData = {};
 let isLangAR = false;
 let timersPaused = false;
+let _isReviewMode = false; // Set true when navigating back to prevent timer restart
 let totalSecondsLeft = 45 * 60;
 let totalTimerInterval = null;
 let currentActivityTimer = null;
@@ -1123,7 +1125,7 @@ let audioCtx = null;
 const PHASE_TIMERS = {
   0: 300,  // Goal Card 5min
   1: 180,  // Keywords 3min
-  2: 180,  // Materials 3min
+  2: 90,   // Materials 1.5min
   3: 180,  // True/False 3min
   4: 300,  // Plan 5min
   5: 480,  // Programming 8min
@@ -1673,6 +1675,49 @@ async function requestHelp(type) {
   statusEl.style.display = 'block';
   setTimeout(closeHelp, 2500);
 }
+
+// ============================================================
+// PHASE-SPECIFIC HINTS & EXPLANATIONS
+// ============================================================
+const PHASE_HINTS = {
+  0: {
+    hint: '💡 <strong>Hint:</strong> Read the learning goal carefully — what skill will you learn today?<br><br><span style="font-family:Tajawal,sans-serif;color:#888">اقرأ هدف التعلم بعناية — ما المهارة التي ستتعلمها اليوم؟</span>',
+    exp:  '📖 <strong>Explanation:</strong> Today you will design, build, and program a robot from recycled materials. The goal is to use creativity and coding together!<br><br><span style="font-family:Tajawal,sans-serif;color:#888">اليوم ستصمم وتبني وتبرمج روبوتاً من مواد معاد تدويرها. الهدف هو الجمع بين الإبداع والبرمجة!</span>'
+  },
+  1: {
+    hint: '💡 <strong>Hint:</strong> Read each keyword slowly — think about what it means in technology and robotics.<br><br><span style="font-family:Tajawal,sans-serif;color:#888">اقرأ كل كلمة ببطء — فكّر في معناها في مجال التكنولوجيا والروبوتات.</span>',
+    exp:  '📖 <strong>Explanation:</strong> <b>Robot</b> = a machine that follows instructions. <b>Sensor</b> = detects the environment. <b>Program</b> = set of instructions. <b>NeoPixel</b> = colorful LED lights on your robot!<br><br><span style="font-family:Tajawal,sans-serif;color:#888">روبوت = آلة تتبع التعليمات | مستشعر = يكتشف البيئة | برنامج = مجموعة تعليمات | NeoPixel = أضواء LED ملونة على روبوتك!</span>'
+  },
+  2: {
+    hint: '💡 <strong>Hint:</strong> Choose materials that are <strong>light, safe, and strong</strong> enough to hold a robot shape.<br><br><span style="font-family:Tajawal,sans-serif;color:#888">اختر مواد خفيفة وآمنة وقوية بما يكفي لتشكيل الروبوت.</span>',
+    exp:  '📖 <strong>Explanation:</strong> Cardboard is great for structure. Plastic bottles give shape. Tape holds parts together. Metal wires can be arms or legs!<br><br><span style="font-family:Tajawal,sans-serif;color:#888">الكرتون مثالي للهيكل | الزجاجات البلاستيكية تعطي الشكل | الشريط اللاصق يثبت الأجزاء | الأسلاك المعدنية يمكن أن تكون ذراعين أو أرجلاً!</span>'
+  },
+  4: {
+    hint: '💡 <strong>Hint:</strong> Sketch your robot shape first — where will the <strong>head, body, arms, and legs</strong> go?<br><br><span style="font-family:Tajawal,sans-serif;color:#888">ارسم شكل روبوتك أولاً — أين ستضع الرأس والجسم والذراعين والأرجل؟</span>',
+    exp:  '📖 <strong>Explanation:</strong> A good design plan shows: 1) The overall shape, 2) Where the micro:bit goes, 3) Where the NeoPixels will be placed, 4) Materials for each part.<br><br><span style="font-family:Tajawal,sans-serif;color:#888">خطة التصميم الجيدة تُظهر: 1) الشكل العام 2) مكان micro:bit 3) مكان NeoPixels 4) مواد كل جزء.</span>'
+  },
+  5: {
+    hint: '💡 <strong>Hint:</strong> Look at the code blocks shown — drag the <strong>correct event block</strong> first, then add the action block.<br><br><span style="font-family:Tajawal,sans-serif;color:#888">انظر إلى بلوكات الكود — اسحب بلوك الحدث الصحيح أولاً، ثم أضف بلوك الإجراء.</span>',
+    exp:  '📖 <strong>Explanation:</strong> In MakeCode: <b>Event blocks</b> (like "on button A pressed") trigger actions. <b>Action blocks</b> (like "show string") do something. Connect them in order!<br><br><span style="font-family:Tajawal,sans-serif;color:#888">في MakeCode: بلوكات الأحداث تُشغّل الإجراءات | بلوكات الإجراءات تُنفّذ شيئاً | اربطها بالترتيب!</span>'
+  },
+  6: {
+    hint: '💡 <strong>Hint:</strong> Open MakeCode → find "Basic" (blue category) for display blocks, "Input" (yellow) for button events.<br><br><span style="font-family:Tajawal,sans-serif;color:#888">افتح MakeCode → ابحث في "Basic" (الأزرق) لبلوكات العرض، و"Input" (الأصفر) لأحداث الأزرار.</span>',
+    exp:  '📖 <strong>Explanation:</strong> Step 1: Drag "on button A pressed" from Input. Step 2: Inside it, drag "show string" from Basic. Step 3: Type your robot's name in the string!<br><br><span style="font-family:Tajawal,sans-serif;color:#888">الخطوة 1: اسحب "on button A pressed" من Input | الخطوة 2: أضف "show string" من Basic | الخطوة 3: اكتب اسم روبوتك!</span>'
+  },
+  7: {
+    hint: '💡 <strong>Hint:</strong> Test <strong>one thing at a time</strong> — press button A, then B, then check NeoPixels separately.<br><br><span style="font-family:Tajawal,sans-serif;color:#888">اختبر شيئاً واحداً في كل مرة — اضغط A ثم B ثم تحقق من NeoPixels منفصلةً.</span>',
+    exp:  '📖 <strong>Explanation:</strong> Good testing means: 1) Try each button separately, 2) Check if the screen shows the right text, 3) Check NeoPixel colors, 4) Write down what worked and what didn't.<br><br><span style="font-family:Tajawal,sans-serif;color:#888">الاختبار الجيد يعني: 1) جرّب كل زر منفصلاً 2) تحقق من النص الصحيح 3) تحقق من ألوان NeoPixel 4) سجّل ما نجح وما لم ينجح.</span>'
+  },
+  8: {
+    hint: '💡 <strong>Hint:</strong> Be <strong>honest</strong> with yourself — rate how well you really understood, not how you wish you had!<br><br><span style="font-family:Tajawal,sans-serif;color:#888">كن صادقاً مع نفسك — قيّم مدى فهمك الحقيقي، ليس ما تتمناه!</span>',
+    exp:  '📖 <strong>Explanation:</strong> Self-assessment helps you grow! ⭐ = I need more practice | ⭐⭐ = I understand but need review | ⭐⭐⭐ = I can explain this to others!<br><br><span style="font-family:Tajawal,sans-serif;color:#888">⭐ = أحتاج مزيداً من التدريب | ⭐⭐ = أفهم لكن أحتاج مراجعة | ⭐⭐⭐ = أستطيع شرحه للآخرين!</span>'
+  },
+  9: {
+    hint: '💡 <strong>Hint:</strong> Think about the <strong>most important</strong> thing you learned today — choose your answer carefully!<br><br><span style="font-family:Tajawal,sans-serif;color:#888">فكّر في أهم شيء تعلمته اليوم — اختر إجابتك بعناية!</span>',
+    exp:  '📖 <strong>Explanation:</strong> A good exit ticket shows your understanding! Mention: your robot idea, the code you wrote, or what NeoPixels do.<br><br><span style="font-family:Tajawal,sans-serif;color:#888">بطاقة الخروج الجيدة تُظهر فهمك! اذكر: فكرة روبوتك، الكود الذي كتبته، أو وظيفة NeoPixels.</span>'
+  }
+};
+
 function showHint() {
   // Phase 3 = TF questions → use actual question hint
   if (currentPhase === 3 && typeof TF_QUESTIONS !== 'undefined') {
@@ -1694,7 +1739,10 @@ function showHint() {
       return;
     }
   }
-  showModal('💡 <strong>Hint:</strong> Read each question slowly and think about what you learned today! 🤔');
+  // Phase-specific hint
+  const ph = PHASE_HINTS[currentPhase];
+  if (ph) { showModal(ph.hint); return; }
+  showModal('💡 <strong>Hint:</strong> Think about what you learned in class today! 🤔');
 }
 function showExplanation() {
   if (currentPhase === 3 && typeof TF_QUESTIONS !== 'undefined') {
@@ -1712,7 +1760,9 @@ function showExplanation() {
       return;
     }
   }
-  showModal('📖 <strong>Explanation:</strong> Think about the key words in the question. You can do it! 💪');
+  const phE = PHASE_HINTS[currentPhase];
+  if (phE) { showModal(phE.exp); return; }
+  showModal('📖 <strong>Explanation:</strong> Think about the key words! You can do it! 💪');
 }
 function skipQuestion() {
   if (currentPhase === 3 && typeof TF_QUESTIONS !== 'undefined') {
@@ -1791,61 +1841,202 @@ function loadTeacherData() {
     .where('status', 'in', ['in_progress','completed'])
     .onSnapshot(snap => {
       const students = snap.docs.map(d => ({id:d.id, ...d.data()}));
+      window._lastStudentsData = students;
       renderTeacherStudents(students);
     }, err => console.warn('Teacher listener error:', err));
 }
 
+// Global help requests cache for teacher panel
+let _helpCache = {};
+
 function renderTeacherStudents(students) {
   const container = document.getElementById('teacherStudentList');
-  if (!students.length) { container.innerHTML = '<p style="color:#888;">No students connected yet...</p>'; return; }
-  container.innerHTML = students.map(s => `
-    <div class="student-card-teacher ${s.isSpecialNeeds ? 'sn' : ''}">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <strong>${s.studentName || '?'} ${s.isSpecialNeeds ? '🌈' : ''}</strong>
-        <span class="score-badge" style="font-size:0.85rem;padding:4px 12px;">${s.section || ''}</span>
+  if (!students.length) {
+    container.innerHTML = '<div style="text-align:center;color:#888;padding:30px;"><div style="font-size:2rem;">📭</div><p>No students connected yet...</p></div>';
+    return;
+  }
+  container.innerHTML = students.map(s => {
+    // Get pending help requests for this student
+    const pendingHelp = Object.values(_helpCache).filter(h =>
+      h.sessionId === s.sessionId && !h.resolved
+    );
+    const pendingCount = pendingHelp.length;
+    const hasPendingTeacher = pendingHelp.some(h => h.type === 'teacher');
+    
+    // Phase label
+    const phaseNames = ['Goal','Keywords','Materials','T/F Q','Plan','Coding','MakeCode','Test','Self-Assess','Exit'];
+    const phaseName = phaseNames[s.currentPhase] || `Phase ${s.currentPhase}`;
+    
+    // Status color
+    const statusColor = s.status === 'completed' ? '#22c55e' : (hasPendingTeacher ? '#ef4444' : '#3b82f6');
+    const statusIcon = s.status === 'completed' ? '✅' : (hasPendingTeacher ? '🆘' : '🔄');
+    
+    // Help requests HTML for this student
+    const helpHtml = pendingHelp.length > 0 ? `
+      <div style="background:rgba(239,68,68,0.08);border-radius:8px;padding:8px;margin-top:8px;border-left:3px solid #ef4444;">
+        <div style="font-size:0.78rem;font-weight:700;color:#ef4444;margin-bottom:4px;">🆘 Help Requests (${pendingCount})</div>
+        ${pendingHelp.map(h => `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:4px;padding:4px 6px;background:rgba(239,68,68,0.05);border-radius:6px;">
+            <span style="font-size:0.8rem;">
+              ${h.type === 'teacher' ? '👩‍🏫' : h.type === 'hint' ? '💡' : h.type === 'explanation' ? '📖' : '🔄'}
+              <strong>${h.type}</strong> — Phase ${h.phase}
+              ${h.onWay ? '<span style="background:#f59e0b;color:white;padding:1px 6px;border-radius:4px;font-size:0.7rem;margin-left:4px;">📍 On my way</span>' : ''}
+            </span>
+            <div style="display:flex;gap:4px;flex-shrink:0;">
+              ${!h.onWay ? `<button onclick="markOnWay('${h.id}')" style="background:#f59e0b;border:none;color:white;padding:2px 6px;border-radius:5px;font-size:0.72rem;cursor:pointer;white-space:nowrap;">📍 On My Way</button>` : ''}
+              <button onclick="resolveHelp('${h.id}')" style="background:#22c55e;border:none;color:white;padding:2px 6px;border-radius:5px;font-size:0.72rem;cursor:pointer;white-space:nowrap;">✅ Done</button>
+            </div>
+          </div>
+        `).join('')}
       </div>
-      <div style="font-size:0.9rem;color:#666;margin-bottom:8px;">
-        Phase: ${s.currentPhase ?? '?'} / 10 | Level: ${s.programmingLevel || '-'}
+    ` : '';
+    
+    return `
+    <div class="student-card-teacher ${s.isSpecialNeeds ? 'sn' : ''}" style="position:relative;border:2px solid ${hasPendingTeacher ? '#ef4444' : 'transparent'};${hasPendingTeacher ? 'box-shadow:0 0 12px rgba(239,68,68,0.3);' : ''}">
+      ${hasPendingTeacher ? '<div style="position:absolute;top:-8px;right:10px;background:#ef4444;color:white;font-size:0.7rem;padding:2px 8px;border-radius:10px;font-weight:700;">⚠️ Needs Help!</div>' : ''}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:1.1rem;">${statusIcon}</span>
+          <div>
+            <div style="font-weight:700;font-size:0.95rem;">${s.studentName || '?'} ${s.isSpecialNeeds ? '🌈' : ''}</div>
+            <div style="font-size:0.75rem;color:#888;">${s.section || ''} · ${phaseName}</div>
+          </div>
+        </div>
+        <span style="background:${statusColor};color:white;padding:3px 10px;border-radius:12px;font-size:0.78rem;font-weight:600;">${s.currentPhase ?? 0}/10</span>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="btn-sm" style="background:var(--success);color:white;" onclick="teacherEdit('${s.id}')">✏️ Edit</button>
-        <button class="btn-sm" style="background:var(--danger);color:white;" onclick="teacherDelete('${s.id}')">🗑️ Delete</button>
+      <div style="display:flex;gap:6px;align-items:center;font-size:0.82rem;color:#666;margin-bottom:8px;">
+        <span style="background:rgba(59,130,246,0.1);padding:2px 8px;border-radius:8px;">📊 ${s.programmingLevel || 'advanced'}</span>
+        ${s.status === 'completed' ? '<span style="background:rgba(34,197,94,0.1);color:#16a34a;padding:2px 8px;border-radius:8px;">🎉 Completed</span>' : ''}
       </div>
-    </div>`
-  ).join('');
+      ${helpHtml}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;border-top:1px solid rgba(0,0,0,0.06);padding-top:8px;">
+        <button onclick="recallStudent('${s.sessionId}','${s.studentName}')" style="background:linear-gradient(135deg,#f97316,#ef4444);color:white;border:none;padding:4px 10px;border-radius:8px;font-size:0.78rem;cursor:pointer;font-weight:600;">📣 Recall</button>
+        <button onclick="teacherEditStudent('${s.id}','${s.studentName}','${s.currentPhase}','${s.programmingLevel}')" style="background:#3b82f6;color:white;border:none;padding:4px 10px;border-radius:8px;font-size:0.78rem;cursor:pointer;">✏️ Edit</button>
+        <button onclick="teacherDelete('${s.id}')" style="background:#ef4444;color:white;border:none;padding:4px 10px;border-radius:8px;font-size:0.78rem;cursor:pointer;">🗑️ Delete</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 async function teacherDelete(id) {
   if (!confirm('Delete this student session?')) return;
   await db.collection(COLLECTION).doc(id).delete();
 }
-function teacherEdit(id) { showModal('✏️ To edit, go directly to Firestore console.'); }
+function teacherEditStudent(id, name, phase, level) {
+  const levels = ['advanced','intermediate','basic'];
+  const levelOptions = levels.map(l => 
+    `<option value="${l}" ${l===level?'selected':''}>${l==='advanced'?'⭐ Advanced / متقدم':l==='intermediate'?'📗 Intermediate / متوسط':'📘 Basic / أساسي'}</option>`
+  ).join('');
+  document.getElementById('modalContent').innerHTML = `
+    <div style="font-size:1.05rem;margin-bottom:12px;">✏️ <strong>Edit: ${name}</strong></div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:0.9rem;font-weight:600;display:block;margin-bottom:4px;">📊 Adaptive Level:</label>
+      <select id="editLevel" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ddd;">${levelOptions}</select>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:0.9rem;font-weight:600;display:block;margin-bottom:4px;">📍 Reset to Phase:</label>
+      <select id="editPhase" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ddd;">
+        ${['Goal','Keywords','Materials','T/F','Plan','Coding','MakeCode','Test','Self-Assess','Exit'].map((n,i)=>`<option value="${i}" ${i==phase?'selected':''}>${i}: ${n}</option>`).join('')}
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button onclick="closeModal()" style="padding:8px 16px;border-radius:8px;border:1px solid #ddd;cursor:pointer;background:#f5f5f5;">Cancel</button>
+      <button onclick="applyStudentEdit('${id}')" style="padding:8px 20px;border-radius:8px;border:none;background:var(--navy);color:white;cursor:pointer;font-weight:600;">💾 Save Changes</button>
+    </div>
+  `;
+  document.getElementById('generalModal').classList.add('open');
+}
+
+async function applyStudentEdit(id) {
+  const level = document.getElementById('editLevel')?.value;
+  const phase = parseInt(document.getElementById('editPhase')?.value);
+  if (!level || isNaN(phase)) return;
+  try {
+    await db.collection(COLLECTION).doc(id).update({
+      programmingLevel: level,
+      currentPhase: phase,
+      lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    closeModal();
+    showModal('✅ Student updated successfully!');
+  } catch(e) { showModal('❌ Error: ' + e.message); }
+}
 
 function subscribeHelpRequests() {
   if (helpUnsubscribe) helpUnsubscribe();
   helpUnsubscribe = db.collection(HELP_COLLECTION)
-    .where('resolved', '==', false)
     .where('grade', '==', GRADE)
+    .orderBy('timestamp', 'desc')
     .onSnapshot(snap => {
-      const reqs = snap.docs.map(d => ({id:d.id, ...d.data()}));
+      // Update help cache
+      _helpCache = {};
+      snap.docs.forEach(d => { _helpCache[d.id] = {id:d.id, ...d.data()}; });
+      
+      const pending = snap.docs.filter(d => !d.data().resolved);
+      const teacherCalls = pending.filter(d => d.data().type === 'teacher');
+      
+      // Update banner
       const banner = document.getElementById('helpAlertBanner');
       const list = document.getElementById('helpAlertList');
-      if (reqs.length > 0) {
+      if (pending.length > 0) {
         banner.style.display = 'block';
-        playAlert();
-        list.innerHTML = reqs.map(r => `
-          <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
-            <strong>${r.studentName}</strong> (${r.section}) — ${r.type} in Phase ${r.phase}
-            <button class="btn-sm" style="background:var(--success);color:white;" onclick="resolveHelp('${r.id}')">✅ Resolved</button>
-          </div>`).join('');
+        if (teacherCalls.length > 0) playAlert();
+        list.innerHTML = `<strong>${pending.length} pending</strong> — ${teacherCalls.length} teacher calls`;
       } else {
         banner.style.display = 'none';
       }
-    });
+      
+      // Re-render student cards with updated help data
+      if (teacherUnsubscribe) {
+        const cards = document.getElementById('teacherStudentList');
+        if (cards && cards.children.length > 0) {
+          // Get current student data from Firestore snapshot (stored in last render)
+          if (window._lastStudentsData) renderTeacherStudents(window._lastStudentsData);
+        }
+      }
+    }, err => console.warn('Help listener error:', err));
+}
+
+async function markOnWay(id) {
+  try {
+    await db.collection(HELP_COLLECTION).doc(id).update({ onWay: true, onWayAt: firebase.firestore.FieldValue.serverTimestamp() });
+    // Notify student via recall-like mechanism
+    const req = _helpCache[id];
+    if (req && req.sessionId) {
+      await db.collection(RECALL_COLLECTION).doc(req.sessionId).set({
+        active: true, type: 'teacher_coming',
+        message: '👩‍🏫 المعلمة في طريقها إليك! Teacher is on the way! 📍',
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+  } catch(e) { console.warn(e); }
 }
 
 async function resolveHelp(id) {
-  await db.collection(HELP_COLLECTION).doc(id).update({ resolved: true });
+  try {
+    const req = _helpCache[id];
+    await db.collection(HELP_COLLECTION).doc(id).update({ resolved: true, resolvedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    // Clear recall notification
+    if (req && req.sessionId) {
+      await db.collection(RECALL_COLLECTION).doc(req.sessionId).delete().catch(()=>{});
+    }
+  } catch(e) { console.warn(e); }
+}
+
+
+// ============================================================
+// RECALL STUDENT (Teacher → Firebase → Student)
+// ============================================================
+async function recallStudent(sessionId, name) {
+  if (!sessionId || sessionId === 'undefined') { showModal('❌ No active session for this student.'); return; }
+  try {
+    await db.collection(RECALL_COLLECTION).doc(sessionId).set({
+      active: true, type: 'recall',
+      message: '📣 المعلمة تطلب عودتك للحصة! Your teacher wants you back!',
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showModal(`📣 <strong>Recall sent to ${name}!</strong><br><br>The student will see an alert to return to the lesson.`);
+  } catch(e) { showModal('❌ Could not send recall: ' + e.message); }
 }
 
 function pauseAllTimers() {
@@ -1912,9 +2103,12 @@ function goBack() {
   if (currentPhase <= 0) return;
   saveCurrentPhaseData();
   if (currentActivityTimer) currentActivityTimer.stop();
+  currentActivityTimer = null;
+  _isReviewMode = true;
   currentPhase--;
   updateProgressBar();
   renderPhase(currentPhase);
+  _isReviewMode = false;
   document.getElementById('mainContent').scrollIntoView({behavior:'smooth'});
 }
 
@@ -1925,6 +2119,21 @@ function toggleCurrentTimer() {
 }
 
 function startPhaseTimer(seconds) {
+  // In review mode (going back), don't restart timer — show expired state
+  if (_isReviewMode) {
+    if (currentActivityTimer) currentActivityTimer.stop();
+    currentActivityTimer = null;
+    setTimeout(() => {
+      const el = document.getElementById('activityTimer');
+      if (el) {
+        el.innerHTML = '<span style="font-size:0.8rem;opacity:0.6;letter-spacing:0">🔍 Review</span>';
+        el.style.background = 'rgba(120,120,120,0.25)';
+        el.style.color = '#999';
+        el.title = 'Review mode — time for this phase already used';
+      }
+    }, 50);
+    return;
+  }
   if (isSpecialNeeds) seconds = Math.floor(seconds * 1.5);
   if (currentActivityTimer) currentActivityTimer.stop();
   currentActivityTimer = new ActivityTimer(seconds,
@@ -2504,7 +2713,7 @@ let _neoIntroSeen = false;
 
 function startTFQuestions() {
   _neoIntroSeen = true;
-  document.getElementById('phaseContent').innerHTML = renderTrueFalseQuestions();
+  document.getElementById('mainContent').innerHTML = renderTrueFalseQuestions();
   const secs = PHASE_TIMERS[3] * (isSpecialNeeds ? 1.5 : 1);
   startPhaseTimer(secs);
 }
@@ -3627,6 +3836,56 @@ function savePoster() {
   a.href = window._posterData || canvas.toDataURL();
   a.download = `STREAM_Poster_${studentName.replace(/\s+/g,'_')}.png`;
   a.click();
+}
+
+
+// ============================================================
+// STUDENT RECALL LISTENER (Firebase → Student alert)
+// ============================================================
+let _recallUnsubscribe = null;
+function startRecallListener() {
+  if (!sessionId || _recallUnsubscribe) return;
+  _recallUnsubscribe = db.collection(RECALL_COLLECTION).doc(sessionId)
+    .onSnapshot(snap => {
+      if (snap.exists && snap.data().active) {
+        const msg = snap.data().message || '👩‍🏫 Your teacher wants you back!';
+        // Show large recall modal
+        showRecallModal(msg);
+        // Auto-clear after student acknowledges
+      }
+    });
+}
+
+function showRecallModal(msg) {
+  // Prevent duplicate modals
+  if (document.getElementById('recallModal')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'recallModal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;animation:fadeIn .3s;';
+  overlay.innerHTML = `
+    <div style="background:white;border-radius:20px;padding:32px;max-width:360px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+      <div style="font-size:3.5rem;margin-bottom:12px;animation:bounce 0.6s infinite alternate;">📣</div>
+      <div style="font-family:'Fredoka One',cursive;font-size:1.4rem;color:#1e3a5f;margin-bottom:8px;">Message from Teacher</div>
+      <div style="font-family:'Tajawal',sans-serif;font-size:1.1rem;color:#374151;margin-bottom:20px;line-height:1.5;">${msg}</div>
+      <button onclick="acknowledgeRecall()" style="background:linear-gradient(135deg,#1e3a5f,#2d5a8e);color:white;border:none;border-radius:14px;padding:14px 36px;font-size:1rem;font-weight:700;cursor:pointer;font-family:'Tajawal',sans-serif;">
+        🏃 I'm back! أنا هنا!
+      </button>
+    </div>`;
+  // Add bounce animation
+  const style = document.createElement('style');
+  style.textContent = '@keyframes bounce{from{transform:translateY(0)}to{transform:translateY(-10px)}}';
+  overlay.appendChild(style);
+  document.body.appendChild(overlay);
+  // Play alert sound
+  try { playAlert(); } catch(e) {}
+}
+
+async function acknowledgeRecall() {
+  const modal = document.getElementById('recallModal');
+  if (modal) modal.remove();
+  if (sessionId) {
+    try { await db.collection(RECALL_COLLECTION).doc(sessionId).delete(); } catch(e) {}
+  }
 }
 
 // ============================================================
