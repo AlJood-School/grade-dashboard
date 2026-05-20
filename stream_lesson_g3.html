@@ -1430,6 +1430,25 @@ let studentName = '';
 let studentSection = '';
 let sessionId = '';
 let programmingLevel = 'advanced';
+
+// ── Global Adaptive Scoring (all scored phases) ─────────────
+let globalScores = { p0: null, p3: null, p5a: null, p5b: null };
+
+function recalcOverallLevel() {
+  let totalCorrect = 0, totalPossible = 0;
+  if (globalScores.p0 !== null) { totalCorrect += globalScores.p0 ? 1 : 0; totalPossible += 1; }
+  if (globalScores.p3 !== null) { totalCorrect += globalScores.p3.score; totalPossible += globalScores.p3.total; }
+  if (globalScores.p5a !== null) { totalCorrect += globalScores.p5a; totalPossible += 3; }
+  if (globalScores.p5b !== null) { totalCorrect += globalScores.p5b ? 1 : 0; totalPossible += 1; }
+  if (totalPossible === 0) return;
+  const pct = totalCorrect / totalPossible;
+  const newLevel = pct >= 0.75 ? 'advanced' : pct >= 0.50 ? 'intermediate' : 'basic';
+  programmingLevel = newLevel;
+  phaseData.adaptiveLevel = newLevel;
+  phaseData.adaptiveScore = { correct: totalCorrect, total: totalPossible, pct: Math.round(pct * 100) };
+  saveSession();
+  updateObserverAdaptive(newLevel, totalCorrect, totalPossible);
+}
 let phaseData = {};
 let isLangAR = false;
 let timersPaused = false;
@@ -1622,6 +1641,17 @@ function restoreState() {
     isSpecialNeeds    = s.isSpecialNeeds    || false;
     sessionId         = s.sessionId         || '';
     programmingLevel  = s.programmingLevel  || 'advanced';
+    // Restore globalScores from saved phaseData
+    if (s.phaseData) {
+      const pd = s.phaseData;
+      if (pd.p0_answer !== undefined) globalScores.p0 = (pd.p0_answer !== null && pd.p0_answer !== '');
+      if (pd.p3_score !== undefined && pd.p3_tf) {
+        const tfTotal = Object.keys(pd.p3_tf).length;
+        globalScores.p3 = { score: pd.p3_score, total: tfTotal || 5 };
+      }
+      if (pd.p5_preScore !== undefined) globalScores.p5a = pd.p5_preScore;
+      if (pd.p5_codeCorrect) globalScores.p5b = true;
+    }
     isLangAR          = s.isLangAR          || false;
     phaseData         = s.phaseData         || {};
     tfAnswers         = s.tfAnswers         || {};
@@ -2268,6 +2298,8 @@ function renderTeacherStudents(students) {
     // Level tag class
     const lvlTag = s.programmingLevel === 'advanced' ? 'sc-tag-adv' : s.programmingLevel === 'intermediate' ? 'sc-tag-int' : 'sc-tag-bas';
     const lvlLabel = s.programmingLevel === 'advanced' ? '⭐ Advanced' : s.programmingLevel === 'intermediate' ? '📗 Intermediate' : '📘 Basic';
+    const adaptScore = s.adaptiveScore || null;
+    const scoreText = adaptScore ? ` (${adaptScore.correct}/${adaptScore.total} · ${adaptScore.pct}%)` : '';
     // Phase badge class
     const phaseBadgeClass = s.status === 'completed' ? 'done' : hasPendingTeacher ? 'urgent' : '';
     // Card class
@@ -2310,7 +2342,7 @@ function renderTeacherStudents(students) {
         <div class="sc-phase-badge ${phaseBadgeClass}">${s.currentPhase ?? 0}/10</div>
       </div>
       <div class="sc-tags">
-        <span class="sc-tag ${lvlTag}">${lvlLabel}</span>
+        <span class="sc-tag ${lvlTag}" title="Adaptive score across all phases${scoreText}">${lvlLabel}${scoreText}</span>
         ${s.status === 'completed' ? '<span class="sc-tag sc-tag-done">🎉 Completed</span>' : ''}
         ${s.isSpecialNeeds ? '<span class="sc-tag sc-tag-sn">🌈 Special</span>' : ''}
       </div>
@@ -2994,10 +3026,14 @@ function selectGoalAnswer(idx, correct) {
     playSuccess();
     phaseData.p0_answer = String(idx);
     document.getElementById('nextGoalBtn').disabled = false;
+    // Global adaptive: Phase 0 correct ✅
+    if (globalScores.p0 === null) { globalScores.p0 = true; recalcOverallLevel(); }
   } else {
     fb.className = 'feedback-box wrong';
     fb.textContent = t('wrong') + ' 🤖';
     playWrong();
+    // Global adaptive: Phase 0 wrong (track first attempt only)
+    if (globalScores.p0 === null) { globalScores.p0 = false; recalcOverallLevel(); }
   }
 }
 
@@ -3372,18 +3408,9 @@ function answerTF(idx, answer, correct) {
     const emoji = score === qs.length ? '🌟' : score >= qs.length * 0.6 ? '⭐' : '💪';
     area.innerHTML = `<div class="score-badge">${emoji} Score: ${score}/${qs.length}</div>`;
     phaseData.p3_score = score;
-    // Adaptive: if too many wrong, record level
-    if (phaseWrongCount >= 3) {
-      programmingLevel = 'basic';
-      phaseData.adaptiveLevel = 'basic';
-      saveSession();
-      updateObserverAdaptive('basic', score, qs.length);
-    } else if (phaseWrongCount >= 2) {
-      programmingLevel = programmingLevel === 'advanced' ? 'intermediate' : programmingLevel;
-      phaseData.adaptiveLevel = programmingLevel;
-      saveSession();
-      updateObserverAdaptive(programmingLevel, score, qs.length);
-    }
+    // Global adaptive: Phase 3 T/F complete
+    globalScores.p3 = { score: score, total: qs.length };
+    recalcOverallLevel();
     const nextBtn = document.getElementById('nextTFBtn');
     nextBtn.disabled = false;
     if (score >= qs.length * 0.6) launchConfetti(30);
@@ -3637,7 +3664,9 @@ function answerPre(qIdx, optIdx, correct) {
   preAnswers[qIdx] = isCorrect;
   if (Object.keys(preAnswers).length === 3) {
     preScore = Object.values(preAnswers).filter(Boolean).length;
-    programmingLevel = preScore >= 3 ? 'advanced' : preScore >= 2 ? 'intermediate' : 'basic';
+    // Global adaptive: Phase 5a pre-coding MCQ
+    globalScores.p5a = preScore;
+    recalcOverallLevel(); // sets programmingLevel based on all phases
     phaseData.p5_codeLevel = programmingLevel;
     phaseData.p5_preScore = preScore;
     const area = document.getElementById('preScoreArea');
@@ -3765,6 +3794,9 @@ function placeBlock(id, slotId, slotEl) {
       const res = document.getElementById('codeResult');
       if(res) { res.style.display='block'; res.innerHTML=`<div class="score-badge">🎉 Code Complete! ${total}/${total}</div>`; launchConfetti(40); }
       document.getElementById('nextCodeBtn').disabled = false;
+      // Global adaptive: Phase 5b code builder complete ✅
+      globalScores.p5b = true;
+      recalcOverallLevel();
     }
   } else {
     slotEl.classList.add('wrong');
