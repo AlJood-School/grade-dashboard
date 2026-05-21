@@ -693,10 +693,22 @@ async function loadRoster(g) {
     if (doc.exists) {
       studentRoster = doc.data();
     }
-    // Load SEN
-    const senSnap = await db.collection('special_needs_students')
-      .where('grade', '==', g).get();
-    senStudents = senSnap.docs.map(d => ({id:d.id, ...d.data()}));
+    // Load SEN from students.json (special_needs_students collection doesn't exist)
+    try {
+      const sjRes = await fetch('data/students.json');
+      const sjData = await sjRes.json();
+      const prefix = `${g}`;
+      senStudents = [];
+      Object.entries(sjData).forEach(([sec, arr]) => {
+        if (sec.startsWith(prefix)) {
+          arr.filter(st => st.specialNeeds).forEach(st => {
+            senStudents.push({ id: st.id, name: st.nameAr, section: sec, condition: 'احتياجات خاصة' });
+          });
+        }
+      });
+    } catch(e2) {
+      console.warn('SEN load from students.json failed:', e2.message);
+    }
   } catch(e) {
     console.warn('Roster load:', e.message);
   }

@@ -569,18 +569,36 @@
       const absentList = sectionStudents.filter(s => !presentNames.has(s.name)).map(s => s.name);
       const males   = sectionStudents.filter(s => s.gender === 'male').length;
       const females = sectionStudents.filter(s => s.gender === 'female').length;
-      renderStats(present, total, absentList, males, females, 0);
+      const specialNeedsCount = sectionStudents.filter(s => s.specialNeeds).length;
+      renderStats(present, total, absentList, males, females, specialNeedsCount);
     }
 
     async function loadStudents() {
-      // Try Firebase first
+      // Load from students.json (includes specialNeeds field)
+      try {
+        const res = await fetch('data/students.json');
+        const sjData = await res.json();
+        const sectionArr = sjData[selectedSection] || [];
+        if (sectionArr.length > 0) {
+          allStudents = sectionArr.map(st => ({
+            name: st.nameAr,
+            gender: detectGender(st.nameAr),
+            section: selectedSection,
+            specialNeeds: !!st.specialNeeds
+          }));
+          updateStatsDisplay();
+          return;
+        }
+      } catch(e) { console.warn('students.json load error:', e); }
+
+      // Try Firebase next
       try {
         const docRef = doc(db, 'students', `grade${selectedGrade}_sections`);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
           const names = data[selectedSection] || [];
-          allStudents = names.map(n => ({ name: n, gender: detectGender(n), section: selectedSection }));
+          allStudents = names.map(n => ({ name: n, gender: detectGender(n), section: selectedSection, specialNeeds: false }));
           updateStatsDisplay();
           return;
         }
@@ -589,7 +607,7 @@
       // Fallback
       const fallback = selectedGrade == 3 ? FALLBACK_STUDENTS_G3 : {};
       const names = fallback[selectedSection] || [];
-      allStudents = names.map(n => ({ name: n, gender: detectGender(n), section: selectedSection }));
+      allStudents = names.map(n => ({ name: n, gender: detectGender(n), section: selectedSection, specialNeeds: false }));
       updateStatsDisplay();
     }
 
