@@ -2467,31 +2467,40 @@ function showSuccessScreen(score) {
     launchConfetti(40);
   }
 
-  // Show robot image if available
+  // Show robot image — try all sources in order of priority
   const robotImgSection = document.getElementById('robotImageSection');
   const finalRobotImg = document.getElementById('finalRobotImg');
   if (robotImgSection && finalRobotImg) {
-    const imgData = window._robotImageData;
-    if (imgData && imgData.length > 200) {
-      // If it's already a data URL (from html2canvas), use directly
-      // If it's raw SVG, convert to data URI
-      const src = imgData.startsWith('data:') ? imgData
-        : 'data:image/svg+xml,' + encodeURIComponent(imgData);
-      finalRobotImg.src = src;
-      robotImgSection.style.display = 'block';
-    } else {
-      // Try building SVG now
-      const svgStr = (typeof buildConnectedRobotSVG === 'function') ? buildConnectedRobotSVG() : '';
+    let src = '';
+    const cached = window._robotImageData;
+    if (cached && cached.length > 200) {
+      src = cached.startsWith('data:') ? cached : 'data:image/svg+xml,' + encodeURIComponent(cached);
+    } else if (typeof buildConnectedRobotSVG === 'function') {
+      const svgStr = buildConnectedRobotSVG();
       if (svgStr && svgStr.length > 200) {
-        finalRobotImg.src = 'data:image/svg+xml,' + encodeURIComponent(svgStr);
-        robotImgSection.style.display = 'block';
+        src = 'data:image/svg+xml,' + encodeURIComponent(svgStr);
+        window._robotImageData = src; // cache for export
       }
     }
+    // Always show the section — use placeholder if image unavailable
+    if (src) {
+      finalRobotImg.src = src;
+    } else {
+      finalRobotImg.src = '';
+      finalRobotImg.alt = '🤖 Robot image not captured';
+      finalRobotImg.style.display = 'none';
+    }
+    robotImgSection.style.display = src ? 'block' : 'none';
   }
 
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  // Hide all screens (both class-based and inline-style)
+  document.querySelectorAll('.screen').forEach(s => {
+    s.classList.remove('active');
+    s.style.display = 'none';
+  });
   const s4 = document.getElementById('s4');
   s4.style.display = 'flex';
+  s4.classList.add('active');
   window.scrollTo(0, 0);
 }
 
