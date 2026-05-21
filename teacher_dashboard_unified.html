@@ -780,6 +780,7 @@ th .th-check{width:16px;height:16px;cursor:pointer;accent-color:#ef4444}
           <button class="chip" onclick="filterNS('3C',this)">3C</button>
           <button class="chip" onclick="filterNS('3D',this)">3D</button>
           <button class="chip" onclick="filterNS('3E',this)">3E</button>
+          <button class="chip" onclick="filterNS('sn',this)">💙 أصحاب الهمم</button>
           <div style="margin-right:auto;display:flex;gap:8px;">
             <button class="btn btn-primary btn-sm" onclick="loadNonSubmitters()">🔄 تحديث</button>
             <button class="btn btn-outline btn-sm" onclick="sendAllMessages()">📤 رسائل الكل</button>
@@ -839,7 +840,7 @@ th .th-check{width:16px;height:16px;cursor:pointer;accent-color:#ef4444}
             <div style="font-size:.8rem;color:var(--g500)">الكشف التلقائي عند تسجيل دخول الطالب</div>
           </div>
           <div style="padding:16px">
-            <div style="display:grid;grid-template-columns:1fr 1fr 120px;gap:10px;align-items:end;margin-bottom:16px">
+            <div style="display:none">
               <div>
                 <label style="font-size:.8rem;font-weight:700;color:var(--g600);display:block;margin-bottom:5px">الشعبة</label>
                 <select id="snSection" style="width:100%;padding:9px 12px;border:1px solid var(--g200);border-radius:8px;font-family:inherit;font-size:.9rem">
@@ -1176,6 +1177,20 @@ async function loadData() {
   try {
     const r = await fetch(STURL);
     students = await r.json();
+    // بناء Set لأصحاب الهمم
+    window.SPECIAL_NEEDS_IDS = new Set();
+    window.SN_BY_NAME_SEC = new Map();
+    Object.entries(students).forEach(([sec, arr]) => {
+      (arr || []).forEach(st => {
+        if (st.specialNeeds === true) {
+          window.SPECIAL_NEEDS_IDS.add(String(st.id || ''));
+          const _ar = (st.nameAr || '').trim();
+          const _en = (st.nameEn || '').trim();
+          if (_ar) window.SN_BY_NAME_SEC.set(sec+'_'+_ar, true);
+          if (_en) window.SN_BY_NAME_SEC.set(sec+'_'+_en, true);
+        }
+      });
+    });
     renderOverview();
     renderStats();
     if (document.getElementById('sec-parents').classList.contains('active')) renderEngagement();
@@ -1397,15 +1412,17 @@ function renderStats() {
 
   const bars = document.getElementById('statsBars');
   if(!bars) return;
-  bars.innerHTML = CLASSES.map(c => {
-    const n   = subs.filter(s=>s.section===c).length;
-    const tot = (students[c]||[]).length || 1;
-    const p   = Math.min(100,Math.round(n/tot*100));
-    const fc  = p>=70?'grn':p>=40?'amb':'';
-    const col = p>=70?'var(--success)':p>=40?'var(--warning)':'var(--danger)';
+    bars.innerHTML = CLASSES.map(c => {
+    const n      = subs.filter(s=>s.section===c).length;
+    const tot    = (students[c]||[]).length || 1;
+    const snCnt  = (students[c]||[]).filter(s=>s.specialNeeds).length;
+    const p      = Math.min(100,Math.round(n/tot*100));
+    const fc     = p>=70?'grn':p>=40?'amb':'';
+    const col    = p>=70?'var(--success)':p>=40?'var(--warning)':'var(--danger)';
+    const snHtml = snCnt > 0 ? `<span style="font-size:.78rem;color:#7c3aed;font-weight:700;margin-right:8px">💙 ${snCnt}</span>` : '';
     return `<div style="margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-        <span style="font-weight:800;font-size:.85rem;color:var(--g700)">شعبة ${c}</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-weight:800;font-size:.85rem;color:var(--g700)">شعبة ${c} ${snHtml}</span>
         <span style="font-size:.83rem;color:var(--g600);font-weight:700">${n}/${tot} &nbsp; <b style="color:${col}">${p}%</b></span>
       </div>
       <div class="p-bar" style="height:10px"><div class="p-fill ${fc}" style="width:${p}%"></div></div>
@@ -1452,11 +1469,14 @@ function openM(id) {
     </div>`;
   }).join('');
 
+    const _isSN = window.SN_BY_NAME_SEC && window.SN_BY_NAME_SEC.has(`${s.section}_${s.name}`);
+  const _snTag = _isSN ? '<span style="background:#f3e8ff;color:#7c3aed;border:1px solid #c4b5fd;border-radius:20px;padding:3px 10px;font-size:.78rem;font-weight:700;display:inline-block;margin-top:5px">💙 طالب من أصحاب الهمم</span><div style="background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:.82rem;color:#713f12">⚠️ يُرجى مراعاة احتياجاته الخاصة عند التقييم</div>' : '';
   document.getElementById('modalIn').innerHTML = `
     <div class="m-banner">
       <div class="m-circle ${cc}"><span class="mc-num">${sc}/10</span><span class="mc-lbl">Score</span></div>
       <div class="m-info">
         <div class="m-name">${s.name} — ${s.section}</div>
+        ${_snTag ? `<div style="margin-top:4px">${_snTag}</div>` : ''}
         <div style="font-size:.8rem;color:#CBD5E1;margin-bottom:5px">${lbl}</div>
         <div class="m-bar-wrap"><div class="m-bar-fill" style="width:${p}%;background:${bc}"></div></div>
         <div class="m-time">🕐 ${tsStr}</div>
@@ -1797,7 +1817,8 @@ async function loadNonSubmitters() {
             section: sec,
             phone: st.parentPhone || '',
             parentName: st.parentName || '',
-            submitted: false
+            submitted: false,
+            specialNeeds: st.specialNeeds === true
           });
         }
       });
@@ -1826,7 +1847,9 @@ function filterNS(val, btn) {
 
 function renderNSTable() {
   const wrap = document.getElementById('nsTableWrap');
-  const data = nsCurrentFilter === 'all' ? nsAllData : nsAllData.filter(s => s.section === nsCurrentFilter);
+  const data = nsCurrentFilter === 'all' ? nsAllData :
+               nsCurrentFilter === 'sn'  ? nsAllData.filter(s => s.specialNeeds) :
+               nsAllData.filter(s => s.section === nsCurrentFilter);
 
   if (!data.length) {
     wrap.innerHTML = `<div style="text-align:center;padding:40px;color:var(--success)">
@@ -1863,10 +1886,14 @@ function renderNSTable() {
         </thead>
         <tbody>`;
     bySection[sec].forEach((s, i) => {
+      const _snBg   = s.specialNeeds ? 'background:#f3e8ff;' : '';
+      const _snHov  = s.specialNeeds ? '#ede9fe' : 'var(--g50)';
+      const _snHout = s.specialNeeds ? '#f3e8ff' : '';
+      const _snBdg  = s.specialNeeds ? ' <span style="background:#7c3aed;color:#fff;border-radius:8px;padding:1px 7px;font-size:11px;vertical-align:middle">💙 دعم خاص</span>' : '';
       html += `
-          <tr style="border-bottom:1px solid var(--g100);transition:background .15s" onmouseover="this.style.background='var(--g50)'" onmouseout="this.style.background=''">
+          <tr style="border-bottom:1px solid var(--g100);transition:background .15s;${_snBg}" onmouseover="this.style.background='${_snHov}'" onmouseout="this.style.background='${_snHout}'">
             <td style="padding:10px 12px;color:var(--g500)">${i + 1}</td>
-            <td style="padding:10px 12px;font-weight:600;color:var(--g800)">${s.name}</td>
+            <td style="padding:10px 12px;font-weight:600;color:var(--g800)">${s.name}${_snBdg}</td>
             <td style="padding:10px 12px;color:var(--g600)">${s.parentName || '—'}</td>
             <td style="padding:10px 12px;direction:ltr;color:var(--g600)">${s.phone || '—'}</td>
             <td style="padding:10px 12px;text-align:center">
@@ -2070,41 +2097,30 @@ async function loadSNList() {
   const wrap = document.getElementById('snListWrap');
   if (!wrap) return;
   try {
-    const r = await fetch(
-      `https://firestore.googleapis.com/v1/projects/${FB}/databases/(default)/documents:runQuery?key=${FBKEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          structuredQuery: {
-            from: [{ collectionId: 'special_needs_students' }],
-            where: { fieldFilter: { field: { fieldPath: 'enabled' }, op: 'EQUAL', value: { booleanValue: true } } }
-          }
-        })
-      }
-    );
-    const data = await r.json();
-    const items = (data || []).filter(x => x.document).map(x => ({
-      id: x.document.name.split('/').pop(),
-      name: x.document.fields?.studentName?.stringValue || '?',
-      section: x.document.fields?.section?.stringValue || '?'
-    }));
-
+    const items = [];
+    Object.entries(students).forEach(([sec, arr]) => {
+      (arr || []).forEach(st => {
+        if (st.specialNeeds === true) {
+          items.push({
+            name: st.nameAr || st.nameEn || '؟',
+            section: sec
+          });
+        }
+      });
+    });
+    items.sort((a,b) => a.section.localeCompare(b.section));
     if (!items.length) {
-      wrap.innerHTML = '<div style="text-align:center;color:var(--g400);padding:16px;font-size:.9rem">لا يوجد طلاب أصحاب همم مضافون بعد.</div>';
+      wrap.innerHTML = '<div style="text-align:center;color:var(--g400);padding:16px;font-size:.9rem">لا يوجد طلاب أصحاب همم مسجّلون حالياً</div>';
       return;
     }
-
-    wrap.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px">` +
+    wrap.innerHTML = `<div style="margin-bottom:10px;font-size:.8rem;color:var(--g500)">المصدر: بيانات الطلاب الرسمية (students.json) — إجمالي: ${items.length} طالب</div>` +
+      `<div style="display:flex;flex-wrap:wrap;gap:8px">` +
       items.map(it => `
         <div style="display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,#f3e8ff,#ede9fe);
                     border:1px solid #c4b5fd;border-radius:20px;padding:6px 14px;font-size:.88rem">
-          <span>🌈</span>
+          <span>💙</span>
           <span style="font-weight:700;color:#5b21b6">${it.name}</span>
           <span style="color:#7c3aed;font-size:.78rem">${it.section}</span>
-          <button onclick="removeSN('${it.id}')"
-            style="background:none;border:none;cursor:pointer;color:#e53e3e;font-size:1rem;padding:0 2px;line-height:1"
-            title="حذف">×</button>
         </div>`).join('') +
       '</div>';
   } catch(e) {
@@ -2200,7 +2216,7 @@ function updateVARKStats(students) {
 }
 
 function renderVARK(students) {
-  const specialNeeds = JSON.parse(localStorage.getItem('special_needs_ids') || '[]');
+  const specialNeeds = window.SPECIAL_NEEDS_IDS ? Array.from(window.SPECIAL_NEEDS_IDS) : [];
   const rows = students.map(s => {
     const vd = varkData[s.id] || {};
     const snBadge = specialNeeds.includes(s.id) ? '<span style="background:#F3E8FF;color:#7E22CE;padding:3px 8px;border-radius:20px;font-size:.75rem;font-weight:700">♾️ أصحاب الهمم</span>' : '';
