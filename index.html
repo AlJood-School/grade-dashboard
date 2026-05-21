@@ -7594,9 +7594,21 @@ async function doLogin() {
     ? (STAFF_DB.find(e => e.username === enteredUsername) || STAFF_DB.find(e => e.id === supaStaffRec.staff_id) || getStaffFromDBByHash(passHash))
     : getStaffFromDBByHash(passHash);
   if (staffMember) {
-    // Validate tab matches actual role
+    // Validate tab matches actual role — use loginRole field if present (smart role system)
+    // loginRole overrides role for tab-matching: a teacher with admin duties logs in via teacher tab
+    const effectiveLoginRole = staffMember.loginRole || staffMember.role;
     const allowedRoles = TAB_ROLE_MAP[loginRole] || [];
-    if (!allowedRoles.includes(staffMember.role)) {
+    // Build expanded check: the selected tab must match the staff member's loginRole
+    const effectiveTabRoles = {
+      'admin':       ['admin'],
+      'principal':   ['principal', 'vice_principal'],
+      'teacher':     ['teacher'],
+      'admin_staff': ['admin_staff', 'vice_principal'],
+      'parent':      ['parent']
+    };
+    const tabAllowed = (effectiveTabRoles[loginRole] || []).includes(effectiveLoginRole) ||
+                       allowedRoles.includes(staffMember.role);
+    if (!tabAllowed) {
       showToast('بيانات الدخول غير صحيحة لهذا القسم — يرجى اختيار التبويب الصحيح', 'error');
       return;
     }
@@ -7612,10 +7624,13 @@ async function doLogin() {
       }
     }
     currentStaff = staffMember;
-    currentRole = staffMember.role;
+    // Use loginRole for session if defined (smart role system)
+    currentRole = staffMember.loginRole || staffMember.role;
     currentUsername = staffMember.name_ar;
     const roleLabel = getStaffRoleLabel(staffMember);
-    localStorage.setItem('aljood_session_role', staffMember.role);
+    localStorage.setItem('aljood_session_role', currentRole); // uses loginRole if set
+    localStorage.setItem('aljood_session_raw_role', staffMember.role); // original role for permissions
+    localStorage.setItem('aljood_session_permissions', JSON.stringify(staffMember.permissions || []));
     localStorage.setItem('aljood_session_pass', passHash);
     localStorage.setItem('aljood_session_username', currentUsername);
     localStorage.setItem('aljood_session_staff_id', staffMember.id);
@@ -7624,7 +7639,7 @@ async function doLogin() {
     var _appEl = document.getElementById('app'); _appEl.classList.add('visible'); _appEl.style.display = '';
     document.getElementById('userNameDisplay').textContent = currentUsername;
     document.getElementById('userRoleDisplay').textContent = staffMember.primary_job || roleLabel;
-    document.getElementById('adminMenu').style.display = (staffMember.role === 'admin' || staffMember.role === 'principal' || staffMember.role === 'vice_principal') ? 'block' : 'none';
+    document.getElementById('adminMenu').style.display = (currentRole === 'admin' || currentRole === 'principal' || staffMember.role === 'admin' || staffMember.role === 'vice_principal') ? 'block' : 'none';
     renderNav();
     showSection('home');
     renderHomeDashboard();
