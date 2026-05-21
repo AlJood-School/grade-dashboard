@@ -836,30 +836,20 @@ th .th-check{width:16px;height:16px;cursor:pointer;accent-color:#ef4444}
         <!-- Special Needs Management -->
         <div class="card">
           <div class="card-head">
-            <div class="card-title">🌈 إدارة أصحاب الهمم</div>
-            <div style="font-size:.8rem;color:var(--g500)">الكشف التلقائي عند تسجيل دخول الطالب</div>
+            <div class="card-title">💙 أصحاب الهمم — جميع الصفوف</div>
+            <div style="font-size:.8rem;color:var(--g500)">يُحدَّث تلقائياً من بيانات الطلاب الرسمية</div>
           </div>
           <div style="padding:16px">
-            <div style="display:none">
-              <div>
-                <label style="font-size:.8rem;font-weight:700;color:var(--g600);display:block;margin-bottom:5px">الشعبة</label>
-                <select id="snSection" style="width:100%;padding:9px 12px;border:1px solid var(--g200);border-radius:8px;font-family:inherit;font-size:.9rem">
-                  <option value="3A">3A</option><option value="3B">3B</option><option value="3C">3C</option><option value="3D">3D</option><option value="3E">3E</option>
-                </select>
-              </div>
-              <div>
-                <label style="font-size:.8rem;font-weight:700;color:var(--g600);display:block;margin-bottom:5px">اسم الطالب</label>
-                <input id="snStudentName" type="text" placeholder="اكتب اسم الطالب..." style="width:100%;padding:9px 12px;border:1px solid var(--g200);border-radius:8px;font-family:inherit;font-size:.9rem">
-              </div>
-              <button class="btn btn-primary" onclick="addSpecialNeedsStudent()">➕ إضافة</button>
-            </div>
+            <!-- Grade filter tabs -->
+            <div id="snGradeFilters" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
+            <!-- Stats summary -->
+            <div id="snStatsBar" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
+            <!-- Student list -->
             <div id="snListWrap" style="min-height:60px">
               <div style="text-align:center;color:var(--g400);padding:20px;font-size:.9rem">⏳ جاري التحميل...</div>
             </div>
           </div>
         </div>
-      </div>
-
       <!-- ════════ STATS ════════ -->
       <div id="sec-stats" class="sec">
         <div class="sec-title">📊 إحصائيات مفصّلة</div>
@@ -2099,8 +2089,28 @@ async function saveCode(sec, enabled) {
   }
 }
 
+let snCurrentGrade = 'all';
+
+function getSNGradeLabel(sec) {
+  if (!sec) return '؟';
+  if (sec.startsWith('KG1')) return 'روضة 1';
+  if (sec.startsWith('KG2')) return 'روضة 2';
+  const m = sec.match(/^(\d+)/);
+  return m ? `صف ${m[1]}` : sec;
+}
+
+function getSNGradeKey(sec) {
+  if (!sec) return '?';
+  if (sec.startsWith('KG1')) return 'KG1';
+  if (sec.startsWith('KG2')) return 'KG2';
+  const m = sec.match(/^(\d+)/);
+  return m ? m[1] : sec;
+}
+
 async function loadSNList() {
   const wrap = document.getElementById('snListWrap');
+  const filtersWrap = document.getElementById('snGradeFilters');
+  const statsWrap = document.getElementById('snStatsBar');
   if (!wrap) return;
   try {
     const items = [];
@@ -2109,71 +2119,73 @@ async function loadSNList() {
         if (st.specialNeeds === true) {
           items.push({
             name: st.nameAr || st.nameEn || '؟',
-            section: sec
+            section: sec,
+            gradeKey: getSNGradeKey(sec),
+            gradeLabel: getSNGradeLabel(sec)
           });
         }
       });
     });
     items.sort((a,b) => a.section.localeCompare(b.section));
-    if (!items.length) {
-      wrap.innerHTML = '<div style="text-align:center;color:var(--g400);padding:16px;font-size:.9rem">لا يوجد طلاب أصحاب همم مسجّلون حالياً</div>';
+
+    const gradeCounts = {};
+    items.forEach(it => {
+      gradeCounts[it.gradeKey] = (gradeCounts[it.gradeKey] || 0) + 1;
+    });
+
+    const gradeOrder = ['KG1','KG2','1','2','3','4','5','6','7','8'];
+    const presentGrades = gradeOrder.filter(g => gradeCounts[g]);
+
+    if (filtersWrap) {
+      const allActive = snCurrentGrade === 'all';
+      let fHtml = `<button onclick="snFilterGrade('all')" style="padding:5px 14px;border-radius:20px;border:none;cursor:pointer;font-family:inherit;font-size:.82rem;font-weight:700;background:${allActive?'var(--primary)':'var(--g100)'};color:${allActive?'#fff':'var(--g600)'}">🌍 جميع الصفوف (${items.length})</button>`;
+      presentGrades.forEach(g => {
+        const label = g === 'KG1' ? 'روضة 1' : g === 'KG2' ? 'روضة 2' : `صف ${g}`;
+        const active = snCurrentGrade === g;
+        fHtml += `<button onclick="snFilterGrade('${g}')" style="padding:5px 14px;border-radius:20px;border:none;cursor:pointer;font-family:inherit;font-size:.82rem;font-weight:700;background:${active?'#7c3aed':'var(--g100)'};color:${active?'#fff':'var(--g600)'}">💙 ${label} (${gradeCounts[g]})</button>`;
+      });
+      filtersWrap.innerHTML = fHtml;
+    }
+
+    if (statsWrap) {
+      statsWrap.innerHTML = presentGrades.map(g => {
+        const label = g === 'KG1' ? 'روضة 1' : g === 'KG2' ? 'روضة 2' : `صف ${g}`;
+        return `<div style="background:linear-gradient(135deg,#f3e8ff,#ede9fe);border:1px solid #c4b5fd;border-radius:12px;padding:8px 14px;text-align:center;min-width:70px"><div style="font-size:1.1rem;font-weight:800;color:#5b21b6">${gradeCounts[g]}</div><div style="font-size:.72rem;color:#7c3aed;font-weight:600">${label}</div></div>`;
+      }).join('') + `<div style="background:linear-gradient(135deg,#ddd6fe,#c4b5fd);border:1px solid #a78bfa;border-radius:12px;padding:8px 14px;text-align:center;min-width:70px"><div style="font-size:1.1rem;font-weight:800;color:#3b0764">${items.length}</div><div style="font-size:.72rem;color:#6d28d9;font-weight:700">الإجمالي</div></div>`;
+    }
+
+    const filtered = snCurrentGrade === 'all' ? items : items.filter(it => it.gradeKey === snCurrentGrade);
+
+    if (!filtered.length) {
+      wrap.innerHTML = '<div style="text-align:center;color:var(--g400);padding:16px;font-size:.9rem">لا يوجد طلاب أصحاب همم في هذا الصف</div>';
       return;
     }
-    wrap.innerHTML = `<div style="margin-bottom:10px;font-size:.8rem;color:var(--g500)">المصدر: بيانات الطلاب الرسمية (students.json) — إجمالي: ${items.length} طالب</div>` +
-      `<div style="display:flex;flex-wrap:wrap;gap:8px">` +
-      items.map(it => `
-        <div style="display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,#f3e8ff,#ede9fe);
-                    border:1px solid #c4b5fd;border-radius:20px;padding:6px 14px;font-size:.88rem">
-          <span>💙</span>
-          <span style="font-weight:700;color:#5b21b6">${it.name}</span>
-          <span style="color:#7c3aed;font-size:.78rem">${it.section}</span>
-        </div>`).join('') +
-      '</div>';
+
+    const bySection = {};
+    filtered.forEach(it => {
+      if (!bySection[it.section]) bySection[it.section] = [];
+      bySection[it.section].push(it);
+    });
+
+    wrap.innerHTML = `<div style="margin-bottom:8px;font-size:.78rem;color:var(--g500)">المصدر: بيانات الطلاب الرسمية (students.json) — يُحدَّث تلقائياً</div>` +
+      Object.entries(bySection).sort(([a],[b])=>a.localeCompare(b)).map(([sec, sts]) =>
+        `<div style="margin-bottom:12px"><div style="font-size:.78rem;font-weight:700;color:#7c3aed;margin-bottom:6px;padding:3px 10px;background:#f3e8ff;border-radius:8px;display:inline-block">📚 شعبة ${sec} — ${sts.length} طالب</div><div style="display:flex;flex-wrap:wrap;gap:6px">` +
+        sts.map(it => `<div style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#f3e8ff,#ede9fe);border:1px solid #c4b5fd;border-radius:20px;padding:5px 12px;font-size:.85rem"><span>💙</span><span style="font-weight:700;color:#5b21b6">${it.name}</span></div>`).join('') +
+        `</div></div>`
+      ).join('');
   } catch(e) {
-    wrap.innerHTML = '<div style="color:var(--danger);font-size:.85rem;padding:8px">خطأ في التحميل</div>';
+    if (wrap) wrap.innerHTML = '<div style="color:var(--danger);font-size:.85rem;padding:8px">خطأ في التحميل</div>';
   }
 }
 
-async function addSpecialNeedsStudent() {
-  const section = document.getElementById('snSection').value;
-  const name = document.getElementById('snStudentName').value.trim();
-  if (!name) { showToast('أدخل اسم الطالب', 'error'); return; }
-  try {
-    await fetch(
-      `https://firestore.googleapis.com/v1/projects/${FB}/databases/(default)/documents/special_needs_students?key=${FBKEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fields: {
-            studentName: { stringValue: name },
-            section:     { stringValue: section },
-            enabled:     { booleanValue: true },
-            addedAt:     { timestampValue: new Date().toISOString() }
-          }
-        })
-      }
-    );
-    document.getElementById('snStudentName').value = '';
-    showToast(`✅ تمت إضافة ${name} كطالب من أصحاب الهمم`, 'success');
-    loadSNList();
-  } catch(e) {
-    showToast('خطأ في الإضافة', 'error');
-  }
+function snFilterGrade(grade) {
+  snCurrentGrade = grade;
+  loadSNList();
 }
 
-async function removeSN(docId) {
-  try {
-    await fetch(
-      `https://firestore.googleapis.com/v1/projects/${FB}/databases/(default)/documents/special_needs_students/${docId}?key=${FBKEY}`,
-      { method: 'DELETE' }
-    );
-    showToast('تم الحذف', 'info');
-    loadSNList();
-  } catch(e) {
-    showToast('خطأ في الحذف', 'error');
-  }
-}
+
+
+
 
 // Navigation hook merged into main go() function above
 
