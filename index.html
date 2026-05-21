@@ -7025,14 +7025,27 @@ async function supaFetch(path, opts={}) {
 
 async function checkStaffPassword(username, passHash) {
   try {
-    const r = await supaFetch('/rest/v1/staff_passwords?username=eq.' + encodeURIComponent(username) + '&limit=1');
+    // Use server-side API to bypass RLS on anon key
+    const r = await fetch('/api/check-staff-auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, passwordHash: passHash })
+    });
     if (!r.ok) return null;
-    const data = await r.json();
-    if (!data.length) return null;
-    const rec = data[0];
-    if (rec.password_hash !== passHash) return null;
-    return rec;
-  } catch(e) { return null; }
+    const rec = await r.json();
+    return rec || null;
+  } catch(e) {
+    // Fallback: direct Supabase query (may fail due to RLS)
+    try {
+      const r2 = await supaFetch('/rest/v1/staff_passwords?username=eq.' + encodeURIComponent(username) + '&limit=1');
+      if (!r2.ok) return null;
+      const data = await r2.json();
+      if (!data.length) return null;
+      const rec2 = data[0];
+      if (rec2.password_hash !== passHash) return null;
+      return rec2;
+    } catch(e2) { return null; }
+  }
 }
 
 async function setFirstLoginAt(pwId) {
