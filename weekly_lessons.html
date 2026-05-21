@@ -2391,13 +2391,26 @@ async function loadTeacherData() {
       setTimeout(loadTeacherData, 2000);
       return;
     }
-    // (Firebase refs removed)
-    const q = query(collection(null /* removed */, 'weekly_results'), orderBy('createdAt', 'desc'));
     // Supabase: load results from weekly_results table
-    const { data: snapshotData } = await (await getWLSB()).from('weekly_results').select('*').eq('class_name', selectedClass || '');
-    const snapshot = { docs: (snapshotData || []).map(d => ({ data: () => ({studentName: d.student_name, score: d.score, total: d.total, week: d.week, grade: d.grade, className: d.class_name, savedAt: d.created_at}) })) }; // snapshot
-    allTeacherData = [];
-    (snapshot.docs || []).forEach(doc => allTeacherData.push({ id: doc.id, ...doc.data() }));
+    let wlQuery = (await getWLSB()).from('weekly_results').select('*').order('created_at', { ascending: false });
+    if (selectedClass) wlQuery = wlQuery.eq('class_name', selectedClass);
+    const { data: snapshotData, error: wlErr } = await wlQuery;
+    if (wlErr) console.error('Supabase weekly_results error:', wlErr);
+    allTeacherData = (snapshotData || []).map(d => ({
+      studentName: d.student_name || d.studentName || '',
+      totalScore:  d.score ?? d.totalScore ?? 0,
+      quizScore:   d.quiz_score ?? d.quizScore ?? null,
+      activityScore: d.activity_score ?? d.activityScore ?? null,
+      week:        d.week || '',
+      grade:       d.grade || '',
+      cls:         d.class_name || d.cls || '',
+      class:       d.class_name || d.cls || '',
+      className:   d.class_name || d.cls || '',
+      completedAt: d.completed_at || d.created_at || null,
+      savedAt:     d.created_at || null,
+      selfRate:    d.self_rate ?? d.selfRate ?? 0,
+      exitText:    d.exit_text || d.exitText || ''
+    }));
     console.log('Loaded', allTeacherData.length, 'records');
     renderWeeksProgress();
     renderTeacherTable();
