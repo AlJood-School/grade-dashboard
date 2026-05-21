@@ -1406,6 +1406,52 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
 }
 .nav-group.collapsed .nav-group-items { max-height: 0; }
 
+/* ===== News Ticker Bar ===== */
+#newsTickerBar {
+  display:none;
+  background:#0d1b2a;
+  border-bottom:2px solid #00b4d8;
+  padding:6px 16px;
+  overflow:hidden;
+  position:relative;
+  direction:ltr;
+}
+#newsTickerBar.admin-msg { border-bottom-color:#ef4444; }
+.news-ticker-inner {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  white-space:nowrap;
+  animation:newsScroll 40s linear infinite;
+}
+.news-ticker-inner:hover { animation-play-state:paused; }
+@keyframes newsScroll {
+  0%   { transform:translateX(-30%); }
+  100% { transform:translateX(100%); }
+}
+.news-item {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  margin:0 24px;
+  font-size:0.82rem;
+  color:rgba(255,255,255,0.9);
+  font-family:'Tajawal',sans-serif;
+}
+.news-item a { color:#7dd3fc; text-decoration:none; }
+.news-item a:hover { text-decoration:underline; }
+.news-ticker-label {
+  flex-shrink:0;
+  background:#00b4d8;
+  color:#fff;
+  font-size:0.72rem;
+  font-weight:700;
+  padding:2px 10px;
+  border-radius:10px;
+  letter-spacing:0.5px;
+}
+#newsTickerBar.admin-msg .news-ticker-label { background:#ef4444; }
+
 </style>
 
 <style>
@@ -1810,6 +1856,13 @@ body { font-family:'Cairo',sans-serif; background:var(--light); color:var(--text
       <span id="sys-notif-count" style="position:absolute;top:-2px;left:-2px;background:#6366f1;color:white;border-radius:50%;min-width:18px;height:18px;font-size:0.68rem;display:none;align-items:center;justify-content:center;font-weight:800;padding:0 3px;line-height:1;">0</span>
       <!-- Dropdown Panel -->
       <div id="sys-notif-panel" onclick="event.stopPropagation()" style="display:none;position:absolute;top:calc(100% + 8px);left:-260px;width:320px;background:#fff;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.18);border:1px solid #e8e8e8;z-index:9999;opacity:0;transform:translateY(-10px);transition:opacity 0.2s,transform 0.2s;direction:rtl;overflow:hidden;font-family:Cairo,sans-serif;"></div>
+    </div>
+  </div>
+  <!-- News Ticker Bar -->
+  <div id="newsTickerBar">
+    <span class="news-ticker-label">📰 أخبار</span>
+    <div class="news-ticker-inner" id="newsTickerInner">
+      <!-- populated by initNewsTicker() -->
     </div>
   </div>
   <div id="sidebar-overlay" onclick="toggleMobileSidebar()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:998;"></div>
@@ -7641,6 +7694,8 @@ async function doLogin() {
     document.getElementById('userRoleDisplay').textContent = staffMember.primary_job || roleLabel;
     document.getElementById('adminMenu').style.display = (currentRole === 'admin' || currentRole === 'principal' || staffMember.role === 'admin' || staffMember.role === 'vice_principal') ? 'block' : 'none';
     renderNav();
+    // Teacher goes to their hub dashboard
+    if (currentRole === 'teacher') { window.location.href = 'teacher_hub.html'; return; }
     showSection('home');
     renderHomeDashboard();
     try { trackLogin(currentUsername, currentRole, currentUsername); } catch(e) {}
@@ -7651,6 +7706,7 @@ async function doLogin() {
     initCharts();
     updateDate();
     initGlobalBanner();
+    initNewsTicker();
     setTimeout(applyLearningMode, 500);
     resetSessionTimer();
     sessionStorage.setItem('aljood_splash_shown','1');
@@ -8445,6 +8501,43 @@ function dismissGlobalBanner() {
   _globalBannerDismissed = true;
   var el = document.getElementById('global-attendance-banner');
   if (el) { el.style.animation = 'none'; el.style.opacity = '0'; el.style.transition = 'opacity 0.4s'; setTimeout(function(){ el.style.display='none'; }, 400); }
+}
+
+// ===== NEWS TICKER =====
+function initNewsTicker() {
+  var bar = document.getElementById('newsTickerBar');
+  var inner = document.getElementById('newsTickerInner');
+  if (!bar || !inner) return;
+
+  var FALLBACK = [
+    { title:'مدرسة الجود | العين | أبوظبي — العام الدراسي 2025–2026', type:'school' },
+    { title:'🎓 برنامج CCDI & AI — Computing, Creative Design, and Innovation', type:'edu' },
+    { title:'📅 للاطلاع على الجدول الدراسي افتح قسم الجدول من القائمة الجانبية', type:'edu' },
+    { title:'🤖 ورقة عمل الروبوت — الصف الثالث — مشروع نهاية الفصل', type:'edu' },
+    { title:'📢 للتواصل والاستفسار: t.me/Schaljood', type:'admin' }
+  ];
+
+  fetch('/auto_news.json?t=' + Date.now())
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      var items = (data && data.news && data.news.length > 0) ? data.news : FALLBACK;
+      renderTicker(items);
+    })
+    .catch(function(){ renderTicker(FALLBACK); });
+
+  function renderTicker(items) {
+    var hasAdmin = items.some(function(i){ return i.type === 'admin'; });
+    if (hasAdmin) bar.classList.add('admin-msg'); else bar.classList.remove('admin-msg');
+    var doubled = items.concat(items); // duplicate for seamless loop
+    inner.innerHTML = doubled.map(function(item){
+      var icon = item.type === 'admin' ? '🔴' : '🩵';
+      var content = item.url
+        ? '<a href="' + item.url + '" target="_blank" rel="noopener">' + item.title + '</a>'
+        : item.title;
+      return '<span class="news-item">' + icon + ' ' + content + '</span>';
+    }).join('<span class="news-item" style="color:rgba(255,255,255,0.3)">|</span>');
+    bar.style.display = 'block';
+  }
 }
 
 function updateDate() {
@@ -10103,7 +10196,7 @@ const ALL_SECTIONS = [
 const DEFAULT_ACCESS = {
   admin:         ['home','analysis','students','admin_section','distance','resources','projects','events','achievements','documents','parents','forms','templates','staff_directory','school_schedule','kg_schedules','substitute_scheduler','schedule_builder','leaves','meetings','weekly_plan','daily_plans','behavior_log','reports','parent_portal','parent_requests','digital_safety','my_profile','tech_support','credentials_center','lms_credentials','hr_management','student_admission','prof_development','conferences','login_analytics','specialist_inbox','smart_report','roles_permissions','social_worker','lesson_attendance','data_analytics','school_stats','duties'],
   principal:     ['home','analysis','students','admin_section','distance','resources','projects','events','achievements','documents','parents','forms','templates','staff_directory','school_schedule','kg_schedules','substitute_scheduler','schedule_builder','leaves','meetings','weekly_plan','daily_plans','behavior_log','reports','parent_portal','parent_requests','digital_safety','my_profile','tech_support','hr_management','student_admission','prof_development','conferences','smart_report','data_analytics','social_worker','lesson_attendance','school_stats','duties'],
-  teacher:       ['home','analysis','students','distance','resources','projects','events','achievements','forms','templates','prof_development','staff_directory','my_profile','school_schedule','meetings','weekly_plan','daily_plans','behavior_log','reports','parent_portal','parent_requests','digital_safety','tech_support','smart_report','lesson_attendance','duties'],
+  teacher:       ['home','analysis','students','distance','resources','projects','events','achievements','forms','templates','prof_development','staff_directory','my_profile','school_schedule','meetings','weekly_plan','daily_plans','behavior_log','reports','parent_requests','digital_safety','tech_support','smart_report','lesson_attendance','duties','ai_predict'],
   staff:         ['home','analysis','events','achievements','documents','forms','templates','staff_directory','my_profile','school_schedule','meetings','resources','weekly_plan','daily_plans','behavior_log','reports','parent_portal','parent_requests','specialist_inbox','digital_safety','tech_support','prof_development','student_admission'],
   vice_principal:['home','my_profile','substitute_scheduler','hr_management','prof_development',
                   'conferences','meetings','behavior_log','parent_portal','parent_requests','admin_section',
@@ -28774,8 +28867,8 @@ function dtLoadData(cb) {
 
 function renderDutiesSection() {
   var schedule = generateFairDutySchedule(false);
-  var role = window.CURRENT_ROLE || '';
-  var user = window.CURRENT_USER || {};
+  var role = (typeof currentRole !== 'undefined' ? currentRole : '') || (window.CURRENT_ROLE || '');
+  var user = (typeof currentStaff !== 'undefined' ? currentStaff : null) || window.CURRENT_USER || {};
   var isAdmin = (role==='admin'||role==='principal'||role==='vice_principal'||role==='admin_staff');
   var stats = getDutyComplianceStats();
   var weekKey = getDutyWeekKey();
