@@ -2195,13 +2195,28 @@ function snFilterGrade(grade) {
 let allStudentsVARK = [];
 let varkData = {};
 
-// Load VARK from localStorage (client-side for now)
-function initVARK() {
-  varkData = JSON.parse(localStorage.getItem('vark_data') || '{}');
+// Load VARK from Supabase (with localStorage fallback)
+async function initVARK() {
+  varkData = {};
+  try {
+    // حاول القراءة من Supabase
+    const res = await fetch(`${SUPA_URL}/rest/v1/students?select=id,vark_style,vark_secondary&vark_style=not.is.null`, {
+      headers: { 'apikey': SUPA_ANON, 'Authorization': 'Bearer ' + SUPA_ANON }
+    });
+    if (res.ok) {
+      const rows = await res.json();
+      rows.forEach(r => {
+        if (r.vark_style) varkData[r.id] = { primary: r.vark_style, secondary: r.vark_secondary || '' };
+      });
+    }
+  } catch(e) {
+    // fallback من localStorage
+    varkData = JSON.parse(localStorage.getItem('vark_data') || '{}');
+  }
 }
 
 async function loadVARKSection() {
-  initVARK();
+  await initVARK();
   try {
     const res = await fetch(SUPABASE_URL + '/rest/v1/students?select=id,name,grade,class&order=name&limit=200', {
       headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON }
@@ -2264,7 +2279,7 @@ function filterVARK(type, btn) {
   renderVARK(filtered);
 }
 
-function setVARK(id, name) {
+async function setVARK(id, name) {
   const opts = ['V — 👁️ بصري', 'A — 👂 سمعي', 'R — 📖 قرائي', 'K — 🤸 حركي'];
   const choice = prompt(`نمط التعلم الرئيسي لـ ${name}:\n\n` + opts.map((o,i) => `${i+1}. ${o}`).join('\n') + '\n\nأدخلي رقم النمط:');
   if (!choice) return;
@@ -2272,7 +2287,24 @@ function setVARK(id, name) {
   const primary = map[choice.trim()];
   if (!primary) { showToast('اختيار غير صحيح', 'error'); return; }
   varkData[id] = { ...(varkData[id]||{}), primary };
-  localStorage.setItem('vark_data', JSON.stringify(varkData));
+
+  // حفظ في Supabase
+  try {
+    await fetch(`${SUPA_URL}/rest/v1/students?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPA_ANON,
+        'Authorization': 'Bearer ' + SUPA_ANON,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({ vark_style: primary })
+    });
+  } catch(e) {
+    // fallback: localStorage فقط
+    localStorage.setItem('vark_data', JSON.stringify(varkData));
+  }
+
   renderVARK(allStudentsVARK);
   updateVARKStats(allStudentsVARK);
   showToast(`تم تعيين نمط ${primary} لـ ${name}`, 'success');
