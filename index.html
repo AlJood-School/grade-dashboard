@@ -10340,10 +10340,10 @@ function getNavConfig() {
     const savedVersion = localStorage.getItem('aljood_nav_version');
     if (savedVersion !== NAV_CONFIG_VERSION) {
       // Version changed — clear old cached nav to apply new groups
-      localStorage.removeItem('aljood_nav_config');
+      sessionStorage.removeItem('aljood_nav_config');
       localStorage.setItem('aljood_nav_version', NAV_CONFIG_VERSION);
     }
-    const saved = JSON.parse(localStorage.getItem('aljood_nav_config') || 'null');
+    const saved = JSON.parse(sessionStorage.getItem('aljood_nav_config') || 'null');
     if (saved && Array.isArray(saved) && saved.length > 0) {
       // Merge with NAV_DEFAULT_CONFIG to fill missing properties (e.g. visibleTo from old cache)
       return saved.map(item => {
@@ -10356,7 +10356,7 @@ function getNavConfig() {
 }
 
 function saveNavConfig(config) {
-  localStorage.setItem('aljood_nav_config', JSON.stringify(config));
+  sessionStorage.setItem('aljood_nav_config', JSON.stringify(config));
 }
 
 function renderNav() {
@@ -10557,7 +10557,7 @@ function addNavSection() {
 
 function resetNavConfig() {
   if (!confirm('إعادة تعيين القائمة إلى الإعدادات الافتراضية؟')) return;
-  localStorage.removeItem('aljood_nav_config');
+  sessionStorage.removeItem('aljood_nav_config');
   renderNav();
   renderWebsiteManager();
   showToast('↩️ تم إعادة تعيين القائمة');
@@ -12331,14 +12331,14 @@ function filterStaffDirectory() {
 
 function getStaffData() {
   try {
-    const saved = JSON.parse(localStorage.getItem('aljood_staff_db') || 'null');
+    const saved = JSON.parse(sessionStorage.getItem('aljood_staff_db') || 'null');
     if (saved && Array.isArray(saved)) return saved;
   } catch(e) {}
   return JSON.parse(JSON.stringify(STAFF_DB));
 }
 
 function saveStaffData(data) {
-  localStorage.setItem('aljood_staff_db', JSON.stringify(data));
+  sessionStorage.setItem('aljood_staff_db', JSON.stringify(data));
 }
 
 function renderStaffDirectory() {
@@ -15059,6 +15059,18 @@ function getTeacherAttendance() {
 }
 function saveTeacherAttendance(data) {
   localStorage.setItem('aljood_teacher_attendance', JSON.stringify(data));
+  // Sync to Supabase in background
+  try {
+    Object.keys(data).forEach(function(k){
+      var entry = data[k];
+      if(!entry || !entry.empId) return;
+      fetch(SUPA_URL+'/rest/v1/teacher_attendance',{
+        method:'POST',
+        headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+        body:JSON.stringify({staff_id:entry.empId,staff_name:entry.empId,date:entry.date||new Date().toISOString().split('T')[0],status:entry.status||'absent',note:entry.leaveType||''})
+      }).catch(function(){});
+    });
+  } catch(e) {}
 }
 // سجّل غياباً تلقائياً لكل يوم بين startDate و endDate
 function recordAttendanceFromLeave(empId, startDate, endDate, leaveId, leaveType) {
@@ -23142,7 +23154,7 @@ setTimeout(function() {
 // Digital Safety Team Member Status (Admin Only)
 // ============================================================
 function initDsMemberStatuses() {
-    var statuses = JSON.parse(localStorage.getItem('ds_member_statuses') || '{}');
+    var statuses = JSON.parse(sessionStorage.getItem('ds_member_statuses') || '{}');
     var members = ['ds-member-0','ds-member-1','ds-member-2','ds-member-3','ds-member-4','ds-member-5','ds-member-6'];
     var statusMap = {active:{label:'نشطة',cls:'status-active'}, inactive:{label:'غير نشطة',cls:'status-inactive'}, suspended:{label:'معلقة',cls:'status-suspended'}};
     members.forEach(function(mid) {
@@ -23160,12 +23172,12 @@ function initDsMemberStatuses() {
 function toggleDsMemberStatus(mid) {
     var role = currentRole || '';
     if (role !== 'admin') return;
-    var statuses = JSON.parse(localStorage.getItem('ds_member_statuses') || '{}');
+    var statuses = JSON.parse(sessionStorage.getItem('ds_member_statuses') || '{}');
     var cur = statuses[mid] || 'active';
     var order = ['active','inactive','suspended'];
     var next = order[(order.indexOf(cur)+1) % order.length];
     statuses[mid] = next;
-    localStorage.setItem('ds_member_statuses', JSON.stringify(statuses));
+    sessionStorage.setItem('ds_member_statuses', JSON.stringify(statuses));
     initDsMemberStatuses();
     var labels = {active:'نشطة ✅',inactive:'غير نشطة ⚠️',suspended:'معلقة 🔴'};
     showToast('تم تغيير الحالة إلى: ' + labels[next]);
@@ -26456,7 +26468,7 @@ function submitAddStaff() {
 
   // Save to STAFF_DB (localStorage override)
   var staffOverride = [];
-  try { staffOverride = JSON.parse(localStorage.getItem('aljood_staff_additions') || '[]'); } catch(e) {}
+  try { staffOverride = JSON.parse(sessionStorage.getItem('aljood_staff_additions') || '[]'); } catch(e) {}
   staffOverride.push({
     id: minId, name_ar: nameAr, name_en: nameEn, email: email,
     phone: phone, role: newRole, primary_job: pos, password: pw,
@@ -26464,7 +26476,7 @@ function submitAddStaff() {
     added_by: (typeof currentUser !== 'undefined' && currentUser) ? currentUser.email : 'admin',
     added_at: new Date().toISOString()
   });
-  localStorage.setItem('aljood_staff_additions', JSON.stringify(staffOverride));
+  sessionStorage.setItem('aljood_staff_additions', JSON.stringify(staffOverride));
 
   // Save position assignment
   var sam = getStaffAssignmentMap();
@@ -26577,12 +26589,12 @@ function doRenewContract(empId) {
   sam[empId].contract_end = newEnd;
   try { localStorage.setItem('aljood_staff_assignments', JSON.stringify(sam)); } catch(e){}
   try {
-    var arr = JSON.parse(localStorage.getItem('aljood_staff_additions') || '[]');
+    var arr = JSON.parse(sessionStorage.getItem('aljood_staff_additions') || '[]');
     arr = arr.map(function(s){
       if((s.email||s.id) === empId){ s.contract_end = newEnd; }
       return s;
     });
-    localStorage.setItem('aljood_staff_additions', JSON.stringify(arr));
+    sessionStorage.setItem('aljood_staff_additions', JSON.stringify(arr));
   } catch(e){}
   var modal = document.getElementById('_renewContractModal');
   if (modal) modal.remove();
@@ -26616,7 +26628,7 @@ function renderHRContracts() {
   }).join('');
 
   var addedStaff = [];
-  try { addedStaff = JSON.parse(localStorage.getItem('aljood_staff_additions') || '[]'); } catch(e) {}
+  try { addedStaff = JSON.parse(sessionStorage.getItem('aljood_staff_additions') || '[]'); } catch(e) {}
   var addedRows = addedStaff.filter(function(s) { return s.contract_type !== 'permanent'; }).map(function(s) {
     var endDate = s.contract_end ? new Date(s.contract_end) : null;
     var daysLeft = endDate ? Math.ceil((endDate - now) / 86400000) : null;
@@ -26669,7 +26681,7 @@ function renderHRContracts() {
 function renderHRClearance() {
   var staff = (typeof STAFF_DB !== 'undefined') ? STAFF_DB : [];
   var addedStaff = [];
-  try { addedStaff = JSON.parse(localStorage.getItem('aljood_staff_additions') || '[]'); } catch(e) {}
+  try { addedStaff = JSON.parse(sessionStorage.getItem('aljood_staff_additions') || '[]'); } catch(e) {}
   var allStaff = staff.concat(addedStaff);
   var options = allStaff.map(function(s) {
     return '<option value="' + (s.email || s.id) + '">' + (s.name_ar || s.email) + ' — ' + (s.email || '') + '</option>';
@@ -26693,7 +26705,7 @@ function previewClearanceForm() {
   var el = document.getElementById('clearanceStaff');
   if (!el || !el.value) { showToast('اختر موظفاً أولاً', 'warning'); return; }
   var staffList = (typeof STAFF_DB !== 'undefined') ? STAFF_DB : [];
-  var addedList = []; try { addedList = JSON.parse(localStorage.getItem('aljood_staff_additions')||'[]'); } catch(e){}
+  var addedList = []; try { addedList = JSON.parse(sessionStorage.getItem('aljood_staff_additions')||'[]'); } catch(e){}
   var all = staffList.concat(addedList);
   var emp = all.find(function(s){ return (s.email||s.id) === el.value; });
   if (!emp) return;
@@ -27083,9 +27095,9 @@ function confirmClearance() {
 
   // Remove from staff additions
   try {
-    var arr = JSON.parse(localStorage.getItem('aljood_staff_additions') || '[]');
+    var arr = JSON.parse(sessionStorage.getItem('aljood_staff_additions') || '[]');
     arr = arr.filter(function(s) { return s.email !== emailOrId && s.id !== emailOrId; });
-    localStorage.setItem('aljood_staff_additions', JSON.stringify(arr));
+    sessionStorage.setItem('aljood_staff_additions', JSON.stringify(arr));
   } catch(e) {}
 
   // Remove from assignment map
@@ -27106,15 +27118,61 @@ function confirmClearance() {
     localStorage.setItem('aljood_custom_passwords', JSON.stringify(pws));
   } catch(e) {}
 
-  // Log clearance
+  // Log clearance to Supabase (with localStorage fallback)
   try {
-    var log = JSON.parse(localStorage.getItem('aljood_clearance_log') || '[]');
-    log.push({ emailOrId: emailOrId, clearedBy: (typeof currentUser !== 'undefined' && currentUser) ? currentUser.email : 'admin', clearedAt: new Date().toISOString() });
-    localStorage.setItem('aljood_clearance_log', JSON.stringify(log));
+    var _clEntry = { emailOrId: emailOrId, clearedBy: (typeof currentUser !== 'undefined' && currentUser) ? currentUser.email : 'admin', clearedAt: new Date().toISOString() };
+    fetch(SUPA_URL+'/rest/v1/clearance_log',{
+      method:'POST',
+      headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        staff_id: emailOrId,
+        staff_name: emailOrId,
+        items: [],
+        status: 'cleared',
+        approved_by: _clEntry.clearedBy
+      })
+    }).catch(function(){
+      var list = JSON.parse(localStorage.getItem('aljood_clearance_log')||'[]');
+      list.push(_clEntry);
+      localStorage.setItem('aljood_clearance_log', JSON.stringify(list));
+    });
   } catch(e) {}
 
   showToast('✅ تم إخلاء طرف الموظفة وحذف حسابها من النظام');
   renderHRContent('clearance');
+}
+
+// ═══════════════════════════════════════════════════════════
+// CLEARANCE LOG — Supabase
+// ═══════════════════════════════════════════════════════════
+async function getClearanceLog() {
+  try {
+    const r = await fetch(SUPA_URL+'/rest/v1/clearance_log?order=created_at.desc&limit=200',
+      {headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON}});
+    if(!r.ok) throw new Error();
+    return await r.json();
+  } catch(e) {
+    return JSON.parse(localStorage.getItem('aljood_clearance_log')||'[]');
+  }
+}
+async function saveClearanceEntry(entry) {
+  try {
+    await fetch(SUPA_URL+'/rest/v1/clearance_log',{
+      method:'POST',
+      headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        staff_id: entry.staffId||entry.staff_id||entry.emailOrId||'',
+        staff_name: entry.name||entry.staff_name||entry.emailOrId||'',
+        items: entry.items||[],
+        status: entry.status||'pending',
+        approved_by: entry.approvedBy||entry.clearedBy||''
+      })
+    });
+  } catch(e) {
+    var list = JSON.parse(localStorage.getItem('aljood_clearance_log')||'[]');
+    list.push(entry);
+    localStorage.setItem('aljood_clearance_log', JSON.stringify(list));
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -27131,6 +27189,41 @@ function switchAdmTab(tab) {
   renderAdmContent(tab);
 }
 
+
+// ===== ADMISSIONS — Supabase =====
+async function getAdmissions() {
+  try {
+    const r = await fetch(SUPA_URL+'/rest/v1/admissions?order=submitted_at.desc&limit=500',
+      {headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON}});
+    if(!r.ok) throw new Error();
+    return await r.json();
+  } catch(e) {
+    return JSON.parse(localStorage.getItem('aljood_admissions')||'[]');
+  }
+}
+async function saveAdmission(entry) {
+  try {
+    var method = entry.id ? 'PATCH' : 'POST';
+    var url = SUPA_URL+'/rest/v1/admissions'+(entry.id?'?id=eq.'+entry.id:'');
+    await fetch(url,{
+      method:method,
+      headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        student_name: entry.name_ar||entry.studentName||entry.name||'',
+        grade: entry.classId||entry.grade||'',
+        section: entry.section||'',
+        guardian_name: entry.guardian_name||entry.guardianName||entry.parent||'',
+        guardian_phone: entry.guardian_phone||entry.phone||entry.guardianPhone||'',
+        status: entry.status||'active',
+        notes: entry.notes||''
+      })
+    });
+  } catch(e) {
+    var list = JSON.parse(localStorage.getItem('aljood_admissions')||'[]');
+    list.push(entry);
+    localStorage.setItem('aljood_admissions', JSON.stringify(list));
+  }
+}
 
 // ===== SUBMIT STUDENT ADMISSION =====
 function submitStudentAdmission() {
@@ -27162,11 +27255,9 @@ function submitStudentAdmission() {
     admission_date: new Date().toISOString().slice(0,10),
     status: 'active'
   };
-  // Save to localStorage
+  // Save to Supabase (with localStorage fallback)
   try {
-    var admissions = JSON.parse(localStorage.getItem('aljood_admissions') || '[]');
-    admissions.push(record);
-    localStorage.setItem('aljood_admissions', JSON.stringify(admissions));
+    saveAdmission(record);
     showToast('✅ تم تسجيل الطالب: ' + nameAr + ' في صف ' + cls);
     // Reset form
     ['adm_nameAr','adm_nameEn','adm_nationalId','adm_dob','adm_guardianName','adm_guardianPhone','adm_guardianEmail'].forEach(function(id){
@@ -27599,7 +27690,7 @@ function bulkImportConfirm() {
     localStorage.setItem('aljood_students_extended', JSON.stringify(extended));
   } else {
     var staffAdded = [];
-    try { staffAdded = JSON.parse(localStorage.getItem('aljood_staff_additions') || '[]'); } catch(e) {}
+    try { staffAdded = JSON.parse(sessionStorage.getItem('aljood_staff_additions') || '[]'); } catch(e) {}
     data.forEach(function(row) {
       if (!row.name_ar && !row.nameAr) { skip++; return; }
       staffAdded.push({
@@ -27614,7 +27705,7 @@ function bulkImportConfirm() {
       });
       ok++;
     });
-    localStorage.setItem('aljood_staff_additions', JSON.stringify(staffAdded));
+    sessionStorage.setItem('aljood_staff_additions', JSON.stringify(staffAdded));
   }
   _bulkData = [];
   var btn = document.getElementById('bulk-confirm-btn');
@@ -28776,17 +28867,62 @@ function getDutyWeekKey() {
   var week = Math.ceil(((monday - start) / 86400000 + start.getDay() + 1) / 7);
   return year + '-W' + String(week).padStart(2,'0');
 }
+var _dutyHistoryCache = null;
 function getDutyHistory() {
-  return JSON.parse(localStorage.getItem('duty_history_v2') || '{}');
+  if (_dutyHistoryCache) return _dutyHistoryCache;
+  _dutyHistoryCache = JSON.parse(localStorage.getItem('duty_history_v2') || '{}');
+  // Sync from Supabase in background
+  fetch(SUPA_URL+'/rest/v1/duty_history?select=staff_id,duty_count',
+    {headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON}})
+  .then(function(r){ if(r.ok) return r.json(); }).then(function(rows){
+    if(rows && rows.length){
+      var h={};
+      rows.forEach(function(row){ h[row.staff_id]=row.duty_count||0; });
+      _dutyHistoryCache=h;
+      localStorage.setItem('duty_history_v2',JSON.stringify(h));
+    }
+  }).catch(function(){});
+  return _dutyHistoryCache;
 }
 function saveDutyHistory(h) {
+  _dutyHistoryCache = h;
   localStorage.setItem('duty_history_v2', JSON.stringify(h));
+  // Sync to Supabase in background
+  try {
+    Object.keys(h).forEach(function(sid){
+      fetch(SUPA_URL+'/rest/v1/duty_history',{
+        method:'POST',
+        headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+        body:JSON.stringify({staff_id:sid,week_key:getDutyWeekKey(),duty_count:h[sid]||0,updated_at:new Date().toISOString()})
+      }).catch(function(){});
+    });
+  } catch(e) {}
 }
+var _weeklyDutyScheduleCache = null;
 function getWeeklyDutySchedule() {
-  return JSON.parse(localStorage.getItem('weekly_duty_schedule') || 'null');
+  if (_weeklyDutyScheduleCache) return _weeklyDutyScheduleCache;
+  _weeklyDutyScheduleCache = JSON.parse(localStorage.getItem('weekly_duty_schedule') || 'null');
+  // Sync from Supabase in background
+  var _wk = getDutyWeekKey();
+  fetch(SUPA_URL+'/rest/v1/duty_weekly_schedule?week_key=eq.'+encodeURIComponent(_wk)+'&limit=1',
+    {headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON}})
+  .then(function(r){ if(r.ok) return r.json(); }).then(function(rows){
+    if(rows && rows.length>0){
+      _weeklyDutyScheduleCache=rows[0].schedule;
+      localStorage.setItem('weekly_duty_schedule',JSON.stringify(rows[0].schedule));
+    }
+  }).catch(function(){});
+  return _weeklyDutyScheduleCache;
 }
 function saveWeeklyDutySchedule(s) {
+  _weeklyDutyScheduleCache = s;
   localStorage.setItem('weekly_duty_schedule', JSON.stringify(s));
+  // Sync to Supabase in background
+  fetch(SUPA_URL+'/rest/v1/duty_weekly_schedule',{
+    method:'POST',
+    headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+    body:JSON.stringify({week_key:getDutyWeekKey(),schedule:s,updated_at:new Date().toISOString()})
+  }).catch(function(){});
 }
 
 // توليد جدول مناوبات عادل للأسبوع
@@ -29352,6 +29488,41 @@ function dtPrint() {
 }
 
 
+
+// ══ دوال سجلات السلوك — Supabase ══
+async function saveBehaviorLog(entry) {
+  try {
+    await fetch(SUPA_URL+'/rest/v1/behavior_logs',{
+      method:'POST',
+      headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        student_id: entry.studentId||entry.student_id||'',
+        student_name: entry.studentName||entry.student_name||'',
+        class: entry.class||entry.section||entry.className||'',
+        date: entry.date||(new Date().toISOString().split('T')[0]),
+        type: entry.type||'',
+        description: entry.description||entry.note||'',
+        action_taken: entry.actionTaken||entry.action||'',
+        recorded_by: entry.recordedBy||entry.teacher||''
+      })
+    });
+  } catch(e) {
+    var logs = JSON.parse(localStorage.getItem('behaviorLogs')||'[]');
+    logs.push(entry);
+    localStorage.setItem('behaviorLogs', JSON.stringify(logs));
+  }
+}
+async function getBehaviorLogs(cls) {
+  try {
+    var url = SUPA_URL+'/rest/v1/behavior_logs?order=created_at.desc&limit=100';
+    if(cls) url += '&class=eq.'+encodeURIComponent(cls);
+    const r = await fetch(url, {headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON}});
+    if(!r.ok) throw new Error();
+    return await r.json();
+  } catch(e) {
+    return JSON.parse(localStorage.getItem('behaviorLogs')||'[]');
+  }
+}
 
 // ══ إضافة زر تقرير المخالفات لقسم الأخصائية الاجتماعية ══
 function renderSpecialistViolationsWidget() {
@@ -32260,8 +32431,10 @@ async function dmDeleteTeacher(id, name) {
 // ─── Clear Overrides ───
 function dmClearOverrides() {
   if(!confirm('سيتم مسح جميع التعديلات المحلية. هل تريدين المتابعة؟')) return;
-  var keys = ['data_override_staff','data_override_students','data_override_teachers','empOverrides','aljood_staff_additions','aljood_students_extended'];
+  var keys = ['data_override_staff','data_override_students','data_override_teachers','empOverrides','aljood_students_extended'];
+  var sessionKeys = ['aljood_staff_additions','aljood_staff_db'];
   keys.forEach(function(k){ try{localStorage.removeItem(k);}catch(e){} });
+  sessionKeys.forEach(function(k){ try{sessionStorage.removeItem(k);}catch(e){} });
   if(typeof showToast==='function') showToast('✅ تم مسح التعديلات المحلية');
   dmRenderStudents();
 }
