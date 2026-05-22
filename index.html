@@ -26830,9 +26830,14 @@ function initSmartReport() {
   var classes = typeof STUDENTS_DATA !== 'undefined' ? Object.keys(STUDENTS_DATA) : [];
   var classOpts = classes.map(function(c){ return '<option value="'+c+'">'+c+'</option>'; }).join('');
 
-  el.innerHTML = '<div style="max-width:900px;margin:0 auto;">' +
-    '<h2 style="color:#1A2A4A;border-bottom:3px solid #C9A84C;padding-bottom:10px;">&#x1F4DD; نظام التقرير الذكي</h2>' +
-    '<p style="color:#666;font-size:0.9rem;">اختر من القوائم وسيصيغ النظام التقرير الرسمي تلقائياً مع توصيات لولي الأمر</p>' +
+  el.innerHTML = '<div style="max-width:960px;margin:0 auto;">' +
+    '<h2 style="color:#1A2A4A;border-bottom:3px solid #C9A84C;padding-bottom:10px;margin-bottom:20px;">🧠 المنظومة الذكية للطالب</h2>' +
+    '<div style="display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid #e8e8e8;">' +
+      '<button id="sr-tab-btn-report" data-tab="report" onclick="srSwitchTab(this.dataset.tab)" style="padding:10px 22px;border:none;background:none;font-family:Cairo,Tajawal,sans-serif;font-size:0.95rem;font-weight:700;color:#1A2A4A;border-bottom:3px solid #C9A84C;margin-bottom:-2px;cursor:pointer;">📝 التقرير الذكي</button>' +
+      '<button id="sr-tab-btn-memory" data-tab="memory" onclick="srSwitchTab(this.dataset.tab)" style="padding:10px 22px;border:none;background:none;font-family:Cairo,Tajawal,sans-serif;font-size:0.95rem;font-weight:700;color:#888;border-bottom:3px solid transparent;margin-bottom:-2px;cursor:pointer;">🧠 الذاكرة التراكمية</button>' +
+    '</div>' +
+    '<div id="sr-tab-report" style="display:block;">' +
+    '<p style="color:#666;font-size:0.9rem;margin-bottom:16px;">اختر من القوائم وسيصيغ النظام التقرير الرسمي تلقائياً مع توصيات لولي الأمر</p>' +
     '<div style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,0.08);margin-top:16px;">' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">' +
     '<div><label style="font-size:0.85rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">الصف الدراسي</label>' +
@@ -26869,8 +26874,207 @@ function initSmartReport() {
     '<button onclick="generateSmartReport()" style="width:100%;background:linear-gradient(135deg,#1A2A4A,#2a4080);color:#fff;border:none;border-radius:10px;padding:14px;font-size:1rem;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;">&#x2728; توليد التقرير الرسمي تلقائياً</button>' +
     '</div>' +
     '<div id="sr-result" style="display:none;margin-top:24px;"></div>' +
+    '</div>' +
+    '<div id="sr-tab-memory" style="display:none;">' +
+      '<div style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,0.08);margin-bottom:20px;">' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:end;">' +
+          '<div>' +
+            '<label style="font-size:0.85rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">الصف الدراسي</label>' +
+            '<select id="mem-class" onchange="loadMemStudents()" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;">' +
+              '<option value="">— اختر الصف —</option>' + classOpts +
+            '</select>' +
+          '</div>' +
+          '<div>' +
+            '<label style="font-size:0.85rem;font-weight:700;color:#444;display:block;margin-bottom:6px;">الطالب/ة</label>' +
+            '<select id="mem-student" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-family:Cairo,sans-serif;">' +
+              '<option value="">— اختر الطالب —</option>' +
+            '</select>' +
+          '</div>' +
+          '<div>' +
+            '<button onclick="loadStudentMemory()" style="width:100%;background:linear-gradient(135deg,#1A2A4A,#2a4080);color:#fff;border:none;border-radius:10px;padding:11px;font-size:0.9rem;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;">🔍 عرض الذاكرة</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div id="mem-display"></div>' +
+    '</div>' +
     '</div>';
 }
+
+
+// ── Cumulative Memory System ─────────────────────────────────────────────
+function srSwitchTab(tab) {
+  var rTab = document.getElementById('sr-tab-report');
+  var mTab = document.getElementById('sr-tab-memory');
+  var btnR = document.getElementById('sr-tab-btn-report');
+  var btnM = document.getElementById('sr-tab-btn-memory');
+  if (rTab) rTab.style.display = tab === 'report' ? 'block' : 'none';
+  if (mTab) mTab.style.display = tab === 'memory' ? 'block' : 'none';
+  if (btnR) {
+    btnR.style.color = tab === 'report' ? '#1A2A4A' : '#888';
+    btnR.style.borderBottom = tab === 'report' ? '3px solid #C9A84C' : '3px solid transparent';
+  }
+  if (btnM) {
+    btnM.style.color = tab === 'memory' ? '#1A2A4A' : '#888';
+    btnM.style.borderBottom = tab === 'memory' ? '3px solid #C9A84C' : '3px solid transparent';
+  }
+}
+
+function loadMemStudents() {
+  var cls = (document.getElementById('mem-class') || {}).value;
+  var sel = document.getElementById('mem-student');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— اختر الطالب —</option>';
+  if (!cls || !window.STUDENTS_DATA || !window.STUDENTS_DATA[cls]) return;
+  window.STUDENTS_DATA[cls].forEach(function(s) {
+    var opt = document.createElement('option');
+    opt.value = s.student_id || s.id || s.nameAr;
+    opt.textContent = (s.nameAr || s.id) + (s.specialNeeds ? ' 💙' : '');
+    sel.appendChild(opt);
+  });
+}
+
+async function loadStudentMemory() {
+  var cls = (document.getElementById('mem-class') || {}).value;
+  var sel = document.getElementById('mem-student');
+  var studentId = sel ? sel.value : '';
+  var studentName = (sel && sel.selectedIndex > 0) ? sel.options[sel.selectedIndex].textContent : '';
+  var display = document.getElementById('mem-display');
+  if (!cls || !studentId) {
+    if (typeof showToast === 'function') showToast('يرجى اختيار الصف والطالب', 'warning');
+    return;
+  }
+  if (display) display.innerHTML = '<div style="text-align:center;padding:40px;color:#888;"><i class="fas fa-spinner fa-spin fa-2x"></i><br><br>جارٍ تحميل الذاكرة التراكمية...</div>';
+  try {
+    var SURL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+    var SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ4NDYwMTYsImV4cCI6MjA2MDQyMjAxNn0.lF0h4DFQZ2f7rLAzuN1H7IVoaBpZCMKcHFGgj0mETyc';
+    var url = SURL + '/rest/v1/student_memory?student_id=eq.' + encodeURIComponent(studentId) + '&order=session_date.desc&limit=50';
+    var resp = await fetch(url, { headers: { apikey: SKEY, Authorization: 'Bearer ' + SKEY } });
+    var records = await resp.json();
+    var studs = (window.STUDENTS_DATA && window.STUDENTS_DATA[cls]) ? window.STUDENTS_DATA[cls] : [];
+    var stu = studs.find(function(s){ return (s.student_id || s.id || s.nameAr) === studentId; }) || {};
+    var isSEN = !!stu.specialNeeds || studentName.includes('💙');
+    renderStudentMemory(records, studentName.replace(' 💙', ''), cls, isSEN);
+  } catch(e) {
+    if (display) display.innerHTML = '<div style="text-align:center;padding:40px;color:#e74c3c;"><i class="fas fa-exclamation-triangle fa-2x"></i><br><br>خطأ في تحميل البيانات: ' + e.message + '</div>';
+  }
+}
+
+function renderStudentMemory(records, studentName, cls, isSEN) {
+  var display = document.getElementById('mem-display');
+  if (!display) return;
+  var senBadge = isSEN ? '<span style="background:#7c3aed;color:#fff;padding:3px 10px;border-radius:12px;font-size:0.75rem;margin-right:8px;">💙 دعم خاص</span>' : '';
+  if (!records || records.length === 0) {
+    display.innerHTML = '<div style="background:#fff;border-radius:16px;padding:40px;box-shadow:0 2px 12px rgba(0,0,0,0.08);text-align:center;">' +
+      '<div style="font-size:3rem;margin-bottom:16px;">📭</div>' +
+      '<h3 style="color:#1A2A4A;">لا توجد بيانات بعد</h3>' +
+      '<p style="color:#888;">لم يتم تسجيل أي جلسات للطالب <strong>' + studentName + '</strong> في ' + cls + ' حتى الآن.</p>' +
+      '<p style="color:#aaa;font-size:0.85rem;">ستظهر البيانات هنا بعد حضور الطالب لجلسات الحصة التفاعلية.</p>' +
+    '</div>';
+    return;
+  }
+  var scores = records.filter(function(r){ return r.score !== null && r.score !== undefined; }).map(function(r){ return parseFloat(r.score); });
+  var avgScore = scores.length ? (scores.reduce(function(a, b){ return a + b; }, 0) / scores.length).toFixed(1) : 'N/A';
+  var maxScore = scores.length ? Math.max.apply(null, scores).toFixed(0) : 'N/A';
+  var trend = '—', trendColor = '#888';
+  if (scores.length >= 2) {
+    if (scores[0] > scores[scores.length - 1]) { trend = '📈 تحسن'; trendColor = '#27ae60'; }
+    else if (scores[0] < scores[scores.length - 1]) { trend = '📉 تراجع'; trendColor = '#e74c3c'; }
+    else { trend = '➡️ ثابت'; }
+  }
+  var strengths = [], weaknesses = [];
+  records.forEach(function(r){
+    if (r.strengths) strengths = strengths.concat(r.strengths.split(',').map(function(s){ return s.trim(); }));
+    if (r.weaknesses) weaknesses = weaknesses.concat(r.weaknesses.split(',').map(function(s){ return s.trim(); }));
+  });
+  strengths = [...new Set(strengths)].filter(Boolean).slice(0, 5);
+  weaknesses = [...new Set(weaknesses)].filter(Boolean).slice(0, 5);
+  var strTags = strengths.length
+    ? strengths.map(function(s){ return '<span style="background:#eafaf1;color:#27ae60;padding:4px 12px;border-radius:20px;font-size:0.8rem;margin:3px;">✅ ' + s + '</span>'; }).join('')
+    : '<span style="color:#aaa;font-size:0.85rem;">لم تُرصد نقاط قوة بعد</span>';
+  var weakTags = weaknesses.length
+    ? weaknesses.map(function(w){ return '<span style="background:#fef9e7;color:#e67e22;padding:4px 12px;border-radius:20px;font-size:0.8rem;margin:3px;">⚠️ ' + w + '</span>'; }).join('')
+    : '<span style="color:#aaa;font-size:0.85rem;">لا ملاحظات سلبية</span>';
+  var recentRecs = records.slice(0, 10);
+  var sessionRows = recentRecs.map(function(r){
+    var sv = (r.score !== null && r.score !== undefined) ? parseFloat(r.score) : null;
+    var sc = sv === null ? '#888' : sv >= 75 ? '#27ae60' : sv >= 50 ? '#f39c12' : '#e74c3c';
+    var sl = sv === null ? '—' : sv + '%';
+    var dt = r.session_date ? new Date(r.session_date).toLocaleDateString('ar-AE', { weekday: 'short', month: 'short', day: 'numeric' }) : '—';
+    return '<tr style="border-bottom:1px solid #f0f0f0;">' +
+      '<td style="padding:10px 8px;color:#666;font-size:0.82rem;">' + dt + '</td>' +
+      '<td style="padding:10px 8px;font-weight:600;color:#1A2A4A;font-size:0.82rem;">' + (r.lesson_title || r.session_id || '—') + '</td>' +
+      '<td style="padding:10px 8px;text-align:center;"><span style="background:' + sc + '22;color:' + sc + ';padding:3px 10px;border-radius:20px;font-weight:700;font-size:0.82rem;">' + sl + '</span></td>' +
+      '<td style="padding:10px 8px;color:#888;font-size:0.8rem;">' + (r.notes || '—') + '</td>' +
+    '</tr>';
+  }).join('');
+  var senSec = isSEN
+    ? '<div style="background:linear-gradient(135deg,#f3e8ff,#ede9fe);border:1.5px solid #c084fc;border-radius:12px;padding:16px;margin-top:16px;">' +
+        '<div style="font-size:0.9rem;font-weight:700;color:#7c3aed;margin-bottom:8px;">💙 توصيات الدعم الخاص</div>' +
+        '<ul style="margin:0;padding-right:20px;color:#555;font-size:0.85rem;line-height:2;">' +
+          '<li>تقديم الأسئلة بصيغة مبسّطة مع وقت إضافي</li>' +
+          '<li>استخدام التعزيز البصري والتلميحات المرئية</li>' +
+          '<li>التواصل مع الأخصائية قبل الحصة التالية</li>' +
+          '<li>مراجعة خطة الدعم الفردية (IEP) دورياً</li>' +
+        '</ul>' +
+      '</div>'
+    : '';
+  display.innerHTML =
+    '<div style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">' +
+    '<div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #f0f0f0;">' +
+      '<div style="width:56px;height:56px;background:linear-gradient(135deg,#1A2A4A,#2a4080);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#C9A84C;font-size:1.5rem;">👤</div>' +
+      '<div>' +
+        '<h3 style="margin:0;color:#1A2A4A;font-size:1.2rem;">' + studentName + ' ' + senBadge + '</h3>' +
+        '<p style="margin:4px 0 0;color:#888;font-size:0.85rem;">الصف: ' + cls + ' | ' + records.length + ' جلسة مسجّلة</p>' +
+      '</div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">' +
+      '<div style="background:linear-gradient(135deg,#f0f4ff,#e8f0ff);border-radius:12px;padding:16px;text-align:center;">' +
+        '<div style="font-size:1.6rem;font-weight:800;color:#1A2A4A;">' + records.length + '</div>' +
+        '<div style="font-size:0.78rem;color:#666;margin-top:4px;">جلسة مسجّلة</div>' +
+      '</div>' +
+      '<div style="background:linear-gradient(135deg,#f0fff4,#e8fff0);border-radius:12px;padding:16px;text-align:center;">' +
+        '<div style="font-size:1.6rem;font-weight:800;color:#27ae60;">' + avgScore + (avgScore !== 'N/A' ? '%' : '') + '</div>' +
+        '<div style="font-size:0.78rem;color:#666;margin-top:4px;">متوسط الأداء</div>' +
+      '</div>' +
+      '<div style="background:linear-gradient(135deg,#fffcf0,#fff8e0);border-radius:12px;padding:16px;text-align:center;">' +
+        '<div style="font-size:1.6rem;font-weight:800;color:#C9A84C;">' + maxScore + (maxScore !== 'N/A' ? '%' : '') + '</div>' +
+        '<div style="font-size:0.78rem;color:#666;margin-top:4px;">أعلى نتيجة</div>' +
+      '</div>' +
+      '<div style="background:#f9f9f9;border-radius:12px;padding:16px;text-align:center;">' +
+        '<div style="font-size:1.3rem;font-weight:800;color:' + trendColor + ';">' + trend + '</div>' +
+        '<div style="font-size:0.78rem;color:#666;margin-top:4px;">الاتجاه العام</div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">' +
+      '<div style="background:#f9fff9;border:1.5px solid #d5f5e3;border-radius:12px;padding:16px;">' +
+        '<div style="font-size:0.9rem;font-weight:700;color:#27ae60;margin-bottom:10px;">✅ نقاط القوة</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + strTags + '</div>' +
+      '</div>' +
+      '<div style="background:#fffcf0;border:1.5px solid #fde8c8;border-radius:12px;padding:16px;">' +
+        '<div style="font-size:0.9rem;font-weight:700;color:#e67e22;margin-bottom:10px;">⚠️ نقاط التطوير</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + weakTags + '</div>' +
+      '</div>' +
+    '</div>' +
+    senSec +
+    '<div style="margin-top:20px;">' +
+      '<div style="font-size:0.95rem;font-weight:700;color:#1A2A4A;margin-bottom:12px;">📅 آخر الجلسات</div>' +
+      '<div style="overflow-x:auto;">' +
+        '<table style="width:100%;border-collapse:collapse;font-family:Cairo,Tajawal,sans-serif;">' +
+          '<thead>' +
+            '<tr style="background:#f8f9fa;">' +
+              '<th style="padding:10px 8px;text-align:right;font-size:0.82rem;color:#555;font-weight:700;">التاريخ</th>' +
+              '<th style="padding:10px 8px;text-align:right;font-size:0.82rem;color:#555;font-weight:700;">الحصة</th>' +
+              '<th style="padding:10px 8px;text-align:center;font-size:0.82rem;color:#555;font-weight:700;">النتيجة</th>' +
+              '<th style="padding:10px 8px;text-align:right;font-size:0.82rem;color:#555;font-weight:700;">ملاحظات</th>' +
+            '</tr>' +
+          '</thead>' +
+          '<tbody>' + sessionRows + '</tbody>' +
+        '</table>' +
+      '</div>' +
+    '</div>' +
+    '</div>';
+}
+// ─────────────────────────────────────────────────────────────────────────
 
 function srAxisHTML(name, title, opts) {
   return '<h4 style="color:#1A2A4A;margin-bottom:12px;">'+title+'</h4>' +
