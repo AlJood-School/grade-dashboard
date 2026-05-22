@@ -9841,7 +9841,7 @@ function getAllCalEvents() {
   // Upcoming events
   try { (JSON.parse(localStorage.getItem('aljood_upcoming')||'[]')).forEach(function(e){ if(e.date) events.push({date:e.date,title:e.title,desc:e.desc||'',color:'#4ade80',type:'upcoming',icon:'📌'}); }); } catch(x){}
   // PD Programs
-  try { (JSON.parse(localStorage.getItem('aljood_pd_programs')||'[]')).forEach(function(p){ if(p.date) events.push({date:p.date,title:'🎓 '+(p.title||'تنمية مهنية'),desc:(p.type==='ministry'?'وزاري':'داخلي')+(p.cycle&&p.cycle!=='all'?' — '+(p.cycle==='C1'?'الحلقة الأولى':'الحلقة الثانية'):''),color:'#a78bfa',type:'pd',icon:'🎓'}); }); } catch(x){}
+  try { (window._pdCache||[]).forEach(function(p){ if(p.date) events.push({date:p.date,title:'🎓 '+(p.title||'تنمية مهنية'),desc:(p.type==='ministry'?'وزاري':'داخلي')+(p.cycle&&p.cycle!=='all'?' — '+(p.cycle==='C1'?'الحلقة الأولى':'الحلقة الثانية'):''),color:'#a78bfa',type:'pd',icon:'🎓'}); }); } catch(x){}
   // Meetings
   try {
     var isPrivViewer = currentRole==='admin'||currentRole==='principal';
@@ -21149,6 +21149,83 @@ async function _supaSave(table, data) {
 // ===== END DUAL-WRITE HELPERS =====
 
 async function supaFetch(path,opts){var h={'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json','Prefer':'return=representation'};var r=await fetch(SUPA_URL+path,Object.assign({headers:h},opts||{}));if(!r.ok)return null;return r.json().catch(function(){return null;});}
+// === Phase 2: Supabase cache helpers ===
+
+// --- parent_messages ---
+window._parentMsgsCache = null;
+window._parentMsgsCacheTime = 0;
+async function loadParentMessages(forceRefresh) {
+  if (!forceRefresh && window._parentMsgsCache && (Date.now() - window._parentMsgsCacheTime < 300000)) {
+    return window._parentMsgsCache;
+  }
+  try {
+    var msgs = await supaFetch('/rest/v1/parent_messages?select=*&school_id=eq.aljood&order=created_at.desc') || [];
+    window._parentMsgsCache = msgs;
+    window._parentMsgsCacheTime = Date.now();
+    return msgs;
+  } catch(e) { return window._parentMsgsCache || []; }
+}
+async function updateParentMessageInSupabase(id, updates) {
+  try {
+    await supaFetch('/rest/v1/parent_messages?id=eq.' + id, { method: 'PATCH', body: JSON.stringify(updates) });
+    window._parentMsgsCache = null;
+  } catch(e) {}
+}
+
+// --- absence_followups ---
+window._followupsCache = null;
+window._followupsCacheTime = 0;
+async function loadFollowupsFromSupabase(forceRefresh) {
+  if (!forceRefresh && window._followupsCache && (Date.now() - window._followupsCacheTime < 300000)) {
+    return window._followupsCache;
+  }
+  try {
+    var rows = await supaFetch('/rest/v1/absence_followups?select=*&school_id=eq.aljood&order=followup_date.desc') || [];
+    var obj = {};
+    rows.forEach(function(r) {
+      if (!obj[r.student_id]) {
+        obj[r.student_id] = {
+          date: r.followup_date,
+          isoDate: r.followup_date,
+          action: r.action_taken,
+          notes: r.notes,
+          by: r.created_by,
+          studentName: r.student_name
+        };
+      }
+    });
+    window._followupsCache = obj;
+    window._followupsCacheTime = Date.now();
+    return obj;
+  } catch(e) { return window._followupsCache || {}; }
+}
+
+// --- pd_programs ---
+window._pdCache = null;
+window._pdCacheTime = 0;
+async function loadPDFromSupabase(forceRefresh) {
+  if (!forceRefresh && window._pdCache && (Date.now() - window._pdCacheTime < 300000)) return window._pdCache;
+  try {
+    var rows = await supaFetch('/rest/v1/pd_programs?select=*&school_id=eq.aljood&order=date.desc') || [];
+    window._pdCache = rows;
+    window._pdCacheTime = Date.now();
+    return rows;
+  } catch(e) { return window._pdCache || []; }
+}
+
+// --- conferences ---
+window._confCache = null;
+window._confCacheTime = 0;
+async function loadConferencesFromSupabase(forceRefresh) {
+  if (!forceRefresh && window._confCache && (Date.now() - window._confCacheTime < 300000)) return window._confCache;
+  try {
+    var rows = await supaFetch('/rest/v1/conferences?select=*&school_id=eq.aljood&order=date.desc') || [];
+    window._confCache = rows;
+    window._confCacheTime = Date.now();
+    return rows;
+  } catch(e) { return window._confCache || []; }
+}
+
 var BH_DEGREES = {
   1:{label:'الدرجة الأولى',action:'تنبيه شفهي',color:'#C9A84C',bg:'#FFF8E1',threshold:3},
   2:{label:'الدرجة الثانية',action:'إنذار كتابي',color:'#E65100',bg:'#FFF3E0',threshold:3},
@@ -27588,13 +27665,23 @@ function switchPDTab(tab) {
 }
 
 function renderProfDevelopment() {
-  renderPDContent(pdCurrentTab);
+  loadPDFromSupabase().then(function() { renderPDContent(pdCurrentTab); });
 }
 
 function getPDPrograms() {
-  try { return JSON.parse(localStorage.getItem('aljood_pd_programs') || '[]'); } catch(e) { return []; }
+  // Returns cache synchronously; caller should call loadPDFromSupabase() first
+  return window._pdCache || [];
 }
-function savePDPrograms(arr) { localStorage.setItem('aljood_pd_programs', JSON.stringify(arr)); }
+async function savePDPrograms(arr) {
+  window._pdCache = arr;
+  window._pdCacheTime = Date.now();
+  try {
+    var toUpsert = arr.map(function(p) { return Object.assign({ school_id: 'aljood' }, p); });
+    await supaFetch('/rest/v1/pd_programs', { method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify(toUpsert) });
+  } catch(e) {}
+}
 
 function renderPDContent(tab) {
   var el = document.getElementById('pdContent');
@@ -27784,10 +27871,24 @@ function switchConfTab(tab) {
   renderConfContent(tab);
 }
 
-function renderConferences() { renderConfContent(confCurrentTab); }
+function renderConferences() { loadConferencesFromSupabase().then(function() { renderConfContent(confCurrentTab); }); }
 
-function getConferences() { try { return JSON.parse(localStorage.getItem('aljood_conferences') || '[]'); } catch(e) { return []; } }
-function saveConferences(arr) { localStorage.setItem('aljood_conferences', JSON.stringify(arr)); }
+function getConferences() {
+  return window._confCache || [];
+}
+async function saveConferences(arr) {
+  window._confCache = arr;
+  window._confCacheTime = Date.now();
+  try {
+    var toUpsert = arr.map(function(c) {
+      return Object.assign({ school_id: 'aljood' }, c,
+        { requirements: Array.isArray(c.requirements) ? c.requirements.join('\n') : (c.requirements||'') });
+    });
+    await supaFetch('/rest/v1/conferences', { method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify(toUpsert) });
+  } catch(e) {}
+}
 
 function renderConfContent(tab) {
   var el = document.getElementById('confContent');
@@ -28159,11 +28260,10 @@ function sendParentMessage() {
     updated_at: null
   };
 
-  var msgs = [];
-  try { msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]'); } catch(e){}
-  msgs.unshift(msg);
+  var msgs = window._parentMsgsCache ? [msg].concat(window._parentMsgsCache) : [msg];
+  window._parentMsgsCache = msgs;
+  window._parentMsgsCacheTime = Date.now();
   _supaSave('parent_messages', msg);
-  localStorage.setItem('aljood_parent_messages', JSON.stringify(msgs));
 
   // Update specialist badge
   updateSpecialistBadge();
@@ -28184,8 +28284,7 @@ function renderParentMsgList() {
   if (!container) return;
   var username = '';
   try { username = (typeof currentUser !== 'undefined' && currentUser) ? (currentUser.username || '') : ''; } catch(e){}
-  var msgs = [];
-  try { msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]'); } catch(e){}
+  var msgs = window._parentMsgsCache || [];
   var myMsgs = msgs.filter(function(m) { return m.parent_username === username; });
   if (!myMsgs.length) {
     container.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">لا توجد رسائل سابقة</p>';
@@ -28219,7 +28318,7 @@ function renderParentMsgList() {
 
 function updateSpecialistBadge() {
   try {
-    var msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]');
+    var msgs = window._parentMsgsCache || [];
     var pending = msgs.filter(function(m) { return m.status === 'pending'; }).length;
     // Find nav item and update badge
     var navItems = document.querySelectorAll('[data-section="specialist_inbox"] .nav-badge');
@@ -28235,8 +28334,10 @@ function renderSpecialistInbox() {
   if (!container) { container = document.getElementById('mainContent'); }
   if (!container) return;
 
-  var msgs = [];
-  try { msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]'); } catch(e){}
+  var msgs = window._parentMsgsCache || [];
+  loadParentMessages().then(function(freshMsgs) {
+    if (freshMsgs && freshMsgs.length !== msgs.length) renderSpecialistInbox();
+  });
 
   var isSpec = isCurrentUserSpecialist();
   var isAdminOrPrincipal = (typeof currentRole !== 'undefined' && (currentRole === 'admin' || currentRole === 'principal'));
@@ -28364,8 +28465,7 @@ function renderSpecialistInbox() {
 }
 
 function filterSpecMsgs(status) {
-  var msgs = [];
-  try { msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]'); } catch(e){}
+  var msgs = window._parentMsgsCache || [];
   var filtered = status === 'all' ? msgs : msgs.filter(function(m) { return m.status === status; });
   var container = document.getElementById('specMsgList');
   if (!container) return;
@@ -28394,8 +28494,7 @@ function confirmSpecialistAction(msgId) {
   }
 
   // Update message
-  var msgs = [];
-  try { msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]'); } catch(e){}
+  var msgs = window._parentMsgsCache || [];
   var msgIdx = msgs.findIndex(function(m) { return m.id === msgId; });
   if (msgIdx < 0) { showToast('⚠️ الرسالة غير موجودة'); return; }
   
@@ -28406,7 +28505,8 @@ function confirmSpecialistAction(msgId) {
   msgs[msgIdx].specialist_note = noteText || null;
   msgs[msgIdx].status = forwardEmail ? 'forwarded' : 'scheduled';
   msgs[msgIdx].updated_at = new Date().toISOString();
-  localStorage.setItem('aljood_parent_messages', JSON.stringify(msgs));
+  window._parentMsgsCache = msgs;
+  updateParentMessageInSupabase(msgId, { meeting_date: meetDate, meeting_time: meetTime, forwarded_to_email: forwardEmail||null, forwarded_to_name: forwardedName||null, specialist_note: noteText||null, status: msgs[msgIdx].status, updated_at: msgs[msgIdx].updated_at });
 
   // Auto-create meeting
   autoCreateMeeting(msgs[msgIdx]);
@@ -28435,15 +28535,15 @@ function staffConfirmMeeting(msgId) {
   if (!dateEl.value) { showToast('⚠️ يرجى تحديد التاريخ'); return; }
   if (!timeEl.value) { showToast('⚠️ يرجى تحديد الوقت'); return; }
 
-  var msgs = [];
-  try { msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]'); } catch(e){}
+  var msgs = window._parentMsgsCache || [];
   var msgIdx = msgs.findIndex(function(m) { return m.id === msgId; });
   if (msgIdx < 0) { showToast('⚠️ الرسالة غير موجودة'); return; }
   msgs[msgIdx].meeting_date = dateEl.value;
   msgs[msgIdx].meeting_time = timeEl.value;
   msgs[msgIdx].status = 'scheduled';
   msgs[msgIdx].updated_at = new Date().toISOString();
-  localStorage.setItem('aljood_parent_messages', JSON.stringify(msgs));
+  window._parentMsgsCache = msgs;
+  updateParentMessageInSupabase(msgId, { meeting_date: dateEl.value, meeting_time: timeEl.value, status: 'scheduled', updated_at: msgs[msgIdx].updated_at });
   autoCreateMeeting(msgs[msgIdx]);
 
   // Notify parent
@@ -28462,13 +28562,13 @@ function staffConfirmMeeting(msgId) {
 }
 
 function resolveParentMsg(msgId) {
-  var msgs = [];
-  try { msgs = JSON.parse(localStorage.getItem('aljood_parent_messages') || '[]'); } catch(e){}
+  var msgs = window._parentMsgsCache || [];
   var msgIdx = msgs.findIndex(function(m) { return m.id === msgId; });
   if (msgIdx >= 0) {
     msgs[msgIdx].status = 'resolved';
     msgs[msgIdx].updated_at = new Date().toISOString();
-    localStorage.setItem('aljood_parent_messages', JSON.stringify(msgs));
+    window._parentMsgsCache = msgs;
+    updateParentMessageInSupabase(msgId, { status: 'resolved', updated_at: msgs[msgIdx].updated_at });
   }
   showToast('تم إغلاق الطلب');
   renderSpecialistInbox();
@@ -30736,8 +30836,10 @@ function _renderStudentAbsenceCalendar(studentId) {
     return r.present > 0 && r.absent === 0 && r.late === 0;
   }).length;
 
-  var followups = {};
-  try { followups = JSON.parse(localStorage.getItem('aljood_absence_followups') || '{}'); } catch(e) {}
+  var followups = window._followupsCache || {};
+  loadFollowupsFromSupabase().then(function(fresh) {
+    if (fresh) window._followupsCache = fresh;
+  });
   var fu = followups[studentId];
 
   var warningHtml = '';
@@ -30848,8 +30950,7 @@ function saveFollowup() {
   var notes = (document.getElementById('followupNotes') || {}).value || '';
   if (!studentId) return;
 
-  var followups = {};
-  try { followups = JSON.parse(localStorage.getItem('aljood_absence_followups') || '{}'); } catch(e) {}
+  var followups = window._followupsCache ? Object.assign({}, window._followupsCache) : {};
   followups[studentId] = {
     date: new Date().toLocaleDateString('ar-AE'),
     isoDate: new Date().toISOString().slice(0,10),
@@ -30858,12 +30959,14 @@ function saveFollowup() {
     by: (typeof currentStaff !== 'undefined' && currentStaff && currentStaff.name_ar) ? currentStaff.name_ar : (typeof currentRole !== 'undefined' ? currentRole : 'مستخدم'),
     studentName: studentName
   };
-  localStorage.setItem('aljood_absence_followups', JSON.stringify(followups));
-  // Dual-write to Supabase (non-blocking)
+  window._followupsCache = followups;
+  window._followupsCacheTime = Date.now();
+  // Write to Supabase (non-blocking)
   try {
     var fuPayload = { student_id: studentId, student_name: studentName, action_taken: action, notes: notes,
       followup_date: new Date().toISOString().slice(0,10),
-      created_by: (typeof currentStaff!=='undefined'&&currentStaff&&currentStaff.name_ar)?currentStaff.name_ar:(typeof currentRole!=='undefined'?currentRole:'admin') };
+      created_by: (typeof currentStaff!=='undefined'&&currentStaff&&currentStaff.name_ar)?currentStaff.name_ar:(typeof currentRole!=='undefined'?currentRole:'admin'),
+      school_id: 'aljood' };
     supaFetch('/rest/v1/absence_followups', {method:'POST', body:JSON.stringify(fuPayload)});
   } catch(e) {}
   modal.style.display = 'none';
@@ -30889,8 +30992,7 @@ function _getAbsenceAlerts() {
       }
     });
   });
-  var followups = {};
-  try { followups = JSON.parse(localStorage.getItem('aljood_absence_followups') || '{}'); } catch(e) {}
+  var followups = window._followupsCache || {};
   var alerts = [];
   Object.keys(absByStudent).forEach(function(sid) {
     var info = absByStudent[sid];
