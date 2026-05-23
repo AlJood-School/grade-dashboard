@@ -5,20 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>اكتشف كيف تتعلم! 🎯 | بوابة الجود الذكية</title>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
-<!-- Supabase SQL to run ONCE in dashboard:
-CREATE TABLE IF NOT EXISTS vark_results (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  student_name text NOT NULL,
-  grade text, section text, school_id text DEFAULT 'aljood',
-  v_score int DEFAULT 0, a_score int DEFAULT 0,
-  r_score int DEFAULT 0, k_score int DEFAULT 0,
-  dominant_style text, is_multimodal boolean DEFAULT false,
-  grade_band text, completed_at timestamptz DEFAULT now()
-);
-ALTER TABLE vark_results ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "allow_insert_vark" ON vark_results FOR INSERT WITH CHECK (true);
-CREATE POLICY "allow_select_vark" ON vark_results FOR SELECT USING (true);
--->
 <style>
 :root {
   --navy: #1A2A4A;
@@ -41,27 +27,6 @@ body {
 /* ====== SCREEN MANAGER ====== */
 .screen { display: none; min-height: 100vh; }
 .screen.active { display: flex; flex-direction: column; }
-
-/* ====== HEADER ====== */
-.header {
-  background: var(--navy);
-  padding: 14px 20px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
-}
-.header-logo { display: flex; align-items: center; gap: 10px; }
-.header-logo .school-name { color: white; font-size: 0.88rem; font-weight: 700; }
-.header-logo .school-sub { color: var(--gold); font-size: 0.72rem; }
-.header-badge {
-  background: var(--gold);
-  color: var(--navy);
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 0.78rem;
-  font-weight: 800;
-}
 
 /* ====== WELCOME SCREEN ====== */
 #scWelcome {
@@ -98,7 +63,20 @@ body {
   transition: border-color 0.2s;
 }
 .form-row input:focus, .form-row select:focus { border-color: var(--gold); background: white; }
-.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 0; }
+.name-loading {
+  text-align: center;
+  padding: 10px;
+  color: #667;
+  font-size: 0.88rem;
+  display: none;
+}
+.name-loading.visible { display: block; }
+/* Name dropdown highlight */
+#studentNameSelect {
+  border-color: var(--gold);
+  background: #fffdf5;
+}
 .btn-start {
   width: 100%;
   padding: 16px;
@@ -116,21 +94,8 @@ body {
 }
 .btn-start:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(201,168,76,0.5); }
 .btn-start:active { transform: translateY(0); }
+.btn-start:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 .welcome-footer { margin-top: 18px; font-size: 0.75rem; color: #aaa; }
-.grade-bands {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-top: 14px;
-}
-.grade-band-pill {
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  border: 1px solid;
-}
 
 /* ====== QUESTION SCREEN ====== */
 #scQuestion {
@@ -413,14 +378,11 @@ body {
       واكتشف طريقتك المميزة في التعلم ✨
     </div>
 
-    <div class="form-row">
-      <label>✏️ اسمك الكريم</label>
-      <input type="text" id="studentName" placeholder="اكتب اسمك هنا..." maxlength="60">
-    </div>
+    <!-- Step 1: Grade + Section -->
     <div class="form-grid">
       <div class="form-row">
         <label>🎓 الصف الدراسي</label>
-        <select id="studentGrade">
+        <select id="studentGrade" onchange="onGradeOrSectionChange()">
           <option value="">اختر...</option>
           <option value="KG1">روضة 1</option>
           <option value="KG2">روضة 2</option>
@@ -440,7 +402,7 @@ body {
       </div>
       <div class="form-row">
         <label>🏫 الشعبة</label>
-        <select id="studentSection">
+        <select id="studentSection" onchange="onGradeOrSectionChange()">
           <option value="">اختر...</option>
           <option>A</option><option>B</option><option>C</option>
           <option>D</option><option>E</option><option>F</option>
@@ -448,7 +410,24 @@ body {
       </div>
     </div>
 
-    <button class="btn-start" onclick="startAssessment()">
+    <!-- Loading indicator -->
+    <div class="name-loading" id="nameLoadingRow">⏳ جاري تحميل أسماء الطلاب...</div>
+
+    <!-- Step 2: Name dropdown (appears after grade+section) -->
+    <div class="form-row" id="nameSelectRow" style="display:none">
+      <label>👤 اختر اسمك من القائمة</label>
+      <select id="studentNameSelect" onchange="onNameSelectChange()">
+        <option value="">اختر اسمك...</option>
+      </select>
+    </div>
+
+    <!-- Fallback: manual name input -->
+    <div class="form-row" id="nameManualRow" style="display:none">
+      <label>✏️ اكتب اسمك</label>
+      <input type="text" id="studentNameManual" placeholder="اكتب اسمك هنا..." maxlength="60">
+    </div>
+
+    <button class="btn-start" id="btnStart" onclick="startAssessment()" disabled>
       🚀 ابدأ الاختبار!
     </button>
 
@@ -470,10 +449,7 @@ body {
       <div class="progress-bar-fill" id="progressFill" style="width:8%"></div>
     </div>
   </div>
-
-  <div class="q-body" id="qBody">
-    <!-- Populated by JS -->
-  </div>
+  <div class="q-body" id="qBody"></div>
 </div>
 
 <!-- ========== SCREEN 3: RESULT ========== -->
@@ -511,26 +487,114 @@ body {
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
+<script type="module">
 // ============================================================
-// SUPABASE INIT
+// SUPABASE INIT — ESM import (no global conflict)
 // ============================================================
 const SUPABASE_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
-let supabase;
-try { supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON); } catch(e) {}
 
-// Pre-fill from URL params
-const urlParams = new URLSearchParams(window.location.search);
-if (urlParams.get('grade')) {
-  const sel = document.getElementById('studentGrade');
-  for (let o of sel.options) { if (o.value === urlParams.get('grade')) { sel.value = o.value; break; } }
+let _sbClient = null;
+(async () => {
+  try {
+    const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+    _sbClient = createClient(SUPABASE_URL, SUPABASE_ANON);
+  } catch(e) {
+    console.warn('Supabase init failed:', e);
+  }
+})();
+
+// ============================================================
+// STUDENTS DATA LOADER
+// ============================================================
+let _studentsCache = null;
+
+async function loadStudents() {
+  if (_studentsCache) return _studentsCache;
+  try {
+    const resp = await fetch('https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/students.json');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    _studentsCache = await resp.json();
+  } catch(e) {
+    console.warn('Students load failed:', e);
+    _studentsCache = {};
+  }
+  return _studentsCache;
 }
-if (urlParams.get('section')) {
-  const sel = document.getElementById('studentSection');
-  for (let o of sel.options) { if (o.value.toLowerCase() === urlParams.get('section').toUpperCase()) { sel.value = o.value; break; } }
-}
+
+// ============================================================
+// GRADE + SECTION → NAME DROPDOWN
+// ============================================================
+window.onGradeOrSectionChange = async function() {
+  const grade = document.getElementById('studentGrade').value;
+  const section = document.getElementById('studentSection').value;
+
+  const loadingRow = document.getElementById('nameLoadingRow');
+  const nameSelectRow = document.getElementById('nameSelectRow');
+  const nameManualRow = document.getElementById('nameManualRow');
+  const nameSelect = document.getElementById('studentNameSelect');
+  const btnStart = document.getElementById('btnStart');
+
+  // Reset
+  nameSelectRow.style.display = 'none';
+  nameManualRow.style.display = 'none';
+  loadingRow.classList.remove('visible');
+  btnStart.disabled = true;
+
+  if (!grade || !section) return;
+
+  // Build class key: "3A", "KG1A", "1B", etc.
+  const classKey = grade + section;
+
+  // Show loading
+  loadingRow.classList.add('visible');
+
+  const data = await loadStudents();
+  loadingRow.classList.remove('visible');
+
+  const students = data[classKey] || [];
+
+  if (students.length > 0) {
+    // Populate dropdown
+    nameSelect.innerHTML = '<option value="">اختر اسمك...</option>';
+    students.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.nameAr;
+      opt.textContent = s.num + '. ' + s.nameAr;
+      nameSelect.appendChild(opt);
+    });
+    // Add "other" fallback
+    const other = document.createElement('option');
+    other.value = '__other__';
+    other.textContent = '✏️ اسم آخر (غير موجود في القائمة)';
+    nameSelect.appendChild(other);
+
+    nameSelectRow.style.display = 'block';
+    nameManualRow.style.display = 'none';
+  } else {
+    // No list found — show manual input directly
+    nameManualRow.style.display = 'block';
+    nameSelectRow.style.display = 'none';
+    btnStart.disabled = false;
+  }
+};
+
+window.onNameSelectChange = function() {
+  const val = document.getElementById('studentNameSelect').value;
+  const manualRow = document.getElementById('nameManualRow');
+  const btnStart = document.getElementById('btnStart');
+
+  if (val === '__other__') {
+    manualRow.style.display = 'block';
+    btnStart.disabled = false;
+  } else if (val) {
+    manualRow.style.display = 'none';
+    btnStart.disabled = false;
+  } else {
+    manualRow.style.display = 'none';
+    btnStart.disabled = true;
+  }
+};
 
 // ============================================================
 // QUESTIONS DATABASE
@@ -650,11 +714,8 @@ const QUESTIONS = [
 // VARK Style Definitions
 const VARK_STYLES = {
   V: {
-    name: '👁️ المتعلم البصري',
-    nameShort: 'بصري',
-    color: '#1d4ed8',
-    bgColor: '#dbeafe',
-    emoji: '👁️',
+    name: '👁️ المتعلم البصري', nameShort: 'بصري',
+    color: '#1d4ed8', bgColor: '#dbeafe', emoji: '👁️',
     desc: 'أنت تتعلم بشكل أفضل عندما ترى الأشياء! الصور والمخططات والألوان هي مفتاح نجاحك.',
     tips: [
       { icon: '🗺️', text: 'استخدم الخرائط الذهنية والمخططات الملوّنة عند المذاكرة' },
@@ -664,11 +725,8 @@ const VARK_STYLES = {
     ]
   },
   A: {
-    name: '🎧 المتعلم السمعي',
-    nameShort: 'سمعي',
-    color: '#9d174d',
-    bgColor: '#fce7f3',
-    emoji: '🎧',
+    name: '🎧 المتعلم السمعي', nameShort: 'سمعي',
+    color: '#9d174d', bgColor: '#fce7f3', emoji: '🎧',
     desc: 'أنت تتعلم بشكل أفضل عندما تسمع! الاستماع والنقاش والحوار هي طريقتك المميزة.',
     tips: [
       { icon: '🎤', text: 'اقرأ دروسك بصوت عالٍ عند المذاكرة' },
@@ -678,11 +736,8 @@ const VARK_STYLES = {
     ]
   },
   R: {
-    name: '📖 المتعلم القرائي-الكتابي',
-    nameShort: 'قرائي',
-    color: '#065f46',
-    bgColor: '#d1fae5',
-    emoji: '📖',
+    name: '📖 المتعلم القرائي-الكتابي', nameShort: 'قرائي',
+    color: '#065f46', bgColor: '#d1fae5', emoji: '📖',
     desc: 'أنت تتعلم بشكل أفضل بالكتابة والقراءة! الملاحظات المرتّبة والكلمات الواضحة هي قوتك.',
     tips: [
       { icon: '✍️', text: 'اكتب ملاحظات منظّمة ومرتّبة بعد كل درس' },
@@ -692,11 +747,8 @@ const VARK_STYLES = {
     ]
   },
   K: {
-    name: '🤸 المتعلم الحركي',
-    nameShort: 'حركي',
-    color: '#92400e',
-    bgColor: '#fef3c7',
-    emoji: '🤸',
+    name: '🤸 المتعلم الحركي', nameShort: 'حركي',
+    color: '#92400e', bgColor: '#fef3c7', emoji: '🤸',
     desc: 'أنت تتعلم بشكل أفضل بالتجريب والحركة! التطبيق العملي والتجارب المباشرة هي طريقتك.',
     tips: [
       { icon: '🔬', text: 'طبّق ما تتعلمه في مشاريع ونشاطات عملية' },
@@ -713,7 +765,7 @@ const VARK_STYLES = {
 let currentQ = 0;
 let scores = { V: 0, A: 0, R: 0, K: 0 };
 let studentInfo = {};
-let gradeBand = 'normal'; // 'simple' for G1-G2
+let gradeBand = 'normal';
 
 // ============================================================
 // HELPERS
@@ -742,13 +794,28 @@ function getGradeBand(grade) {
 // ============================================================
 // START ASSESSMENT
 // ============================================================
-function startAssessment() {
-  const name = document.getElementById('studentName').value.trim();
+window.startAssessment = function() {
   const grade = document.getElementById('studentGrade').value;
   const section = document.getElementById('studentSection').value;
 
-  if (!name) { showToast('✏️ من فضلك اكتب اسمك أولاً'); return; }
+  // Get student name
+  let name = '';
+  const nameSelectRow = document.getElementById('nameSelectRow');
+  const nameManualRow = document.getElementById('nameManualRow');
+  if (nameSelectRow.style.display !== 'none') {
+    const sel = document.getElementById('studentNameSelect');
+    if (sel.value && sel.value !== '__other__') {
+      name = sel.value;
+    } else if (sel.value === '__other__') {
+      name = document.getElementById('studentNameManual').value.trim();
+    }
+  } else {
+    name = document.getElementById('studentNameManual').value.trim();
+  }
+
   if (!grade) { showToast('🎓 من فضلك اختر صفك الدراسي'); return; }
+  if (!section) { showToast('🏫 من فضلك اختر الشعبة'); return; }
+  if (!name) { showToast('👤 من فضلك اختر اسمك أو اكتبه'); return; }
 
   studentInfo = { name, grade, section };
   gradeBand = getGradeBand(grade);
@@ -758,7 +825,7 @@ function startAssessment() {
   showScreen('scQuestion');
   renderQuestion(0);
   updateProgress(0);
-}
+};
 
 // ============================================================
 // RENDER QUESTION
@@ -767,13 +834,10 @@ function renderQuestion(idx) {
   const q = QUESTIONS[idx];
   const isSimple = (gradeBand === 'simple');
   const body = document.getElementById('qBody');
-
   const qText = isSimple ? q.text.simple : q.text.normal;
 
   let choicesHTML = '';
-  // Shuffle choices per question for fairness
-  const shuffled = [...q.choices]; // keep order (shuffling would break VARK logic)
-  shuffled.forEach((c, i) => {
+  q.choices.forEach((c, i) => {
     choicesHTML += `
       <div class="choice-card" id="choice_${i}" onclick="selectChoice(${i}, '${c.type}', this)">
         <div class="choice-emoji ${isSimple ? 'large' : ''}">${c.emoji}</div>
@@ -793,18 +857,14 @@ function renderQuestion(idx) {
 // SELECT CHOICE
 // ============================================================
 let isAnimating = false;
-function selectChoice(choiceIdx, type, el) {
+window.selectChoice = function(choiceIdx, type, el) {
   if (isAnimating) return;
   isAnimating = true;
 
-  // Mark selected
   document.querySelectorAll('.choice-card').forEach(c => c.classList.remove('selected'));
   el.classList.add('selected', 'correct-flash');
-
-  // Update score
   scores[type]++;
 
-  // Transition to next question
   setTimeout(() => {
     const overlay = document.getElementById('transitionOverlay');
     const emojis = ['⭐', '🌟', '💫', '✨', '🎯', '💪', '🔥', '👏'];
@@ -825,13 +885,13 @@ function selectChoice(choiceIdx, type, el) {
       }
     }, 350);
   }, 600);
-}
+};
 
 // ============================================================
 // PROGRESS
 // ============================================================
 function updateProgress(idx) {
-  const pct = Math.round(((idx) / QUESTIONS.length) * 100);
+  const pct = Math.round((idx / QUESTIONS.length) * 100);
   document.getElementById('progressFill').style.width = Math.max(8, pct) + '%';
   document.getElementById('qCountDisplay').textContent = (idx + 1) + ' / ' + QUESTIONS.length;
 }
@@ -843,16 +903,13 @@ function showResults() {
   showScreen('scResult');
 
   const total = QUESTIONS.length;
-  // Find dominant style
   const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
   const topScore = sorted[0][1];
   const topStyles = sorted.filter(s => s[1] === topScore);
   const dominant = topStyles.length > 1 ? 'MULTI' : sorted[0][0];
 
-  // Display student name
   document.getElementById('resultName').textContent = '🎓 ' + studentInfo.name;
 
-  // Badge & title
   const badge = document.getElementById('varkBadge');
   if (dominant === 'MULTI') {
     badge.style.background = 'linear-gradient(135deg, #C9A84C, #1A2A4A)';
@@ -862,7 +919,6 @@ function showResults() {
       'أنت مميز جداً! تتعلم بأكثر من طريقة في آنٍ واحد. هذا يعطيك مرونة كبيرة في التكيّف مع أي أسلوب تدريس.';
     document.getElementById('multimodalNote').innerHTML =
       `<div class="multimodal-note">⭐ أنماطك الرئيسية: ${topStyles.map(s => VARK_STYLES[s[0]].emoji + ' ' + VARK_STYLES[s[0]].nameShort).join(' و ')}</div>`;
-    // Show tips for top two styles
     const tips1 = VARK_STYLES[topStyles[0][0]].tips;
     const tips2 = topStyles[1] ? VARK_STYLES[topStyles[1][0]].tips : [];
     const allTips = [...tips1.slice(0,2), ...tips2.slice(0,2)];
@@ -899,14 +955,13 @@ function showResults() {
   });
   document.getElementById('scoreBars').innerHTML = barsHTML;
 
-  // Animate bars after brief delay
   setTimeout(() => {
     document.querySelectorAll('.score-bar-fill').forEach(bar => {
       bar.style.width = bar.dataset.width;
     });
   }, 400);
 
-  // Confetti animation
+  // Confetti
   const confettiEmojis = ['🎉', '🎊', '🌟', '✨', '🏆', '🎯'];
   let ci = 0;
   const confettiInterval = setInterval(() => {
@@ -915,16 +970,15 @@ function showResults() {
     if (ci > 8) clearInterval(confettiInterval);
   }, 400);
 
-  // Save to Supabase
-  saveToSupabase(dominant, sorted);
+  saveToSupabase(dominant);
 }
 
 // ============================================================
 // SAVE TO SUPABASE
 // ============================================================
-async function saveToSupabase(dominant, sorted) {
+async function saveToSupabase(dominant) {
   const statusEl = document.getElementById('saveStatus');
-  if (!supabase) {
+  if (!_sbClient) {
     statusEl.innerHTML = '<div class="save-err">⚠️ تعذّر الاتصال بقاعدة البيانات</div>';
     return;
   }
@@ -945,22 +999,22 @@ async function saveToSupabase(dominant, sorted) {
   };
 
   try {
-    const { error } = await supabase.from('vark_results').insert([record]);
+    const { error } = await _sbClient.from('vark_results').insert([record]);
     if (error) {
       console.warn('Supabase save error:', error);
-      statusEl.innerHTML = `<div class="save-err">⚠️ ${error.code === '42P01' ? 'جدول vark_results غير موجود — أضفه من Supabase Dashboard' : 'خطأ في الحفظ: ' + error.message}</div>`;
+      statusEl.innerHTML = `<div class="save-err">⚠️ ${error.code === '42P01' ? 'جدول vark_results غير موجود' : 'خطأ: ' + error.message}</div>`;
     } else {
       statusEl.innerHTML = '<div class="save-ok">✅ تم حفظ نتيجتك في بوابة الجود الذكية!</div>';
     }
   } catch(e) {
-    statusEl.innerHTML = '<div class="save-err">⚠️ تعذّر الاتصال — تحقق من الاتصال بالإنترنت</div>';
+    statusEl.innerHTML = '<div class="save-err">⚠️ تعذّر الاتصال — تحقق من الإنترنت</div>';
   }
 }
 
 // ============================================================
 // SHARE RESULT
 // ============================================================
-function shareResult() {
+window.shareResult = function() {
   const url = window.location.href.split('?')[0] +
     '?grade=' + studentInfo.grade +
     (studentInfo.section ? '&section=' + studentInfo.section : '');
@@ -974,7 +1028,7 @@ function shareResult() {
   } else {
     copyToClipboard(url);
   }
-}
+};
 
 function copyToClipboard(text) {
   if (navigator.clipboard) {
@@ -993,12 +1047,37 @@ function copyToClipboard(text) {
 // ============================================================
 // RESTART
 // ============================================================
-function restartAssessment() {
+window.restartAssessment = function() {
   scores = { V: 0, A: 0, R: 0, K: 0 };
   currentQ = 0;
-  document.getElementById('studentName').value = '';
+  // Reset form
+  document.getElementById('studentGrade').value = '';
+  document.getElementById('studentSection').value = '';
+  document.getElementById('studentNameSelect').innerHTML = '<option value="">اختر اسمك...</option>';
+  document.getElementById('nameSelectRow').style.display = 'none';
+  document.getElementById('nameManualRow').style.display = 'none';
+  document.getElementById('btnStart').disabled = true;
   showScreen('scWelcome');
-}
+};
+
+// Pre-fill from URL params
+(function() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const grade = urlParams.get('grade');
+  const section = urlParams.get('section');
+  if (grade) {
+    const sel = document.getElementById('studentGrade');
+    for (let o of sel.options) { if (o.value === grade) { sel.value = o.value; break; } }
+  }
+  if (section) {
+    const sel = document.getElementById('studentSection');
+    for (let o of sel.options) { if (o.value === section.toUpperCase()) { sel.value = o.value; break; } }
+  }
+  if (grade && section) {
+    window.onGradeOrSectionChange();
+  }
+})();
+
 </script>
 </body>
 </html>
