@@ -1213,6 +1213,43 @@ select.form-control { cursor: pointer; }
         </div>
       </div>
 
+
+      <!-- توثيق مشاركة فريق الدعم التعليمي -->
+      <div class="card" style="margin-top:20px;" id="team-participation-card">
+        <div class="card-header">
+          <div class="card-title"><span class="icon">👥</span> توثيق مشاركة فريق الدعم التعليمي</div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div id="team-participation-progress" style="font-size:13px;color:#94a3b8;">⏳ جاري التحميل...</div>
+            <button class="btn btn-sm btn-outline" onclick="loadTeamParticipation()" style="font-size:12px;padding:6px 12px;">🔄 تحديث</button>
+          </div>
+        </div>
+        <!-- شريط التقدم -->
+        <div style="margin:0 0 16px;background:rgba(255,255,255,0.08);border-radius:8px;height:10px;overflow:hidden;">
+          <div id="team-progress-bar" style="height:100%;background:linear-gradient(90deg,#C9A84C,#f59e0b);border-radius:8px;transition:width 0.8s ease;width:0%;"></div>
+        </div>
+        <!-- شبكة الأعضاء -->
+        <div id="team-participation-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;">
+          <div style="text-align:center;padding:30px;color:#94a3b8;grid-column:1/-1;">⏳ جاري تحميل بيانات الفريق...</div>
+        </div>
+      </div>
+
+      <!-- Modal عرض تفاصيل إجابات العضو -->
+      <div id="member-response-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;overflow-y:auto;padding:20px;" onclick="closeMemberModal(event)">
+        <div style="max-width:600px;margin:40px auto;background:#0d1f3c;border:1px solid rgba(201,168,76,0.4);border-radius:20px;padding:28px;" onclick="event.stopPropagation()">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+            <div>
+              <div id="modal-member-name" style="font-size:17px;font-weight:700;color:#C9A84C;"></div>
+              <div id="modal-member-role" style="font-size:12px;color:#94a3b8;margin-top:4px;"></div>
+            </div>
+            <button onclick="document.getElementById('member-response-modal').style.display='none'" style="background:rgba(255,255,255,0.08);border:none;color:#94a3b8;font-size:18px;cursor:pointer;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;">✕</button>
+          </div>
+          <!-- قائمة الاستبيانات التي شاركت فيها -->
+          <div id="modal-member-content">
+            <div style="font-size:12px;color:#64748b;margin-bottom:12px;">📋 سجل المشاركة في الاستبيانات</div>
+          </div>
+        </div>
+      </div>
+
     </div><!-- end sec-surveys -->
 
     <div class="section-view" id="sec-settings">
@@ -1355,6 +1392,235 @@ async function initSurveysSection() {
   await checkTeacherSurveyStatus();
   await loadTeacherSurveyResults();
   await loadSupportSurveyCount();
+  loadTeamParticipation();
+}
+
+// ===== سجل مشاركة فريق الدعم في الاستبيانات =====
+
+// تعريف الاستبيانات المتاحة (قابل للتوسع)
+const SURVEYS_REGISTRY = [
+  {
+    id: 'digital_readiness',
+    title: 'استبيان الجاهزية الرقمية',
+    purpose: 'قياس الواقع الميداني لفريق الدعم قبل بناء المنظومة الرقمية — وثيقة بحثية داعمة لملف الابتكار',
+    icon: '📊',
+    table: 'survey_digital_readiness',
+    nameField: 'respondent_name',
+    summaryFields: [
+      { field: 'tech_comfort',        label: 'مستوى الراحة مع التقنية', format: v => `${v} / 5 ⭐` },
+      { field: 'ready_for_digital',   label: 'الجاهزية للتحول الرقمي',  format: v => ({ready:'✅ مستعدة تماماً', mostly_ready:'🟡 مستعدة نسبياً', hesitant:'🟠 مترددة', not_ready:'🔴 غير مستعدة'}[v] || v) },
+      { field: 'daily_challenges',    label: 'أبرز التحديات اليومية',    format: v => translateSurveyValue(v) },
+      { field: 'wants_notifications', label: 'الرغبة في الإشعارات التلقائية', format: v => v === 'yes' ? '✅ نعم' : v === 'no' ? '❌ لا' : '— ' },
+      { field: 'wants_auto_reports',  label: 'الرغبة في التقارير التلقائية',  format: v => v === 'yes' ? '✅ نعم' : v === 'no' ? '❌ لا' : '—' },
+      { field: 'open_feedback',       label: 'ملاحظة إضافية',            format: v => v ? `"${v}"` : null },
+    ]
+  }
+  // ← يُضاف هنا أي استبيان جديد مستقبلاً
+];
+
+const TEAM_MEMBERS_22 = [
+  { name: 'حليمة المعمري',   role: 'مدير المدرسة — رئيس اللجنة' },
+  { name: 'فاطمة الظهوري',   role: 'نائب المدير لشؤون الطلبة' },
+  { name: 'فاطمة العبيدلي',  role: 'نائب المدير لشؤون الطلبة' },
+  { name: 'عائشة المعمري',   role: 'اختصاصي اجتماعي' },
+  { name: 'عفراء العامري',   role: 'اختصاصي اجتماعي' },
+  { name: 'روضة المهري',     role: 'اختصاصي اجتماعي' },
+  { name: 'نورة الاحبابي',   role: 'رئيس وحدة شؤون الطلبة' },
+  { name: 'فاطمة الاحبابي',  role: 'رئيس وحدة شؤون الطلبة' },
+  { name: 'وطفة الخيلي',     role: 'رئيس وحدة شؤون الطلبة' },
+  { name: 'منى الزيدي',      role: 'رئيس وحدة شؤون الطلبة' },
+  { name: 'نوال الغيثي',     role: 'رئيس وحدة شؤون الطلبة' },
+  { name: 'فاطمة الحميري',   role: 'اختصاصي نفسي' },
+  { name: 'رهام عبدالخالق',  role: 'معلمة التربية الخاصة' },
+  { name: 'آمنة اليحيائي',   role: 'معلمة التربية الخاصة' },
+  { name: 'فاطمة الحاجبي',   role: 'معلمة التربية الخاصة' },
+  { name: 'نداء البريكي',    role: 'معلمة التربية الخاصة' },
+  { name: 'فاطمة العامري',   role: 'معلمة التربية الخاصة' },
+  { name: 'موزة الساعدي',    role: 'معلمة التربية الخاصة' },
+  { name: 'أفراح الشامسي',   role: 'مساعد معلم أصحاب الهمم' },
+  { name: 'فاطمة العيسائي',  role: 'مساعد معلم أصحاب الهمم' },
+  { name: 'ميسرة',           role: 'الممرضة' },
+  { name: 'ريم',             role: 'الممرضة' }
+];
+
+function normalizeName(n) {
+  return (n||'').replace(/\s+/g,' ').trim()
+    .replace(/ة/g,'ه').replace(/[أإآ]/g,'ا').replace(/ى/g,'ي');
+}
+
+function translateSurveyValue(val) {
+  if (!val) return '—';
+  const MAP = {
+    time:'ضيق الوقت', info_loss:'ضياع المعلومات', schedule:'تنسيق الجداول',
+    parent:'التواصل مع الأهل', iep:'متابعة IEP',
+    phone:'جوال', laptop:'لابتوب', tablet:'تابلت', school_pc:'كمبيوتر المدرسة',
+    yes:'نعم', no:'لا', sometimes:'أحياناً',
+    ready:'مستعدة تماماً', mostly_ready:'مستعدة نسبياً', hesitant:'مترددة', not_ready:'غير مستعدة',
+  };
+  try {
+    const arr = JSON.parse(val);
+    if (Array.isArray(arr)) return arr.map(v => MAP[v]||v).join('، ');
+  } catch(e) {}
+  return MAP[val] || val;
+}
+
+async function loadTeamParticipation() {
+  const grid = document.getElementById('team-participation-grid');
+  const progress = document.getElementById('team-participation-progress');
+  const bar = document.getElementById('team-progress-bar');
+  if (!grid) return;
+
+  try {
+    // جلب بيانات استبيان الجاهزية الرقمية
+    const res = await fetch(`${SUPA_URL}/rest/v1/survey_digital_readiness?select=*`, {
+      headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` }
+    });
+    const responses = await res.json();
+
+    // فهرسة الإجابات بالاسم المُعيَّر (مع استبعاد سجلات الاختبار)
+    const responseMap = {};
+    responses.forEach(r => {
+      if (r.respondent_name && r.role !== 'test' && !r.respondent_name.includes('اختبار')) {
+        responseMap[normalizeName(r.respondent_name)] = r;
+      }
+    });
+
+    window._teamSurveyData = { responseMap };
+
+    let completed = 0;
+    let html = '';
+
+    TEAM_MEMBERS_22.forEach((member, i) => {
+      const nName = normalizeName(member.name);
+      let response = responseMap[nName];
+      // مطابقة جزئية للأسماء المختلفة قليلاً
+      if (!response) {
+        const parts = nName.split(' ');
+        const key = Object.keys(responseMap).find(k =>
+          parts[0] && k.includes(parts[0]) && parts[parts.length-1] && k.includes(parts[parts.length-1])
+        );
+        if (key) response = responseMap[key];
+      }
+
+      const done = !!response;
+      if (done) completed++;
+
+      const readyBadge = done ? ({
+        ready:        { color:'#34d399', text:'مستعدة تماماً' },
+        mostly_ready: { color:'#C9A84C', text:'مستعدة نسبياً' },
+        hesitant:     { color:'#fb923c', text:'مترددة' },
+        not_ready:    { color:'#f87171', text:'غير مستعدة' }
+      }[response.ready_for_digital] || { color:'#94a3b8', text:'—' }) : null;
+
+      html += `
+        <div onclick="${done ? `showMemberSurveys(${i})` : ''}"
+          style="background:${done ? 'rgba(13,31,60,0.85)' : 'rgba(13,31,60,0.3)'};
+                 border:1px solid ${done ? 'rgba(201,168,76,0.35)' : 'rgba(255,255,255,0.07)'};
+                 border-radius:14px;padding:14px 12px;
+                 cursor:${done ? 'pointer' : 'default'};
+                 transition:all 0.2s;position:relative;"
+          onmouseover="this.style.transform='${done ? 'translateY(-2px)' : 'none'}';this.style.borderColor='${done ? 'rgba(201,168,76,0.65)' : 'rgba(255,255,255,0.07)'}'"
+          onmouseout="this.style.transform='none';this.style.borderColor='${done ? 'rgba(201,168,76,0.35)' : 'rgba(255,255,255,0.07)'}'">
+          <div style="font-size:20px;margin-bottom:6px;">${done ? '✅' : '⏳'}</div>
+          <div style="font-weight:600;font-size:13px;color:${done ? '#e2e8f0' : '#4b5563'};line-height:1.4;margin-bottom:3px;">${member.name}</div>
+          <div style="font-size:11px;color:#4b5563;line-height:1.3;margin-bottom:8px;">${member.role}</div>
+          ${done ? `
+            <div style="font-size:11px;color:${readyBadge.color};font-weight:600;margin-bottom:4px;">${readyBadge.text}</div>
+            <div style="font-size:10px;color:#C9A84C;">📋 استبيان واحد · اضغطي للتفاصيل</div>
+          ` : `
+            <div style="font-size:11px;color:#374151;">لم تُجب بعد</div>
+          `}
+        </div>`;
+    });
+
+    grid.innerHTML = html;
+    const pct = Math.round((completed / 22) * 100);
+    bar.style.width = pct + '%';
+    progress.innerHTML =
+      `<span style="color:#C9A84C;font-weight:700;">${completed}</span>` +
+      `<span style="color:#64748b;"> / 22 أجبن </span>` +
+      `<span style="color:#94a3b8;">(${pct}%)</span>`;
+
+  } catch(e) {
+    grid.innerHTML = `<div style="color:#f87171;padding:20px;text-align:center;">⚠️ تعذّر تحميل البيانات</div>`;
+  }
+}
+
+function showMemberSurveys(idx) {
+  const member = TEAM_MEMBERS_22[idx];
+  if (!member || !window._teamSurveyData) return;
+  const { responseMap } = window._teamSurveyData;
+
+  const nName = normalizeName(member.name);
+  let response = responseMap[nName];
+  if (!response) {
+    const parts = nName.split(' ');
+    const key = Object.keys(responseMap).find(k =>
+      parts[0] && k.includes(parts[0]) && parts[parts.length-1] && k.includes(parts[parts.length-1])
+    );
+    if (key) response = responseMap[key];
+  }
+
+  document.getElementById('modal-member-name').textContent = member.name;
+  document.getElementById('modal-member-role').textContent = member.role;
+
+  // بناء بطاقة الاستبيان
+  const survey = SURVEYS_REGISTRY[0];
+  const date = response?.submitted_at
+    ? new Date(response.submitted_at).toLocaleDateString('ar-AE', { year:'numeric', month:'long', day:'numeric' })
+    : '—';
+
+  let summaryRows = '';
+  if (response) {
+    survey.summaryFields.forEach(({ field, label, format }) => {
+      const raw = response[field];
+      if (raw === undefined || raw === null || raw === '') return;
+      const val = format(String(raw));
+      if (!val || val === '—' || val === 'null') return;
+      summaryRows += `
+        <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+          <div style="font-size:12px;color:#64748b;min-width:140px;flex-shrink:0;">${label}</div>
+          <div style="font-size:13px;color:#e2e8f0;flex:1;">${val}</div>
+        </div>`;
+    });
+  }
+
+  document.getElementById('modal-member-content').innerHTML = `
+    <div style="font-size:12px;color:#64748b;margin-bottom:14px;">📋 الاستبيانات التي شاركت فيها</div>
+
+    <!-- بطاقة الاستبيان -->
+    <div style="background:rgba(201,168,76,0.07);border:1px solid rgba(201,168,76,0.25);border-radius:14px;padding:16px;">
+      <!-- رأس البطاقة -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <div style="font-size:24px;">${survey.icon}</div>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:#C9A84C;">${survey.title}</div>
+          <div style="font-size:11px;color:#64748b;margin-top:2px;">📅 ${date}</div>
+        </div>
+        <div style="margin-right:auto;background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.4);border-radius:20px;padding:3px 10px;font-size:11px;color:#34d399;">✅ شاركت</div>
+      </div>
+      <!-- الهدف -->
+      <div style="font-size:12px;color:#475569;line-height:1.6;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;margin-bottom:12px;">
+        🎯 ${survey.purpose}
+      </div>
+      <!-- أبرز الإجابات -->
+      <div style="font-size:12px;color:#94a3b8;margin-bottom:8px;font-weight:600;">أبرز إجاباتها</div>
+      <div>${summaryRows || '<div style="color:#64748b;font-size:12px;">—</div>'}</div>
+    </div>
+
+    <!-- استبيانات أخرى مستقبلاً -->
+    <div style="margin-top:12px;padding:12px;border:1px dashed rgba(255,255,255,0.1);border-radius:10px;text-align:center;">
+      <div style="font-size:12px;color:#374151;">⏳ ستُضاف الاستبيانات القادمة هنا تلقائياً</div>
+    </div>
+  `;
+
+  document.getElementById('member-response-modal').style.display = 'block';
+}
+
+function closeMemberModal(e) {
+  if (e.target.id === 'member-response-modal') {
+    document.getElementById('member-response-modal').style.display = 'none';
+  }
 }
 
 async function checkTeacherSurveyStatus() {
