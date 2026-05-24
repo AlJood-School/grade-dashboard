@@ -376,10 +376,18 @@ footer {
     <div class="section-title">👤 معلومات عامة</div>
 
     <div class="q-block">
-      <div class="q-label">الاسم <span class="req">*</span></div>
-      <input id="q-name" type="text" class="styled-input" placeholder="اكتبي اسمك الكامل..."
-        oninput="saveFieldVal('respondent_name', this.value); clearError('err-name')">
-      <div class="q-error" id="err-name">يرجى إدخال اسمك</div>
+      <div class="q-label" id="lbl-name">اختاري اسمك <span class="req">*</span></div>
+      <div style="position:relative;">
+        <input id="q-name" list="staff-names-list" class="styled-input"
+          placeholder="🔍 ابدئي بالكتابة لاختيار اسمك..."
+          oninput="onNameInput(this.value)"
+          onchange="onNameSelected(this.value)"
+          autocomplete="off">
+        <datalist id="staff-names-list"></datalist>
+        <div id="name-loading" style="display:none;position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text-muted);">⏳ جاري التحميل...</div>
+      </div>
+      <div id="name-info" style="display:none;margin-top:10px;background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.3);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--gold-light);"></div>
+      <div class="q-error" id="err-name">يرجى اختيار اسمك من القائمة</div>
     </div>
 
     <div class="q-block">
@@ -408,6 +416,9 @@ footer {
         <option value="pe">التربية البدنية</option>
         <option value="music">الموسيقى</option>
         <option value="kg_general">معلمة صف (روضة)</option>
+        <option value="cycle1_general">📗 معلمة صف (ح1 — مجال)</option>
+        <option value="special_ed">🌟 معلمة تربية خاصة</option>
+        <option value="assistant">🤝 معلمة مساعدة</option>
         <option value="other">أخرى</option>
       </select>
       <div class="q-error" id="err-subject">يرجى اختيار المادة</div>
@@ -692,7 +703,168 @@ let multiData = {
 };
 
 // ─────────────────────────────────────────────
-// AUTO-FILL NAME
+// STAFF DATA — يُسحب من data/staff.json
+// ─────────────────────────────────────────────
+let staffData = [];
+
+const SUBJECT_MAP = {
+  'اللغة العربية': 'arabic',
+  'اللغة الانجليزية': 'english',
+  'اللغة الإنجليزية': 'english',
+  'الرياضيات': 'math',
+  'علوم عامة': 'science',
+  'التربية الإسلامية': 'islamic',
+  'الدراسات الاجتماعية والتربية الوطنية': 'social',
+  'الحوسبة والتصميم الابداعي والابتكار': 'ccdi_ai',
+  'الفنون البصرية': 'art',
+  'التربية البدنية': 'pe',
+  'التربية الموسيقية': 'music',
+  'دراما': 'art',
+  'رياض الأطفال عربي': 'kg_general',
+  'رياض الأطفال إنجليزي': 'kg_general',
+  'مجال1': 'cycle1_general',
+  'مجال 2': 'cycle1_general',
+};
+
+const SUBJECT_LABEL_MAP = {
+  'arabic': 'اللغة العربية',
+  'english': 'اللغة الإنجليزية',
+  'math': 'الرياضيات',
+  'science': 'العلوم',
+  'islamic': 'التربية الإسلامية',
+  'social': 'الدراسات الاجتماعية',
+  'ccdi_ai': 'CCDI & AI',
+  'art': 'الفنون / الدراما',
+  'pe': 'التربية البدنية',
+  'music': 'الموسيقى',
+  'kg_general': 'معلمة صف (روضة)',
+  'special_ed': 'معلمة تربية خاصة',
+  'assistant': 'معلمة مساعدة',
+  'cycle1_general': 'معلمة صف (ح1)',
+  'other': 'أخرى',
+};
+
+const GRADE_MAP = {
+  'رياض الأطفال': 'kg',
+  'الحلقة الأولى': 'cycle1',
+  'الحلقة الثانية': 'cycle2',
+};
+
+const GRADE_LABEL = {
+  'kg': '🌱 الروضة',
+  'cycle1': '📚 الحلقة الأولى',
+  'cycle2': '📖 الحلقة الثانية',
+  'mixed': '🔀 مراحل متعددة',
+};
+
+async function loadStaffData() {
+  try {
+    document.getElementById('name-loading').style.display = 'block';
+    const res = await fetch('/data/staff.json');
+    staffData = await res.json();
+    buildNameList();
+    document.getElementById('name-loading').style.display = 'none';
+  } catch(e) {
+    document.getElementById('name-loading').style.display = 'none';
+    console.warn('Could not load staff.json', e);
+  }
+}
+
+function buildNameList() {
+  const datalist = document.getElementById('staff-names-list');
+  if (!datalist) return;
+  datalist.innerHTML = '';
+  // ترتيب أبجدي
+  const sorted = staffData
+    .filter(s => s.name_ar && s.name_ar.trim())
+    .sort((a, b) => a.name_ar.localeCompare(b.name_ar, 'ar'));
+  sorted.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.name_ar.trim();
+    datalist.appendChild(opt);
+  });
+}
+
+function onNameInput(value) {
+  formData['respondent_name'] = value.trim();
+  clearError('err-name');
+  // إخفاء info إذا لم يتطابق بعد
+  const match = staffData.find(s => s.name_ar && s.name_ar.trim() === value.trim());
+  if (!match) {
+    document.getElementById('name-info').style.display = 'none';
+  }
+}
+
+function onNameSelected(value) {
+  const trimmed = value.trim();
+  if (!trimmed) return;
+  formData['respondent_name'] = trimmed;
+  clearError('err-name');
+  saveDraft();
+
+  const staff = staffData.find(s => s.name_ar && s.name_ar.trim() === trimmed);
+  if (!staff) return;
+
+  // ─── تحديد المادة ───
+  const subjects = staff.subjects || [];
+  const primaryJob = staff.primary_job || '';
+  let subjectVal = '';
+
+  if (primaryJob.includes('تربية خاصة')) {
+    subjectVal = 'special_ed';
+  } else if (primaryJob.includes('مساعد معلم') || primaryJob.includes('معلم مساعد')) {
+    subjectVal = 'assistant';
+  } else if (subjects.length > 0) {
+    subjectVal = SUBJECT_MAP[subjects[0]] || 'other';
+  }
+
+  if (subjectVal) {
+    const subjectSelect = document.getElementById('q-subject');
+    const optExists = Array.from(subjectSelect.options).some(o => o.value === subjectVal);
+    if (optExists) {
+      subjectSelect.value = subjectVal;
+      formData['subject'] = subjectVal;
+      subjectSelect.style.borderColor = 'rgba(201,168,76,0.5)';
+      subjectSelect.style.background = 'rgba(201,168,76,0.08)';
+    }
+  }
+
+  // ─── تحديد المرحلة ───
+  const grades = staff.grade || [];
+  let gradeVal = '';
+  if (grades.length === 1) {
+    gradeVal = GRADE_MAP[grades[0]] || '';
+  } else if (grades.length > 1) {
+    gradeVal = 'mixed';
+  }
+
+  if (gradeVal) {
+    // إلغاء أي اختيار سابق أولاً
+    document.querySelectorAll('[data-field="grade_level"]').forEach(b => b.classList.remove('selected'));
+    const btn = document.querySelector(`[data-field="grade_level"][data-val="${gradeVal}"]`);
+    if (btn) {
+      btn.classList.add('selected');
+      formData['grade_level'] = gradeVal;
+    }
+  }
+
+  // ─── بطاقة المعلومات ───
+  const subLabel = SUBJECT_LABEL_MAP[subjectVal] || subjectVal || '—';
+  const gradeLabel = GRADE_LABEL[gradeVal] || '—';
+  const infoDiv = document.getElementById('name-info');
+  infoDiv.style.display = 'block';
+  infoDiv.innerHTML = `✅ تم التعرف عليك — <strong>${trimmed}</strong><br>
+    📚 المادة: <strong>${subLabel}</strong> &nbsp;|&nbsp; 🏫 المرحلة: <strong>${gradeLabel}</strong>`;
+
+  // ─── إخفاء حقل المادة ومرحلة إذا مُعبَّأ ───
+  if (subjectVal) clearError('err-subject');
+  if (gradeVal) clearError('err-grade_level');
+
+  saveDraft();
+}
+
+// ─────────────────────────────────────────────
+// AUTO-FILL NAME (من sessionStorage أو URL)
 // ─────────────────────────────────────────────
 function getAutoName() {
   // 1. من URL param ?name=...
@@ -742,6 +914,7 @@ function applyAutoName() {
 // INIT
 // ─────────────────────────────────────────────
 function init() {
+  loadStaffData(); // سحب الأسماء من staff.json
   applyAutoName();
   initDragDrop();
   restoreDraft();
