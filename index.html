@@ -12953,8 +12953,14 @@ function renderSchoolStats() {
 
   el.innerHTML = '<div style="text-align:center;padding:30px;color:#888;"><i class="fas fa-spinner fa-spin fa-2x" style="color:#C9A84C;"></i></div>';
 
-  var statsUrl = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/distance_stats.json?t=' + Date.now();
-  var maintUrl = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/maintenance.json?t=' + Date.now();
+  // Cache GitHub raw files for 10 minutes to reduce external calls
+  var _now = Date.now();
+  if (!window._statsCache || (_now - (window._statsCacheTime||0)) > 600000) {
+    window._statsCacheTime = _now;
+    window._statsCache = null; window._maintCache = null;
+  }
+  var statsUrl = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/distance_stats.json';
+  var maintUrl = 'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/maintenance.json';
 
   Promise.all([fetch(statsUrl).then(function(r){return r.json();}), fetch(maintUrl).then(function(r){return r.json();})])
   .then(function(results) {
@@ -15213,8 +15219,12 @@ let _meetSelectedAttendees = []; // array of employee IDs
 let _meetTasks = []; // array of {task, assignee, deadline}
 
 function getMeetings(){try{return window._meetingsCache || JSON.parse(localStorage.getItem('aljood_meetings')||'[]');}catch(e){return[];}}
-async function loadMeetingsFromSupabase(){
+async function loadMeetingsFromSupabase(forceRefresh){
+  if (!forceRefresh && window._meetingsCache && window._meetingsCacheTime && (Date.now() - window._meetingsCacheTime < 300000)) {
+    return window._meetingsCache;
+  }
   var r = await supaFetch('/rest/v1/meeting_requests?school_id=eq.aljood&order=created_at.desc&limit=500') || [];
+  window._meetingsCacheTime = Date.now();
   window._meetingsCache = r.map(function(x){ return {
     id: x.id, title: x.title||'', type: x.meeting_type||'', meetingType: x.meeting_type||'',
     createdBy: x.requested_by||'', date: x.meeting_date||'', time: x.meeting_time||'',
@@ -15236,7 +15246,7 @@ function meetingsSyncToSupabase(arr){if(!arr||!arr.length)return;var last=arr[ar
 
 async function loadReportsFromSupabase(force) {
   var now = Date.now();
-  if (!force && window._reportsCache && (now - window._reportsCacheTime) < 30000) return window._reportsCache;
+  if (!force && window._reportsCache && (now - window._reportsCacheTime) < 300000) return window._reportsCache;
   var r = await supaFetch('/rest/v1/reports?school_id=eq.aljood&order=created_at.desc&limit=1000') || [];
   // ترجمة حقول Supabase → تنسيق localStorage القديم للتوافق
   window._reportsCache = r.map(function(x){ return {
@@ -21260,10 +21270,15 @@ var BH_VIOLATION_TYPES = [
 
 function bhGetData(){try{return JSON.parse(localStorage.getItem(BH_KEY)||'{}');}catch(e){return{};}}
 function bhSaveData(d){localStorage.setItem(BH_KEY,JSON.stringify(d));}
-async function bhLoadFromSupabase(){
+async function bhLoadFromSupabase(forceRefresh){
+  if (!forceRefresh && window._bhCache && window._bhCacheTime && (Date.now() - window._bhCacheTime < 300000)) {
+    return;
+  }
   try {
-    var r = await supaFetch('/rest/v1/behavior_incidents?school_id=eq.aljood&order=created_at.desc&limit=2000', {method:'GET'});
+    var r = await supaFetch('/rest/v1/behavior_incidents?school_id=eq.aljood&order=created_at.desc&limit=500', {method:'GET'});
     if(!Array.isArray(r)) return;
+    window._bhCacheTime = Date.now();
+    window._bhCache = true;
     var d = {};
     r.forEach(function(inc){
       var sid = inc.student_id;
@@ -21543,10 +21558,14 @@ function swGetData(){return {cases: _swCasesCache || []};}
 function swSaveData(d){_swCasesCache = d.cases||[];}
 function swGetCases(){return _swCasesCache || [];}
 function swSaveCases(cases){_swCasesCache=cases;}
-async function swLoadFromSupabase(){
+async function swLoadFromSupabase(forceRefresh){
+  if (!forceRefresh && _swCasesCache && window._swCacheTime && (Date.now() - window._swCacheTime < 300000)) {
+    return;
+  }
   try {
     var r = await supaFetch('/rest/v1/sw_cases?school_id=eq.aljood&order=created_at.desc&limit=500', {method:'GET'});
     if(Array.isArray(r)) {
+      window._swCacheTime = Date.now();
       _swCasesCache = r.map(function(row){
         return {
           id: row.id,
@@ -32005,10 +32024,19 @@ async function ppLoadTab(tab) {
 async function ppRenderOverview(child) {
   var el = document.getElementById('pp-sec-overview');
   el.innerHTML = '<div style="color:rgba(255,255,255,0.4);text-align:center;padding:20px">\u23f3 \u062c\u0627\u0631\u064a \u0627\u0644\u062a\u062d\u0645\u064a\u0644...</div>';
-  var ws = await supaFetch('/rest/v1/worksheets?select=score,subject,level&student_id=eq.' + child.id + '&order=created_at.desc&limit=20') || [];
-  var bh = await supaFetch('/rest/v1/behavior_incidents?select=degree,status&student_id=eq.' + child.id + '&order=created_at.desc&limit=10') || [];
-  var meetings = await supaFetch('/rest/v1/meeting_requests?select=status,meeting_date,title&parent_phone=eq.' + ppCurrentPhone + '&order=created_at.desc&limit=5') || [];
-  var notifs = await supaFetch('/rest/v1/parent_notifications?select=is_read&parent_phone=eq.' + ppCurrentPhone + '&is_read=eq.false') || [];
+  // Cache parent portal data per child — 5 minute TTL
+  var _ppKey = 'pp_' + child.id;
+  if (window._ppCache && window._ppCache[_ppKey] && (Date.now() - window._ppCache[_ppKey].t) < 300000) {
+    var _c = window._ppCache[_ppKey];
+    var ws = _c.ws; var bh = _c.bh; var meetings = _c.meetings; var notifs = _c.notifs;
+  } else {
+    var ws = await supaFetch('/rest/v1/worksheets?select=score,subject,level&student_id=eq.' + child.id + '&order=created_at.desc&limit=20') || [];
+    var bh = await supaFetch('/rest/v1/behavior_incidents?select=degree,status&student_id=eq.' + child.id + '&order=created_at.desc&limit=10') || [];
+    var meetings = await supaFetch('/rest/v1/meeting_requests?select=status,meeting_date,title&parent_phone=eq.' + ppCurrentPhone + '&order=created_at.desc&limit=5') || [];
+    var notifs = await supaFetch('/rest/v1/parent_notifications?select=is_read&parent_phone=eq.' + ppCurrentPhone + '&is_read=eq.false') || [];
+    if (!window._ppCache) window._ppCache = {};
+    window._ppCache[_ppKey] = {ws, bh, meetings, notifs, t: Date.now()};
+  }
   var avgScore = ws.length ? Math.round(ws.reduce(function(a,w){return a+(parseFloat(w.score)||0);},0)/ws.length) : 0;
   var openBh = bh.filter(function(b){return b.status==='open';}).length;
   var pendingMeet = meetings.filter(function(m){return m.status==='pending';}).length;
