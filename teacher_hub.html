@@ -766,6 +766,34 @@ select.form-control { cursor: pointer; }
         </div>
         <div id="smartAlerts"><div class="loading-center"><div class="spinner"></div></div></div>
       </div>
+
+      <!-- ======== VARK ADMIN PANEL ======== -->
+      <div id="vark-admin-panel" class="card" style="display:none; margin-top:20px; border:2px solid #C9A84C;">
+        <div class="card-header" style="background:linear-gradient(135deg,#1A2A4A,#283593);border-radius:10px 10px 0 0;padding:14px 20px;">
+          <div class="card-title" style="color:white;">
+            <span class="icon">📊</span> متابعة VARK للموظفين
+          </div>
+          <a href="vark_assessment.html?mode=staff" style="background:#C9A84C;color:#1A2A4A;padding:6px 16px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:0.85rem;">
+            ابدئي الاستبيان ←
+          </a>
+        </div>
+        <div style="padding:16px;">
+          <div id="vark-stats" style="margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+              <span style="font-size:1.4rem;font-weight:800;color:#1A2A4A;" id="vark-completed-count">0</span>
+              <span style="color:#666;font-size:0.9rem;">/ <span id="vark-total-count">0</span> أكملن الاستبيان</span>
+              <span id="vark-percent-badge" style="background:#e8f5e9;color:#2e7d32;padding:3px 10px;border-radius:20px;font-size:0.82rem;font-weight:700;">0%</span>
+            </div>
+            <div style="background:#e8ecf0;border-radius:6px;height:10px;overflow:hidden;">
+              <div id="vark-progress" style="width:0%;background:linear-gradient(90deg,#4CAF50,#81C784);height:100%;border-radius:6px;transition:width 0.6s;"></div>
+            </div>
+          </div>
+          <div style="margin-bottom:12px;font-weight:700;color:#1A2A4A;font-size:0.9rem;">⏳ لم يُكملن بعد:</div>
+          <div id="vark-pending-list" style="max-height:200px;overflow-y:auto;">
+            <div class="loading-center"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ======== SECTION: MY CLASSES ======== -->
@@ -2342,7 +2370,206 @@ window.addEventListener('load', () => {
     document.getElementById('weekendAlert').style.display = 'block';
     document.getElementById('attendanceContent').style.display = 'none';
   }
+  // VARK Staff Reminder
+  checkVarkCompletion(username);
+  loadVarkAdminPanel();
 });
+
+// ============================================================
+// VARK STAFF REMINDER SYSTEM — 3 مستويات تصعيد
+// ============================================================
+const VARK_SUPABASE_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const VARK_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+
+async function checkVarkCompletion(uname) {
+  if (!uname || uname === 'المعلمة') return;
+  try {
+    const res = await fetch(
+      `${VARK_SUPABASE_URL}/rest/v1/staff_vark_results?username=eq.${encodeURIComponent(uname)}&select=id`,
+      { headers: { 'apikey': VARK_SUPABASE_KEY, 'Authorization': `Bearer ${VARK_SUPABASE_KEY}` } }
+    );
+    const data = await res.json();
+    if (Array.isArray(data) && data.length > 0) return; // أكملت — لا تذكير
+
+    // تخزين تاريخ أول تسجيل دخول
+    const firstLoginKey = `vark_first_login_${uname}`;
+    if (!localStorage.getItem(firstLoginKey)) {
+      localStorage.setItem(firstLoginKey, new Date().toISOString());
+    }
+    const firstLogin = new Date(localStorage.getItem(firstLoginKey));
+    const daysSinceFirst = (Date.now() - firstLogin.getTime()) / (1000 * 60 * 60 * 24);
+
+    if (daysSinceFirst > 7) {
+      showVarkOfficialNotice(); // مستوى 2 🟠
+    } else {
+      showVarkPopup();          // مستوى 1 🟡
+    }
+    checkVarkUrgentBanner();    // مستوى 3 🔴 — بشكل مستقل
+  } catch(e) {
+    console.log('VARK check error:', e);
+  }
+}
+
+function showVarkPopup() {
+  if (document.getElementById('vark-reminder-popup')) return;
+  const popup = document.createElement('div');
+  popup.id = 'vark-reminder-popup';
+  popup.style.cssText = `
+    position:fixed;bottom:30px;left:50%;transform:translateX(-50%);
+    background:linear-gradient(135deg,#1a237e,#283593);
+    color:white;padding:20px 30px;border-radius:16px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.3);z-index:9999;
+    text-align:center;font-family:'Tajawal',sans-serif;direction:rtl;
+    min-width:320px;border:2px solid #FFD700;
+    animation:varkSlideUp 0.5s ease,varkFadeOut 0.5s ease 7.5s forwards;
+  `;
+  popup.innerHTML = `
+    <style>
+      @keyframes varkSlideUp{from{transform:translateX(-50%) translateY(100px);opacity:0}to{transform:translateX(-50%) translateY(0);opacity:1}}
+      @keyframes varkFadeOut{from{opacity:1}to{opacity:0;pointer-events:none}}
+      #vark-reminder-popup .vt{width:100%;background:rgba(255,255,255,0.2);height:4px;border-radius:2px;margin-top:12px;overflow:hidden}
+      #vark-reminder-popup .vtb{height:100%;background:#FFD700;animation:varkShrink 8s linear forwards}
+      @keyframes varkShrink{from{width:100%}to{width:0%}}
+    </style>
+    <button onclick="document.getElementById('vark-reminder-popup').remove()"
+      style="position:absolute;top:8px;left:12px;background:none;border:none;color:rgba(255,255,255,0.6);font-size:18px;cursor:pointer;line-height:1;">×</button>
+    <div style="font-size:28px;margin-bottom:8px;">🧠</div>
+    <div style="font-size:16px;font-weight:bold;margin-bottom:6px;">لم تُكملي استبيان VARK بعد!</div>
+    <div style="font-size:13px;opacity:0.85;margin-bottom:14px;">اكتشفي نمط تعلّمك في 5 دقائق</div>
+    <a href="vark_assessment.html?mode=staff" style="background:#FFD700;color:#1a237e;padding:8px 20px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:14px;">ابدئي الآن ←</a>
+    <div class="vt"><div class="vtb"></div></div>
+  `;
+  document.body.appendChild(popup);
+  setTimeout(() => { const p = document.getElementById('vark-reminder-popup'); if (p) p.remove(); }, 8500);
+}
+
+function showVarkOfficialNotice() {
+  if (document.getElementById('vark-official-notice')) return;
+  const notice = document.createElement('div');
+  notice.id = 'vark-official-notice';
+  notice.style.cssText = `
+    background:linear-gradient(90deg,#e65100,#ff6d00);color:white;
+    padding:12px 20px;text-align:center;font-family:'Tajawal',sans-serif;
+    direction:rtl;font-size:15px;position:relative;z-index:100;
+  `;
+  notice.innerHTML = `
+    ⚠️ <strong>تنبيه رسمي:</strong> لم تُكملي استبيان أنماط التعلم VARK منذ أكثر من أسبوع —
+    <a href="vark_assessment.html?mode=staff" style="color:#FFD700;font-weight:bold;">أكمليه الآن</a>
+    <button onclick="document.getElementById('vark-official-notice').remove()"
+      style="background:none;border:none;color:white;position:absolute;left:16px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:20px;line-height:1;">×</button>
+  `;
+  // أدرج مباشرة في بداية body
+  document.body.insertAdjacentElement('afterbegin', notice);
+}
+
+async function checkVarkUrgentBanner() {
+  try {
+    // عدد المكملين من Supabase
+    const completedRes = await fetch(
+      `${VARK_SUPABASE_URL}/rest/v1/staff_vark_results?select=id`,
+      { headers: { 'apikey': VARK_SUPABASE_KEY, 'Authorization': `Bearer ${VARK_SUPABASE_KEY}` } }
+    );
+    const completed = await completedRes.json();
+    const completedCount = Array.isArray(completed) ? completed.length : 0;
+
+    // عدد الموظفين الكلي من staff.json
+    let totalStaff = 0;
+    try {
+      const staffRes = await fetch('data/staff.json');
+      if (staffRes.ok) {
+        const staff = await staffRes.json();
+        totalStaff = Array.isArray(staff)
+          ? staff.filter(s => s.loginRole === 'teacher' || s.loginRole === 'special_ed').length
+          : 0;
+      }
+    } catch(e) {}
+
+    if (totalStaff === 0) return; // لا يمكن حساب النسبة
+    const completionRate = completedCount / totalStaff;
+
+    if (completionRate < 0.5) {
+      const pct = Math.round((1 - completionRate) * 100);
+      // أضف للشريط العاجل إذا وُجد، وإلا أنشئ بانر مستقل
+      const ticker = document.getElementById('thNewsTickerInner');
+      if (ticker) {
+        const urgentSpan = document.createElement('span');
+        urgentSpan.className = 'th-news-item';
+        urgentSpan.innerHTML = `🔴 تذكير: ${pct}% من المعلمات لم يكملن استبيان VARK — <a href="vark_assessment.html?mode=staff" style="color:#FFD700;text-decoration:underline">أكملي الآن</a>`;
+        ticker.prepend(urgentSpan);
+        const bar = document.getElementById('th-news-ticker');
+        if (bar) bar.classList.add('admin-msg');
+      }
+    }
+  } catch(e) {}
+}
+
+// لوحة إدارة VARK — تظهر لجميع المعلمات
+async function loadVarkAdminPanel() {
+  const panel = document.getElementById('vark-admin-panel');
+  if (!panel) return;
+  panel.style.display = 'block';
+
+  try {
+    // عدد المكملين
+    const completedRes = await fetch(
+      `${VARK_SUPABASE_URL}/rest/v1/staff_vark_results?select=username`,
+      { headers: { 'apikey': VARK_SUPABASE_KEY, 'Authorization': `Bearer ${VARK_SUPABASE_KEY}` } }
+    );
+    const completedData = await completedRes.json();
+    const completedUsernames = Array.isArray(completedData) ? completedData.map(r => r.username) : [];
+
+    // عدد الموظفين الكلي
+    let allStaff = [];
+    try {
+      const staffRes = await fetch('data/staff.json');
+      if (staffRes.ok) {
+        const staff = await staffRes.json();
+        allStaff = Array.isArray(staff)
+          ? staff.filter(s => s.loginRole === 'teacher' || s.loginRole === 'special_ed')
+          : [];
+      }
+    } catch(e) {}
+
+    const totalCount = allStaff.length || completedUsernames.length;
+    const completedCount = completedUsernames.length;
+    const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+    document.getElementById('vark-completed-count').textContent = completedCount;
+    document.getElementById('vark-total-count').textContent = totalCount;
+    document.getElementById('vark-percent-badge').textContent = pct + '%';
+    document.getElementById('vark-percent-badge').style.background = pct >= 80 ? '#e8f5e9' : pct >= 50 ? '#fff3e0' : '#ffebee';
+    document.getElementById('vark-percent-badge').style.color = pct >= 80 ? '#2e7d32' : pct >= 50 ? '#e65100' : '#c62828';
+    document.getElementById('vark-progress').style.width = pct + '%';
+    document.getElementById('vark-progress').style.background = pct >= 80 ? 'linear-gradient(90deg,#4CAF50,#81C784)' : pct >= 50 ? 'linear-gradient(90deg,#FF9800,#FFB74D)' : 'linear-gradient(90deg,#f44336,#e57373)';
+
+    // قائمة من لم يُكمل
+    const pendingList = document.getElementById('vark-pending-list');
+    if (allStaff.length > 0) {
+      const pending = allStaff.filter(s => !completedUsernames.includes(s.username || s.loginId));
+      if (pending.length === 0) {
+        pendingList.innerHTML = '<div style="color:#2e7d32;text-align:center;padding:12px;">✅ جميع المعلمات أكملن الاستبيان!</div>';
+      } else {
+        pendingList.innerHTML = pending.map(s => `
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0;">
+            <span style="color:#f44336;font-size:1rem;">⏳</span>
+            <span style="font-size:0.88rem;color:#333;">${s.nameAr || s.name || s.username || s.loginId}</span>
+          </div>
+        `).join('');
+      }
+    } else {
+      // إذا لم نحصل على staff.json — اعرض المكملين فقط
+      pendingList.innerHTML = completedUsernames.length > 0
+        ? completedUsernames.map(u => `<div style="padding:5px 0;font-size:0.88rem;color:#2e7d32;">✅ ${u}</div>`).join('')
+        : '<div style="color:#666;text-align:center;padding:12px;">لا توجد بيانات متاحة</div>';
+    }
+  } catch(e) {
+    console.log('VARK admin panel error:', e);
+    document.getElementById('vark-pending-list').innerHTML = '<div style="color:#666;text-align:center;padding:12px;">⚠️ تعذّر تحميل البيانات</div>';
+  }
+}
+// ============================================================
+// END VARK STAFF REMINDER SYSTEM
+// ============================================================
 </script>
 </body>
 </html>

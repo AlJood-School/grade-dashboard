@@ -927,6 +927,13 @@ const VARK_STYLES = {
 };
 
 // ============================================================
+// STAFF MODE DETECTION
+// ============================================================
+const _urlParams = new URLSearchParams(window.location.search);
+const isStaffMode = _urlParams.get('mode') === 'staff';
+const staffUsername = sessionStorage.getItem('aljood_username') || '';
+
+// ============================================================
 // STATE
 // ============================================================
 let currentQ = 0;
@@ -1273,6 +1280,11 @@ function showResults() {
 // SAVE TO SUPABASE
 // ============================================================
 async function saveToSupabase(dominant) {
+  // توجيه وضع الموظف لدالة الحفظ المخصصة
+  if (isStaffMode) {
+    return saveToStaffSupabase(dominant);
+  }
+
   const statusEl = document.getElementById('saveStatus');
 
   // ─── وضع بدون حفظ (نتيجة سابقة < 6 أشهر أو عرض قديم) ───
@@ -1402,6 +1414,92 @@ window.restartAssessment = function() {
     window.onGradeOrSectionChange();
   }
 })();
+
+// ============================================================
+// STAFF MODE INIT — تهيئة وضع الموظف
+// ============================================================
+if (isStaffMode) {
+  // تحويل واجهة الترحيب لوضع الموظف
+  window.addEventListener('DOMContentLoaded', function() {
+    const welcomeCard = document.querySelector('.welcome-card');
+    if (!welcomeCard) return;
+
+    // استبدل المحتوى بواجهة الموظف
+    const displayName = staffUsername || 'الموظفة';
+    welcomeCard.innerHTML = `
+      <div class="welcome-hero">🧠</div>
+      <div class="welcome-title" style="color:#1A2A4A;">استبيان VARK للموظفين</div>
+      <div class="welcome-sub" style="color:#555;">
+        مرحباً <strong>${displayName}</strong>!<br>
+        أجيبي على ١٢ سؤالاً لاكتشاف نمط تعلّمك ✨<br>
+        <small style="color:#888;">النتيجة ستُحفظ باسمك تلقائياً</small>
+      </div>
+      <button class="btn-start" id="btnStart" onclick="startStaffAssessment()" style="margin-top:16px;">
+        🚀 ابدئي الاستبيان!
+      </button>
+      <div class="welcome-footer" style="margin-top:16px;">
+        روضة ومدرسة الجود · العين · أبوظبي<br>
+        © منيرة علي محمد المري · 2026
+      </div>
+    `;
+  });
+}
+
+window.startStaffAssessment = function() {
+  if (!staffUsername) {
+    showToast('⚠️ يجب تسجيل الدخول أولاً');
+    setTimeout(() => { window.location.href = 'index.html'; }, 2000);
+    return;
+  }
+  studentInfo = { name: staffUsername, grade: 'staff', section: 'staff' };
+  gradeBand = 'expert';
+  _noSave = false;
+  showScreen('scQuestion');
+  renderQuestion();
+};
+
+// ============================================================
+// STAFF MODE SAVE — حفظ نتيجة الموظفة في staff_vark_results
+// ============================================================
+async function saveToStaffSupabase(dominant) {
+  const statusEl = document.getElementById('saveStatus');
+  if (!_sbClient) {
+    statusEl.innerHTML = '<div class="save-err">⚠️ تعذّر الاتصال بقاعدة البيانات</div>';
+    return;
+  }
+
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  const academicYear = month >= 9 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+
+  const dominantLetter = dominant === 'MULTI' ? 'Multimodal' : dominant;
+  const record = {
+    username: staffUsername,
+    full_name: staffUsername,
+    job_title: 'معلمة',
+    result: dominantLetter,
+    scores: { v: scores.V, a: scores.A, r: scores.R, k: scores.K },
+    completed_at: now.toISOString(),
+    academic_year: academicYear,
+    assigned_by: 'self'
+  };
+
+  try {
+    // upsert — إذا كان هناك سجل سابق، حدّثه
+    const { error } = await _sbClient.from('staff_vark_results').upsert([record], { onConflict: 'username' });
+    if (error) {
+      console.warn('Staff VARK save error:', error);
+      statusEl.innerHTML = `<div class="save-err">⚠️ ${error.code === '42P01' ? 'جدول staff_vark_results غير موجود — يرجى إنشاؤه' : 'خطأ: ' + error.message}</div>`;
+    } else {
+      statusEl.innerHTML = '<div class="save-ok">✅ تم حفظ نتيجتك! شكراً على إكمال الاستبيان.</div>';
+      // امسح مؤقت أول تسجيل الدخول
+      localStorage.removeItem(`vark_first_login_${staffUsername}`);
+    }
+  } catch(e) {
+    statusEl.innerHTML = '<div class="save-err">⚠️ تعذّر الاتصال — تحقق من الإنترنت</div>';
+  }
+}
 
 </script>
 </body>
