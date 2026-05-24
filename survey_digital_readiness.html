@@ -730,6 +730,7 @@ let formData = {};
 let multiData = {
   daily_challenges: [],
   available_devices: [],
+  current_apps: [],
   automation_needs: [],
   concerns: [],
   support_needed: []
@@ -1064,7 +1065,7 @@ function restoreDraft() {
     const draft = JSON.parse(raw);
 
     formData = draft.data || {};
-    multiData = draft.multi || { daily_challenges:[], available_devices:[], automation_needs:[], concerns:[], support_needed:[] };
+    multiData = draft.multi || { daily_challenges:[], available_devices:[], current_apps:[], automation_needs:[], concerns:[], support_needed:[] };
 
     // Restore single-choice buttons
     Object.keys(formData).forEach(field => {
@@ -1132,6 +1133,24 @@ async function submitSurvey() {
   btn.disabled = true;
   btn.textContent = '⏳ جاري الإرسال...';
 
+  // ✅ فحص التكرار — هل هذا الشخص أجرى الاستبيان من قبل؟
+  const respondentName = (formData['respondent_name'] || '').trim();
+  try {
+    const checkRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/survey_digital_readiness?respondent_name=eq.${encodeURIComponent(respondentName)}&select=id&limit=1`,
+      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+    );
+    if (checkRes.ok) {
+      const existing = await checkRes.json();
+      if (existing && existing.length > 0) {
+        showToast(`✋ لقد أكملتِ الاستبيان مسبقاً — شكراً لمشاركتك!`, 'error');
+        btn.disabled = false;
+        btn.textContent = '✅ إرسال الاستبيان';
+        return;
+      }
+    }
+  } catch(e) { /* تجاهل خطأ الفحص وأكمل الإرسال */ }
+
   const payload = {
     submitted_at: new Date().toISOString(),
     respondent_name: formData['respondent_name'] || '',
@@ -1145,7 +1164,7 @@ async function submitSurvey() {
     coordination_difficulty: formData['coordination_difficulty'] || '',
     tech_comfort: formData['tech_comfort'] || 0,
     available_devices: JSON.stringify(multiData['available_devices'] || []),
-    current_apps: JSON.stringify(multiData['current_apps'] || []),
+    current_apps: JSON.stringify(multiData['current_apps'] || multiData['currentApps'] || []),
     automation_needs: JSON.stringify(multiData['automation_needs'] || []),
     iep_digital: formData['iep_digital'] || '',
     wants_notifications: formData['wants_notifications'] || '',
@@ -1196,7 +1215,7 @@ async function submitSurvey() {
 function resetSurvey() {
   sessionStorage.removeItem('survey_draft_v1');
   formData = {};
-  multiData = { daily_challenges:[], available_devices:[], automation_needs:[], concerns:[], support_needed:[] };
+  multiData = { daily_challenges:[], available_devices:[], current_apps:[], automation_needs:[], concerns:[], support_needed:[] };
   currentStep = -1;
   // Reset all buttons
   document.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('selected'));
