@@ -692,9 +692,57 @@ let multiData = {
 };
 
 // ─────────────────────────────────────────────
+// AUTO-FILL NAME
+// ─────────────────────────────────────────────
+function getAutoName() {
+  // 1. من URL param ?name=...
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const nameParam = params.get('name');
+    if (nameParam && nameParam.trim()) return decodeURIComponent(nameParam.trim());
+  } catch(e) {}
+  // 2. من sessionStorage (البوابة)
+  try {
+    const raw = sessionStorage.getItem('aljood_session');
+    if (raw) {
+      const obj = JSON.parse(raw);
+      const n = obj.nameAr || obj.name || '';
+      if (n) return n;
+    }
+  } catch(e) {}
+  return '';
+}
+
+function applyAutoName() {
+  const autoName = getAutoName();
+  if (!autoName) return;
+  const input = document.getElementById('q-name');
+  if (!input) return;
+  input.value = autoName;
+  input.readOnly = true;
+  input.style.background = 'rgba(201,168,76,0.08)';
+  input.style.borderColor = 'rgba(201,168,76,0.5)';
+  input.style.cursor = 'not-allowed';
+  input.title = 'الاسم مُعبَّأ تلقائياً';
+  formData['respondent_name'] = autoName;
+  // إضافة شارة تأكيد
+  const label = input.previousElementSibling;
+  if (label && label.classList.contains('q-label')) {
+    if (!label.querySelector('.auto-badge')) {
+      const badge = document.createElement('span');
+      badge.className = 'auto-badge';
+      badge.style.cssText = 'background:rgba(201,168,76,0.2);border:1px solid var(--gold);border-radius:6px;padding:2px 8px;font-size:11px;color:var(--gold);margin-right:8px;';
+      badge.textContent = '✨ مُعبَّأ تلقائياً';
+      label.appendChild(badge);
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────────
 function init() {
+  applyAutoName();
   initDragDrop();
   restoreDraft();
 
@@ -946,7 +994,12 @@ function restoreDraft() {
         if (btn) btn.classList.add('selected');
       });
     });
-    if (formData['respondent_name']) document.getElementById('q-name').value = formData['respondent_name'];
+    // لا تستعيد الاسم من draft إذا كان مُعبَّأً تلقائياً
+    if (formData['respondent_name'] && !getAutoName()) {
+      document.getElementById('q-name').value = formData['respondent_name'];
+    } else if (getAutoName()) {
+      formData['respondent_name'] = getAutoName(); // الأولوية للاسم التلقائي
+    }
     if (formData['subject']) document.getElementById('q-subject').value = formData['subject'];
     if (formData['tech_comfort']) {
       const r = document.querySelector(`input[name="tech_comfort"][value="${formData['tech_comfort']}"]`);
