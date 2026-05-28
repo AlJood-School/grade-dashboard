@@ -1104,7 +1104,7 @@ async function setupDatabase() {
   // Tables should be created in Supabase directly. 
   // We'll verify by trying to query, and silently continue on error.
   try {
-    await supabase.from('special_needs_cases').select('id').limit(1);
+    await supabase.from('special_ed_students').select('id').limit(1);
   } catch(e) {
     console.log('DB setup needed:', e);
   }
@@ -1125,14 +1125,16 @@ async function loadAllData() {
 async function loadCases() {
   try {
     const { data, error } = await supabase
-      .from('special_needs_cases')
+      .from('special_ed_students')
       .select('*')
+      .eq('school_id', 'aljood')
+      .eq('is_active', true)
       .order('created_at', { ascending: false });
     if (error) throw error;
     state.cases = data || [];
     renderCases();
     populateStudentDropdowns();
-    document.getElementById('cases-badge').textContent = state.cases.filter(c => c.status === 'active').length;
+    document.getElementById('cases-badge').textContent = state.cases.filter(c => c.is_active === true).length;
   } catch (e) {
     console.error('Load cases error:', e);
     state.cases = [];
@@ -1144,8 +1146,8 @@ function renderCases() {
   const container = document.getElementById('cases-list');
   const search = document.getElementById('cases-search')?.value?.toLowerCase() || '';
   let filtered = state.cases.filter(c => {
-    const matchStatus = state.currentCaseFilter === 'all' || c.status === state.currentCaseFilter;
-    const matchSearch = !search || c.student_name?.toLowerCase().includes(search) || c.grade?.toLowerCase().includes(search);
+    const matchStatus = state.currentCaseFilter === 'all' || (state.currentCaseFilter === 'active' ? c.is_active === true : (state.currentCaseFilter === 'inactive' ? c.is_active === false : true));
+    const matchSearch = !search || c.name_ar?.toLowerCase().includes(search) || c.grade?.toLowerCase().includes(search);
     return matchStatus && matchSearch;
   });
 
@@ -1159,12 +1161,12 @@ function renderCases() {
     return `
     <div class="student-card" onclick="openStudentDetail('${c.id}')">
       <div class="sc-header">
-        <div class="sc-avatar">${c.student_name?.[0] || '؟'}</div>
+        <div class="sc-avatar">${c.name_ar?.[0] || '؟'}</div>
         <div>
-          <div class="sc-name">${c.student_name}</div>
+          <div class="sc-name">${c.name_ar}</div>
           <div class="sc-grade">الصف ${c.grade || '—'} • ${c.section || ''}</div>
         </div>
-        ${getStatusBadge(c.status)}
+        ${c.is_active ? '<span class="badge badge-success">نشط</span>' : '<span class="badge badge-danger">غير نشط</span>'}
       </div>
       <div class="sc-body">
         <div class="sc-badges">
@@ -1190,18 +1192,18 @@ function renderCases() {
 async function loadCaseProgress(caseId) {
   try {
     const { data: ieps } = await supabase
-      .from('iep_plans')
+      .from('special_ed_iep_goals')
       .select('id')
-      .eq('case_id', caseId)
-      .eq('status', 'active');
+      .eq('student_id', c?.student_id)
+      .eq('is_active', true);
     if (!ieps?.length) return;
     const iepIds = ieps.map(i => i.id);
     const { data: goals } = await supabase
-      .from('iep_goals')
-      .select('current_percentage')
+      .from('special_ed_iep_goals')
+      .select('progress_pct')
       .in('iep_id', iepIds);
     if (!goals?.length) return;
-    const avg = Math.round(goals.reduce((s, g) => s + (g.current_percentage || 0), 0) / goals.length);
+    const avg = Math.round(goals.reduce((s, g) => s + (g.progress_pct || 0), 0) / goals.length);
     // Update all cards for this case
     const cards = document.querySelectorAll(`[onclick="openStudentDetail('${caseId}')"]`);
     cards.forEach(card => {
@@ -1232,10 +1234,10 @@ async function loadHomeStats() {
     const teacher = state.teacher;
 
     const [casesRes, iepsRes, overdueRes, sessionsRes] = await Promise.all([
-      supabase.from('special_needs_cases').select('id', { count: 'exact' }).eq('status', 'active'),
-      supabase.from('iep_plans').select('id', { count: 'exact' }).eq('status', 'active'),
-      supabase.from('iep_plans').select('id', { count: 'exact' }).lt('review_date', today).neq('status', 'completed'),
-      supabase.from('intervention_logs').select('id', { count: 'exact' }).gte('log_date', wStart)
+      supabase.from('special_ed_students').select('id', { count: 'exact' }).eq('is_active', true),
+      supabase.from('special_ed_iep_goals').select('id', { count: 'exact' }).eq('is_active', true),
+      supabase.from('special_ed_iep_goals').select('id', { count: 'exact' }).lt('target_date', today).neq('status', 'achieved'),
+      supabase.from('special_ed_notes').select('id', { count: 'exact' }).gte('date', wStart)
     ]);
 
     document.getElementById('stat-students').textContent = casesRes.count ?? 0;
@@ -1265,27 +1267,28 @@ async function loadSmartAlerts() {
 
     // Overdue IEPs
     const { data: overdueIEPs } = await supabase
-      .from('iep_plans')
-      .select('student_name')
-      .lt('review_date', today)
-      .neq('status', 'completed');
+      .from('special_ed_iep_goals')
+      .select('student_id,name_ar')
+      .lt('target_date', today)
+      .neq('status', 'achieved')
+      .eq('school_id', 'aljood');
     if (overdueIEPs?.length > 0) {
-      alerts.push({ type: 'danger', msg: `⚠️ لديك ${overdueIEPs.length} خطة IEP تحتاج مراجعة: ${overdueIEPs.slice(0,3).map(i=>i.student_name).join('، ')}` });
+      alerts.push({ type: 'danger', msg: `⚠️ لديك ${overdueIEPs.length} خطة IEP تحتاج مراجعة: ${overdueIEPs.slice(0,3).map(i=>i.name_ar).join('، ')}` });
     }
 
     // Students with no session in 7 days
     const sevenDaysAgo = new Date(Date.now() - 7*24*3600000).toISOString().split('T')[0];
-    const { data: activeCases } = await supabase.from('special_needs_cases').select('id,student_name').eq('status','active');
+    const { data: activeCases } = await supabase.from('special_ed_students').select('id,student_id,name_ar').eq('is_active', true).eq('school_id', 'aljood');
     if (activeCases?.length) {
       for (const c of activeCases.slice(0, 10)) {
         const { data: logs } = await supabase
-          .from('intervention_logs')
+          .from('special_ed_notes')
           .select('id')
-          .eq('case_id', c.id)
-          .gte('log_date', sevenDaysAgo)
+          .eq('student_id', c.student_id)
+          .gte('date', sevenDaysAgo)
           .limit(1);
         if (!logs?.length) {
-          alerts.push({ type: 'info', msg: `📌 لم تُسجَّل جلسة لـ ${c.student_name} منذ 7 أيام` });
+          alerts.push({ type: 'info', msg: `📌 لم تُسجَّل جلسة لـ ${c.name_ar} منذ 7 أيام` });
         }
       }
     }
@@ -1293,18 +1296,23 @@ async function loadSmartAlerts() {
     // Shadow alerts
     const threeDaysAgo = new Date(Date.now() - 3*24*3600000).toISOString().split('T')[0];
     const { data: shadowLogs } = await supabase
-      .from('shadow_logs')
-      .select('student_name,behavior_rating,academic_participation,social_interaction,log_date')
-      .gte('log_date', threeDaysAgo);
+      .from('special_ed_notes')
+      .select('student_id,content,date')
+      .eq('note_type', 'behavior')
+      .eq('school_id', 'aljood')
+      .gte('date', threeDaysAgo);
     if (shadowLogs?.length) {
       const byStudent = {};
       shadowLogs.forEach(l => {
-        if (!byStudent[l.student_name]) byStudent[l.student_name] = [];
-        const avg = ((l.behavior_rating||3) + (l.academic_participation||3) + (l.social_interaction||3)) / 3;
-        byStudent[l.student_name].push(avg);
+        const m = (l.content||'').match(/\u0633\u0644\u0648\u0643:\s*(\d)/);
+        const rating = m ? parseInt(m[1]) : 3;
+        if (!byStudent[l.student_id]) byStudent[l.student_id] = [];
+        byStudent[l.student_id].push(rating);
       });
-      for (const [name, ratings] of Object.entries(byStudent)) {
+      for (const [sid, ratings] of Object.entries(byStudent)) {
         if (ratings.length >= 2 && ratings.every(r => r < 3)) {
+          const sc = state.cases.find(x => x.student_id === sid);
+          const name = sc ? sc.name_ar : sid;
           alerts.push({ type: 'warning', msg: `🔔 تنبيه: ${name} يمر بأيام صعبة — متوسط تقييم المساعد منخفض` });
         }
       }
@@ -1327,14 +1335,14 @@ async function loadActivityFeed() {
   try {
     const activities = [];
     const [cases, ieps, logs, meetings] = await Promise.all([
-      supabase.from('special_needs_cases').select('student_name,created_at').order('created_at',{ascending:false}).limit(3),
-      supabase.from('iep_plans').select('student_name,created_at').order('created_at',{ascending:false}).limit(3),
-      supabase.from('intervention_logs').select('student_name,log_date,created_at').order('created_at',{ascending:false}).limit(3),
+      supabase.from('special_ed_students').select('name_ar,student_id,created_at').eq('school_id','aljood').order('created_at',{ascending:false}).limit(3),
+      supabase.from('special_ed_iep_goals').select('student_id,goal_text,created_at').eq('school_id','aljood').order('created_at',{ascending:false}).limit(3),
+      supabase.from('special_ed_notes').select('student_id,content,date,created_at').eq('school_id','aljood').order('created_at',{ascending:false}).limit(3),
       supabase.from('special_needs_meetings').select('student_name,created_at').order('created_at',{ascending:false}).limit(2)
     ]);
-    (cases.data||[]).forEach(c => activities.push({ text: `تمت إضافة حالة جديدة: ${c.student_name}`, time: c.created_at, color: '#3b82f6' }));
-    (ieps.data||[]).forEach(i => activities.push({ text: `تم إنشاء خطة IEP لـ: ${i.student_name}`, time: i.created_at, color: '#10b981' }));
-    (logs.data||[]).forEach(l => activities.push({ text: `جلسة مسجلة لـ: ${l.student_name}`, time: l.created_at, color: '#c9a84c' }));
+    (cases.data||[]).forEach(c => activities.push({ text: `تمت إضافة حالة جديدة: ${c.name_ar}`, time: c.created_at, color: '#3b82f6' }));
+    (ieps.data||[]).forEach(i => { const is2 = state.cases.find(x=>x.student_id===i.student_id); activities.push({ text: `تم إضافة هدف IEP لـ: ${is2?.name_ar||i.student_id}`, time: i.created_at, color: '#10b981' }); });
+    (logs.data||[]).forEach(l => { const ls = state.cases.find(x=>x.student_id===l.student_id); activities.push({ text: `ملاحظة مسجلة لـ: ${ls?.name_ar||l.student_id}`, time: l.created_at, color: '#c9a84c' }); });
     (meetings.data||[]).forEach(m => activities.push({ text: `اجتماع مع أهل: ${m.student_name}`, time: m.created_at, color: '#8b5cf6' }));
     activities.sort((a, b) => new Date(b.time) - new Date(a.time));
     if (!activities.length) {
@@ -1398,11 +1406,11 @@ window.showSection = showSection;
 
 // ===== POPULATE DROPDOWNS =====
 function populateStudentDropdowns() {
-  const active = state.cases.filter(c => c.status === 'active');
-  const opts = `<option value="">اختر الطالب...</option>` + active.map(c => `<option value="${c.id}">${c.student_name}</option>`).join('');
+  const active = state.cases.filter(c => c.is_active === true);
+  const opts = `<option value="">اختر الطالب...</option>` + active.map(c => `<option value="${c.id}">${c.name_ar}</option>`).join('');
   ['int-student', 'int-filter-student', 'shadow-student-select', 'meeting-student', 'report-student-select'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.innerHTML = id === 'int-filter-student' ? `<option value="">كل الطلاب</option>` + active.map(c => `<option value="${c.id}">${c.student_name}</option>`).join('') : opts;
+    if (el) el.innerHTML = id === 'int-filter-student' ? `<option value="">كل الطلاب</option>` + active.map(c => `<option value="${c.id}">${c.name_ar}</option>`).join('') : opts;
   });
 }
 
@@ -1537,9 +1545,9 @@ async function saveCase() {
   const hasShadow = document.getElementById('case-hasshadow')?.checked;
 
   try {
-    const { data, error } = await supabase.from('special_needs_cases').insert({
+    const { data, error } = await supabase.from('special_ed_students').insert({
       student_id: sid,
-      student_name: name,
+      name_ar: name,
       grade: document.getElementById('case-grade')?.value,
       section: document.getElementById('case-section')?.value?.trim(),
       disability_type: dtype,
@@ -1601,8 +1609,9 @@ async function openStudentDetail(caseId) {
   const c = state.cases.find(x => x.id === caseId);
   if (!c) return;
   state.currentStudentId = caseId;
+  state.currentStudentKey = c.student_id;
 
-  openDrawer(`👤 ${c.student_name}`, `
+  openDrawer(`👤 ${c.name_ar}`, `
     <div class="tabs" id="student-tabs">
       <div class="tab active" onclick="switchStudentTab('info',this)">معلومات</div>
       <div class="tab" onclick="switchStudentTab('iep',this)">IEP</div>
@@ -1622,14 +1631,14 @@ function renderStudentInfo(c) {
   return `
     <div style="display:flex;flex-direction:column;gap:12px;">
       <div style="display:flex;align-items:center;gap:16px;padding:16px;background:var(--bg);border-radius:12px;">
-        <div style="width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,var(--navy),var(--navy-light));display:flex;align-items:center;justify-content:center;color:white;font-size:28px;font-weight:800;">${c.student_name?.[0]}</div>
+        <div style="width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,var(--navy),var(--navy-light));display:flex;align-items:center;justify-content:center;color:white;font-size:28px;font-weight:800;">${c.name_ar?.[0]}</div>
         <div>
-          <div style="font-size:20px;font-weight:800;color:var(--navy);">${c.student_name}</div>
+          <div style="font-size:20px;font-weight:800;color:var(--navy);">${c.name_ar}</div>
           <div style="color:var(--text-light);font-size:13px;">الصف ${c.grade||'—'} • ${c.section||''}</div>
           <div style="margin-top:6px;display:flex;gap:6px;">
             ${c.disability_type?`<span class="badge light-blue">${c.disability_type}</span>`:''}
             ${c.disability_level?`<span class="badge ${lvlCls}">${c.disability_level}</span>`:''}
-            ${getStatusBadge(c.status)}
+            ${c.is_active ? '<span class="badge badge-success">نشط</span>' : '<span class="badge badge-danger">غير نشط</span>'}
           </div>
         </div>
       </div>
@@ -1648,8 +1657,8 @@ function renderStudentInfo(c) {
       ${c.general_notes ? `<div><span class="text-light text-sm">ملاحظات عامة:</span><p style="margin-top:4px;font-size:14px;">${c.general_notes}</p></div>` : ''}
       <div style="display:flex;gap:8px;margin-top:8px;">
         <button class="btn btn-primary btn-sm" onclick="editCase('${c.id}')">✏️ تعديل</button>
-        <button class="btn btn-gold btn-sm" onclick="openCreateIEPForStudent('${c.id}','${c.student_name}')">📄 إنشاء IEP</button>
-        <button class="btn btn-outline btn-sm" onclick="openQuickSessionForStudent('${c.id}','${c.student_name}')">📝 جلسة</button>
+        <button class="btn btn-gold btn-sm" onclick="openCreateIEPForStudent('${c.id}','${c.name_ar}')">📄 إنشاء IEP</button>
+        <button class="btn btn-outline btn-sm" onclick="openQuickSessionForStudent('${c.id}','${c.name_ar}')">📝 جلسة</button>
       </div>
     </div>`;
 }
@@ -1665,49 +1674,52 @@ async function switchStudentTab(tab, el) {
   content.innerHTML = `<div class="skeleton sk-line"></div><div class="skeleton sk-line"></div>`;
 
   if (tab === 'iep') {
-    const { data } = await supabase.from('iep_plans').select('*').eq('case_id', state.currentStudentId);
+    const { data } = await supabase.from('special_ed_iep_goals').select('*').eq('student_id', state.currentStudentKey);
     if (!data?.length) {
-      content.innerHTML = `<div class="empty-state"><div class="icon">📄</div><h3>لا توجد خطط IEP</h3><button class="btn btn-primary" onclick="openCreateIEPForStudent('${c.id}','${c.student_name}')">إنشاء خطة IEP</button></div>`;
+      content.innerHTML = `<div class="empty-state"><div class="icon">📄</div><h3>لا توجد خطط IEP</h3><button class="btn btn-primary" onclick="openCreateIEPForStudent('${c.id}','${c.name_ar}')">إنشاء خطة IEP</button></div>`;
       return;
     }
     content.innerHTML = data.map(iep => `
       <div class="goal-card">
         <div class="goal-header">
-          <span class="font-bold">${iep.academic_year} - ${iep.semester||''}</span>
+          <span class="font-bold">${iep.academic_year} - ${iep.term||''}</span>
           ${getStatusBadge(iep.status)}
         </div>
-        <div class="text-sm text-light">من ${formatDate(iep.start_date)} إلى ${formatDate(iep.end_date)}</div>
-        <div style="margin-top:8px;font-size:14px;">${iep.current_level||''}</div>
+        <div class="text-sm text-light">${iep.goal_text||''}</div>
+        <div class="goal-progress" style="margin-top:8px;">
+          <div class="progress-bar"><div class="progress-fill" style="width:${iep.progress_pct||0}%"></div></div>
+          <span class="text-xs">${iep.progress_pct||0}%</span>
+        </div>
         <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="viewIEPDetail('${iep.id}')">عرض التفاصيل</button>
       </div>`).join('');
   }
 
   if (tab === 'interventions') {
-    const { data } = await supabase.from('intervention_logs').select('*').eq('case_id', state.currentStudentId).order('log_date',{ascending:false}).limit(10);
+    const { data } = await supabase.from('special_ed_notes').select('*').eq('student_id', state.currentStudentKey).order('date',{ascending:false}).limit(10);
     if (!data?.length) { content.innerHTML = `<div class="empty-state"><div class="icon">📝</div><h3>لا توجد جلسات مسجلة</h3></div>`; return; }
-    content.innerHTML = `<div class="table-wrap"><table><thead><tr><th>التاريخ</th><th>النوع</th><th>المدة</th><th>الاستجابة</th></tr></thead><tbody>${data.map(l => `<tr><td>${formatDate(l.log_date)}</td><td>${l.session_type}</td><td>${l.duration_minutes} د</td><td>${l.student_response||'—'}</td></tr>`).join('')}</tbody></table></div>`;
+    content.innerHTML = `<div class="table-wrap"><table><thead><tr><th>التاريخ</th><th>النوع</th><th>المدة</th><th>الاستجابة</th></tr></thead><tbody>${data.map(l => `<tr><td>${formatDate(l.date)}</td><td>${l.session_type}</td><td>${l.duration_minutes} د</td><td>${l.student_response||'—'}</td></tr>`).join('')}</tbody></table></div>`;
   }
 
   if (tab === 'shadow') {
     if (!c.has_shadow) { content.innerHTML = `<div class="empty-state"><div class="icon">👤</div><h3>لا يوجد مساعد فردي</h3></div>`; return; }
-    const { data } = await supabase.from('shadow_logs').select('*').eq('case_id', state.currentStudentId).order('log_date',{ascending:false}).limit(10);
-    if (!data?.length) { content.innerHTML = `<div class="empty-state"><div class="icon">📋</div><h3>لا توجد ملاحظات مسجلة</h3></div>`; return; }
+    const { data } = await supabase.from('special_ed_notes').select('*').eq('student_id', state.currentStudentKey).eq('note_type','behavior').eq('school_id','aljood').order('date',{ascending:false}).limit(10);
+    if (!data?.length) { content.innerHTML = `<div class='empty-state'><div class='icon'>📋</div><h3>لا توجد ملاحظات مسجلة</h3></div>`; return; }
     content.innerHTML = data.map(l => {
-      const avg = ((l.behavior_rating||3)+(l.academic_participation||3)+(l.social_interaction||3))/3;
-      const color = avg >= 4 ? 'var(--success)' : avg >= 3 ? 'var(--warning)' : 'var(--danger)';
-      return `<div style="padding:12px;border-radius:8px;border:1px solid var(--border);margin-bottom:8px;">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-          <span style="font-weight:600;">${formatDate(l.log_date)}</span>
-          <span style="color:${color};font-weight:700;">متوسط: ${avg.toFixed(1)}/5</span>
+      const ms2 = (l.content||'').match(/\u0633\u0644\u0648\u0643:\s*(\d)/);
+      const avgS2 = ms2 ? parseInt(ms2[1]) : 3;
+      const color = avgS2 >= 4 ? 'var(--success)' : avgS2 >= 3 ? 'var(--warning)' : 'var(--danger)';
+      return `<div style='padding:12px;border-radius:8px;border:1px solid var(--border);margin-bottom:8px;'>
+        <div style='display:flex;justify-content:space-between;margin-bottom:6px;'>
+          <span style='font-weight:600;'>${formatDate(l.date)}</span>
+          <span style='color:${color};font-weight:700;'>تقييم: ${avgS2}/5</span>
         </div>
-        <div style="font-size:13px;color:var(--text-light);">سلوك: ${l.behavior_rating||'—'} • مشاركة: ${l.academic_participation||'—'} • اجتماعي: ${l.social_interaction||'—'}</div>
-        ${l.challenges ? `<div style="font-size:13px;margin-top:4px;">التحديات: ${l.challenges}</div>` : ''}
+        <div style='font-size:13px;color:var(--text-light);'>${l.content||'—'}</div>
       </div>`;
     }).join('');
   }
 
   if (tab === 'meetings') {
-    const { data } = await supabase.from('special_needs_meetings').select('*').eq('case_id', state.currentStudentId).order('meeting_date',{ascending:false}).limit(10);
+    const { data } = await supabase.from('special_needs_meetings').select('*').eq('student_id', state.currentStudentKey).order('meeting_date',{ascending:false}).limit(10);
     if (!data?.length) { content.innerHTML = `<div class="empty-state"><div class="icon">👨‍👩‍👧</div><h3>لا توجد اجتماعات مسجلة</h3></div>`; return; }
     content.innerHTML = data.map(m => `
       <div class="meeting-card completed">
@@ -1729,12 +1741,12 @@ async function editCase(caseId) {
     <div class="form-grid">
       <div class="form-group">
         <label class="form-label">اسم الطالب <span class="req">*</span></label>
-        <input type="text" id="edit-name" value="${c.student_name||''}">
+        <input type="text" id="edit-name" value="${c.name_ar||''}">
       </div>
       <div class="form-group">
         <label class="form-label">الحالة</label>
         <select id="edit-status">
-          <option value="active" ${c.status==='active'?'selected':''}>نشط</option>
+          <option value="active" ${c.is_active===true?'selected':''}>نشط</option>
           <option value="graduated" ${c.status==='graduated'?'selected':''}>خريج</option>
           <option value="transferred" ${c.status==='transferred'?'selected':''}>محوّل</option>
           <option value="on_hold" ${c.status==='on_hold'?'selected':''}>معلق</option>
@@ -1770,9 +1782,9 @@ async function updateCase(caseId) {
   const btn = document.querySelector('#modal-footer .btn-primary');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
   try {
-    const { error } = await supabase.from('special_needs_cases').update({
-      student_name: name,
-      status: document.getElementById('edit-status')?.value,
+    const { error } = await supabase.from('special_ed_students').update({
+      name_ar: name,
+      is_active: document.getElementById('edit-status')?.value === 'active',
       disability_type: document.getElementById('edit-dtype')?.value,
       disability_level: document.getElementById('edit-dlevel')?.value || null,
       general_notes: document.getElementById('edit-notes')?.value?.trim(),
@@ -1796,8 +1808,9 @@ async function loadIEPs() {
   container.innerHTML = `<div class="skeleton sk-card"></div><div class="skeleton sk-card"></div>`;
   try {
     const { data, error } = await supabase
-      .from('iep_plans')
+      .from('special_ed_iep_goals')
       .select('*')
+      .eq('school_id', 'aljood')
       .order('created_at', { ascending: false });
     if (error) throw error;
     state.ieps = data || [];
@@ -1813,9 +1826,9 @@ function renderIEPs() {
   const today = todayStr();
   let filtered = state.ieps.filter(iep => {
     let status = iep.status;
-    if (status === 'active' && iep.review_date && iep.review_date < today) status = 'overdue';
+    if (status === 'in_progress' && iep.target_date && iep.target_date < today) status = 'overdue';
     const matchFilter = state.currentIEPFilter === 'all' || status === state.currentIEPFilter;
-    const matchSearch = !search || iep.student_name?.toLowerCase().includes(search);
+    const matchSearch = !search || iep.name_ar?.toLowerCase().includes(search);
     return matchFilter && matchSearch;
   });
 
@@ -1826,12 +1839,13 @@ function renderIEPs() {
 
   container.innerHTML = filtered.map(iep => {
     let status = iep.status;
-    if (status === 'active' && iep.review_date && iep.review_date < today) status = 'overdue';
+    if (status === 'in_progress' && iep.target_date && iep.target_date < today) status = 'overdue';
+    const iepStudentName = state.cases.find(x=>x.student_id===iep.student_id)?.name_ar || iep.student_id || '—';
     return `
     <div class="card" style="margin-bottom:12px;">
       <div class="card-header">
         <div>
-          <span class="font-bold" style="font-size:16px;">${iep.student_name}</span>
+          <span class="font-bold" style="font-size:16px;">${iep.name_ar}</span>
           <span style="margin-right:8px;color:var(--text-light);font-size:13px;">${iep.academic_year} • ${iep.semester||''}</span>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
@@ -1843,7 +1857,7 @@ function renderIEPs() {
         <div class="two-col" style="gap:12px;">
           <div><span class="text-light text-xs">تاريخ البدء:</span> <span class="text-sm">${formatDate(iep.start_date)}</span></div>
           <div><span class="text-light text-xs">تاريخ المراجعة:</span> <span class="text-sm ${status==='overdue'?'':''}">
-            ${formatDate(iep.review_date)}${status==='overdue'?' ⚠️':''}</span></div>
+            ${formatDate(iep.target_date)}${status==='overdue'?' ⚠️':''}</span></div>
           <div><span class="text-light text-xs">تاريخ الانتهاء:</span> <span class="text-sm">${formatDate(iep.end_date)}</span></div>
           <div><span class="text-light text-xs">أنشئ بالذكاء:</span> <span class="text-sm">${iep.ai_generated?'🤖 نعم':'يدوي'}</span></div>
         </div>
@@ -1869,8 +1883,8 @@ function openCreateIEP() {
 window.openCreateIEP = openCreateIEP;
 
 function openCreateIEPForStudent(caseId, studentName) {
-  const studOptions = state.cases.filter(c=>c.status==='active')
-    .map(c => `<option value="${c.id}" data-name="${c.student_name}" data-grade="${c.grade||''}" data-dtype="${c.disability_type||''}" data-dlevel="${c.disability_level||''}" ${c.id===caseId?'selected':''}>${c.student_name}</option>`).join('');
+  const studOptions = state.cases.filter(c=>c.is_active===true)
+    .map(c => `<option value="${c.id}" data-name="${c.name_ar}" data-grade="${c.grade||''}" data-dtype="${c.disability_type||''}" data-dlevel="${c.disability_level||''}" ${c.id===caseId?'selected':''}>${c.name_ar}</option>`).join('');
 
   const html = `
     <div id="iep-create-form">
@@ -2099,14 +2113,14 @@ async function saveIEP(status) {
   const goalItems = document.querySelectorAll('#goals-list .goal-card');
 
   try {
-    const { data: iepData, error } = await supabase.from('iep_plans').insert({
+    const { data: iepData, error } = await supabase.from('special_ed_iep_goals').insert({
       case_id: caseId,
       student_id: c.student_id,
-      student_name: c.student_name,
+      student_name: c?.name_ar,
       academic_year: document.getElementById('iep-year')?.value || ACADEMIC_YEAR,
       semester: document.getElementById('iep-semester')?.value,
       start_date: document.getElementById('iep-start')?.value || null,
-      review_date: document.getElementById('iep-review')?.value || null,
+      target_date: document.getElementById('iep-review')?.value || null,
       end_date: document.getElementById('iep-end')?.value || null,
       current_level: level,
       strengths: document.getElementById('iep-strengths')?.value?.trim(),
@@ -2122,8 +2136,8 @@ async function saveIEP(status) {
       const id = item.id;
       const goalText = document.getElementById(`${id}-text`)?.value?.trim();
       if (!goalText) continue;
-      await supabase.from('iep_goals').insert({
-        iep_id: iepData.id,
+      await supabase.from('special_ed_iep_goals').insert({
+        student_id: c.student_id,
         domain: document.getElementById(`${id}-domain`)?.value,
         goal_text: goalText,
         measurement_method: document.getElementById(`${id}-method`)?.value?.trim(),
@@ -2133,7 +2147,7 @@ async function saveIEP(status) {
       });
     }
 
-    showToast(`تم حفظ خطة IEP لـ ${c.student_name} ✅`);
+    showToast(`تم حفظ خطة IEP لـ ${c.name_ar} ✅`);
     closeModal();
     pendingGoals = [];
     goalCount = 0;
@@ -2146,13 +2160,13 @@ async function saveIEP(status) {
 window.saveIEP = saveIEP;
 
 async function viewIEPDetail(iepId) {
-  const { data: iep } = await supabase.from('iep_plans').select('*').eq('id', iepId).single();
-  const { data: goals } = await supabase.from('iep_goals').select('*').eq('iep_id', iepId);
+  const { data: iep } = await supabase.from('special_ed_iep_goals').select('*').eq('id', iepId).single();
+  const { data: goals } = await supabase.from('special_ed_iep_goals').select('*').eq('student_id', state.currentStudentKey);
   if (!iep) return;
 
   const today = todayStr();
   let status = iep.status;
-  if (status === 'active' && iep.review_date && iep.review_date < today) status = 'overdue';
+  if (status === 'in_progress' && iep.target_date && iep.target_date < today) status = 'overdue';
 
   const goalsHtml = (goals||[]).map(g => `
     <div class="goal-card">
@@ -2162,25 +2176,25 @@ async function viewIEPDetail(iepId) {
       </div>
       <div class="goal-text">${g.goal_text}</div>
       <div class="goal-progress">
-        <input type="range" min="0" max="100" value="${g.current_percentage||0}"
+        <input type="range" min="0" max="100" value="${g.progress_pct||0}"
           oninput="this.nextElementSibling.textContent=this.value+'%'"
           onchange="updateGoalProgress('${g.id}',this.value)">
-        <span class="goal-pct">${g.current_percentage||0}%</span>
+        <span class="goal-pct">${g.progress_pct||0}%</span>
       </div>
       <div class="progress-bar" style="margin-top:6px;">
-        <div class="progress-fill" style="width:${g.current_percentage||0}%"></div>
+        <div class="progress-fill" style="width:${g.progress_pct||0}%"></div>
       </div>
       ${g.measurement_method ? `<div class="text-xs text-light" style="margin-top:6px;">القياس: ${g.measurement_method}</div>` : ''}
     </div>`).join('');
 
   const html = `
-    <div class="print-header" style="display:none;"><h2>مدرسة الجود - خطة IEP</h2><p>الطالب: ${iep.student_name} | ${iep.academic_year}</p></div>
+    <div class="print-header" style="display:none;"><h2>مدرسة الجود - خطة IEP</h2><p>الطالب: ${iep.name_ar} | ${iep.academic_year}</p></div>
     <div style="padding:16px;background:var(--bg);border-radius:12px;margin-bottom:16px;">
-      <div style="font-size:18px;font-weight:800;color:var(--navy);">${iep.student_name}</div>
+      <div style="font-size:18px;font-weight:800;color:var(--navy);">${iep.name_ar}</div>
       <div style="color:var(--text-light);font-size:13px;margin-top:4px;">${iep.academic_year} • ${iep.semester||''} • ${getStatusBadge(status)}</div>
       <div class="two-col" style="margin-top:12px;">
         <div><span class="text-xs text-light">البدء:</span> <span style="font-size:13px;">${formatDate(iep.start_date)}</span></div>
-        <div><span class="text-xs text-light">المراجعة:</span> <span style="font-size:13px;">${formatDate(iep.review_date)}</span></div>
+        <div><span class="text-xs text-light">المراجعة:</span> <span style="font-size:13px;">${formatDate(iep.target_date)}</span></div>
       </div>
     </div>
     <div style="margin-bottom:16px;">
@@ -2197,7 +2211,7 @@ async function viewIEPDetail(iepId) {
       <button class="btn btn-outline btn-sm" onclick="window.print()">🖨️ طباعة</button>
     </div>`;
 
-  openModal(`خطة IEP - ${iep.student_name}`, html, []);
+  openModal(`خطة IEP - ${iep.name_ar}`, html, []);
   document.querySelector('.modal').style.width = '720px';
 }
 window.viewIEPDetail = viewIEPDetail;
@@ -2206,7 +2220,8 @@ async function updateGoalProgress(goalId, value) {
   try {
     const pct = parseInt(value);
     const newStatus = pct >= 100 ? 'achieved' : 'in_progress';
-    await supabase.from('iep_goals').update({ current_percentage: pct, status: newStatus }).eq('id', goalId);
+    const goalStatus = pct >= 100 ? 'achieved' : pct > 0 ? 'in_progress' : 'not_started';
+    await supabase.from('special_ed_iep_goals').update({ progress_pct: pct, status: goalStatus }).eq('id', goalId);
     showToast('تم تحديث التقدم ✅');
   } catch(e) { showToast('خطأ في التحديث', 'error'); }
 }
@@ -2215,7 +2230,7 @@ window.updateGoalProgress = updateGoalProgress;
 async function markIEPComplete(iepId) {
   if (!confirm('هل تريدين إتمام هذه الخطة؟')) return;
   try {
-    await supabase.from('iep_plans').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', iepId);
+    await supabase.from('special_ed_iep_goals').update({ status: 'achieved' }).eq('id', iepId);
     showToast('تم إتمام خطة IEP ✅');
     closeModal();
     loadIEPs();
@@ -2255,11 +2270,11 @@ async function saveInterventionLog() {
   setLoading('save-int-btn', true);
 
   try {
-    const { error } = await supabase.from('intervention_logs').insert({
+    const { error } = await supabase.from('special_ed_notes').insert({
       case_id: caseId,
       student_id: c?.student_id,
-      student_name: c?.student_name,
-      log_date: document.getElementById('int-date')?.value || todayStr(),
+      name_ar: c?.name_ar,
+      date: document.getElementById('int-date')?.value || todayStr(),
       session_type: document.getElementById('int-type')?.value,
       duration_minutes: parseInt(document.getElementById('int-duration')?.value) || 30,
       activities: document.getElementById('int-activities')?.value?.trim(),
@@ -2296,8 +2311,8 @@ async function loadInterventionLogs() {
   container.innerHTML = `<div class="skeleton sk-line"></div><div class="skeleton sk-line"></div>`;
   try {
     const filterStudent = document.getElementById('int-filter-student')?.value;
-    let query = supabase.from('intervention_logs').select('*').order('log_date',{ascending:false}).limit(30);
-    if (filterStudent) query = query.eq('case_id', filterStudent);
+    let query = supabase.from('special_ed_notes').select('*').in('note_type',['daily_obs','academic','iep_progress']).eq('school_id','aljood').order('date',{ascending:false}).limit(30);
+    if (filterStudent) query = query.eq('student_id', filterStudent);
     const { data, error } = await query;
     if (error) throw error;
     if (!data?.length) {
@@ -2310,8 +2325,8 @@ async function loadInterventionLogs() {
         <thead><tr><th>التاريخ</th><th>الطالب</th><th>النوع</th><th>المدة</th><th>الاستجابة</th><th>ملاحظات</th></tr></thead>
         <tbody>
           ${data.map(l => `<tr>
-            <td>${formatDate(l.log_date)}</td>
-            <td style="font-weight:600;">${l.student_name||'—'}</td>
+            <td>${formatDate(l.date)}</td>
+            <td style="font-weight:600;">${l.name_ar||'—'}</td>
             <td>${l.session_type||'—'}</td>
             <td>${l.duration_minutes||'—'} د</td>
             <td><span style="color:${responseColors[l.student_response]||'#666'};font-weight:600;">${l.student_response||'—'}</span></td>
@@ -2328,9 +2343,9 @@ window.loadInterventionLogs = loadInterventionLogs;
 
 async function checkInterventionInsight(caseId) {
   const { data: logs } = await supabase
-    .from('intervention_logs')
+    .from('special_ed_notes')
     .select('session_type,student_response,activities')
-    .eq('case_id', caseId)
+    .eq('student_id', c?.student_id)
     .limit(20);
   if (!logs || logs.length < 5) return;
 
@@ -2367,7 +2382,7 @@ async function checkInterventionInsight(caseId) {
 async function loadShadowSection() {
   const container = document.getElementById('shadow-cards-list');
   container.innerHTML = `<div class="skeleton sk-card"></div>`;
-  const shadowCases = state.cases.filter(c => c.has_shadow && c.status === 'active');
+  const shadowCases = state.cases.filter(c => c.has_shadow && c.is_active === true);
   if (!shadowCases.length) {
     container.innerHTML = `<div class="empty-state"><div class="icon">👤</div><h3>لا توجد حالات بمساعد فردي</h3><p>أضفي "لديه مساعد فردي" عند إنشاء الحالة</p></div>`;
     return;
@@ -2376,21 +2391,24 @@ async function loadShadowSection() {
   const cards = [];
   for (const c of shadowCases) {
     const { data: logs } = await supabase
-      .from('shadow_logs')
+      .from('special_ed_notes')
       .select('*')
       .eq('case_id', c.id)
-      .order('log_date', { ascending: false })
+      .order('date', { ascending: false })
       .limit(7);
 
-    const todayLog = logs?.find(l => l.log_date === todayStr());
-    const recentAvgs = (logs || []).map(l => ((l.behavior_rating||3) + (l.academic_participation||3) + (l.social_interaction||3)) / 3);
+    const todayLog = logs?.find(l => l.date === todayStr());
+    const recentAvgs = (logs || []).map(l => {
+      const m = (l.content||'').match(/سلوك:\s*(\d)/);
+      return m ? parseInt(m[1]) : 3;
+    });
     const hasAlert = recentAvgs.slice(0, 3).every(a => a < 3) && recentAvgs.length >= 2;
 
     cards.push(`
       <div class="card" style="margin-bottom:16px;">
         <div class="card-header">
           <div>
-            <span style="font-size:16px;font-weight:700;">${c.student_name}</span>
+            <span style="font-size:16px;font-weight:700;">${c.name_ar}</span>
             ${hasAlert ? '<span style="color:var(--danger);font-size:14px;margin-right:8px;">🚨 تنبيه</span>' : ''}
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
@@ -2416,8 +2434,8 @@ async function loadShadowSection() {
             </div>
           </div>
           <div style="display:flex;gap:8px;margin-top:12px;">
-            <button class="btn btn-primary btn-sm" onclick="openShadowLogFormForCase('${c.id}','${c.student_name}')">➕ إضافة ملاحظة</button>
-            <button class="btn btn-outline btn-sm" onclick="viewShadowHistory('${c.id}','${c.student_name}')">📋 السجل الكامل</button>
+            <button class="btn btn-primary btn-sm" onclick="openShadowLogFormForCase('${c.id}','${c.name_ar}')">➕ إضافة ملاحظة</button>
+            <button class="btn btn-outline btn-sm" onclick="viewShadowHistory('${c.id}','${c.name_ar}')">📋 السجل الكامل</button>
           </div>
         </div>
       </div>`);
@@ -2431,8 +2449,8 @@ function openShadowLogForm() {
 window.openShadowLogForm = openShadowLogForm;
 
 function openShadowLogFormForCase(caseId, studentName) {
-  const shadowCases = state.cases.filter(c => c.has_shadow && c.status === 'active');
-  const opts = shadowCases.map(c => `<option value="${c.id}" ${c.id===caseId?'selected':''}>${c.student_name}</option>`).join('');
+  const shadowCases = state.cases.filter(c => c.has_shadow && c.is_active === true);
+  const opts = shadowCases.map(c => `<option value="${c.id}" ${c.id===caseId?'selected':''}>${c.name_ar}</option>`).join('');
 
   const html = `
     <div class="form-grid">
@@ -2509,18 +2527,16 @@ async function saveShadowLog() {
   const btn = document.querySelector('#modal-footer .btn-primary');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
   try {
-    const { error } = await supabase.from('shadow_logs').insert({
-      case_id: caseId,
+    const positiveText = document.getElementById('sl-positive')?.value?.trim();
+    const challengesText = document.getElementById('sl-challenges')?.value?.trim();
+    const shadowContent = `سلوك: ${behavior}/5 | أكاديمي: ${academic}/5 | اجتماعي: ${social}/5${positiveText ? ' | إيجابيات: ' + positiveText : ''}${challengesText ? ' | تحديات: ' + challengesText : ''}`;
+    const { error } = await supabase.from('special_ed_notes').insert({
       student_id: c?.student_id,
-      student_name: c?.student_name,
-      log_date: document.getElementById('sl-date')?.value || todayStr(),
-      behavior_rating: behavior,
-      academic_participation: academic,
-      social_interaction: social,
-      positive_moments: document.getElementById('sl-positive')?.value?.trim(),
-      challenges: document.getElementById('sl-challenges')?.value?.trim(),
-      incidents: document.getElementById('sl-incidents')?.value?.trim(),
-      submitted_by: document.getElementById('sl-by')?.value?.trim() || state.teacher
+      note_type: 'behavior',
+      date: document.getElementById('sl-date')?.value || todayStr(),
+      content: shadowContent,
+      noted_by: document.getElementById('sl-by')?.value?.trim() || state.teacher,
+      school_id: 'aljood'
     });
     if (error) throw error;
     showToast('تم حفظ ملاحظة المساعد ✅');
@@ -2535,29 +2551,26 @@ window.saveShadowLog = saveShadowLog;
 
 async function viewShadowHistory(caseId, studentName) {
   const { data: logs } = await supabase
-    .from('shadow_logs')
+    .from('special_ed_notes')
     .select('*')
-    .eq('case_id', caseId)
-    .order('log_date', { ascending: false });
+    .eq('student_id', c?.student_id)
+    .eq('note_type', 'behavior')
+    .eq('school_id', 'aljood')
+    .order('date', { ascending: false });
 
   const html = `
     <div style="max-height:60vh;overflow-y:auto;">
       ${(logs||[]).length === 0 ? '<div class="empty-state"><div class="icon">📋</div><h3>لا توجد ملاحظات</h3></div>' :
         (logs||[]).map(l => {
-          const avg = ((l.behavior_rating||3)+(l.academic_participation||3)+(l.social_interaction||3))/3;
-          const color = avg >= 4 ? 'var(--success)' : avg >= 3 ? 'var(--warning)' : 'var(--danger)';
-          return `<div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;border-right:4px solid ${color};">
-            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-              <span style="font-weight:700;">${formatDate(l.log_date)}</span>
-              <span style="color:${color};font-weight:700;">متوسط: ${avg.toFixed(1)}/5</span>
+          const mv = (l.content||'').match(/\u0633\u0644\u0648\u0643:\s*(\d)/);
+          const avgV = mv ? parseInt(mv[1]) : 3;
+          const color = avgV >= 4 ? 'var(--success)' : avgV >= 3 ? 'var(--warning)' : 'var(--danger)';
+          return `<div style='border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;border-right:4px solid ${color};'>
+            <div style='display:flex;justify-content:space-between;margin-bottom:8px;'>
+              <span style='font-weight:700;'>${formatDate(l.date)}</span>
+              <span style='color:${color};font-weight:700;'>تقييم: ${avgV}/5</span>
             </div>
-            <div style="display:flex;gap:12px;font-size:13px;color:var(--text-light);margin-bottom:8px;">
-              <span>سلوك: <strong>${l.behavior_rating}/5</strong></span>
-              <span>أكاديمي: <strong>${l.academic_participation}/5</strong></span>
-              <span>اجتماعي: <strong>${l.social_interaction}/5</strong></span>
-            </div>
-            ${l.positive_moments ? `<div style="font-size:13px;">✅ ${l.positive_moments}</div>` : ''}
-            ${l.challenges ? `<div style="font-size:13px;color:var(--danger);">⚠️ ${l.challenges}</div>` : ''}
+            <div style='font-size:13px;color:var(--text-light);margin-bottom:8px;'>${l.content||'—'}</div>
           </div>`;
         }).join('')
       }
@@ -2605,7 +2618,7 @@ async function loadMeetings() {
 }
 
 function openAddMeeting() {
-  const opts = state.cases.filter(c=>c.status==='active').map(c=>`<option value="${c.id}">${c.student_name}</option>`).join('');
+  const opts = state.cases.filter(c=>c.is_active===true).map(c=>`<option value="${c.id}">${c.name_ar}</option>`).join('');
   const html = `
     <div class="form-grid">
       <div class="form-group full">
@@ -2685,7 +2698,7 @@ async function saveMeeting() {
     const { error } = await supabase.from('special_needs_meetings').insert({
       case_id: caseId,
       student_id: c?.student_id,
-      student_name: c?.student_name,
+      name_ar: c?.name_ar,
       meeting_date: date,
       meeting_type: document.getElementById('mtg-type')?.value,
       attendees: document.getElementById('mtg-attendees')?.value?.trim(),
@@ -2720,11 +2733,11 @@ async function generateStudentReport() {
   try {
     // Fetch all data
     const [iepsRes, goalsRes, logsRes, shadowRes, meetingsRes, varkRes] = await Promise.all([
-      supabase.from('iep_plans').select('*').eq('case_id', caseId).order('created_at',{ascending:false}).limit(3),
-      supabase.from('iep_goals').select('*').in('iep_id', []),
-      supabase.from('intervention_logs').select('*').eq('case_id', caseId).order('log_date',{ascending:false}).limit(20),
-      supabase.from('shadow_logs').select('*').eq('case_id', caseId).order('log_date',{ascending:false}).limit(10),
-      supabase.from('special_needs_meetings').select('*').eq('case_id', caseId).order('meeting_date',{ascending:false}).limit(3),
+      supabase.from('special_ed_iep_goals').select('*').eq('student_id', c?.student_id).order('created_at',{ascending:false}).limit(3),
+      supabase.from('special_ed_iep_goals').select('*').in('iep_id', []),
+      supabase.from('special_ed_notes').select('*').eq('student_id', c?.student_id).order('date',{ascending:false}).limit(20),
+      supabase.from('special_ed_notes').select('*').eq('student_id', c?.student_id).order('date',{ascending:false}).limit(10),
+      supabase.from('special_needs_meetings').select('*').eq('student_id', c?.student_id).order('meeting_date',{ascending:false}).limit(3),
       supabase.from('vark_results').select('*').eq('student_id', c.student_id).eq('is_latest', true).limit(1)
     ]);
 
@@ -2738,7 +2751,7 @@ async function generateStudentReport() {
     let goals = [];
     const activeIEP = ieps.find(i => i.status === 'active') || ieps[0];
     if (activeIEP) {
-      const { data: gData } = await supabase.from('iep_goals').select('*').eq('iep_id', activeIEP.id);
+      const { data: gData } = await supabase.from('special_ed_iep_goals').select('*').eq('iep_id', activeIEP.id);
       goals = gData || [];
     }
 
@@ -2746,14 +2759,14 @@ async function generateStudentReport() {
     const totalSessions = logs.length;
     const responseMap = { 'ممتاز': 5, 'جيد': 4, 'متوسط': 3, 'يحتاج دعم': 2, 'لم يشارك': 1 };
     const avgResponse = totalSessions ? (logs.reduce((s, l) => s + (responseMap[l.student_response]||3), 0) / totalSessions).toFixed(1) : '—';
-    const goalsProgress = goals.length ? Math.round(goals.reduce((s, g) => s + (g.current_percentage||0), 0) / goals.length) : 0;
-    const shadowAvg = shadows.length ? (shadows.reduce((s, l) => s + ((l.behavior_rating||3)+(l.academic_participation||3)+(l.social_interaction||3))/3, 0) / shadows.length).toFixed(1) : '—';
+    const goalsProgress = goals.length ? Math.round(goals.reduce((s, g) => s + (g.progress_pct||0), 0) / goals.length) : 0;
+    const shadowAvg = shadows.length ? (shadows.reduce((s, l) => { const mr = (l.content||'').match(/سلوك:\s*(\d)/); return s + (mr ? parseInt(mr[1]) : 3); }, 0) / shadows.length).toFixed(1) : '—';
 
     // AI Recommendations
     let aiRecommendations = '';
     if (totalSessions > 0 || goals.length > 0) {
       const prompt = `أنت مختصة تربية خاصة. بناءً على بيانات الطالب التالية، أعطي 3 توصيات مهنية موجزة:
-الطالب: ${c.student_name} - ${c.disability_type} - ${c.disability_level}
+الطالب: ${c.name_ar} - ${c.disability_type} - ${c.disability_level}
 جلسات التدخل: ${totalSessions} جلسة، متوسط الاستجابة: ${avgResponse}/5
 الأهداف الحالية: ${goals.length} هدف، متوسط التقدم: ${goalsProgress}%
 اكتبي 3 توصيات عملية بالعربية، كل واحدة بجملة أو جملتين.`;
@@ -2765,13 +2778,13 @@ async function generateStudentReport() {
       <div id="report-printable">
         <div class="report-header">
           <h1>مدرسة الجود - تقرير الطالب</h1>
-          <p>${c.student_name} | ${new Date().toLocaleDateString('ar-AE')}</p>
+          <p>${c.name_ar} | ${new Date().toLocaleDateString('ar-AE')}</p>
         </div>
 
         <div class="report-section">
           <h2>معلومات الطالب</h2>
           <div class="report-grid">
-            <div><strong>الاسم:</strong> ${c.student_name}</div>
+            <div><strong>الاسم:</strong> ${c.name_ar}</div>
             <div><strong>الصف:</strong> ${c.grade || '—'} ${c.section || ''}</div>
             <div><strong>نوع الإعاقة:</strong> ${c.disability_type || '—'}</div>
             <div><strong>درجة الإعاقة:</strong> ${c.disability_level || '—'}</div>
@@ -2789,14 +2802,14 @@ async function generateStudentReport() {
             <div><strong>السنة:</strong> ${activeIEP.academic_year}</div>
             <div><strong>الحالة:</strong> ${activeIEP.status}</div>
             <div><strong>بدء:</strong> ${formatDate(activeIEP.start_date)}</div>
-            <div><strong>مراجعة:</strong> ${formatDate(activeIEP.review_date)}</div>
+            <div><strong>الهدف:</strong> ${formatDate(activeIEP.target_date)}</div>
           </div>
           ${activeIEP.current_level ? `<p style="margin-top:8px;"><strong>المستوى الحالي:</strong> ${activeIEP.current_level}</p>` : ''}
           ${goals.length ? `
             <div style="margin-top:12px;">
               <strong>الأهداف (${goals.length})</strong>
               <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
-                ${goals.map(g => `<span class="badge light-blue">${g.domain}: ${g.current_percentage||0}%</span>`).join('')}
+                ${goals.map(g => `<span class="badge light-blue">${g.subject_area||g.term||'—'}: ${g.progress_pct||0}%</span>`).join('')}
               </div>
               <div style="margin-top:6px;font-size:14px;"><strong>متوسط التقدم الكلي: ${goalsProgress}%</strong></div>
             </div>` : ''}
@@ -2836,7 +2849,7 @@ window.generateStudentReport = generateStudentReport;
 async function generateClassReport() {
   const container = document.getElementById('report-content');
   container.innerHTML = `<div style="text-align:center;padding:40px;"><div class="spinner" style="width:40px;height:40px;margin:0 auto;border-color:rgba(99,102,241,0.2);border-top-color:#6366f1;"></div><p>جاري التحميل...</p></div>`;
-  const active = state.cases.filter(c => c.status === 'active');
+  const active = state.cases.filter(c => c.is_active === true);
   container.innerHTML = `
     <div id="report-printable">
       <div class="report-header"><h1>مدرسة الجود - تقرير الفصل الكامل</h1><p>${new Date().toLocaleDateString('ar-AE')}</p></div>
@@ -2847,12 +2860,12 @@ async function generateClassReport() {
             <thead><tr><th>الطالب</th><th>الصف</th><th>نوع الإعاقة</th><th>الدرجة</th><th>مساعد فردي</th><th>الحالة</th></tr></thead>
             <tbody>
               ${active.map(c=>`<tr>
-                <td style="font-weight:600;">${c.student_name}</td>
+                <td style="font-weight:600;">${c.name_ar}</td>
                 <td>${c.grade||'—'} ${c.section||''}</td>
                 <td>${c.disability_type||'—'}</td>
                 <td><span class="badge ${getDisabilityBadgeClass(c.disability_level)}">${c.disability_level||'—'}</span></td>
                 <td>${c.has_shadow?'✅':'❌'}</td>
-                <td>${getStatusBadge(c.status)}</td>
+                <td>${c.is_active ? '<span class="badge badge-success">نشط</span>' : '<span class="badge badge-danger">غير نشط</span>'}</td>
               </tr>`).join('')}
             </tbody>
           </table>
@@ -3004,7 +3017,7 @@ CREATE TABLE IF NOT EXISTS special_needs_cases (
 CREATE TABLE IF NOT EXISTS iep_plans (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   case_id UUID, student_id TEXT NOT NULL, student_name TEXT,
-  academic_year TEXT, semester TEXT, start_date DATE, review_date DATE, end_date DATE,
+  academic_year TEXT, semester TEXT, start_date DATE, target_date DATE, end_date DATE,
   current_level TEXT, strengths TEXT, challenges TEXT, ai_generated BOOLEAN DEFAULT false,
   status TEXT DEFAULT 'draft' CHECK (status IN ('draft','active','completed','overdue')),
   created_by TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -3013,7 +3026,7 @@ CREATE TABLE IF NOT EXISTS iep_plans (
 CREATE TABLE IF NOT EXISTS iep_goals (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY, iep_id UUID,
   domain TEXT, goal_text TEXT NOT NULL, measurement_method TEXT,
-  target_percentage INTEGER DEFAULT 80, current_percentage INTEGER DEFAULT 0,
+  target_percentage INTEGER DEFAULT 80, progress_pct INTEGER DEFAULT 0,
   target_date DATE, status TEXT DEFAULT 'in_progress',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -3021,7 +3034,7 @@ CREATE TABLE IF NOT EXISTS iep_goals (
 CREATE TABLE IF NOT EXISTS intervention_logs (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   case_id UUID, student_id TEXT, student_name TEXT,
-  log_date DATE DEFAULT CURRENT_DATE,
+  date DATE DEFAULT CURRENT_DATE,
   session_type TEXT, duration_minutes INTEGER,
   activities TEXT, student_response TEXT, skills_practiced TEXT, notes TEXT,
   logged_by TEXT, created_at TIMESTAMPTZ DEFAULT NOW()
@@ -3030,7 +3043,7 @@ CREATE TABLE IF NOT EXISTS intervention_logs (
 CREATE TABLE IF NOT EXISTS shadow_logs (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   case_id UUID, student_id TEXT, student_name TEXT,
-  log_date DATE DEFAULT CURRENT_DATE,
+  date DATE DEFAULT CURRENT_DATE,
   behavior_rating INTEGER, academic_participation INTEGER, social_interaction INTEGER,
   positive_moments TEXT, challenges TEXT, incidents TEXT,
   submitted_by TEXT, reviewed BOOLEAN DEFAULT false,
