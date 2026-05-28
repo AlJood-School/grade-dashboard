@@ -672,6 +672,7 @@ footer {
       <div class="done-icon">✅</div>
       <div class="done-title">شكراً لك! تم تسجيل إجاباتك بنجاح</div>
       <div class="done-sub">مساهمتك ستُحدث فرقاً حقيقياً في بناء المنظومة الرقمية لفريق الدعم التعليمي.</div>
+      <div id="done-redirect-info" style="margin:16px 0 8px;"></div>
       <button class="btn btn-primary" onclick="resetSurvey()" style="width:100%;font-size:16px;padding:14px;">تعبئة استبيان جديد</button>
     </div>
     <footer>© 2026 · منيرة علي محمد المري</footer>
@@ -1208,6 +1209,9 @@ async function submitSurvey() {
     if (res.ok || res.status === 201) {
       sessionStorage.removeItem('survey_draft_v1');
       document.getElementById('progress-bar').style.display = 'none';
+      showScreen('screen-done');
+      startReturnCountdown();
+      return;
       document.getElementById('nav-bar').style.display = 'none';
       showScreen('screen-done');
     } else if (res.status === 401 || res.status === 403) {
@@ -1272,6 +1276,42 @@ function showToast(msg, type) {
   toastTimer = setTimeout(() => {
     toast.className = '';
   }, 4000);
+}
+
+// ─────────────────────────────────────────────
+// العودة التلقائية بعد إتمام الاستبيان
+// ─────────────────────────────────────────────
+function startReturnCountdown() {
+  const role = sessionStorage.getItem('aljood_session_role') || '';
+  const roleMap = {
+    admin:      'principal_dashboard.html',
+    principal:  'principal_dashboard.html',
+    teacher:    'teacher_hub.html',
+    special_ed: 'special_ed_dashboard.html',
+    assistant:  'teacher_hub.html'
+  };
+  const returnTo = (document.referrer && new URL(document.referrer).hostname === location.hostname)
+    ? document.referrer
+    : (roleMap[role] || 'index.html');
+
+  const el = document.getElementById('done-redirect-info');
+  if (!el) return;
+
+  let sec = 5;
+  const render = () => {
+    el.innerHTML = `
+      <div style="font-size:13px;color:#666;margin-bottom:10px;">
+        سيتم إعادة توجيهك تلقائياً خلال <strong>${sec}</strong> ثوانٍ...
+      </div>
+      <button onclick="window.location.href='${returnTo}'" style="
+        padding:10px 28px;background:linear-gradient(135deg,#1a2e4a,#2a4a7a);
+        color:#d4a843;border:none;border-radius:25px;font-family:Tajawal,sans-serif;
+        font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,0.2);
+      ">🏠 العودة إلى البوابة</button>`;
+    if (sec > 0) { sec--; setTimeout(render, 1000); }
+    else window.location.href = returnTo;
+  };
+  render();
 }
 
 // ─────────────────────────────────────────────
