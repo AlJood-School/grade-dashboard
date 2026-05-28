@@ -931,7 +931,7 @@ const VARK_STYLES = {
 // ============================================================
 const _urlParams = new URLSearchParams(window.location.search);
 const isStaffMode = _urlParams.get('mode') === 'staff';
-const staffUsername = sessionStorage.getItem('aljood_username') || '';
+const staffUsername = sessionStorage.getItem('aljood_username') || sessionStorage.getItem('aljood_session_user') || sessionStorage.getItem('loggedInUser') || '';
 
 // ============================================================
 // STATE
@@ -1474,20 +1474,47 @@ async function saveToStaffSupabase(dominant) {
   const academicYear = month >= 9 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
 
   const dominantLetter = dominant === 'MULTI' ? 'Multimodal' : dominant;
+
+  // حساب all_styles — جميع الأنماط المتعادلة في القمة
+  const sortedStyles = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  const topScore = sortedStyles[0][1];
+  const topStyleKeys = sortedStyles.filter(s => s[1] === topScore).map(s => s[0]);
+  const allStyles = topStyleKeys.length > 1 ? topStyleKeys : [dominant];
+
+  // اسم الموظفة ودورها
+  let staffDisplayName = staffUsername;
+  let staffRole = 'teacher';
+  try {
+    const sessionRaw = sessionStorage.getItem('aljood_session');
+    if (sessionRaw) {
+      const sessionObj = JSON.parse(sessionRaw);
+      staffDisplayName = sessionObj.nameAr || sessionObj.name || staffUsername;
+      staffRole = sessionObj.loginRole || sessionObj.role || 'teacher';
+    }
+  } catch(e) {}
+  staffRole = sessionStorage.getItem('aljood_role') || staffRole;
+
   const record = {
-    username: staffUsername,
-    full_name: staffUsername,
-    job_title: 'معلمة',
-    result: dominantLetter,
-    scores: { v: scores.V, a: scores.A, r: scores.R, k: scores.K },
+    staff_id: staffUsername,
+    staff_name: staffDisplayName,
+    staff_role: staffRole,
+    vark_scores: { V: scores.V, A: scores.A, R: scores.R, K: scores.K },
+    dominant_style: dominantLetter,
+    all_styles: allStyles,
+    is_latest: true,
     completed_at: now.toISOString(),
     academic_year: academicYear,
     assigned_by: 'self'
   };
 
   try {
-    // upsert — إذا كان هناك سجل سابق، حدّثه
-    const { error } = await _sbClient.from('staff_vark_results').upsert([record], { onConflict: 'username' });
+    // أوقف is_latest على السجلات القديمة لهذا الموظف
+    await _sbClient.from('staff_vark_results')
+      .update({ is_latest: false })
+      .eq('staff_id', staffUsername);
+
+    // أدرج السجل الجديد
+    const { error } = await _sbClient.from('staff_vark_results').insert([record]);
     if (error) {
       console.warn('Staff VARK save error:', error);
       statusEl.innerHTML = `<div class="save-err">⚠️ ${error.code === '42P01' ? 'جدول staff_vark_results غير موجود — يرجى إنشاؤه' : 'خطأ: ' + error.message}</div>`;
