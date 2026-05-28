@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>بطاقة الخروج الرقمية</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--navy:#1a2550;--gold:#c9a84c;--light-gold:#f0e6c8;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Tajawal',sans-serif;direction:rtl;background:#f5f7fa;min-height:100vh;}
+.header{background:linear-gradient(135deg,var(--navy),#2d3e7a);color:white;padding:18px 24px;}
+.header h1{font-size:1.4rem;font-weight:800;}
+.header p{font-size:13px;opacity:.75;margin-top:4px;}
+.container{max-width:640px;margin:0 auto;padding:24px 16px;}
+.card{background:white;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,0.08);padding:24px;margin-bottom:16px;}
+.section-label{font-size:13px;font-weight:700;color:var(--navy);margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+.filter-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+.filter-row.triple{grid-template-columns:1fr 1fr 1fr;}
+.form-control{width:100%;padding:10px 14px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:'Tajawal',sans-serif;font-size:14px;outline:none;}
+.form-control:focus{border-color:var(--gold);}
+.question-card{background:#f8fafc;border-radius:12px;padding:20px;margin-bottom:14px;border-right:4px solid var(--gold);}
+.question-text{font-size:1rem;font-weight:700;color:var(--navy);margin-bottom:14px;}
+.choices{display:flex;gap:10px;flex-wrap:wrap;}
+.choice-btn{flex:1;min-width:100px;padding:12px 8px;border:2px solid #e5e7eb;border-radius:10px;background:white;cursor:pointer;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:600;text-align:center;transition:all .2s;}
+.choice-btn:hover{border-color:var(--gold);background:var(--light-gold);}
+.choice-btn.selected{border-color:var(--navy);background:var(--navy);color:white;}
+.emoji-btn{font-size:2.2rem;width:70px;height:70px;border:2px solid #e5e7eb;border-radius:14px;background:white;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;}
+.emoji-btn:hover{transform:scale(1.1);border-color:var(--gold);}
+.emoji-btn.selected{border-color:var(--navy);background:var(--light-gold);transform:scale(1.15);}
+.emoji-row{display:flex;gap:14px;justify-content:center;}
+textarea.form-control{resize:none;}
+.btn-submit{width:100%;padding:16px;background:var(--navy);color:white;border:none;border-radius:10px;font-family:'Tajawal',sans-serif;font-size:1rem;font-weight:700;cursor:pointer;transition:all .2s;}
+.btn-submit:hover{background:#2d3e7a;}
+.success-screen{display:none;text-align:center;padding:40px 20px;}
+.success-icon{font-size:4rem;margin-bottom:12px;}
+.teacher-mode{background:white;}
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;}
+.stat-box{background:#f8fafc;border-radius:10px;padding:16px;text-align:center;}
+.stat-val{font-size:2rem;font-weight:800;color:var(--navy);}
+.stat-lbl{font-size:11px;color:#888;}
+.progress-bar{height:10px;background:#e5e7eb;border-radius:5px;overflow:hidden;margin:6px 0;}
+.progress-good{background:#10b981;}
+.progress-partial{background:var(--gold);}
+.progress-poor{background:#ef4444;}
+.btn-refresh{padding:10px 18px;background:var(--gold);color:white;border:none;border-radius:8px;font-family:'Tajawal',sans-serif;cursor:pointer;font-weight:600;}
+.response-item{background:#f8fafc;border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px;}
+.tab-btns{display:flex;gap:6px;margin-bottom:16px;}
+.tab-btn{padding:10px 16px;border:none;border-radius:8px;font-family:'Tajawal',sans-serif;cursor:pointer;font-size:13px;font-weight:600;background:#f1f5f9;color:#666;transition:all .2s;}
+.tab-btn.active{background:var(--navy);color:white;}
+</style>
+</head>
+<body>
+<script>
+const SUPABASE_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYzNzM5NjMsImV4cCI6MjA2MTk0OTk2M30.BMBGMwMNFvhFoLKBYqaVZ5F8BzJDHfFmCVmBmSHJZLw';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const params = new URLSearchParams(location.search);
+const isTeacher = params.get('mode') === 'teacher';
+let selectedUnderstanding = null;
+let selectedFeeling = null;
+
+function selectUnderstanding(val, el) {
+  selectedUnderstanding = val;
+  document.querySelectorAll('.u-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+}
+function selectFeeling(val, el) {
+  selectedFeeling = val;
+  document.querySelectorAll('.f-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+async function submitTicket() {
+  const grade = document.getElementById('et-grade').value.trim();
+  const cls = document.getElementById('et-class').value.trim();
+  const subject = document.getElementById('et-subject').value.trim();
+  const date = document.getElementById('et-date').value;
+  const student = document.getElementById('et-student').value.trim();
+  const wantMore = document.getElementById('et-want').value.trim();
+  if (!grade || !cls || !subject || !selectedUnderstanding || !selectedFeeling) {
+    alert('يرجى إكمال جميع الحقول المطلوبة'); return;
+  }
+  const { error } = await supabase.from('exit_tickets').insert({
+    grade, class_section: cls, subject, lesson_date: date, understanding: selectedUnderstanding,
+    feeling: selectedFeeling, want_more: wantMore, student_name: student, school_id: 'aljood'
+  });
+  if (error) { alert('خطأ في الإرسال: ' + error.message); return; }
+  document.getElementById('student-form').style.display = 'none';
+  document.getElementById('success-screen').style.display = 'block';
+  let count = 5;
+  const cd = document.getElementById('countdown');
+  const timer = setInterval(() => { cd.textContent = --count; if (count <= 0) { clearInterval(timer); location.reload(); } }, 1000);
+}
+
+async function loadTeacherReport() {
+  const grade = document.getElementById('t-grade').value.trim();
+  const cls = document.getElementById('t-class').value.trim();
+  const date = document.getElementById('t-date').value;
+  const { data } = await supabase.from('exit_tickets').select('*').eq('grade', grade).eq('class_section', cls).eq('lesson_date', date);
+  if (!data?.length) { document.getElementById('report-area').innerHTML = '<p style="text-align:center;color:#888;padding:20px">لا توجد بيانات لهذا الفلتر</p>'; return; }
+  const total = data.length;
+  const good = data.filter(r => r.understanding === 'good').length;
+  const partial = data.filter(r => r.understanding === 'partial').length;
+  const poor = data.filter(r => r.understanding === 'poor').length;
+  const happy = data.filter(r => r.feeling === 'happy').length;
+  const neutral = data.filter(r => r.feeling === 'neutral').length;
+  const confused = data.filter(r => r.feeling === 'confused').length;
+  document.getElementById('t-total').textContent = total;
+  document.getElementById('t-good').textContent = Math.round(good/total*100) + '%';
+  document.getElementById('t-poor').textContent = Math.round(poor/total*100) + '%';
+  const responses = data.filter(r => r.want_more).map(r => `<div class="response-item">💬 ${r.want_more} <span style="color:#888;font-size:11px">${r.student_name?'— '+r.student_name:''}</span></div>`).join('');
+  document.getElementById('report-area').innerHTML = `
+    <div class="progress-bar"><div class="progress-good" style="width:${good/total*100}%;display:inline-block;float:right"></div></div>
+    <div style="display:flex;gap:16px;font-size:12px;margin-bottom:14px">
+      <span>😊 فهموا جيداً: ${good}</span><span>😐 قليلاً: ${partial}</span><span>😕 لم يفهموا: ${poor}</span>
+    </div>
+    <div style="margin-bottom:8px;font-weight:700;color:var(--navy)">مشاعر الطلاب:</div>
+    <div style="display:flex;gap:16px;font-size:13px;margin-bottom:16px">
+      <span>😊 ${happy}</span><span>😐 ${neutral}</span><span>😕 ${confused}</span>
+    </div>
+    ${responses ? `<div style="font-weight:700;color:var(--navy);margin-bottom:8px">يريدون معرفة أكثر عن:</div>${responses}` : ''}`;
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  if (isTeacher) {
+    document.getElementById('student-form').style.display = 'none';
+    document.getElementById('teacher-form').style.display = 'block';
+  }
+  document.getElementById('et-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('t-date').value = new Date().toISOString().split('T')[0];
+});
+</script>
+
+<div class="header">
+  <h1>🎫 بطاقة الخروج الرقمية</h1>
+  <p>أداة تقييم فوري بعد كل حصة</p>
+</div>
+
+<div class="container">
+  <!-- Student Form -->
+  <div id="student-form">
+    <div class="card">
+      <div class="section-label">📋 بيانات الحصة</div>
+      <div class="filter-row triple">
+        <div><label style="font-size:12px;color:#666;display:block;margin-bottom:4px">الصف</label><input class="form-control" id="et-grade" placeholder="مثال: 5"></div>
+        <div><label style="font-size:12px;color:#666;display:block;margin-bottom:4px">الشعبة</label><input class="form-control" id="et-class" placeholder="أ"></div>
+        <div><label style="font-size:12px;color:#666;display:block;margin-bottom:4px">المادة</label><input class="form-control" id="et-subject" placeholder="الرياضيات"></div>
+      </div>
+      <div class="filter-row">
+        <div><label style="font-size:12px;color:#666;display:block;margin-bottom:4px">التاريخ</label><input type="date" class="form-control" id="et-date"></div>
+        <div><label style="font-size:12px;color:#666;display:block;margin-bottom:4px">اسمك (اختياري)</label><input class="form-control" id="et-student" placeholder="اسمك"></div>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="question-text">1️⃣ ماذا تعلمت اليوم؟</div>
+      <div class="choices">
+        <button class="choice-btn u-btn" onclick="selectUnderstanding('good', this)">✅ تعلمت جيداً</button>
+        <button class="choice-btn u-btn" onclick="selectUnderstanding('partial', this)">🔶 تعلمت قليلاً</button>
+        <button class="choice-btn u-btn" onclick="selectUnderstanding('poor', this)">❓ لم أفهم</button>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="question-text">2️⃣ كيف شعرت خلال الحصة؟</div>
+      <div class="emoji-row">
+        <button class="emoji-btn f-btn" onclick="selectFeeling('happy', this)" title="سعيد">😊</button>
+        <button class="emoji-btn f-btn" onclick="selectFeeling('neutral', this)" title="محايد">😐</button>
+        <button class="emoji-btn f-btn" onclick="selectFeeling('confused', this)" title="مرتبك">😕</button>
+      </div>
+    </div>
+
+    <div class="question-card">
+      <div class="question-text">3️⃣ ما الذي أريد معرفة أكثر عنه؟ <span style="font-size:12px;font-weight:400;color:#888">(اختياري)</span></div>
+      <textarea class="form-control" id="et-want" rows="3" placeholder="اكتب ما تريد معرفته..."></textarea>
+    </div>
+
+    <button class="btn-submit" onclick="submitTicket()">✅ إرسال البطاقة</button>
+  </div>
+
+  <!-- Success -->
+  <div id="success-screen" class="card success-screen">
+    <div class="success-icon">🎉</div>
+    <h2 style="color:var(--navy)">تم الإرسال بنجاح!</h2>
+    <p style="color:#888;margin-top:8px">شكراً لمشاركتك</p>
+    <p style="margin-top:20px;color:#666">سيتم تحديث الصفحة بعد <span id="countdown" style="font-weight:800;color:var(--navy)">5</span> ثوانٍ</p>
+  </div>
+
+  <!-- Teacher Mode -->
+  <div id="teacher-form" style="display:none">
+    <div class="card">
+      <div class="section-label">👩‍🏫 وضع المعلمة — تقارير الحصة</div>
+      <div class="filter-row triple">
+        <div><label style="font-size:12px;color:#666;display:block;margin-bottom:4px">الصف</label><input class="form-control" id="t-grade" placeholder="5"></div>
+        <div><label style="font-size:12px;color:#666;display:block;margin-bottom:4px">الشعبة</label><input class="form-control" id="t-class" placeholder="أ"></div>
+        <div><label style="font-size:12px;color:#666;display:block;margin-bottom:4px">التاريخ</label><input type="date" class="form-control" id="t-date"></div>
+      </div>
+      <button class="btn-refresh" onclick="loadTeacherReport()">🔄 عرض التقرير</button>
+    </div>
+    <div class="card">
+      <div class="stat-grid">
+        <div class="stat-box"><div class="stat-val" id="t-total">0</div><div class="stat-lbl">إجمالي الردود</div></div>
+        <div class="stat-box"><div class="stat-val" id="t-good">—</div><div class="stat-lbl">فهموا جيداً</div></div>
+        <div class="stat-box"><div class="stat-val" id="t-poor">—</div><div class="stat-lbl">لم يفهموا</div></div>
+      </div>
+      <div id="report-area"><p style="text-align:center;color:#888">حدد الفلتر واضغط عرض التقرير</p></div>
+    </div>
+    <div style="text-align:center;margin-top:12px">
+      <a href="?mode=student" style="color:var(--navy);font-size:13px">← الانتقال لوضع الطالب</a>
+    </div>
+  </div>
+</div>
+
+<div style="position:fixed;bottom:12px;left:12px;background:rgba(26,37,80,0.9);color:#c9a84c;padding:6px 12px;border-radius:20px;font-size:11px;font-family:'Tajawal',sans-serif;z-index:9999;border:1px solid #c9a84c;">🛡️ 1614-2026</div>
+<footer style="text-align:center;padding:20px;color:#888;font-size:12px;font-family:'Tajawal',sans-serif;">© 2026 · منيرة علي محمد المري</footer>
+</body>
+</html>

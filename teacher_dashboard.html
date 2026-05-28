@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>داشبورد المعلمة</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--navy:#1a2550;--gold:#c9a84c;--light-gold:#f0e6c8;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Tajawal',sans-serif;direction:rtl;background:#f5f7fa;}
+.header{background:linear-gradient(135deg,var(--navy),#2d3e7a);color:white;padding:18px 28px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.header h1{font-size:1.4rem;font-weight:800;}
+.header-right{margin-right:auto;display:flex;align-items:center;gap:12px;}
+.avatar{width:44px;height:44px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-size:1.3rem;}
+.teacher-name{font-size:14px;font-weight:700;}
+.teacher-sub{font-size:11px;opacity:.7;}
+.logout-btn{background:transparent;border:1px solid rgba(255,255,255,.4);color:white;padding:7px 14px;border-radius:8px;cursor:pointer;font-family:'Tajawal',sans-serif;font-size:12px;}
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#f0e6c8,#f5f7fa);}
+.login-card{background:white;border-radius:20px;box-shadow:0 10px 40px rgba(26,37,80,.15);padding:40px;width:100%;max-width:380px;text-align:center;}
+.login-card h2{color:var(--navy);font-size:1.5rem;font-weight:800;margin:12px 0 4px;}
+.form-group{margin-bottom:14px;text-align:right;}
+.form-label{font-size:13px;font-weight:600;color:#555;margin-bottom:5px;display:block;}
+.form-control{width:100%;padding:11px 14px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:'Tajawal',sans-serif;font-size:14px;outline:none;}
+.form-control:focus{border-color:var(--gold);}
+.btn-login{width:100%;padding:13px;background:var(--navy);color:white;border:none;border-radius:10px;font-family:'Tajawal',sans-serif;font-size:15px;font-weight:700;cursor:pointer;}
+.main-content{display:none;padding:24px;}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px;}
+.kpi-card{background:white;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.07);padding:20px;border-top:4px solid var(--gold);}
+.kpi-value{font-size:2rem;font-weight:800;color:var(--navy);}
+.kpi-label{font-size:12px;color:#888;margin-top:4px;}
+.vark-badge{display:inline-flex;align-items:center;gap:6px;background:var(--navy);color:white;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700;}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;}
+@media(max-width:700px){.two-col{grid-template-columns:1fr;}}
+.card{background:white;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.07);padding:20px;}
+.card-title{font-size:1rem;font-weight:700;color:var(--navy);margin-bottom:14px;border-bottom:2px solid var(--light-gold);padding-bottom:8px;}
+.schedule-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f1f5f9;}
+.schedule-row:last-child{border-bottom:none;}
+.period-badge{background:var(--light-gold);color:var(--navy);padding:4px 10px;border-radius:8px;font-size:12px;font-weight:700;min-width:50px;text-align:center;}
+.ticket-item{background:#f8fafc;border-radius:8px;padding:10px 14px;margin-bottom:8px;}
+.ticket-meta{font-size:11px;color:#888;}
+.quick-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px;}
+.quick-link{background:white;border-radius:10px;padding:16px;text-align:center;text-decoration:none;color:var(--navy);font-weight:700;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.06);transition:all .2s;border:2px solid transparent;}
+.quick-link:hover{border-color:var(--gold);transform:translateY(-2px);}
+.vark-prompt{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:center;justify-content:center;}
+.vark-modal{background:white;border-radius:16px;padding:32px;text-align:center;max-width:400px;width:90%;}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+.badge-green{background:#10b981;color:white;}
+.badge-orange{background:#f59e0b;color:white;}
+</style>
+</head>
+<body>
+<script>
+const SUPABASE_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYzNzM5NjMsImV4cCI6MjA2MTk0OTk2M30.BMBGMwMNFvhFoLKBYqaVZ5F8BzJDHfFmCVmBmSHJZLw';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let currentUser = null;
+
+const SCHEDULE = {
+  0:[],1:[{p:'الأولى',c:'5/أ',s:'رياضيات'},{p:'الثانية',c:'5/ب',s:'رياضيات'},{p:'الثالثة',c:'6/أ',s:'رياضيات'},{p:'الرابعة',c:'فراغ',s:'—'},{p:'الخامسة',c:'5/ج',s:'رياضيات'}],
+  2:[{p:'الأولى',c:'6/ب',s:'رياضيات'},{p:'الثانية',c:'5/أ',s:'رياضيات'},{p:'الثالثة',c:'فراغ',s:'—'},{p:'الرابعة',c:'5/ب',s:'رياضيات'},{p:'الخامسة',c:'6/أ',s:'رياضيات'}],
+  3:[{p:'الأولى',c:'5/ج',s:'رياضيات'},{p:'الثانية',c:'فراغ',s:'—'},{p:'الثالثة',c:'6/ب',s:'رياضيات'},{p:'الرابعة',c:'5/أ',s:'رياضيات'},{p:'الخامسة',c:'5/ب',s:'رياضيات'}],
+  4:[{p:'الأولى',c:'6/أ',s:'رياضيات'},{p:'الثانية',c:'5/ج',s:'رياضيات'},{p:'الثالثة',c:'5/أ',s:'رياضيات'},{p:'الرابعة',c:'6/ب',s:'رياضيات'},{p:'الخامسة',c:'فراغ',s:'—'}],
+  5:[{p:'الأولى',c:'5/ب',s:'رياضيات'},{p:'الثانية',c:'6/أ',s:'رياضيات'},{p:'الثالثة',c:'5/ج',s:'رياضيات'},{p:'الرابعة',c:'فراغ',s:'—'},{p:'الخامسة',c:'فراغ',s:'—'}],
+  6:[]
+};
+const DAY_NAMES = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+
+async function doLogin() {
+  const username = document.getElementById('l-user').value.trim();
+  const password = document.getElementById('l-pass').value.trim();
+  if (!username || !password) return alert('يرجى إدخال البيانات');
+  // Simple auth from staff_vark_results or any existing user record
+  const { data } = await supabase.from('staff_vark_results').select('*').eq('staff_id', username).maybeSingle();
+  // For demo: any username with password "1234" works
+  if (password !== '1234' && password !== username) { alert('كلمة المرور غير صحيحة\n(تلميح: استخدم 1234)'); return; }
+  currentUser = { username, vark: data };
+  sessionStorage.setItem('aljood_session_role', 'teacher');
+  sessionStorage.setItem('aljood_session_user', username);
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('main-content').style.display = 'block';
+  renderDashboard(data);
+}
+
+async function renderDashboard(varkData) {
+  document.getElementById('t-username').textContent = currentUser.username;
+  document.getElementById('t-role').textContent = 'معلمة';
+  // VARK
+  if (!varkData) {
+    document.getElementById('vark-prompt').style.display = 'flex';
+  } else {
+    document.getElementById('vark-val').textContent = varkData.dominant_style || '—';
+  }
+  // Students KPI
+  const { count } = await supabase.from('special_ed_students').select('*',{count:'exact',head:true}).eq('teacher_name', currentUser.username);
+  document.getElementById('kpi-students').textContent = count || 0;
+  // Attendance this week
+  const today = new Date();
+  const weekStart = new Date(today); weekStart.setDate(today.getDate() - today.getDay());
+  const { data: attData } = await supabase.from('special_ed_attendance').select('*').gte('date', weekStart.toISOString().split('T')[0]);
+  const att = attData || [];
+  const attPct = att.length ? Math.round(att.filter(a=>a.status==='present').length/att.length*100) : 0;
+  document.getElementById('kpi-att').textContent = attPct + '%';
+  // Exit tickets this month
+  const firstMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+  const { count: etCount } = await supabase.from('exit_tickets').select('*',{count:'exact',head:true}).gte('lesson_date', firstMonth);
+  document.getElementById('kpi-et').textContent = etCount || 0;
+  // Schedule
+  renderSchedule();
+  // Recent Exit Tickets
+  loadRecentTickets();
+}
+
+function renderSchedule() {
+  const dow = new Date().getDay();
+  const schedule = SCHEDULE[dow] || [];
+  document.getElementById('today-day').textContent = DAY_NAMES[dow];
+  if (!schedule.length) { document.getElementById('schedule-list').innerHTML = '<p style="color:#888;text-align:center;padding:20px">لا توجد حصص اليوم</p>'; return; }
+  document.getElementById('schedule-list').innerHTML = schedule.map(s => `
+    <div class="schedule-row">
+      <div class="period-badge">${s.p}</div>
+      <div style="flex:1"><div style="font-weight:600">${s.c}</div><div style="font-size:12px;color:#888">${s.s}</div></div>
+      ${s.c!=='فراغ'?`<a href="exit_ticket.html?mode=teacher&class=${encodeURIComponent(s.c)}" style="color:var(--gold);font-size:12px;text-decoration:none">🎫 بطاقة خروج</a>`:''}
+    </div>`).join('');
+}
+
+async function loadRecentTickets() {
+  const { data } = await supabase.from('exit_tickets').select('*').order('created_at',{ascending:false}).limit(10);
+  const el = document.getElementById('tickets-list');
+  if (!data?.length) { el.innerHTML = '<p style="color:#888;text-align:center">لا توجد بيانات</p>'; return; }
+  el.innerHTML = data.map(t => `
+    <div class="ticket-item">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:600">${t.grade}/${t.class_section} · ${t.subject}</span>
+        <span class="badge ${t.understanding==='good'?'badge-green':'badge-orange'}">${t.understanding==='good'?'فهم جيد':t.understanding==='partial'?'فهم جزئي':'لم يفهم'}</span>
+      </div>
+      <div class="ticket-meta">${t.lesson_date} · ${t.feeling==='happy'?'😊':t.feeling==='neutral'?'😐':'😕'}</div>
+    </div>`).join('');
+}
+
+function logout() {
+  sessionStorage.removeItem('aljood_session_role');
+  sessionStorage.removeItem('aljood_session_user');
+  document.getElementById('main-content').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const role = sessionStorage.getItem('aljood_session_role');
+  const user = sessionStorage.getItem('aljood_session_user');
+  if (role === 'teacher' && user) {
+    currentUser = { username: user };
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('main-content').style.display = 'block';
+    renderDashboard(null);
+  }
+});
+</script>
+
+<!-- Login -->
+<div id="login-screen" class="login-screen">
+  <div class="login-card">
+    <div style="font-size:3rem">👩‍🏫</div>
+    <h2>داشبورد المعلمة</h2>
+    <p style="color:#888;font-size:13px;margin-bottom:20px">بوابة المعلمات — مدرسة الجود</p>
+    <div class="form-group"><label class="form-label">اسم المستخدم</label><input class="form-control" id="l-user" placeholder="أدخل اسم المستخدم" type="text"></div>
+    <div class="form-group"><label class="form-label">كلمة المرور</label><input class="form-control" id="l-pass" placeholder="كلمة المرور" type="password"></div>
+    <button class="btn-login" onclick="doLogin()">دخول 🔐</button>
+  </div>
+</div>
+
+<!-- Main -->
+<div id="main-content" style="display:none">
+  <div class="header">
+    <div class="avatar">👩</div>
+    <div>
+      <div class="teacher-name" id="t-username">—</div>
+      <div class="teacher-sub" id="t-role">معلمة</div>
+    </div>
+    <div class="header-right">
+      <div class="vark-badge">🧠 <span id="vark-val">—</span></div>
+      <button class="logout-btn" onclick="logout()">خروج</button>
+    </div>
+  </div>
+
+  <div style="padding:24px">
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-value" id="kpi-students">—</div><div class="kpi-label">عدد طلابي في التربية الخاصة</div></div>
+      <div class="kpi-card"><div class="kpi-value" id="kpi-att">—</div><div class="kpi-label">نسبة حضور الأسبوع</div></div>
+      <div class="kpi-card"><div class="kpi-value" id="kpi-et">—</div><div class="kpi-label">Exit Tickets هذا الشهر</div></div>
+      <div class="kpi-card" style="border-top-color:var(--navy)">
+        <div class="kpi-value" style="font-size:1.3rem">🧠 <span id="vark-display">—</span></div>
+        <div class="kpi-label">نمط التعلم VARK</div>
+      </div>
+    </div>
+
+    <div class="quick-links">
+      <a class="quick-link" href="surveys.html">📋 منشئ الاستبيانات</a>
+      <a class="quick-link" href="class_display.html">🖥️ عرض الصف</a>
+      <a class="quick-link" href="teacher_hub.html">🏫 مركز المعلمة</a>
+      <a class="quick-link" href="exit_ticket.html?mode=teacher">🎫 بطاقة الخروج</a>
+      <a class="quick-link" href="special_ed_dashboard.html">🎓 التربية الخاصة</a>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">📅 جدول الحصص — <span id="today-day"></span></div>
+        <div id="schedule-list"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🎫 آخر بطاقات الخروج</div>
+        <div id="tickets-list"><p style="color:#888;text-align:center">جاري التحميل...</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- VARK Reminder -->
+<div id="vark-prompt" class="vark-prompt" style="display:none">
+  <div class="vark-modal">
+    <div style="font-size:3rem">🧠</div>
+    <h3 style="color:var(--navy);margin:12px 0 8px">لم تكملي استبيان VARK بعد!</h3>
+    <p style="color:#666;font-size:14px;margin-bottom:20px">أكملي استبيان نمط التعلم لتحسين تجربتك التعليمية</p>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button onclick="window.location.href='vark_survey.html'" style="padding:12px 24px;background:var(--navy);color:white;border:none;border-radius:8px;font-family:'Tajawal',sans-serif;font-weight:700;cursor:pointer">إكمال الاستبيان</button>
+      <button onclick="document.getElementById('vark-prompt').style.display='none'" style="padding:12px 24px;background:#f1f5f9;border:none;border-radius:8px;font-family:'Tajawal',sans-serif;cursor:pointer">لاحقاً</button>
+    </div>
+  </div>
+</div>
+
+<div style="position:fixed;bottom:12px;left:12px;background:rgba(26,37,80,0.9);color:#c9a84c;padding:6px 12px;border-radius:20px;font-size:11px;font-family:'Tajawal',sans-serif;z-index:9999;border:1px solid #c9a84c;">🛡️ 1614-2026</div>
+<footer style="text-align:center;padding:20px;color:#888;font-size:12px;font-family:'Tajawal',sans-serif;">© 2026 · منيرة علي محمد المري</footer>
+</body>
+</html>

@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ملف الطالب الذكي</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root { --navy:#1a2550; --gold:#c9a84c; --light-gold:#f0e6c8; --white:#ffffff; }
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Tajawal',sans-serif;direction:rtl;background:#f5f7fa;color:#333;}
+.header{background:linear-gradient(135deg,var(--navy),#2d3e7a);color:white;padding:20px 30px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.header h1{font-size:1.6rem;font-weight:800;}
+.badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;}
+.badge-blue{background:#3b82f6;color:white;}
+.badge-green{background:#10b981;color:white;}
+.badge-orange{background:#f59e0b;color:white;}
+.badge-gold{background:var(--gold);color:white;}
+.header-actions{margin-right:auto;display:flex;gap:10px;flex-wrap:wrap;}
+.btn{border:none;border-radius:8px;padding:10px 18px;cursor:pointer;font-family:'Tajawal',sans-serif;font-size:14px;font-weight:600;transition:all .2s;}
+.btn-primary{background:var(--navy);color:white;}
+.btn-gold{background:var(--gold);color:white;}
+.btn-outline{background:transparent;border:2px solid white;color:white;}
+.btn:hover{opacity:.85;transform:translateY(-1px);}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;padding:24px 30px;}
+.kpi-card{background:white;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,0.08);padding:20px;text-align:center;border-top:4px solid var(--gold);}
+.kpi-value{font-size:2rem;font-weight:800;color:var(--navy);}
+.kpi-label{font-size:13px;color:#666;margin-top:4px;}
+.tabs-container{padding:0 30px;}
+.tabs{display:flex;gap:4px;background:white;border-radius:12px 12px 0 0;overflow-x:auto;border-bottom:2px solid #e5e7eb;}
+.tab-btn{padding:14px 20px;border:none;background:transparent;font-family:'Tajawal',sans-serif;font-size:14px;cursor:pointer;white-space:nowrap;color:#666;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s;}
+.tab-btn.active{color:var(--navy);border-bottom-color:var(--gold);font-weight:700;}
+.tab-content{display:none;background:white;border-radius:0 0 12px 12px;padding:24px;box-shadow:0 4px 12px rgba(0,0,0,0.06);}
+.tab-content.active{display:block;}
+.section-title{font-size:1.1rem;font-weight:700;color:var(--navy);margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--light-gold);}
+.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;}
+.info-item{background:#f8fafc;border-radius:8px;padding:12px 16px;}
+.info-label{font-size:11px;color:#888;margin-bottom:4px;}
+.info-value{font-size:15px;font-weight:600;color:var(--navy);}
+.goal-item{background:#f8fafc;border-radius:10px;padding:16px;margin-bottom:12px;border-right:4px solid var(--gold);}
+.goal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+.goal-text{font-size:14px;color:#333;font-weight:500;}
+.progress-bar{height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--gold),#e8b84b);border-radius:4px;transition:width .6s ease;}
+.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:12px;}
+.cal-header{text-align:center;font-size:11px;font-weight:700;color:#666;padding:4px;}
+.cal-day{aspect-ratio:1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;}
+.cal-present{background:#d1fae5;color:#065f46;}
+.cal-absent{background:#fee2e2;color:#991b1b;}
+.cal-late{background:#fef3c7;color:#92400e;}
+.cal-empty{background:transparent;color:#ccc;}
+.note-item{background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:10px;border-right:4px solid #3b82f6;}
+.note-type{font-size:11px;color:#3b82f6;font-weight:700;margin-bottom:4px;}
+.note-text{font-size:14px;color:#333;}
+.note-meta{font-size:11px;color:#888;margin-top:6px;}
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:100;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:white;border-radius:16px;padding:28px;width:90%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,0.2);}
+.modal h3{color:var(--navy);font-size:1.2rem;margin-bottom:16px;}
+.form-group{margin-bottom:14px;}
+.form-label{font-size:13px;font-weight:600;color:#555;margin-bottom:6px;display:block;}
+.form-control{width:100%;padding:10px 14px;border:1.5px solid #e5e7eb;border-radius:8px;font-family:'Tajawal',sans-serif;font-size:14px;outline:none;transition:border-color .2s;}
+.form-control:focus{border-color:var(--gold);}
+.report-item{background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+.report-icon{font-size:2rem;}
+.loading{text-align:center;padding:40px;color:#888;font-size:1.1rem;}
+@media print{.header-actions,.tabs,.modal-overlay,div[style*="position:fixed"]{display:none!important;}.tab-content{display:block!important;}}
+</style>
+</head>
+<body>
+<script>
+const SUPABASE_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYzNzM5NjMsImV4cCI6MjA2MTk0OTk2M30.BMBGMwMNFvhFoLKBYqaVZ5F8BzJDHfFmCVmBmSHJZLw';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const params = new URLSearchParams(location.search);
+const studentId = params.get('id');
+let studentData = null;
+
+async function init() {
+  if (!studentId) { document.body.innerHTML = '<div style="text-align:center;padding:80px;font-family:Tajawal,sans-serif"><h2>يرجى تحديد معرف الطالب في الرابط</h2><p>مثال: ?id=1001</p></div>'; return; }
+  await loadStudent();
+}
+
+async function loadStudent() {
+  const { data, error } = await supabase.from('special_ed_students').select('*').eq('student_id', studentId).single();
+  if (error || !data) { document.body.innerHTML = '<div style="text-align:center;padding:80px;font-family:Tajawal,sans-serif"><h2>لم يتم العثور على الطالب</h2></div>'; return; }
+  studentData = data;
+  renderPage(data);
+  loadKPIs();
+}
+
+function planBadge(p) {
+  const map = { 'IEP':'badge-blue', 'IPP':'badge-green', 'BIP':'badge-orange' };
+  return `<span class="badge ${map[p]||'badge-gold'}">${p||'—'}</span>`;
+}
+
+function renderPage(s) {
+  document.getElementById('header-name').textContent = s.name_ar || 'الطالب';
+  document.getElementById('header-info').innerHTML = `الصف: ${s.grade||'—'} | الشعبة: ${s.class_section||'—'} | ${planBadge(s.plan_type)}`;
+  const infoGrid = document.getElementById('basic-info');
+  const fields = [
+    ['معرف الطالب', s.student_id], ['الاسم الكامل', s.name_ar], ['الجنس', s.gender],
+    ['الصف', s.grade], ['الشعبة', s.class_section], ['نوع الإعاقة', s.disability_type],
+    ['نوع الدمج', s.inclusion_type], ['المعلمة', s.teacher_name], ['نوع الخطة', s.plan_type],
+    ['الحالة', s.is_active ? 'نشط' : 'غير نشط']
+  ];
+  infoGrid.innerHTML = fields.map(([l,v]) => `<div class="info-item"><div class="info-label">${l}</div><div class="info-value">${v||'—'}</div></div>`).join('');
+  loadGoals();
+  loadAttendance();
+  loadNotes();
+  loadReports();
+}
+
+async function loadKPIs() {
+  const now = new Date();
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  const lastDay = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().split('T')[0];
+  const [attRes, goalsRes, notesRes] = await Promise.all([
+    supabase.from('special_ed_attendance').select('*').eq('student_id', studentId).gte('date', firstDay).lte('date', lastDay),
+    supabase.from('special_ed_iep_goals').select('*').eq('student_id', studentId),
+    supabase.from('special_ed_notes').select('*').eq('student_id', studentId).order('date', {ascending:false}).limit(1)
+  ]);
+  const att = attRes.data || [];
+  const present = att.filter(a => a.status === 'present').length;
+  const attPct = att.length ? Math.round(present/att.length*100) : 0;
+  document.getElementById('kpi-att').textContent = att.length ? attPct + '%' : '—';
+  const goals = goalsRes.data || [];
+  document.getElementById('kpi-goals').textContent = goals.length;
+  const achieved = goals.filter(g => g.progress_pct >= 80).length;
+  document.getElementById('kpi-achieved').textContent = goals.length ? Math.round(achieved/goals.length*100) + '%' : '—';
+  const lastNote = notesRes.data && notesRes.data[0];
+  document.getElementById('kpi-note').textContent = lastNote ? lastNote.date : '—';
+}
+
+async function loadGoals() {
+  const { data } = await supabase.from('special_ed_iep_goals').select('*').eq('student_id', studentId);
+  const container = document.getElementById('goals-list');
+  if (!data || !data.length) { container.innerHTML = '<p style="color:#888;text-align:center">لا توجد أهداف مسجلة</p>'; return; }
+  container.innerHTML = data.map(g => `
+    <div class="goal-item">
+      <div class="goal-header">
+        <span class="badge badge-blue">${g.subject_area||'عام'}</span>
+        <span class="badge badge-green">${g.progress_pct||0}%</span>
+      </div>
+      <div class="goal-text">${g.goal_text}</div>
+      <div class="progress-bar" style="margin-top:8px"><div class="progress-fill" style="width:${g.progress_pct||0}%"></div></div>
+      <div style="font-size:11px;color:#888;margin-top:6px">الفصل: ${g.term||'—'} | الحالة: ${g.status||'—'}</div>
+    </div>`).join('');
+}
+
+async function loadAttendance() {
+  const now = new Date();
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  const lastDay = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().split('T')[0];
+  const { data } = await supabase.from('special_ed_attendance').select('*').eq('student_id', studentId).gte('date', firstDay).lte('date', lastDay);
+  const attMap = {};
+  (data||[]).forEach(a => { attMap[a.date] = a.status; });
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+  const firstDow = new Date(now.getFullYear(), now.getMonth(), 1).getDay();
+  const days = ['أح','إث','ث','أر','خ','ج','س'];
+  let html = days.map(d => `<div class="cal-header">${d}</div>`).join('');
+  for (let i = 0; i < firstDow; i++) html += '<div class="cal-day cal-empty"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const st = attMap[dateStr];
+    const cls = st === 'present' ? 'cal-present' : st === 'absent' ? 'cal-absent' : st === 'late' ? 'cal-late' : 'cal-empty';
+    html += `<div class="cal-day ${cls}" title="${st||''}">${d}</div>`;
+  }
+  document.getElementById('attendance-calendar').innerHTML = html;
+  const total = data?.length || 0;
+  const present = (data||[]).filter(a => a.status==='present').length;
+  document.getElementById('att-summary').textContent = `الحضور: ${present}/${total} يوم (${total?Math.round(present/total*100):0}%)`;
+}
+
+async function loadNotes() {
+  const { data } = await supabase.from('special_ed_notes').select('*').eq('student_id', studentId).order('date', {ascending:false});
+  const container = document.getElementById('notes-list');
+  if (!data || !data.length) { container.innerHTML = '<p style="color:#888;text-align:center">لا توجد ملاحظات</p>'; return; }
+  container.innerHTML = data.map(n => `
+    <div class="note-item">
+      <div class="note-type">${n.note_type||'ملاحظة'} ${n.is_shared?'🔗':''}</div>
+      <div class="note-text">${n.content}</div>
+      <div class="note-meta">بقلم: ${n.noted_by||'—'} | ${n.date||'—'}</div>
+    </div>`).join('');
+}
+
+async function loadReports() {
+  const { data } = await supabase.from('special_ed_reports').select('*').eq('student_id', studentId).order('period_start', {ascending:false});
+  const container = document.getElementById('reports-list');
+  if (!data || !data.length) { container.innerHTML = '<p style="color:#888;text-align:center">لا توجد تقارير</p>'; return; }
+  container.innerHTML = data.map(r => `
+    <div class="report-item">
+      <div class="report-icon">📄</div>
+      <div>
+        <div style="font-weight:700">${r.report_type||'تقرير'}</div>
+        <div style="font-size:12px;color:#666">${r.period_start||''} – ${r.period_end||''}</div>
+        <div style="font-size:12px;color:#333;margin-top:4px">${r.summary||''}</div>
+      </div>
+      <span class="badge badge-green" style="margin-right:auto">${r.status||'—'}</span>
+    </div>`).join('');
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-'+name));
+}
+
+async function saveGoal() {
+  const text = document.getElementById('new-goal-text').value.trim();
+  const subject = document.getElementById('new-goal-subject').value.trim();
+  const term = document.getElementById('new-goal-term').value;
+  if (!text) return alert('يرجى كتابة نص الهدف');
+  const { error } = await supabase.from('special_ed_iep_goals').insert({ student_id: studentId, goal_text: text, subject_area: subject, term, progress_pct: 0, status: 'active' });
+  if (error) { alert('خطأ: ' + error.message); return; }
+  document.getElementById('goal-modal').classList.remove('open');
+  loadGoals();
+}
+
+async function saveNote() {
+  const content = document.getElementById('new-note-text').value.trim();
+  const note_type = document.getElementById('new-note-type').value;
+  const is_shared = document.getElementById('new-note-shared').checked;
+  if (!content) return alert('يرجى كتابة نص الملاحظة');
+  const noted_by = sessionStorage.getItem('aljood_session_user') || 'معلمة';
+  const { error } = await supabase.from('special_ed_notes').insert({ student_id: studentId, content, note_type, is_shared, noted_by, date: new Date().toISOString().split('T')[0] });
+  if (error) { alert('خطأ: ' + error.message); return; }
+  document.getElementById('note-modal').classList.remove('open');
+  loadNotes();
+}
+
+async function saveAttendance() {
+  const date = document.getElementById('new-att-date').value;
+  const status = document.getElementById('new-att-status').value;
+  const period = document.getElementById('new-att-period').value;
+  if (!date) return alert('يرجى تحديد التاريخ');
+  const { error } = await supabase.from('special_ed_attendance').insert({ student_id: studentId, date, status, period, noted_by: sessionStorage.getItem('aljood_session_user')||'معلمة' });
+  if (error) { alert('خطأ: ' + error.message); return; }
+  document.getElementById('att-modal').classList.remove('open');
+  loadAttendance();
+}
+
+init();
+</script>
+
+<div class="header">
+  <div>
+    <div style="font-size:13px;opacity:.7;margin-bottom:4px">ملف الطالب الذكي</div>
+    <h1 id="header-name">جاري التحميل...</h1>
+    <div id="header-info" style="margin-top:6px;font-size:14px;opacity:.9"></div>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-outline" onclick="window.print()">🖨️ طباعة الملف</button>
+    <button class="btn btn-gold" onclick="history.back()">⬅️ العودة للداشبورد</button>
+  </div>
+</div>
+
+<div class="kpi-grid">
+  <div class="kpi-card"><div class="kpi-value" id="kpi-att">—</div><div class="kpi-label">نسبة الحضور (الشهر الحالي)</div></div>
+  <div class="kpi-card"><div class="kpi-value" id="kpi-goals">—</div><div class="kpi-label">عدد أهداف IEP</div></div>
+  <div class="kpi-card"><div class="kpi-value" id="kpi-achieved">—</div><div class="kpi-label">نسبة تحقق الأهداف</div></div>
+  <div class="kpi-card"><div class="kpi-value" id="kpi-note" style="font-size:1.1rem">—</div><div class="kpi-label">آخر ملاحظة</div></div>
+</div>
+
+<div class="tabs-container">
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="basic" onclick="switchTab('basic')">📋 البيانات الأساسية</button>
+    <button class="tab-btn" data-tab="goals" onclick="switchTab('goals')">🎯 أهداف IEP</button>
+    <button class="tab-btn" data-tab="attendance" onclick="switchTab('attendance')">📅 الحضور</button>
+    <button class="tab-btn" data-tab="notes" onclick="switchTab('notes')">📝 الملاحظات</button>
+    <button class="tab-btn" data-tab="reports" onclick="switchTab('reports')">📊 التقارير</button>
+  </div>
+
+  <div id="tab-basic" class="tab-content active">
+    <div class="section-title">البيانات الأساسية للطالب</div>
+    <div class="info-grid" id="basic-info"><div class="loading">جاري التحميل...</div></div>
+  </div>
+
+  <div id="tab-goals" class="tab-content">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="section-title" style="margin:0">أهداف IEP</div>
+      <button class="btn btn-gold" onclick="document.getElementById('goal-modal').classList.add('open')">+ إضافة هدف</button>
+    </div>
+    <div id="goals-list"><div class="loading">جاري التحميل...</div></div>
+  </div>
+
+  <div id="tab-attendance" class="tab-content">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="section-title" style="margin:0">سجل الحضور الشهري</div>
+      <button class="btn btn-gold" onclick="document.getElementById('att-modal').classList.add('open')">+ إضافة سجل</button>
+    </div>
+    <div id="att-summary" style="font-size:14px;font-weight:600;color:var(--navy);margin-bottom:12px"></div>
+    <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+      <span style="display:flex;align-items:center;gap:6px;font-size:12px"><span style="width:16px;height:16px;background:#d1fae5;border-radius:4px;display:inline-block"></span>حاضر</span>
+      <span style="display:flex;align-items:center;gap:6px;font-size:12px"><span style="width:16px;height:16px;background:#fee2e2;border-radius:4px;display:inline-block"></span>غائب</span>
+      <span style="display:flex;align-items:center;gap:6px;font-size:12px"><span style="width:16px;height:16px;background:#fef3c7;border-radius:4px;display:inline-block"></span>متأخر</span>
+    </div>
+    <div class="calendar-grid" id="attendance-calendar"></div>
+  </div>
+
+  <div id="tab-notes" class="tab-content">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="section-title" style="margin:0">الملاحظات اليومية</div>
+      <button class="btn btn-gold" onclick="document.getElementById('note-modal').classList.add('open')">+ إضافة ملاحظة</button>
+    </div>
+    <div id="notes-list"><div class="loading">جاري التحميل...</div></div>
+  </div>
+
+  <div id="tab-reports" class="tab-content">
+    <div class="section-title">التقارير</div>
+    <div id="reports-list"><div class="loading">جاري التحميل...</div></div>
+  </div>
+</div>
+
+<!-- Goal Modal -->
+<div class="modal-overlay" id="goal-modal">
+  <div class="modal">
+    <h3>إضافة هدف IEP جديد</h3>
+    <div class="form-group"><label class="form-label">نص الهدف *</label><textarea class="form-control" id="new-goal-text" rows="3" placeholder="اكتب نص الهدف..."></textarea></div>
+    <div class="form-group"><label class="form-label">المجال</label><input class="form-control" id="new-goal-subject" placeholder="مثال: القراءة، الرياضيات"></div>
+    <div class="form-group"><label class="form-label">الفصل</label><select class="form-control" id="new-goal-term"><option>الأول</option><option>الثاني</option><option>الثالث</option></select></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-primary" onclick="saveGoal()">حفظ</button>
+      <button class="btn" style="background:#f1f5f9" onclick="document.getElementById('goal-modal').classList.remove('open')">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- Note Modal -->
+<div class="modal-overlay" id="note-modal">
+  <div class="modal">
+    <h3>إضافة ملاحظة جديدة</h3>
+    <div class="form-group"><label class="form-label">نوع الملاحظة</label><select class="form-control" id="new-note-type"><option value="academic">أكاديمية</option><option value="behavioral">سلوكية</option><option value="social">اجتماعية</option><option value="parent_comm">تواصل ولي أمر</option></select></div>
+    <div class="form-group"><label class="form-label">نص الملاحظة *</label><textarea class="form-control" id="new-note-text" rows="4" placeholder="اكتب الملاحظة..."></textarea></div>
+    <div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="new-note-shared"> مشاركة مع ولي الأمر</label></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-primary" onclick="saveNote()">حفظ</button>
+      <button class="btn" style="background:#f1f5f9" onclick="document.getElementById('note-modal').classList.remove('open')">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- Attendance Modal -->
+<div class="modal-overlay" id="att-modal">
+  <div class="modal">
+    <h3>إضافة سجل حضور</h3>
+    <div class="form-group"><label class="form-label">التاريخ *</label><input type="date" class="form-control" id="new-att-date" value=""></div>
+    <div class="form-group"><label class="form-label">الحالة</label><select class="form-control" id="new-att-status"><option value="present">حاضر</option><option value="absent">غائب</option><option value="late">متأخر</option></select></div>
+    <div class="form-group"><label class="form-label">الحصة</label><input class="form-control" id="new-att-period" placeholder="مثال: الأولى، الثانية"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-primary" onclick="saveAttendance()">حفظ</button>
+      <button class="btn" style="background:#f1f5f9" onclick="document.getElementById('att-modal').classList.remove('open')">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<div style="position:fixed;bottom:12px;left:12px;background:rgba(26,37,80,0.9);color:#c9a84c;padding:6px 12px;border-radius:20px;font-size:11px;font-family:'Tajawal',sans-serif;z-index:9999;border:1px solid #c9a84c;">🛡️ 1614-2026</div>
+<footer style="text-align:center;padding:20px;color:#888;font-size:12px;font-family:'Tajawal',sans-serif;">© 2026 · منيرة علي محمد المري</footer>
+</body>
+</html>
