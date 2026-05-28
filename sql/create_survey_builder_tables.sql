@@ -12,13 +12,13 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- =====================================================
 CREATE TABLE IF NOT EXISTS surveys (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  school_id     UUID REFERENCES schools(id) ON DELETE SET NULL,
+  school_id     TEXT DEFAULT 'aljood',
   title         TEXT NOT NULL,
   description   TEXT,
   target_roles  TEXT[] DEFAULT '{}',
   status        TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','active','closed')),
   allow_anon    BOOLEAN DEFAULT FALSE,
-  created_by    UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_by    TEXT,
   academic_year TEXT DEFAULT '2025-2026',
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
@@ -47,10 +47,10 @@ CREATE INDEX IF NOT EXISTS idx_survey_questions_order ON survey_questions(survey
 CREATE TABLE IF NOT EXISTS survey_responses (
   id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   survey_id        UUID NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
-  school_id        UUID REFERENCES schools(id) ON DELETE SET NULL,
+  school_id        TEXT DEFAULT 'aljood',
   respondent_name  TEXT,
   respondent_role  TEXT,
-  respondent_id    UUID REFERENCES users(id) ON DELETE SET NULL,
+  respondent_id    TEXT,
   submitted_at     TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -72,45 +72,44 @@ CREATE INDEX IF NOT EXISTS idx_survey_answers_response_id ON survey_answers(resp
 CREATE INDEX IF NOT EXISTS idx_survey_answers_question_id ON survey_answers(question_id);
 
 -- =====================================================
--- RLS Policies
+-- RLS
 -- =====================================================
 ALTER TABLE surveys ENABLE ROW LEVEL SECURITY;
 ALTER TABLE survey_questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE survey_responses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE survey_answers ENABLE ROW LEVEL SECURITY;
 
--- Allow anon to read active surveys
+DROP POLICY IF EXISTS "Public read active surveys" ON surveys;
 CREATE POLICY "Public read active surveys" ON surveys
   FOR SELECT USING (status = 'active');
 
--- Allow anon to read questions for active surveys
-CREATE POLICY "Public read survey questions" ON survey_questions
-  FOR SELECT USING (
-    EXISTS (SELECT 1 FROM surveys WHERE surveys.id = survey_id AND surveys.status = 'active')
-  );
-
--- Allow anon to insert responses
-CREATE POLICY "Anyone can submit response" ON survey_responses
-  FOR INSERT WITH CHECK (true);
-
--- Allow anon to read their own responses (by survey)
-CREATE POLICY "Read survey responses" ON survey_responses
-  FOR SELECT USING (true);
-
--- Allow anon to insert answers
-CREATE POLICY "Anyone can submit answers" ON survey_answers
-  FOR INSERT WITH CHECK (true);
-
--- Allow anon to read answers
-CREATE POLICY "Read survey answers" ON survey_answers
-  FOR SELECT USING (true);
-
--- Allow authenticated users to manage surveys
+DROP POLICY IF EXISTS "Admins manage surveys" ON surveys;
 CREATE POLICY "Admins manage surveys" ON surveys
   FOR ALL USING (true);
 
+DROP POLICY IF EXISTS "Public read survey questions" ON survey_questions;
+CREATE POLICY "Public read survey questions" ON survey_questions
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Admins manage questions" ON survey_questions;
 CREATE POLICY "Admins manage questions" ON survey_questions
   FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Anyone can submit response" ON survey_responses;
+CREATE POLICY "Anyone can submit response" ON survey_responses
+  FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Read survey responses" ON survey_responses;
+CREATE POLICY "Read survey responses" ON survey_responses
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Anyone can submit answers" ON survey_answers;
+CREATE POLICY "Anyone can submit answers" ON survey_answers
+  FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Read survey answers" ON survey_answers;
+CREATE POLICY "Read survey answers" ON survey_answers
+  FOR SELECT USING (true);
 
 -- =====================================================
 -- End of file
