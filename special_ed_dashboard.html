@@ -494,6 +494,28 @@ tr:hover td { background: var(--bg); }
   #cases-list { grid-template-columns: 1fr; }
   .stats-grid { grid-template-columns: 1fr 1fr; }
 }
+
+.btn-moe-report {
+  background: linear-gradient(135deg, #b8860b, #daa520);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: 'Tajawal', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(184,134,11,0.3);
+  transition: all 0.3s;
+}
+.btn-moe-report:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(184,134,11,0.5); }
+@media print {
+  #moeReportModal { display: block !important; position: static !important; background: white !important; }
+  .btn-moe-report, nav, header, .sidebar { display: none !important; }
+}
 </style>
 </head>
 <body>
@@ -615,6 +637,7 @@ tr:hover td { background: var(--bg); }
           <button class="btn btn-gold" onclick="openQuickSession()">📝 تسجيل جلسة</button>
           <button class="btn btn-outline" onclick="openCreateIEP()">📄 خطة IEP</button>
           <button class="btn btn-outline" onclick="openQuickReport()">📊 تقرير سريع</button>
+          <button onclick="openMoeReport()" class="btn btn-moe-report" title="تقرير وزارة التربية">📋 تقرير MOE</button>
         </div>
 
         <div class="home-grid">
@@ -3090,6 +3113,257 @@ if (lastSection && state.teacher) showSection(lastSection);
 
 <!-- 🛡️ شارة الملكية الفكرية -->
 <div id="ip-badge" style="position:fixed;bottom:12px;left:12px;z-index:9999;background:linear-gradient(135deg,#1a2e4a,#2a4a7a);color:#d4a843;font-size:10px;font-family:'Tajawal',sans-serif;padding:5px 10px;border-radius:20px;border:1px solid #d4a843;opacity:0.75;cursor:default;user-select:none;box-shadow:0 2px 8px rgba(0,0,0,0.3);transition:opacity 0.2s;" title="محمية بموجب شهادة حق المؤلف رقم 1614-2026 — منيرة علي محمد المري" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.75'">🛡️ 1614-2026</div>
+
+
+<!-- MOE Report Modal -->
+<div id="moeReportModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:9999; overflow-y:auto; direction:rtl;">
+  <div style="max-width:900px; margin:20px auto; background:white; border-radius:12px; overflow:hidden;">
+    <!-- Header Controls -->
+    <div style="background:linear-gradient(135deg,#1a2a4a,#2d4a7a); padding:16px 24px; display:flex; justify-content:space-between; align-items:center;">
+      <h2 style="color:#daa520; margin:0; font-family:'Tajawal',sans-serif;">📋 تقرير وزارة التربية والتعليم</h2>
+      <div style="display:flex;gap:10px;">
+        <button onclick="printMoeReport()" style="background:#daa520;color:#1a2a4a;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-family:'Tajawal',sans-serif;font-weight:700;">🖨️ طباعة</button>
+        <button onclick="closeMoeReport()" style="background:#e53e3e;color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-family:'Tajawal',sans-serif;">✕ إغلاق</button>
+      </div>
+    </div>
+    <!-- Report Content -->
+    <div id="moeReportContent" style="padding:32px; font-family:'Tajawal',sans-serif; direction:rtl;">
+      <div style="text-align:center; color:#666;">جاري تحميل البيانات...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============= MOE REPORT =============
+async function openMoeReport() {
+  document.getElementById('moeReportModal').style.display = 'block';
+  document.getElementById('moeReportContent').innerHTML = '<div style="text-align:center;padding:40px;color:#666;font-family:Tajawal,sans-serif;">⏳ جاري تحميل البيانات...</div>';
+  
+  try {
+    const { data: students, error } = await supabase
+      .from('special_ed_students')
+      .select('*')
+      .order('name_ar');
+    
+    if (error) throw error;
+    
+    const { data: iepGoals } = await supabase
+      .from('special_ed_iep_goals')
+      .select('student_id, status');
+    
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const { data: attendance } = await supabase
+      .from('special_ed_attendance')
+      .select('student_id, status')
+      .gte('date', thirtyDaysAgo.toISOString().split('T')[0]);
+    
+    generateMoeReportHTML(students || [], iepGoals || [], attendance || []);
+  } catch(err) {
+    document.getElementById('moeReportContent').innerHTML = 
+      `<div style="text-align:center;color:red;padding:40px;">❌ خطأ في تحميل البيانات: ${err.message}</div>`;
+  }
+}
+
+function kpiCard(icon, label, value, color) {
+  return `<div style="background:white; border:2px solid ${color}; border-radius:10px; padding:16px; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div style="font-size:28px; margin-bottom:4px;">${icon}</div>
+    <div style="font-size:26px; font-weight:900; color:${color};">${value}</div>
+    <div style="font-size:12px; color:#666; margin-top:4px;">${label}</div>
+  </div>`;
+}
+
+function generateMoeReportHTML(students, iepGoals, attendance) {
+  const today = new Date().toLocaleDateString('ar-AE', {year:'numeric',month:'long',day:'numeric'});
+  const totalStudents = students.length;
+  
+  const disabilityStats = {};
+  students.forEach(s => {
+    const type = s.disability_type || 'غير محدد';
+    disabilityStats[type] = (disabilityStats[type] || 0) + 1;
+  });
+  
+  const inclusionStats = {};
+  students.forEach(s => {
+    const type = s.inclusion_type || 'غير محدد';
+    inclusionStats[type] = (inclusionStats[type] || 0) + 1;
+  });
+  
+  const gradeStats = {};
+  students.forEach(s => {
+    const grade = s.grade || 'غير محدد';
+    gradeStats[grade] = (gradeStats[grade] || 0) + 1;
+  });
+  
+  const iepByStudent = {};
+  iepGoals.forEach(g => {
+    if (!iepByStudent[g.student_id]) iepByStudent[g.student_id] = {total:0, achieved:0};
+    iepByStudent[g.student_id].total++;
+    if (g.status === 'achieved') iepByStudent[g.student_id].achieved++;
+  });
+  const studentsWithIEP = Object.keys(iepByStudent).length;
+  const totalGoals = iepGoals.length;
+  const achievedGoals = iepGoals.filter(g => g.status === 'achieved').length;
+  const iepRate = totalGoals > 0 ? Math.round((achievedGoals/totalGoals)*100) : 0;
+  
+  const attByStudent = {};
+  attendance.forEach(a => {
+    if (!attByStudent[a.student_id]) attByStudent[a.student_id] = {total:0, present:0};
+    attByStudent[a.student_id].total++;
+    if (a.status === 'present') attByStudent[a.student_id].present++;
+  });
+  const attRates = Object.values(attByStudent).map(a => a.total > 0 ? (a.present/a.total)*100 : 0);
+  const avgAtt = attRates.length > 0 ? Math.round(attRates.reduce((a,b)=>a+b,0)/attRates.length) : 0;
+
+  const html = `
+    <div id="printableReport" style="direction:rtl; font-family:'Tajawal',sans-serif;">
+      <div style="text-align:center; border-bottom:3px solid #1a2a4a; padding-bottom:20px; margin-bottom:24px;">
+        <div style="font-size:13px; color:#666; margin-bottom:4px;">دولة الإمارات العربية المتحدة</div>
+        <div style="font-size:13px; color:#666; margin-bottom:4px;">إمارة أبوظبي | مدينة العين</div>
+        <div style="font-size:15px; font-weight:700; color:#1a2a4a; margin-bottom:4px;">روضة ومدرسة الجود</div>
+        <h1 style="color:#1a2a4a; font-size:22px; margin:12px 0 4px;">تقرير أصحاب الهمم</h1>
+        <div style="color:#b8860b; font-size:14px;">العام الدراسي 2025-2026</div>
+        <div style="color:#666; font-size:13px; margin-top:6px;">تاريخ التقرير: ${today}</div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:28px;">
+        ${kpiCard('👤', 'إجمالي الطلاب', totalStudents, '#1a2a4a')}
+        ${kpiCard('📋', 'لديهم خطة IEP', studentsWithIEP, '#2d6a4f')}
+        ${kpiCard('✅', 'نسبة تحقق الأهداف', iepRate + '%', '#b8860b')}
+        ${kpiCard('📅', 'معدل الحضور (30 يوم)', avgAtt + '%', '#6b21a8')}
+      </div>
+
+      <h3 style="color:#1a2a4a; border-right:4px solid #daa520; padding-right:10px; margin-bottom:12px;">توزيع الطلاب حسب نوع الإعاقة</h3>
+      <table style="width:100%; border-collapse:collapse; margin-bottom:24px; font-size:14px;">
+        <thead>
+          <tr style="background:#1a2a4a; color:white;">
+            <th style="padding:10px 14px; text-align:right;">نوع الإعاقة</th>
+            <th style="padding:10px 14px; text-align:center;">عدد الطلاب</th>
+            <th style="padding:10px 14px; text-align:center;">النسبة</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Object.entries(disabilityStats).sort((a,b)=>b[1]-a[1]).map(([type,count],i) => 
+            `<tr style="background:${i%2===0?'#f8f9fa':'white'}">
+              <td style="padding:9px 14px;">${type}</td>
+              <td style="padding:9px 14px; text-align:center; font-weight:700;">${count}</td>
+              <td style="padding:9px 14px; text-align:center;">${totalStudents>0?Math.round((count/totalStudents)*100):0}%</td>
+            </tr>`
+          ).join('')}
+        </tbody>
+      </table>
+
+      <h3 style="color:#1a2a4a; border-right:4px solid #daa520; padding-right:10px; margin-bottom:12px;">توزيع حسب نوع الدمج</h3>
+      <table style="width:100%; border-collapse:collapse; margin-bottom:24px; font-size:14px;">
+        <thead>
+          <tr style="background:#1a2a4a; color:white;">
+            <th style="padding:10px 14px; text-align:right;">نوع الدمج</th>
+            <th style="padding:10px 14px; text-align:center;">عدد الطلاب</th>
+            <th style="padding:10px 14px; text-align:center;">النسبة</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Object.entries(inclusionStats).sort((a,b)=>b[1]-a[1]).map(([type,count],i) => 
+            `<tr style="background:${i%2===0?'#f8f9fa':'white'}">
+              <td style="padding:9px 14px;">${type}</td>
+              <td style="padding:9px 14px; text-align:center; font-weight:700;">${count}</td>
+              <td style="padding:9px 14px; text-align:center;">${totalStudents>0?Math.round((count/totalStudents)*100):0}%</td>
+            </tr>`
+          ).join('')}
+        </tbody>
+      </table>
+
+      <h3 style="color:#1a2a4a; border-right:4px solid #daa520; padding-right:10px; margin-bottom:12px;">التوزيع حسب الصف الدراسي</h3>
+      <table style="width:100%; border-collapse:collapse; margin-bottom:24px; font-size:14px;">
+        <thead>
+          <tr style="background:#1a2a4a; color:white;">
+            <th style="padding:10px 14px; text-align:right;">الصف</th>
+            <th style="padding:10px 14px; text-align:center;">عدد الطلاب</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Object.entries(gradeStats).sort().map(([grade,count],i) => 
+            `<tr style="background:${i%2===0?'#f8f9fa':'white'}">
+              <td style="padding:9px 14px;">${grade}</td>
+              <td style="padding:9px 14px; text-align:center; font-weight:700;">${count}</td>
+            </tr>`
+          ).join('')}
+        </tbody>
+      </table>
+
+      <h3 style="color:#1a2a4a; border-right:4px solid #daa520; padding-right:10px; margin-bottom:12px;">قائمة الطلاب الكاملة</h3>
+      <table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:24px;">
+        <thead>
+          <tr style="background:#1a2a4a; color:white;">
+            <th style="padding:8px 10px; text-align:center;">#</th>
+            <th style="padding:8px 10px; text-align:right;">اسم الطالب</th>
+            <th style="padding:8px 10px; text-align:center;">الصف</th>
+            <th style="padding:8px 10px; text-align:right;">نوع الإعاقة</th>
+            <th style="padding:8px 10px; text-align:right;">نوع الدمج</th>
+            <th style="padding:8px 10px; text-align:right;">المعلمة المسؤولة</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${students.map((s,i) => 
+            `<tr style="background:${i%2===0?'#f8f9fa':'white'}">
+              <td style="padding:7px 10px; text-align:center; color:#666;">${i+1}</td>
+              <td style="padding:7px 10px; font-weight:600;">${s.name_ar || '—'}</td>
+              <td style="padding:7px 10px; text-align:center;">${s.grade || '—'}</td>
+              <td style="padding:7px 10px;">${s.disability_type || '—'}</td>
+              <td style="padding:7px 10px;">${s.inclusion_type || '—'}</td>
+              <td style="padding:7px 10px;">${s.teacher_name || '—'}</td>
+            </tr>`
+          ).join('')}
+          ${students.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:#666;">لا توجد بيانات محملة بعد</td></tr>' : ''}
+        </tbody>
+      </table>
+
+      <div style="border-top:2px solid #1a2a4a; padding-top:16px; margin-top:24px; display:flex; justify-content:space-between; align-items:center; color:#666; font-size:12px;">
+        <div>🛡️ رقم شهادة حق المؤلف: 1614-2026</div>
+        <div>روضة ومدرسة الجود — نظام إدارة أصحاب الهمم</div>
+        <div>صفحة 1</div>
+      </div>
+    </div>
+  `;
+  
+  document.getElementById('moeReportContent').innerHTML = html;
+  
+  // Save report record silently
+  supabase.from('special_ed_reports').insert({
+    report_type: 'moe',
+    generated_at: new Date().toISOString(),
+    school_id: 'aljood'
+  }).then(() => {}).catch(() => {});
+}
+
+function closeMoeReport() {
+  document.getElementById('moeReportModal').style.display = 'none';
+}
+
+function printMoeReport() {
+  const content = document.getElementById('printableReport').innerHTML;
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html dir="rtl"><head>
+    <meta charset="UTF-8">
+    <title>تقرير وزارة التربية — أصحاب الهمم</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+      * { box-sizing: border-box; }
+      body { font-family: 'Tajawal', sans-serif; direction: rtl; margin: 20px; color: #333; }
+      @media print {
+        body { margin: 0; }
+        button { display: none !important; }
+        @page { margin: 15mm; }
+      }
+      table { page-break-inside: auto; }
+      tr { page-break-inside: avoid; }
+    </style>
+  </head><body>${content}</body></html>`);
+  win.document.close();
+  setTimeout(() => win.print(), 800);
+}
+// ============= END MOE REPORT =============
+</script>
 
 </body>
 </html>
