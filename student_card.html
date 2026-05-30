@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>بطاقة الطالب الرقمية</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--navy:#1a2550;--gold:#c9a84c;--light-gold:#f0e6c8;--white:#fff;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Tajawal',sans-serif;direction:rtl;background:#f0f4f8;min-height:100vh;}
+
+/* Header */
+.header{background:linear-gradient(135deg,var(--navy),#2d3e7a);color:white;padding:16px 24px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.header-logo{width:44px;height:44px;background:var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.4rem;}
+.header h1{font-size:1.3rem;font-weight:800;}
+.header p{font-size:12px;opacity:.7;margin-top:2px;}
+.header-actions{margin-right:auto;display:flex;gap:10px;flex-wrap:wrap;}
+.btn{padding:8px 18px;border-radius:8px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:.2s;}
+.btn-gold{background:var(--gold);color:white;}
+.btn-outline{background:transparent;color:white;border:1.5px solid rgba(255,255,255,.4);}
+.btn:hover{opacity:.85;}
+
+/* Controls */
+.controls{background:white;padding:16px 24px;border-bottom:1px solid #e5e7eb;display:flex;gap:12px;flex-wrap:wrap;align-items:center;}
+.search-box{flex:1;min-width:200px;position:relative;}
+.search-box input{width:100%;padding:10px 16px 10px 40px;border:1.5px solid #e5e7eb;border-radius:10px;font-family:'Tajawal',sans-serif;font-size:14px;outline:none;transition:.2s;}
+.search-box input:focus{border-color:var(--navy);}
+.search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#999;font-size:16px;}
+select{padding:10px 14px;border:1.5px solid #e5e7eb;border-radius:10px;font-family:'Tajawal',sans-serif;font-size:13px;outline:none;background:white;color:#333;}
+select:focus{border-color:var(--navy);}
+
+/* Grid */
+.container{max-width:1400px;margin:0 auto;padding:24px;}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;}
+
+/* Card */
+.card{background:white;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.07);transition:.25s;cursor:pointer;}
+.card:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.12);}
+.card-header{background:linear-gradient(135deg,var(--navy),#2d3e7a);padding:20px;display:flex;align-items:center;gap:14px;position:relative;}
+.card-header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:20px;background:white;border-radius:50% 50% 0 0;}
+.avatar{width:64px;height:64px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:700;color:white;border:3px solid rgba(255,255,255,.3);flex-shrink:0;}
+.card-info{color:white;flex:1;}
+.card-name{font-size:1rem;font-weight:700;line-height:1.3;}
+.card-id{font-size:11px;opacity:.7;margin-top:2px;}
+.card-body{padding:16px 16px 12px;}
+.badge-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+.badge{display:inline-block;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;}
+.badge-navy{background:#e8ecf8;color:var(--navy);}
+.badge-gold{background:#fef3cd;color:#856d0e;}
+.badge-green{background:#dcfce7;color:#166534;}
+.badge-blue{background:#dbeafe;color:#1e40af;}
+.badge-red{background:#fee2e2;color:#991b1b;}
+.badge-purple{background:#ede9fe;color:#5b21b6;}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f3f4f6;font-size:13px;}
+.info-row:last-child{border:none;}
+.info-label{color:#888;font-weight:500;}
+.info-value{color:#333;font-weight:600;text-align:left;}
+.card-footer{background:#f9fafb;padding:10px 16px;display:flex;gap:8px;justify-content:flex-end;}
+.btn-sm{padding:6px 14px;font-size:12px;border-radius:7px;font-family:'Tajawal',sans-serif;font-weight:600;cursor:pointer;border:none;transition:.2s;}
+.btn-sm-navy{background:var(--navy);color:white;}
+.btn-sm-gold{background:var(--gold);color:white;}
+.btn-sm:hover{opacity:.85;}
+
+/* Print zone */
+@media print{
+  .header,.controls,.no-print{display:none!important;}
+  .card{break-inside:avoid;box-shadow:none;border:1px solid #ddd;}
+}
+
+/* Modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:white;border-radius:20px;width:90%;max-width:480px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.modal-header{background:linear-gradient(135deg,var(--navy),#2d3e7a);padding:20px 24px;display:flex;align-items:center;gap:14px;}
+.modal-avatar{width:72px;height:72px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;color:white;border:3px solid rgba(255,255,255,.3);}
+.modal-title{color:white;}
+.modal-title h2{font-size:1.2rem;font-weight:800;}
+.modal-title p{font-size:12px;opacity:.7;margin-top:2px;}
+.modal-body{padding:20px 24px;}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;}
+.detail-item{background:#f8fafc;border-radius:10px;padding:12px;}
+.detail-item label{font-size:11px;color:#888;font-weight:600;display:block;margin-bottom:4px;}
+.detail-item span{font-size:14px;color:#333;font-weight:700;}
+.modal-footer{background:#f9fafb;padding:14px 24px;display:flex;gap:10px;justify-content:flex-end;}
+
+/* ID Card Print */
+.id-card{width:320px;background:linear-gradient(160deg,var(--navy) 0%,#2d3e7a 50%,var(--navy) 100%);border-radius:16px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.2);margin:0 auto;}
+.id-card-top{background:var(--gold);padding:10px 16px;display:flex;align-items:center;gap:10px;}
+.id-card-top .logo{font-size:1.4rem;}
+.id-card-top h3{color:var(--navy);font-size:13px;font-weight:800;}
+.id-card-top p{color:var(--navy);font-size:10px;opacity:.8;}
+.id-card-body{padding:20px 16px;display:flex;gap:14px;align-items:center;}
+.id-card-photo{width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:2.2rem;font-weight:700;color:white;border:3px solid var(--gold);flex-shrink:0;}
+.id-card-details{color:white;flex:1;}
+.id-card-details h2{font-size:1rem;font-weight:800;margin-bottom:6px;line-height:1.3;}
+.id-card-detail-row{display:flex;align-items:center;gap:6px;font-size:11px;opacity:.85;margin-bottom:3px;}
+.id-card-footer{background:rgba(0,0,0,.2);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;}
+.id-card-footer span{color:rgba(255,255,255,.7);font-size:11px;}
+.id-card-footer .year-badge{background:var(--gold);color:var(--navy);padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700;}
+
+/* States */
+.loading{text-align:center;padding:60px;color:#888;font-size:1rem;}
+.empty-state{text-align:center;padding:60px;color:#aaa;}
+.empty-state .icon{font-size:3rem;margin-bottom:12px;}
+.stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;}
+.stat-pill{background:white;border-radius:20px;padding:8px 16px;font-size:13px;font-weight:600;color:var(--navy);box-shadow:0 2px 8px rgba(0,0,0,.07);}
+.stat-pill span{color:var(--gold);}
+.ip-badge{position:fixed;bottom:14px;left:14px;background:rgba(26,37,80,.9);color:#c9a84c;font-size:11px;padding:5px 12px;border-radius:20px;font-family:'Tajawal',sans-serif;backdrop-filter:blur(6px);}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">🎓</div>
+  <div>
+    <h1>بطاقة الطالب الرقمية</h1>
+    <p>روضة ومدرسة الجود — أبوظبي | مدينة العين</p>
+  </div>
+  <div class="header-actions no-print">
+    <button class="btn btn-gold" onclick="printAll()">🖨️ طباعة الكل</button>
+    <button class="btn btn-outline" onclick="history.back()">← رجوع</button>
+  </div>
+</div>
+
+<div class="controls no-print">
+  <div class="search-box">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="ابحث باسم الطالب أو رقمه..." oninput="filterCards()">
+  </div>
+  <select id="gradeFilter" onchange="filterCards()">
+    <option value="">كل الصفوف</option>
+    <option>KG1</option><option>KG2</option>
+    <option>G1</option><option>G2</option><option>G3</option><option>G4</option>
+    <option>G5</option><option>G6</option><option>G7</option><option>G8</option><option>G9</option>
+  </select>
+  <select id="typeFilter" onchange="filterCards()">
+    <option value="">كل الطلاب</option>
+    <option value="special">أصحاب الهمم فقط</option>
+    <option value="regular">الطلاب العاديون</option>
+  </select>
+  <select id="genderFilter" onchange="filterCards()">
+    <option value="">الجنس</option>
+    <option value="ذكر">ذكور</option>
+    <option value="أنثى">إناث</option>
+  </select>
+</div>
+
+<div class="container">
+  <div class="stats" id="statsRow"></div>
+  <div class="grid" id="cardsGrid">
+    <div class="loading">⏳ جارٍ تحميل بيانات الطلاب...</div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" id="modalContent">
+    <div class="modal-header">
+      <div class="modal-avatar" id="modalAvatar">؟</div>
+      <div class="modal-title">
+        <h2 id="modalName">—</h2>
+        <p id="modalSub">—</p>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="detail-grid" id="modalDetails"></div>
+      <div id="modalIdCard"></div>
+    </div>
+    <div class="modal-footer no-print">
+      <button class="btn-sm btn-sm-navy" onclick="printCard()">🖨️ طباعة البطاقة</button>
+      <button class="btn-sm btn-sm-gold" onclick="closeModal()">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<div class="ip-badge">🛡️ 1614-2026 © منيرة علي محمد المري</div>
+
+<script>
+const SUPABASE_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let allStudents = [];
+let specialIds = new Set();
+
+const gradeOrder = ['KG1','KG2','G1','G2','G3','G4','G5','G6','G7','G8','G9'];
+const gradeColors = {
+  KG1:'#8b5cf6',KG2:'#7c3aed',G1:'#3b82f6',G2:'#0ea5e9',G3:'#10b981',
+  G4:'#f59e0b',G5:'#ef4444',G6:'#ec4899',G7:'#6366f1',G8:'#f97316',G9:'#14b8a6'
+};
+
+async function init() {
+  // Load special ed students
+  const { data: specData } = await supabase
+    .from('special_ed_students')
+    .select('student_id, name_ar, grade, class_section, disability_type, inclusion_type, support_level, is_active')
+    .eq('school_id','aljood').eq('is_active',true);
+  
+  if (specData) {
+    specData.forEach(s => specialIds.add(s.student_id));
+    // Map to unified format
+    const specialStudents = specData.map(s => ({
+      id: s.student_id,
+      name: s.name_ar,
+      grade: s.grade,
+      section: s.class_section,
+      gender: s.student_id?.startsWith('F') ? 'أنثى' : '—',
+      type: 'special',
+      disability: s.disability_type,
+      inclusion: s.inclusion_type,
+      support: s.support_level
+    }));
+    allStudents = [...specialStudents];
+  }
+
+  // Also try loading from students.json
+  try {
+    const res = await fetch('data/students.json');
+    if (res.ok) {
+      const jsonData = await res.json();
+      const regStudents = (jsonData.students || jsonData || []).map(s => ({
+        id: s.student_id || s.id,
+        name: s.name_ar || s.name,
+        grade: s.grade,
+        section: s.section || s.class_section,
+        gender: s.gender || '—',
+        type: specialIds.has(s.student_id || s.id) ? 'special' : 'regular',
+        disability: null, inclusion: null, support: null
+      }));
+      // Merge: add only non-special from JSON
+      const regOnly = regStudents.filter(s => !specialIds.has(s.id));
+      allStudents = [...allStudents, ...regOnly];
+    }
+  } catch(e) {}
+
+  // Sort by grade then name
+  allStudents.sort((a,b) => {
+    const gi = gradeOrder.indexOf(a.grade) - gradeOrder.indexOf(b.grade);
+    if (gi !== 0) return gi;
+    return (a.name||'').localeCompare(b.name||'', 'ar');
+  });
+
+  renderStats();
+  renderCards(allStudents);
+}
+
+function renderStats() {
+  const total = allStudents.length;
+  const special = allStudents.filter(s=>s.type==='special').length;
+  const grades = [...new Set(allStudents.map(s=>s.grade).filter(Boolean))];
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-pill">إجمالي: <span>${total}</span> طالب</div>
+    <div class="stat-pill">أصحاب الهمم: <span>${special}</span></div>
+    <div class="stat-pill">عدد الصفوف: <span>${grades.length}</span></div>
+  `;
+}
+
+function getAvatarLetter(name) {
+  if (!name) return '؟';
+  return name.trim()[0];
+}
+
+function renderCards(students) {
+  const grid = document.getElementById('cardsGrid');
+  if (!students.length) {
+    grid.innerHTML = `<div class="empty-state"><div class="icon">🔍</div><p>لا توجد نتائج مطابقة</p></div>`;
+    return;
+  }
+  grid.innerHTML = students.map(s => {
+    const color = gradeColors[s.grade] || '#64748b';
+    const isSpecial = s.type === 'special';
+    return `
+    <div class="card" onclick="openModal('${s.id}')">
+      <div class="card-header" style="background:linear-gradient(135deg,${color},${color}cc)">
+        <div class="avatar" style="background:rgba(255,255,255,.2)">${getAvatarLetter(s.name)}</div>
+        <div class="card-info">
+          <div class="card-name">${s.name || '—'}</div>
+          <div class="card-id">${s.id || '—'}</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="badge-row">
+          ${s.grade ? `<span class="badge badge-navy">الصف ${s.grade}</span>` : ''}
+          ${s.section ? `<span class="badge badge-gold">فصل ${s.section}</span>` : ''}
+          ${isSpecial ? `<span class="badge badge-green">🌟 أصحاب الهمم</span>` : ''}
+          ${s.gender !== '—' ? `<span class="badge badge-blue">${s.gender}</span>` : ''}
+        </div>
+        <div class="info-row">
+          <span class="info-label">رقم الطالب</span>
+          <span class="info-value">${s.id || '—'}</span>
+        </div>
+        ${isSpecial && s.disability ? `<div class="info-row"><span class="info-label">نوع الإعاقة</span><span class="info-value">${s.disability}</span></div>` : ''}
+        ${isSpecial && s.support ? `<div class="info-row"><span class="info-label">مستوى الدعم</span><span class="info-value">${s.support}</span></div>` : ''}
+      </div>
+      <div class="card-footer no-print">
+        <button class="btn-sm btn-sm-navy" onclick="event.stopPropagation();printSingle('${s.id}')">🖨️ طباعة</button>
+        <button class="btn-sm btn-sm-gold" onclick="event.stopPropagation();openModal('${s.id}')">عرض</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterCards() {
+  const search = document.getElementById('searchInput').value.toLowerCase().trim();
+  const grade = document.getElementById('gradeFilter').value;
+  const type = document.getElementById('typeFilter').value;
+  const gender = document.getElementById('genderFilter').value;
+  const filtered = allStudents.filter(s => {
+    const matchSearch = !search || (s.name||'').toLowerCase().includes(search) || (s.id||'').toLowerCase().includes(search);
+    const matchGrade = !grade || s.grade === grade;
+    const matchType = !type || s.type === type;
+    const matchGender = !gender || s.gender === gender;
+    return matchSearch && matchGrade && matchType && matchGender;
+  });
+  renderCards(filtered);
+}
+
+function openModal(studentId) {
+  const s = allStudents.find(x => x.id === studentId);
+  if (!s) return;
+  const color = gradeColors[s.grade] || '#64748b';
+  document.getElementById('modalAvatar').textContent = getAvatarLetter(s.name);
+  document.getElementById('modalAvatar').style.background = color;
+  document.getElementById('modalName').textContent = s.name || '—';
+  document.getElementById('modalSub').textContent = `${s.id || ''} • الصف ${s.grade || ''} ${s.section || ''}`;
+  document.getElementById('modalDetails').innerHTML = `
+    <div class="detail-item"><label>رقم الطالب</label><span>${s.id||'—'}</span></div>
+    <div class="detail-item"><label>الصف</label><span>${s.grade||'—'}</span></div>
+    <div class="detail-item"><label>الفصل</label><span>${s.section||'—'}</span></div>
+    <div class="detail-item"><label>الجنس</label><span>${s.gender||'—'}</span></div>
+    ${s.type==='special'?`
+    <div class="detail-item"><label>نوع الإعاقة</label><span>${s.disability||'—'}</span></div>
+    <div class="detail-item"><label>مستوى الدعم</label><span>${s.support||'—'}</span></div>
+    <div class="detail-item"><label>نوع الدمج</label><span>${s.inclusion||'—'}</span></div>
+    `:``}
+  `;
+  // ID Card preview
+  document.getElementById('modalIdCard').innerHTML = `
+    <div style="margin-top:16px">
+      <p style="font-size:12px;color:#888;margin-bottom:8px;font-weight:600;">معاينة البطاقة</p>
+      <div class="id-card">
+        <div class="id-card-top">
+          <div class="logo">🏫</div>
+          <div><h3>روضة ومدرسة الجود</h3><p>أبوظبي | مدينة العين</p></div>
+        </div>
+        <div class="id-card-body">
+          <div class="id-card-photo" style="background:${color}">${getAvatarLetter(s.name)}</div>
+          <div class="id-card-details">
+            <h2>${s.name||'—'}</h2>
+            <div class="id-card-detail-row">📚 الصف ${s.grade||'—'} — فصل ${s.section||'—'}</div>
+            <div class="id-card-detail-row">🆔 ${s.id||'—'}</div>
+            ${s.type==='special'?`<div class="id-card-detail-row">🌟 من أصحاب الهمم</div>`:''}
+          </div>
+        </div>
+        <div class="id-card-footer">
+          <span>العام الدراسي</span>
+          <span class="year-badge">2025–2026</span>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal(event) {
+  if (!event || event.target === document.getElementById('modalOverlay')) {
+    document.getElementById('modalOverlay').classList.remove('open');
+  }
+}
+
+function printCard() {
+  window.print();
+}
+
+function printSingle(id) {
+  openModal(id);
+  setTimeout(() => window.print(), 300);
+}
+
+function printAll() {
+  window.print();
+}
+
+init();
+</script>
+</body>
+</html>

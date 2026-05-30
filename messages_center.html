@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مركز الرسائل الداخلية</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--navy:#1a2550;--gold:#c9a84c;--light-gold:#f0e6c8;--white:#fff;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Tajawal',sans-serif;direction:rtl;background:#f0f4f8;min-height:100vh;display:flex;flex-direction:column;}
+
+/* Header */
+.header{background:linear-gradient(135deg,var(--navy),#2d3e7a);color:white;padding:14px 24px;display:flex;align-items:center;gap:14px;flex-shrink:0;}
+.header-logo{width:42px;height:42px;background:var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.3rem;}
+.header-title h1{font-size:1.2rem;font-weight:800;}
+.header-title p{font-size:12px;opacity:.7;margin-top:2px;}
+.header-actions{margin-right:auto;display:flex;gap:10px;align-items:center;}
+.btn{padding:8px 18px;border-radius:8px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:.2s;}
+.btn-gold{background:var(--gold);color:white;}
+.btn-outline{background:transparent;color:white;border:1.5px solid rgba(255,255,255,.4);}
+.btn:hover{opacity:.85;}
+.notif-badge{background:#ef4444;color:white;border-radius:50%;width:20px;height:20px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;margin-right:-6px;margin-top:-8px;vertical-align:top;}
+
+/* Layout */
+.layout{display:flex;flex:1;height:calc(100vh - 62px);overflow:hidden;}
+
+/* Sidebar */
+.sidebar{width:300px;background:white;border-left:1px solid #e5e7eb;display:flex;flex-direction:column;flex-shrink:0;}
+.sidebar-header{padding:16px;border-bottom:1px solid #f0f0f0;display:flex;gap:8px;}
+.sidebar-header input{flex:1;padding:9px 14px;border:1.5px solid #e5e7eb;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:13px;outline:none;}
+.sidebar-header input:focus{border-color:var(--navy);}
+.tabs{display:flex;border-bottom:2px solid #f0f0f0;}
+.tab{flex:1;padding:12px;font-size:13px;font-weight:600;cursor:pointer;text-align:center;color:#888;border-bottom:2px solid transparent;margin-bottom:-2px;transition:.2s;}
+.tab.active{color:var(--navy);border-color:var(--navy);}
+.conv-list{flex:1;overflow-y:auto;}
+.conv-item{padding:14px 16px;border-bottom:1px solid #f5f5f5;cursor:pointer;transition:.15s;display:flex;gap:12px;align-items:center;}
+.conv-item:hover{background:#f8fafc;}
+.conv-item.active{background:#e8ecf8;}
+.conv-item.unread .conv-name{font-weight:800;}
+.conv-item.unread::before{content:'';display:block;width:8px;height:8px;background:#3b82f6;border-radius:50%;flex-shrink:0;margin-top:4px;}
+.conv-avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:700;color:white;flex-shrink:0;}
+.conv-content{flex:1;min-width:0;}
+.conv-name{font-size:14px;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.conv-preview{font-size:12px;color:#999;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
+.conv-time{font-size:11px;color:#bbb;flex-shrink:0;margin-right:auto;}
+.new-btn{margin:14px;padding:11px;background:linear-gradient(135deg,var(--navy),#2d3e7a);color:white;border:none;border-radius:10px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;text-align:center;transition:.2s;}
+.new-btn:hover{opacity:.9;}
+
+/* Main Chat */
+.chat-area{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.chat-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;color:#bbb;}
+.chat-empty .icon{font-size:4rem;margin-bottom:16px;}
+.chat-empty p{font-size:14px;}
+.chat-header{background:white;padding:14px 20px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.chat-header-avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:white;font-weight:700;}
+.chat-header-info h3{font-size:1rem;font-weight:700;color:var(--navy);}
+.chat-header-info p{font-size:12px;color:#888;}
+.chat-header-actions{margin-right:auto;display:flex;gap:8px;}
+.btn-sm{padding:7px 14px;font-size:12px;border-radius:8px;font-family:'Tajawal',sans-serif;font-weight:600;cursor:pointer;border:none;transition:.2s;}
+.btn-sm-navy{background:var(--navy);color:white;}
+.btn-sm-red{background:#fee2e2;color:#dc2626;}
+.messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:12px;}
+.msg{max-width:70%;display:flex;gap:10px;align-items:flex-end;}
+.msg.mine{align-self:flex-end;flex-direction:row-reverse;}
+.msg.theirs{align-self:flex-start;}
+.msg-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.9rem;color:white;font-weight:700;flex-shrink:0;}
+.msg-bubble{background:white;border-radius:14px;padding:10px 14px;box-shadow:0 1px 4px rgba(0,0,0,.08);max-width:100%;}
+.msg.mine .msg-bubble{background:linear-gradient(135deg,var(--navy),#2d3e7a);color:white;}
+.msg-sender{font-size:11px;font-weight:700;margin-bottom:4px;color:var(--gold);}
+.msg.mine .msg-sender{display:none;}
+.msg-text{font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word;}
+.msg-time{font-size:11px;opacity:.6;margin-top:4px;text-align:left;}
+.msg.mine .msg-time{color:rgba(255,255,255,.6);}
+.msg-priority{display:inline-block;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;margin-bottom:4px;}
+.msg-priority.urgent{background:#fee2e2;color:#dc2626;}
+.msg-priority.normal{background:#dcfce7;color:#166534;}
+.typing-indicator{display:none;padding:8px 14px;color:#888;font-size:13px;font-style:italic;}
+
+/* Input */
+.chat-input{background:white;border-top:1px solid #e5e7eb;padding:14px 20px;flex-shrink:0;}
+.input-row{display:flex;gap:10px;align-items:flex-end;}
+.input-wrapper{flex:1;background:#f8fafc;border:1.5px solid #e5e7eb;border-radius:12px;padding:10px 14px;display:flex;flex-direction:column;gap:6px;transition:.2s;}
+.input-wrapper:focus-within{border-color:var(--navy);}
+.input-options{display:flex;gap:10px;align-items:center;}
+.priority-toggle{display:flex;gap:6px;}
+.priority-btn{padding:4px 10px;border-radius:12px;font-family:'Tajawal',sans-serif;font-size:11px;font-weight:700;cursor:pointer;border:none;transition:.2s;}
+.priority-btn.normal{background:#dcfce7;color:#166534;}
+.priority-btn.urgent{background:#fee2e2;color:#dc2626;}
+.priority-btn.selected{opacity:1;box-shadow:0 0 0 2px currentColor;}
+.priority-btn:not(.selected){opacity:.5;}
+.input-type-label{font-size:11px;color:#888;}
+select.mini{padding:4px 8px;border:1px solid #e5e7eb;border-radius:7px;font-family:'Tajawal',sans-serif;font-size:12px;outline:none;background:white;}
+textarea#msgInput{width:100%;border:none;background:transparent;font-family:'Tajawal',sans-serif;font-size:14px;resize:none;outline:none;max-height:120px;line-height:1.5;}
+.send-btn{width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,var(--navy),#2d3e7a);color:white;border:none;cursor:pointer;font-size:1.3rem;display:flex;align-items:center;justify-content:center;transition:.2s;flex-shrink:0;}
+.send-btn:hover{opacity:.85;}
+.send-btn:disabled{opacity:.4;cursor:default;}
+
+/* Modal - New Message */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:white;border-radius:16px;width:90%;max-width:500px;overflow:hidden;}
+.modal-head{background:linear-gradient(135deg,var(--navy),#2d3e7a);padding:18px 22px;color:white;}
+.modal-head h2{font-size:1.1rem;font-weight:800;}
+.modal-body{padding:20px 22px;display:flex;flex-direction:column;gap:14px;}
+.form-group label{display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;}
+.form-control{width:100%;padding:10px 14px;border:1.5px solid #e5e7eb;border-radius:9px;font-family:'Tajawal',sans-serif;font-size:14px;outline:none;}
+.form-control:focus{border-color:var(--navy);}
+.form-control textarea{resize:vertical;min-height:80px;}
+.modal-foot{background:#f9fafb;padding:14px 22px;display:flex;gap:10px;justify-content:flex-end;}
+
+/* Announcement Banner */
+.announcement-card{background:linear-gradient(135deg,#1a2550,#2d3e7a);color:white;border-radius:12px;padding:14px 18px;margin-bottom:12px;border-right:4px solid var(--gold);}
+.announcement-card.urgent{background:linear-gradient(135deg,#7f1d1d,#991b1b);border-color:#ef4444;}
+.announcement-card .ann-header{font-size:11px;opacity:.7;margin-bottom:6px;}
+.announcement-card .ann-text{font-size:14px;font-weight:600;line-height:1.5;}
+.announcement-card .ann-footer{font-size:11px;opacity:.6;margin-top:6px;}
+
+/* Status */
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-left:4px;}
+.status-dot.online{background:#22c55e;}
+.status-dot.offline{background:#d1d5db;}
+
+.ip-badge{position:fixed;bottom:14px;left:14px;background:rgba(26,37,80,.9);color:#c9a84c;font-size:11px;padding:5px 12px;border-radius:20px;font-family:'Tajawal',sans-serif;backdrop-filter:blur(6px);z-index:100;}
+
+/* Responsive */
+@media(max-width:640px){
+  .sidebar{width:100%;position:absolute;z-index:10;height:100%;transform:translateX(100%);transition:.3s;}
+  .sidebar.mobile-open{transform:none;}
+  .chat-area{width:100%;}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">💬</div>
+  <div class="header-title">
+    <h1>مركز الرسائل الداخلية</h1>
+    <p>روضة ومدرسة الجود</p>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-gold" onclick="openNewMsg()">✏️ رسالة جديدة</button>
+    <button class="btn btn-outline" onclick="history.back()">← رجوع</button>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <input type="text" placeholder="🔍 بحث في الرسائل..." id="searchMsg" oninput="filterConvs()">
+    </div>
+    <div class="tabs">
+      <div class="tab active" onclick="setTab('all',this)">الكل</div>
+      <div class="tab" onclick="setTab('unread',this)">غير مقروءة</div>
+      <div class="tab" onclick="setTab('urgent',this)">🔴 عاجلة</div>
+      <div class="tab" onclick="setTab('announce',this)">📢 إعلانات</div>
+    </div>
+    <div class="conv-list" id="convList">
+      <div style="padding:20px;text-align:center;color:#aaa;font-size:13px;">⏳ جارٍ التحميل...</div>
+    </div>
+    <button class="new-btn" onclick="openNewMsg()">✏️ إنشاء رسالة / إعلان جديد</button>
+  </div>
+
+  <!-- Chat Area -->
+  <div class="chat-area" id="chatArea">
+    <div class="chat-empty" id="chatEmpty">
+      <div class="icon">💬</div>
+      <p>اختر محادثة أو أنشئ رسالة جديدة</p>
+    </div>
+    <div id="chatView" style="display:none;flex-direction:column;height:100%;overflow:hidden;">
+      <div class="chat-header">
+        <div class="chat-header-avatar" id="chatAvatarEl">؟</div>
+        <div class="chat-header-info">
+          <h3 id="chatTitleEl">—</h3>
+          <p id="chatSubEl">—</p>
+        </div>
+        <div class="chat-header-actions">
+          <button class="btn-sm btn-sm-navy" onclick="markRead()">✓ تحديد كمقروء</button>
+        </div>
+      </div>
+      <div class="messages" id="messagesContainer"></div>
+      <div class="typing-indicator" id="typingEl">يكتب...</div>
+      <div class="chat-input">
+        <div class="input-options">
+          <span class="input-type-label">الأولوية:</span>
+          <div class="priority-toggle">
+            <button class="priority-btn normal selected" id="btnNormal" onclick="setPriority('normal')">عادية</button>
+            <button class="priority-btn urgent" id="btnUrgent" onclick="setPriority('urgent')">🔴 عاجلة</button>
+          </div>
+        </div>
+        <div class="input-row" style="margin-top:8px">
+          <div class="input-wrapper">
+            <textarea id="msgInput" rows="1" placeholder="اكتب رسالتك هنا..." onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          </div>
+          <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New Message Modal -->
+<div class="modal-overlay" id="newMsgModal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-head"><h2>✏️ إنشاء رسالة / إعلان جديد</h2></div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>نوع الرسالة</label>
+        <select class="form-control" id="msgType" onchange="toggleRecipient()">
+          <option value="direct">رسالة مباشرة</option>
+          <option value="announcement">إعلان للجميع</option>
+          <option value="group">رسالة للمجموعة</option>
+        </select>
+      </div>
+      <div class="form-group" id="recipientGroup">
+        <label>المستقبل</label>
+        <select class="form-control" id="recipientSelect">
+          <option value="all">الجميع</option>
+          <option value="admin">الإدارة</option>
+          <option value="teachers">المعلمات</option>
+          <option value="special_ed">فريق التربية الخاصة</option>
+          <option value="support_team">فريق الدعم</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>الموضوع</label>
+        <input type="text" class="form-control" id="msgSubject" placeholder="موضوع الرسالة">
+      </div>
+      <div class="form-group">
+        <label>نص الرسالة</label>
+        <textarea class="form-control" id="msgBody" rows="4" placeholder="اكتب نص الرسالة هنا..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>الأولوية</label>
+        <select class="form-control" id="msgPriority">
+          <option value="normal">عادية</option>
+          <option value="urgent">🔴 عاجلة</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-gold" onclick="sendNewMsg()">إرسال ✈️</button>
+      <button class="btn btn-outline" style="color:#555;border-color:#ddd" onclick="closeModal()">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<div class="ip-badge">🛡️ 1614-2026 © منيرة علي محمد المري</div>
+
+<script>
+const SUPABASE_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Current session (from sessionStorage)
+const sessionRole = sessionStorage.getItem('aljood_session_role') || 'teacher';
+const sessionName = sessionStorage.getItem('aljood_session_name') || 'مستخدم';
+
+let currentThread = null;
+let currentTab = 'all';
+let allThreads = [];
+let currentPriority = 'normal';
+let realtimeChannel = null;
+
+// Recipient group colors
+const recipientColors = {
+  all:'#1a2550', admin:'#dc2626', teachers:'#2563eb',
+  special_ed:'#7c3aed', support_team:'#059669', direct:'#f59e0b'
+};
+const recipientLabels = {
+  all:'الجميع', admin:'الإدارة', teachers:'المعلمات',
+  special_ed:'فريق التربية الخاصة', support_team:'فريق الدعم', direct:'مباشرة'
+};
+
+async function init() {
+  await loadThreads();
+  setupRealtime();
+}
+
+async function loadThreads() {
+  try {
+    const { data, error } = await supabase
+      .from('internal_messages')
+      .select('*')
+      .eq('school_id','aljood')
+      .order('created_at', {ascending:false})
+      .limit(100);
+    
+    if (error) {
+      // Table might not exist yet — show empty state with setup hint
+      if (error.code === '42P01') {
+        showSetupNeeded();
+        return;
+      }
+      throw error;
+    }
+    
+    allThreads = groupByThread(data || []);
+    renderConvList(allThreads);
+  } catch(e) {
+    console.error(e);
+    showSetupNeeded();
+  }
+}
+
+function showSetupNeeded() {
+  document.getElementById('convList').innerHTML = `
+    <div style="padding:20px;text-align:center;color:#888;">
+      <div style="font-size:2.5rem;margin-bottom:12px">📭</div>
+      <p style="font-size:13px;font-weight:600;color:var(--navy)">مركز الرسائل جاهز!</p>
+      <p style="font-size:12px;margin-top:6px;line-height:1.5">أنشئ أول رسالة باستخدام الزر أدناه<br>أو انتظر حتى يُنشئ المدير الجداول</p>
+    </div>`;
+}
+
+function groupByThread(messages) {
+  // Group by subject/thread_id
+  const threads = {};
+  messages.forEach(m => {
+    const key = m.thread_id || m.id;
+    if (!threads[key]) {
+      threads[key] = {
+        id: key,
+        subject: m.subject || 'رسالة بدون موضوع',
+        recipient: m.recipient || 'all',
+        priority: m.priority || 'normal',
+        type: m.message_type || 'direct',
+        sender: m.sender_name || 'مجهول',
+        latest: m.body || '',
+        time: m.created_at,
+        unread: m.is_read === false,
+        messages: []
+      };
+    }
+    threads[key].messages.push(m);
+  });
+  return Object.values(threads).sort((a,b) => new Date(b.time) - new Date(a.time));
+}
+
+function renderConvList(threads) {
+  const search = document.getElementById('searchMsg').value.toLowerCase();
+  const filtered = threads.filter(t => {
+    const matchSearch = !search || t.subject.toLowerCase().includes(search) || t.sender.toLowerCase().includes(search);
+    const matchTab = currentTab === 'all' ||
+      (currentTab === 'unread' && t.unread) ||
+      (currentTab === 'urgent' && t.priority === 'urgent') ||
+      (currentTab === 'announce' && t.type === 'announcement');
+    return matchSearch && matchTab;
+  });
+
+  if (!filtered.length) {
+    document.getElementById('convList').innerHTML = `<div style="padding:20px;text-align:center;color:#bbb;font-size:13px;">لا توجد رسائل</div>`;
+    return;
+  }
+
+  const color = t => recipientColors[t.recipient] || '#1a2550';
+  document.getElementById('convList').innerHTML = filtered.map(t => `
+    <div class="conv-item ${t.unread?'unread':''} ${currentThread===t.id?'active':''}" onclick="openThread('${t.id}')">
+      <div class="conv-avatar" style="background:${color(t)}">${t.subject[0]||'؟'}</div>
+      <div class="conv-content">
+        <div class="conv-name">${t.subject}</div>
+        <div class="conv-preview">${t.priority==='urgent'?'🔴 ':''} ${t.sender}: ${t.latest.substring(0,40)}...</div>
+      </div>
+      <div class="conv-time">${formatTime(t.time)}</div>
+    </div>
+  `).join('');
+}
+
+function formatTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 3600000) return `${Math.floor(diff/60000)} د`;
+  if (diff < 86400000) return d.toLocaleTimeString('ar',{hour:'2-digit',minute:'2-digit'});
+  return d.toLocaleDateString('ar',{month:'short',day:'numeric'});
+}
+
+async function openThread(threadId) {
+  currentThread = threadId;
+  const thread = allThreads.find(t => t.id === threadId);
+  if (!thread) return;
+
+  document.getElementById('chatEmpty').style.display = 'none';
+  const cv = document.getElementById('chatView');
+  cv.style.display = 'flex';
+
+  const color = recipientColors[thread.recipient] || '#1a2550';
+  document.getElementById('chatAvatarEl').textContent = thread.subject[0] || '؟';
+  document.getElementById('chatAvatarEl').style.background = color;
+  document.getElementById('chatTitleEl').textContent = thread.subject;
+  document.getElementById('chatSubEl').textContent = `${thread.type === 'announcement' ? '📢 إعلان' : '💬 رسالة'} • ${recipientLabels[thread.recipient]||thread.recipient} • من: ${thread.sender}`;
+
+  // Load messages
+  const { data } = await supabase
+    .from('internal_messages')
+    .select('*')
+    .eq('thread_id', threadId)
+    .order('created_at', {ascending:true});
+
+  const msgs = data || thread.messages || [];
+  renderMessages(msgs);
+  renderConvList(allThreads);
+}
+
+function renderMessages(msgs) {
+  const container = document.getElementById('messagesContainer');
+  if (!msgs.length) {
+    container.innerHTML = `<div style="text-align:center;color:#bbb;font-size:13px;padding:40px">لا توجد رسائل في هذه المحادثة</div>`;
+    return;
+  }
+  container.innerHTML = msgs.map(m => {
+    const isMine = m.sender_role === sessionRole || m.sender_name === sessionName;
+    const color = recipientColors[m.sender_role||'all'] || '#64748b';
+    const priorityBadge = m.priority === 'urgent' ? '<div class="msg-priority urgent">🔴 عاجل</div>' : '';
+    return `
+    <div class="msg ${isMine?'mine':'theirs'}">
+      <div class="msg-avatar" style="background:${color}">${(m.sender_name||'؟')[0]}</div>
+      <div class="msg-bubble">
+        ${!isMine ? `<div class="msg-sender">${m.sender_name||'—'}</div>` : ''}
+        ${priorityBadge}
+        <div class="msg-text">${escHtml(m.body||'')}</div>
+        <div class="msg-time">${formatTime(m.created_at)}</div>
+      </div>
+    </div>`;
+  }).join('');
+  container.scrollTop = container.scrollHeight;
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function setTab(tab, el) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderConvList(allThreads);
+}
+
+function filterConvs() {
+  renderConvList(allThreads);
+}
+
+function setPriority(p) {
+  currentPriority = p;
+  document.getElementById('btnNormal').classList.toggle('selected', p==='normal');
+  document.getElementById('btnUrgent').classList.toggle('selected', p==='urgent');
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+async function sendMessage() {
+  const text = document.getElementById('msgInput').value.trim();
+  if (!text || !currentThread) return;
+  
+  const btn = document.getElementById('sendBtn');
+  btn.disabled = true;
+  
+  const payload = {
+    school_id: 'aljood',
+    thread_id: currentThread,
+    subject: allThreads.find(t=>t.id===currentThread)?.subject || 'رد',
+    body: text,
+    sender_name: sessionName,
+    sender_role: sessionRole,
+    recipient: allThreads.find(t=>t.id===currentThread)?.recipient || 'all',
+    message_type: 'reply',
+    priority: currentPriority,
+    is_read: false
+  };
+  
+  try {
+    const { error } = await supabase.from('internal_messages').insert([payload]);
+    if (error) throw error;
+    document.getElementById('msgInput').value = '';
+    document.getElementById('msgInput').style.height = 'auto';
+    await openThread(currentThread);
+    await loadThreads();
+  } catch(e) {
+    alert('خطأ في الإرسال: ' + e.message);
+  }
+  btn.disabled = false;
+}
+
+function openNewMsg() {
+  document.getElementById('newMsgModal').classList.add('open');
+}
+
+function closeModal(event) {
+  if (!event || event.target.classList.contains('modal-overlay')) {
+    document.getElementById('newMsgModal').classList.remove('open');
+  }
+}
+
+function toggleRecipient() {
+  const type = document.getElementById('msgType').value;
+  document.getElementById('recipientGroup').style.display = type === 'direct' ? 'block' : 'block';
+}
+
+async function sendNewMsg() {
+  const subject = document.getElementById('msgSubject').value.trim();
+  const body = document.getElementById('msgBody').value.trim();
+  const priority = document.getElementById('msgPriority').value;
+  const type = document.getElementById('msgType').value;
+  const recipient = document.getElementById('recipientSelect').value;
+  
+  if (!subject || !body) { alert('يرجى ملء الموضوع والنص'); return; }
+  
+  const threadId = 'thread_' + Date.now();
+  const payload = {
+    school_id: 'aljood',
+    thread_id: threadId,
+    subject,
+    body,
+    sender_name: sessionName,
+    sender_role: sessionRole,
+    recipient,
+    message_type: type,
+    priority,
+    is_read: false
+  };
+  
+  try {
+    const { error } = await supabase.from('internal_messages').insert([payload]);
+    if (error) throw error;
+    closeModal();
+    document.getElementById('msgSubject').value = '';
+    document.getElementById('msgBody').value = '';
+    await loadThreads();
+    // Open the new thread
+    setTimeout(() => openThread(threadId), 400);
+  } catch(e) {
+    alert('خطأ: ' + e.message);
+  }
+}
+
+async function markRead() {
+  if (!currentThread) return;
+  await supabase.from('internal_messages')
+    .update({is_read: true})
+    .eq('thread_id', currentThread);
+  await loadThreads();
+}
+
+function setupRealtime() {
+  realtimeChannel = supabase
+    .channel('internal_messages_changes')
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'internal_messages',
+      filter: 'school_id=eq.aljood'
+    }, async (payload) => {
+      await loadThreads();
+      if (currentThread === payload.new.thread_id) {
+        await openThread(currentThread);
+      }
+    })
+    .subscribe();
+}
+
+init();
+</script>
+</body>
+</html>
