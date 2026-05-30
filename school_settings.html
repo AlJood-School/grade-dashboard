@@ -62,10 +62,10 @@ input:checked+.slider:before{transform:translateX(-24px);}
 <body>
 <script>
 const SUPABASE_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYzNzM5NjMsImV4cCI6MjA2MTk0OTk2M30.BMBGMwMNFvhFoLKBYqaVZ5F8BzJDHfFmCVmBmSHJZLw';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const SCHOOL_INFO = { name:'مدرسة الجود للتعليم الأساسي', emirate:'الشارقة', city:'الشارقة', school_id:'aljood', staff_count:83 };
+const SCHOOL_INFO = { name:'روضة ومدرسة الجود', emirate:'أبوظبي', city:'مدينة العين', school_id:'aljood', staff_count:83 };
 const ROLES = ['admin','teacher','special_ed','support','principal','coordinator'];
 
 let appSettings = {};
@@ -95,7 +95,7 @@ async function init() {
   renderSchoolInfo();
   await loadAppSettings();
   renderRoles();
-  renderUsers();
+  await renderUsers();
 }
 
 function renderSchoolInfo() {
@@ -167,24 +167,31 @@ function renderRoles() {
   </tbody></table>`;
 }
 
-function renderUsers() {
-  // Mock users for display (in production from users.json)
-  const users = [
-    { username:'admin', name:'المدير', role:'admin', active:true },
-    { username:'teacher1', name:'نورة المنصوري', role:'teacher', active:true },
-    { username:'teacher2', name:'فاطمة الحمادي', role:'special_ed', active:true },
-    { username:'coordinator1', name:'هند الزعابي', role:'coordinator', active:true },
-  ];
+async function renderUsers() {
   const el = document.getElementById('users-table');
-  el.innerHTML = `<table><thead><tr><th>المستخدم</th><th>الاسم</th><th>الدور</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>
-  ${users.map(u => `<tr>
-    <td>${u.username}</td>
-    <td>${u.name}</td>
-    <td><span class="badge badge-${u.role==='admin'?'admin':u.role==='teacher'||u.role==='special_ed'?'teacher':'support'}">${u.role}</span></td>
-    <td><span class="badge" style="background:${u.active?'#10b981':'#e5e7eb'};color:${u.active?'white':'#666'}">${u.active?'نشط':'غير نشط'}</span></td>
-    <td><button class="btn btn-gold" style="padding:5px 12px;font-size:11px">تعديل</button></td>
-  </tr>`).join('')}
-  </tbody></table>`;
+  el.innerHTML = '<p style="color:#888;text-align:center;padding:20px">جارٍ التحميل...</p>';
+  try {
+    const res = await fetch('data/users.json');
+    const raw = await res.json();
+    const users = Array.isArray(raw) ? raw : (raw.users || []);
+    const roleColor = r => r==='admin'?'badge-admin':r==='teacher'||r==='special_ed'?'badge-teacher':'badge-support';
+    el.innerHTML = `<table><thead><tr><th>المستخدم</th><th>الاسم</th><th>الدور</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>
+    ${users.map(u => `<tr>
+      <td style="font-weight:600">${u.username||'—'}</td>
+      <td>${u.name||u.displayName||'—'}</td>
+      <td><span class="badge ${roleColor(u.loginRole||u.role||'')}">${u.loginRole||u.role||'—'}</span></td>
+      <td><span class="badge" style="background:${u.active!==false?'#10b981':'#e5e7eb'};color:${u.active!==false?'white':'#666'}">${u.active!==false?'نشط':'غير نشط'}</span></td>
+      <td><button class="btn btn-gold" style="padding:5px 12px;font-size:11px" onclick="editUser('${u.username||''}')">تعديل</button></td>
+    </tr>`).join('')}
+    </tbody></table>`;
+  } catch(e) {
+    el.innerHTML = '<p style="color:#e11d48;text-align:center;padding:20px">⚠️ تعذّر تحميل المستخدمين — تحقق من data/users.json</p>';
+  }
+}
+
+function editUser(username) {
+  if (!username) return;
+  alert('تعديل المستخدم: ' + username + '\nملاحظة: التعديل يتم عبر تحديث data/users.json في المستودع');
 }
 
 function toggleMaintenance(el) {

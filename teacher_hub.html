@@ -2894,11 +2894,26 @@ async function checkVarkCompletion(uname) {
 
     // تخزين تاريخ أول تسجيل دخول
     const firstLoginKey = `vark_first_login_${uname}`;
-    if (!localStorage.getItem(firstLoginKey)) {
-      localStorage.setItem(firstLoginKey, new Date().toISOString());
-    }
-    const firstLogin = new Date(localStorage.getItem(firstLoginKey));
-    const daysSinceFirst = (Date.now() - firstLogin.getTime()) / (1000 * 60 * 60 * 24);
+    let daysSinceFirst = 0;
+    try {
+      const flRes = await fetch(
+        `${VARK_SUPABASE_URL}/rest/v1/app_settings?key=eq.${firstLoginKey}&select=value`,
+        { headers: { 'apikey': VARK_SUPABASE_KEY, 'Authorization': `Bearer ${VARK_SUPABASE_KEY}` } }
+      );
+      const flData = await flRes.json();
+      if (Array.isArray(flData) && flData.length > 0) {
+        const firstLogin = new Date(flData[0].value);
+        daysSinceFirst = (Date.now() - firstLogin.getTime()) / (1000 * 60 * 60 * 24);
+      } else {
+        await fetch(`${VARK_SUPABASE_URL}/rest/v1/app_settings`, {
+          method: 'POST',
+          headers: { 'apikey': VARK_SUPABASE_KEY, 'Authorization': `Bearer ${VARK_SUPABASE_KEY}`,
+                     'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ key: firstLoginKey, value: new Date().toISOString() })
+        });
+        daysSinceFirst = 0;
+      }
+    } catch(e) {}
 
     if (daysSinceFirst > 7) {
       showVarkOfficialNotice(); // مستوى 2 🟠
