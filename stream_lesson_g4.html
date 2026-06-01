@@ -103,7 +103,7 @@ body.special-mode{font-size:25px;}
 
 #emergencyExitBtn {
   position: fixed;
-  bottom: 90px;
+  bottom: 20px;
   right: 24px;
   z-index: 9000;
   background: #dc2626;
@@ -1585,7 +1585,7 @@ function toggleWu4Chip(el) { el.classList.toggle('selected'); }
 </div>
 
 <!-- EMERGENCY EXIT BUTTON -->
-<button id="emergencyExitBtn" onclick="confirmEmergencyExit()">⚡ خروج طارئ</button>
+<button id="emergencyExitBtn" onclick="confirmEmergencyExit()">💾 حفظ وخروج</button>
 
 <!-- Teacher Panel -->
 <div class="teacher-panel" id="teacherPanel">
@@ -2228,19 +2228,34 @@ function playJoinChime() {
 }
 
 function confirmEmergencyExit() {
-  const confirmed = confirm('⚡ هل تريد الخروج من الحصة؟\n\nسيتم حفظ تقدمك تلقائياً.\n\nDo you want to leave the lesson? Your progress will be saved.');
-  if (!confirmed) return;
-  // Save current state
-  try { saveState(); } catch(e) {}
-  try { saveToFirestore({ status: 'student_left', endReason: 'emergency_exit' }); } catch(e) {}
-  // Notify teacher
-  if (studentName && sectionName) {
-    try { db.collection('help_requests').add({ studentName, section: sectionName, grade: 4, phase: currentPhase, type: 'emergency_exit', sessionId, timestamp: firebase.firestore.FieldValue.serverTimestamp(), resolved: false }); } catch(e) {}
-  }
-  // Reset and reload
-  document.getElementById('emergencyExitBtn').style.display = 'none';
-  document.getElementById('helpBtn').style.display = 'none';
-  window.location.reload();
+  // Show custom confirm modal (avoid blocked confirm() on tablets)
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:Tajawal,sans-serif;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:32px 28px;max-width:360px;width:90%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.4);">
+      <div style="font-size:2.5rem;margin-bottom:12px;">💾</div>
+      <h3 style="color:#1a2744;margin-bottom:8px;font-size:1.3rem;">حفظ وخروج؟</h3>
+      <p style="color:#64748b;font-size:0.95rem;margin-bottom:24px;">سيُحفظ تقدمك، وتُجهَّز الصفحة للطالب التالي.<br><span style="font-size:0.85rem;">Your progress will be saved. Page resets for next student.</span></p>
+      <div style="display:flex;gap:12px;justify-content:center;">
+        <button id="_exitNo" style="padding:10px 24px;border-radius:12px;border:2px solid #cbd5e1;background:#f1f5f9;color:#475569;font-size:1rem;font-family:Tajawal,sans-serif;cursor:pointer;font-weight:700;">إلغاء</button>
+        <button id="_exitYes" style="padding:10px 24px;border-radius:12px;border:none;background:#dc2626;color:#fff;font-size:1rem;font-family:Tajawal,sans-serif;cursor:pointer;font-weight:700;">✅ حفظ وخروج</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('_exitNo').onclick = () => overlay.remove();
+  document.getElementById('_exitYes').onclick = () => {
+    overlay.remove();
+    // Save to Firestore
+    try { saveToFirestore({ status: 'student_left', endReason: 'save_exit', phase: currentPhase }); } catch(e) {}
+    // Notify teacher
+    if (studentName && sectionName) {
+      try { db.collection('help_requests').add({ studentName, section: sectionName, grade: 4, phase: currentPhase, type: 'save_exit', sessionId, timestamp: firebase.firestore.FieldValue.serverTimestamp(), resolved: false }); } catch(e) {}
+    }
+    // ✅ Clear session so next student starts fresh
+    try { sessionStorage.removeItem(SESS_KEY); } catch(e) {}
+    // Reload fresh (no restore)
+    window.location.reload();
+  };
 }
 
 function startLesson(){
@@ -2440,59 +2455,108 @@ function checkMCQ(qi,oi,correct,choicesDiv){
   }
 }
 
-// ===== PHASE 3: TRUE/FALSE =====
+// ===== PHASE 3: TRUE/FALSE (one-by-one, 2 parts) =====
+let _tfCurrentIndex = 0;
+const TF_PART1_COUNT = 3; // first 3 = Part 1, rest = Part 2
+
 function renderTF(){
-  const container=document.getElementById('tfContainer');
-  const qs=isSpecialNeeds?tfQuestions.slice(0,3):tfQuestions;
-  container.innerHTML='';
-  tfAnswers=[];
-  qs.forEach((q,qi)=>{
-    tfAnswers.push(null);
-    const div=document.createElement('div');
-    div.className='question-card';
-    div.innerHTML=`<div class="question-text">Q${qi+1}: ${q.q}<button class="translate-btn" onclick="toggleArabicQ('tf${qi}')">🌐 ترجم</button></div><div class="arabic-hint" id="tf${qi}">${q.ar}</div><div class="tf-row"><button class="tf-btn tf-true" id="tf_t_${qi}" onclick="checkTF(${qi},true)">✅ TRUE / صح</button><button class="tf-btn tf-false" id="tf_f_${qi}" onclick="checkTF(${qi},false)">❌ FALSE / خطأ</button></div><div class="feedback-msg" id="tf_fb_${qi}"></div>`;
-    container.appendChild(div);
-    if(isSpecialNeeds){
-      const ab=document.createElement('button');
-      ab.className='audio-btn';
-      ab.textContent='🔊 Listen';
-      ab.onclick=()=>speak(q.q);
-      div.querySelector('.question-text').appendChild(ab);
-    }
-  });
+  const qs = isSpecialNeeds ? tfQuestions.slice(0,3) : tfQuestions;
+  tfAnswers = [];
+  qs.forEach(() => tfAnswers.push(null));
+  _tfCurrentIndex = 0;
+  _renderTFQuestion(0);
 }
 
-function checkTF(qi,answer){
-  if(tfAnswers[qi]!==null) return;
-  const q=(isSpecialNeeds?tfQuestions.slice(0,3):tfQuestions)[qi];
-  tfAnswers[qi]={given:answer,correct:answer===q.correct};
-  const tb=document.getElementById('tf_t_'+qi);
-  const fb_el=document.getElementById('tf_f_'+qi);
-  const feedbackEl=document.getElementById('tf_fb_'+qi);
-  if(tb){tb.onclick=null;} if(fb_el){fb_el.onclick=null;}
-  if(answer===q.correct){
-    (answer?tb:fb_el).classList.add('correct');
-    feedbackEl.className='feedback-msg feedback-correct';
-    feedbackEl.textContent='✅ Correct! / صحيح!';
+function _renderTFQuestion(qi){
+  const qs = isSpecialNeeds ? tfQuestions.slice(0,3) : tfQuestions;
+  const container = document.getElementById('tfContainer');
+  const q = qs[qi];
+  const total = qs.length;
+  const partLabel = (!isSpecialNeeds && total > TF_PART1_COUNT)
+    ? (qi < TF_PART1_COUNT ? `📘 الجزء الأول / Part 1` : `📗 الجزء الثاني / Part 2`)
+    : '';
+  const partNum = (!isSpecialNeeds && total > TF_PART1_COUNT)
+    ? (qi < TF_PART1_COUNT ? `${qi+1} / ${TF_PART1_COUNT}` : `${qi - TF_PART1_COUNT + 1} / ${total - TF_PART1_COUNT}`)
+    : `${qi+1} / ${total}`;
+
+  // Show "Part 2 intro" banner when transitioning
+  const part2Banner = (!isSpecialNeeds && qi === TF_PART1_COUNT && total > TF_PART1_COUNT)
+    ? `<div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:2px solid #22c55e;border-radius:14px;padding:16px;text-align:center;margin-bottom:18px;font-family:Tajawal,sans-serif;">
+        <div style="font-size:2rem;">🎉</div>
+        <div style="font-size:1.1rem;font-weight:700;color:#166534;">أحسنت! انتهى الجزء الأول</div>
+        <div style="color:#64748b;font-size:0.9rem;">Well done! Now Part 2 begins</div>
+       </div>` : '';
+
+  container.innerHTML = `
+    ${part2Banner}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-family:Tajawal,sans-serif;">
+      <span style="background:#e0f2fe;color:#0369a1;padding:4px 12px;border-radius:20px;font-size:0.85rem;font-weight:700;">${partLabel}</span>
+      <span style="background:#f1f5f9;color:#475569;padding:4px 12px;border-radius:20px;font-size:0.85rem;">سؤال ${partNum}</span>
+    </div>
+    <div class="question-card" id="tf_card_${qi}">
+      <div class="question-text">
+        Q${qi+1}: ${q.q}
+        <button class="translate-btn" onclick="toggleArabicQ('tf${qi}')">🌐 ترجم</button>
+        ${isSpecialNeeds ? `<button class="audio-btn" onclick="speak(tfQuestions[${qi}].q)">🔊</button>` : ''}
+      </div>
+      <div class="arabic-hint" id="tf${qi}">${q.ar}</div>
+      <div class="tf-row">
+        <button class="tf-btn tf-true" id="tf_t_${qi}" onclick="checkTF(${qi},true)">✅ TRUE / صح</button>
+        <button class="tf-btn tf-false" id="tf_f_${qi}" onclick="checkTF(${qi},false)">❌ FALSE / خطأ</button>
+      </div>
+      <div class="feedback-msg" id="tf_fb_${qi}"></div>
+    </div>`;
+
+  document.getElementById('nextTF').style.display = 'none';
+  document.getElementById('tfScore').style.display = 'none';
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function checkTF(qi, answer){
+  if(tfAnswers[qi] !== null) return;
+  const qs = isSpecialNeeds ? tfQuestions.slice(0,3) : tfQuestions;
+  const q = qs[qi];
+  tfAnswers[qi] = {given: answer, correct: answer === q.correct};
+  const tb = document.getElementById('tf_t_' + qi);
+  const fb_el = document.getElementById('tf_f_' + qi);
+  const feedbackEl = document.getElementById('tf_fb_' + qi);
+  if(tb){tb.onclick = null;} if(fb_el){fb_el.onclick = null;}
+
+  if(answer === q.correct){
+    (answer ? tb : fb_el).classList.add('correct');
+    feedbackEl.className = 'feedback-msg feedback-correct';
+    feedbackEl.textContent = '✅ Correct! / صحيح!';
     successSound();
   } else {
-    (answer?tb:fb_el).classList.add('incorrect');
-    (q.correct?tb:fb_el).classList.add('correct');
-    feedbackEl.className='feedback-msg feedback-incorrect';
-    feedbackEl.textContent='❌ The correct answer is '+(q.correct?'TRUE / صح':'FALSE / خطأ');
+    (answer ? tb : fb_el).classList.add('incorrect');
+    (q.correct ? tb : fb_el).classList.add('correct');
+    feedbackEl.className = 'feedback-msg feedback-incorrect';
+    feedbackEl.textContent = '❌ The correct answer is ' + (q.correct ? 'TRUE / صح' : 'FALSE / خطأ');
     errorSound();
   }
-  const allAnswered=tfAnswers.every(a=>a!==null);
-  if(allAnswered){
-    const score=tfAnswers.filter(a=>a&&a.correct).length;
-    const badge=document.getElementById('tfScoreBadge');
-    if(badge) badge.textContent=`Score: ${score}/${tfAnswers.length} ${score>=tfAnswers.length*0.8?'🌟':'👍'}`;
-    document.getElementById('tfScore').style.display='block';
-    const nextBtn=document.getElementById('nextTF');
-    nextBtn.style.display='inline-block';
-    // Scroll the Next button into view so student can see it
-    setTimeout(()=>{ nextBtn.scrollIntoView({behavior:'smooth',block:'center'}); },300);
-    if(score===tfAnswers.length) successSound();
+
+  const isLast = (qi === qs.length - 1);
+  if(isLast){
+    // Show final score + Next Phase button
+    const score = tfAnswers.filter(a => a && a.correct).length;
+    const badge = document.getElementById('tfScoreBadge');
+    if(badge) badge.textContent = `Score: ${score}/${qs.length} ${score >= qs.length * 0.8 ? '🌟' : '👍'}`;
+    document.getElementById('tfScore').style.display = 'block';
+    const nextBtn = document.getElementById('nextTF');
+    nextBtn.style.display = 'inline-block';
+    setTimeout(() => { nextBtn.scrollIntoView({behavior:'smooth', block:'center'}); }, 400);
+    if(score === qs.length) successSound();
+  } else {
+    // Show "Next Question" button
+    setTimeout(() => {
+      const nextQBtn = document.createElement('button');
+      nextQBtn.className = 'btn btn-gold';
+      nextQBtn.innerHTML = `السؤال التالي ← Q${qi+2}`;
+      nextQBtn.style.cssText = 'margin-top:18px;display:block;width:100%;font-size:1rem;padding:12px;';
+      nextQBtn.onclick = () => _renderTFQuestion(qi + 1);
+      feedbackEl.after(nextQBtn);
+      nextQBtn.scrollIntoView({behavior:'smooth', block:'center'});
+    }, 600);
   }
 }
 
