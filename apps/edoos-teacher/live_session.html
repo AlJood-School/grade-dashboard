@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎯 غرفة الحصة الحية — EduOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#0f1729;--surf:#1a2744;--surf2:#243461;--surf3:#2d3e6b;
+  --gold:#c9a84c;--gold2:#f0c96b;--emerald:#10b981;--emerald2:#34d399;
+  --rose:#f43f5e;--sky:#0ea5e9;--violet:#8b5cf6;--amber:#f59e0b;
+  --text:#e8eaf6;--text2:#94a3b8;--bord:rgba(255,255,255,0.08);
+  --radius:14px;--font:'Cairo',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--text);overflow:hidden;}
+
+/* ── SETUP SCREEN ── */
+#setupScreen{
+  position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:24px;gap:20px;overflow-y:auto;
+  background:linear-gradient(135deg,#0f1729 0%,#1a2744 100%);
+}
+.setup-logo{font-size:3rem;text-align:center;}
+.setup-title{font-size:1.6rem;font-weight:900;color:var(--gold2);text-align:center;}
+.setup-sub{font-size:.9rem;color:var(--text2);text-align:center;}
+.setup-card{
+  background:var(--surf);border:1px solid var(--bord);border-radius:20px;
+  padding:24px;width:100%;max-width:580px;display:flex;flex-direction:column;gap:16px;
+}
+.setup-field label{font-size:.82rem;font-weight:700;color:var(--text2);margin-bottom:6px;display:block;}
+.setup-field select,.setup-field input{
+  width:100%;background:var(--surf2);border:1.5px solid var(--bord);border-radius:10px;
+  padding:11px 14px;color:var(--text);font-family:var(--font);font-size:.9rem;outline:none;
+  transition:border-color .2s;
+}
+.setup-field select:focus,.setup-field input:focus{border-color:var(--gold);}
+.setup-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.btn-launch{
+  background:linear-gradient(135deg,var(--gold),var(--amber));color:#0f1729;
+  border:none;border-radius:12px;padding:14px 24px;font-size:1rem;font-weight:800;
+  font-family:var(--font);cursor:pointer;transition:all .2s;width:100%;
+}
+.btn-launch:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(201,168,76,.4);}
+.btn-launch:disabled{opacity:.5;transform:none;cursor:not-allowed;}
+
+/* ── LIVE SCREEN ── */
+#liveScreen{display:none;height:100%;flex-direction:column;}
+
+/* Header */
+.live-header{
+  background:var(--surf);border-bottom:1px solid var(--bord);
+  padding:10px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0;
+}
+.live-badge{
+  background:linear-gradient(135deg,var(--rose),#dc2626);color:white;
+  border-radius:99px;padding:4px 12px;font-size:.75rem;font-weight:800;
+  animation:blink 1.5s infinite;
+}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.5;}}
+.live-class{font-size:1.1rem;font-weight:800;color:var(--gold2);}
+.live-timer{
+  background:var(--surf2);border:1.5px solid var(--bord);border-radius:99px;
+  padding:6px 16px;font-size:1rem;font-weight:700;color:var(--gold2);font-variant-numeric:tabular-nums;
+}
+.live-stats-bar{display:flex;gap:8px;margin-right:auto;}
+.stat-pill{
+  background:var(--surf2);border:1px solid var(--bord);border-radius:99px;
+  padding:5px 14px;font-size:.78rem;font-weight:700;display:flex;align-items:center;gap:5px;
+}
+.stat-pill.green{border-color:var(--emerald);color:var(--emerald2);}
+.stat-pill.red{border-color:var(--rose);color:var(--rose);}
+.stat-pill.blue{border-color:var(--sky);color:var(--sky);}
+.btn-end{
+  background:linear-gradient(135deg,#ef4444,#dc2626);color:white;
+  border:none;border-radius:10px;padding:8px 16px;font-size:.82rem;font-weight:700;
+  font-family:var(--font);cursor:pointer;
+}
+
+/* Main Layout */
+.live-body{flex:1;min-height:0;display:grid;grid-template-columns:280px 1fr 260px;gap:0;}
+
+/* Left Panel */
+.left-panel{
+  background:var(--surf);border-left:1px solid var(--bord);
+  padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;
+}
+.panel-title{font-size:.75rem;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;}
+
+.phase-control{
+  border:1.5px solid var(--bord);border-radius:12px;padding:12px;cursor:pointer;
+  transition:all .2s;display:flex;align-items:center;gap:10px;
+}
+.phase-control:hover{border-color:var(--gold);background:rgba(201,168,76,.06);}
+.phase-control.active-phase{border-color:var(--emerald);background:rgba(16,185,129,.1);}
+.phase-control.broadcasting{border-color:var(--sky);background:rgba(14,165,233,.1);animation:pulse-border .8s infinite;}
+@keyframes pulse-border{0%,100%{border-color:var(--sky);}50%{border-color:var(--sky)66;}}
+.phase-ico{font-size:1.3rem;flex-shrink:0;}
+.phase-info{flex:1;}
+.phase-name{font-size:.82rem;font-weight:700;}
+.phase-status{font-size:.7rem;color:var(--text2);}
+
+.btn-broadcast{
+  background:linear-gradient(135deg,var(--sky),#2563eb);color:white;
+  border:none;border-radius:10px;padding:10px;font-size:.82rem;font-weight:700;
+  font-family:var(--font);cursor:pointer;text-align:center;transition:all .2s;
+}
+.btn-broadcast:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(14,165,233,.4);}
+
+/* Center — Student Grid */
+.center-panel{overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;}
+.section-head{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+
+.student-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;}
+.student-tile{
+  background:var(--surf);border:1.5px solid var(--bord);border-radius:12px;
+  padding:12px 10px;display:flex;flex-direction:column;align-items:center;gap:6px;
+  transition:all .2s;cursor:pointer;text-align:center;position:relative;
+}
+.student-tile:hover{border-color:var(--gold);transform:translateY(-2px);}
+.student-tile.active{border-color:var(--emerald);}
+.student-tile.help{border-color:var(--amber);animation:pulse-amber .8s infinite;}
+@keyframes pulse-amber{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.4);}50%{box-shadow:0 0 0 6px rgba(245,158,11,0);}}
+.student-tile.offline{opacity:.45;border-color:var(--bord);}
+.stu-avatar{
+  width:42px;height:42px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:1.1rem;font-weight:800;border:2px solid;
+}
+.stu-name{font-size:.72rem;font-weight:700;line-height:1.3;}
+.stu-phase-badge{
+  font-size:.6rem;background:var(--surf2);border-radius:99px;
+  padding:2px 8px;color:var(--text2);white-space:nowrap;
+}
+.stu-phase-badge.done{background:rgba(16,185,129,.15);color:var(--emerald2);}
+.stu-phase-badge.active{background:rgba(14,165,233,.15);color:var(--sky);}
+.help-flag{position:absolute;top:6px;left:6px;font-size:.85rem;}
+.vark-tag{font-size:.58rem;font-weight:700;padding:1px 6px;border-radius:99px;}
+.vark-V{background:rgba(139,92,246,.2);color:#c4b5fd;}
+.vark-A{background:rgba(16,185,129,.2);color:#34d399;}
+.vark-R{background:rgba(14,165,233,.2);color:#7dd3fc;}
+.vark-K{background:rgba(245,158,11,.2);color:#fcd34d;}
+
+/* Right Panel */
+.right-panel{
+  background:var(--surf);border-right:1px solid var(--bord);
+  padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;
+}
+.tool-card{
+  background:var(--surf2);border:1px solid var(--bord);border-radius:12px;padding:14px;
+}
+.tool-card-title{font-size:.75rem;font-weight:800;color:var(--text2);text-transform:uppercase;margin-bottom:10px;}
+.tool-btn{
+  width:100%;background:var(--surf3);border:1px solid var(--bord);border-radius:10px;
+  padding:9px 12px;font-size:.8rem;font-weight:700;font-family:var(--font);color:var(--text);
+  cursor:pointer;transition:all .2s;text-align:right;margin-bottom:6px;display:flex;align-items:center;gap:8px;
+}
+.tool-btn:last-child{margin-bottom:0;}
+.tool-btn:hover{background:var(--surf);border-color:var(--gold);}
+.tool-btn.active-tool{background:rgba(201,168,76,.1);border-color:var(--gold);color:var(--gold2);}
+
+.quick-msg-input{
+  width:100%;background:var(--surf3);border:1px solid var(--bord);border-radius:10px;
+  padding:9px 12px;font-size:.82rem;color:var(--text);font-family:var(--font);
+  outline:none;resize:none;margin-bottom:6px;
+}
+.quick-msg-input:focus{border-color:var(--gold);}
+.btn-send-msg{
+  width:100%;background:linear-gradient(135deg,var(--emerald),#059669);
+  color:white;border:none;border-radius:10px;padding:9px;font-size:.82rem;
+  font-weight:700;font-family:var(--font);cursor:pointer;
+}
+
+/* Poll overlay */
+#pollOverlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;
+  display:none;align-items:center;justify-content:center;
+}
+#pollBox{
+  background:var(--surf);border:1px solid var(--bord);border-radius:20px;
+  padding:28px;width:90%;max-width:500px;
+}
+.poll-title{font-size:1.1rem;font-weight:800;color:var(--gold2);margin-bottom:16px;}
+.poll-input{
+  width:100%;background:var(--surf2);border:1.5px solid var(--bord);border-radius:10px;
+  padding:10px 14px;color:var(--text);font-family:var(--font);font-size:.9rem;
+  outline:none;margin-bottom:10px;
+}
+.poll-input:focus{border-color:var(--gold);}
+.poll-opts{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
+.poll-opt{display:flex;align-items:center;gap:8px;}
+.poll-opt input{flex:1;background:var(--surf2);border:1px solid var(--bord);border-radius:8px;padding:8px 12px;color:var(--text);font-family:var(--font);font-size:.85rem;outline:none;}
+.poll-actions{display:flex;gap:10px;}
+.btn-cancel{flex:1;background:var(--surf2);color:var(--text2);border:1px solid var(--bord);border-radius:10px;padding:10px;font-size:.85rem;font-weight:700;font-family:var(--font);cursor:pointer;}
+.btn-launch-poll{flex:2;background:linear-gradient(135deg,var(--violet),#6d28d9);color:white;border:none;border-radius:10px;padding:10px;font-size:.85rem;font-weight:700;font-family:var(--font);cursor:pointer;}
+
+/* Group overlay */
+#groupOverlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;
+  display:none;align-items:center;justify-content:center;
+}
+#groupBox{
+  background:var(--surf);border:1px solid var(--bord);border-radius:20px;
+  padding:28px;width:90%;max-width:600px;max-height:80vh;overflow-y:auto;
+}
+.group-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;}
+.group-card{background:var(--surf2);border:1px solid var(--bord);border-radius:12px;padding:14px;}
+.group-card-title{font-size:.78rem;font-weight:800;color:var(--gold2);margin-bottom:8px;}
+.group-member{font-size:.78rem;padding:4px 0;border-bottom:1px solid var(--bord);color:var(--text2);}
+.group-member:last-child{border-bottom:none;}
+
+/* Live poll results bar */
+.poll-result-bar{margin-bottom:8px;}
+.poll-result-label{font-size:.75rem;color:var(--text2);margin-bottom:3px;display:flex;justify-content:space-between;}
+.poll-result-track{background:var(--surf3);border-radius:99px;height:8px;overflow:hidden;}
+.poll-result-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--violet),var(--sky));transition:width .6s ease;}
+
+/* Toast */
+#toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--surf2);border:1px solid var(--bord);border-radius:12px;
+  padding:10px 20px;font-size:.85rem;font-weight:600;opacity:0;
+  transition:all .3s;z-index:2000;white-space:nowrap;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* End confirm */
+#endConfirm{
+  position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:2000;
+  display:none;align-items:center;justify-content:center;
+}
+.confirm-box{
+  background:var(--surf);border:1px solid var(--bord);border-radius:20px;
+  padding:28px;width:90%;max-width:400px;text-align:center;
+}
+.confirm-title{font-size:1.2rem;font-weight:800;color:var(--rose);margin-bottom:10px;}
+.confirm-sub{font-size:.85rem;color:var(--text2);margin-bottom:20px;line-height:1.6;}
+.confirm-btns{display:flex;gap:12px;}
+.btn-confirm-cancel{flex:1;background:var(--surf2);color:var(--text);border:1px solid var(--bord);border-radius:10px;padding:12px;font-size:.9rem;font-weight:700;font-family:var(--font);cursor:pointer;}
+.btn-confirm-end{flex:1;background:linear-gradient(135deg,var(--rose),#dc2626);color:white;border:none;border-radius:10px;padding:12px;font-size:.9rem;font-weight:700;font-family:var(--font);cursor:pointer;}
+
+@media(max-width:900px){
+  .live-body{grid-template-columns:1fr;}
+  .left-panel,.right-panel{display:none;}
+}
+</style>
+</head>
+<body>
+
+<!-- ══ SETUP SCREEN ══ -->
+<div id="setupScreen">
+  <div class="setup-logo">🎯</div>
+  <div class="setup-title">غرفة الحصة الحية</div>
+  <div class="setup-sub">ابدئي حصةً حيةً تفاعلية — تتابع كل طالبة في الوقت الفعلي</div>
+
+  <div class="setup-card">
+    <div class="setup-row">
+      <div class="setup-field">
+        <label>الصف الدراسي</label>
+        <select id="setupGrade" onchange="onSetupGradeChange()">
+          <option value="">— اختر الصف —</option>
+          <optgroup label="رياض الأطفال">
+            <option value="KG1">KG1 — روضة أولى</option>
+            <option value="KG2">KG2 — روضة ثانية</option>
+          </optgroup>
+          <optgroup label="الحلقة الأولى (1–4)">
+            <option value="1">Grade 1</option><option value="2">Grade 2</option>
+            <option value="3">Grade 3</option><option value="4">Grade 4</option>
+          </optgroup>
+          <optgroup label="الحلقة الثانية (5–9)">
+            <option value="5">Grade 5</option><option value="6">Grade 6</option>
+            <option value="7">Grade 7</option><option value="8">Grade 8</option>
+            <option value="9">Grade 9</option>
+          </optgroup>
+          <optgroup label="الحلقة الثالثة (10–12)">
+            <option value="10">Grade 10</option><option value="11">Grade 11</option>
+            <option value="12">Grade 12</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="setup-field">
+        <label>الشعبة</label>
+        <select id="setupSection">
+          <option value="">— اختر الشعبة —</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="setup-field">
+      <label>المادة والموضوع</label>
+      <input id="setupTopic" type="text" placeholder="مثال: العلوم — دورة الماء في الطبيعة">
+    </div>
+
+    <div class="setup-row">
+      <div class="setup-field">
+        <label>مدة الحصة (دقيقة)</label>
+        <select id="setupDuration">
+          <option value="40">40 دقيقة</option>
+          <option value="45" selected>45 دقيقة</option>
+          <option value="50">50 دقيقة</option>
+          <option value="60">60 دقيقة</option>
+          <option value="80">80 دقيقة — مزدوجة</option>
+        </select>
+      </div>
+      <div class="setup-field">
+        <label>توزيع المجموعات</label>
+        <select id="setupGrouping">
+          <option value="VARK">حسب VARK</option>
+          <option value="random">عشوائي</option>
+          <option value="manual">يدوي</option>
+          <option value="none">بدون مجموعات</option>
+        </select>
+      </div>
+    </div>
+
+    <button class="btn-launch" id="btnLaunch" onclick="launchSession()">
+      🚀 إطلاق الحصة الحية
+    </button>
+  </div>
+</div>
+
+<!-- ══ LIVE SCREEN ══ -->
+<div id="liveScreen">
+
+  <!-- Header -->
+  <div class="live-header">
+    <span class="live-badge">🔴 مباشر</span>
+    <span class="live-class" id="liveClassLabel">—</span>
+    <span class="live-timer" id="liveTimer">45:00</span>
+    <div class="live-stats-bar">
+      <span class="stat-pill green">✅ <span id="statActive">0</span> نشطة</span>
+      <span class="stat-pill blue">🙋 <span id="statHelp">0</span> تطلب مساعدة</span>
+      <span class="stat-pill red">💤 <span id="statIdle">0</span> خاملة</span>
+    </div>
+    <button class="btn-end" onclick="askEndSession()">⏹ إنهاء الحصة</button>
+  </div>
+
+  <div class="live-body">
+
+    <!-- Left Panel: Phase Controls -->
+    <div class="left-panel">
+      <div class="panel-title">📡 بث المراحل</div>
+
+      <div class="phase-control active-phase" id="pc0" onclick="broadcastPhase(0)">
+        <span class="phase-ico">🔥</span>
+        <div class="phase-info">
+          <div class="phase-name">التهيئة الحافزة</div>
+          <div class="phase-status" id="ps0">جاهزة</div>
+        </div>
+      </div>
+      <div class="phase-control" id="pc1" onclick="broadcastPhase(1)">
+        <span class="phase-ico">🎯</span>
+        <div class="phase-info">
+          <div class="phase-name">الاستكشاف</div>
+          <div class="phase-status" id="ps1">في الانتظار</div>
+        </div>
+      </div>
+      <div class="phase-control" id="pc2" onclick="broadcastPhase(2)">
+        <span class="phase-ico">💡</span>
+        <div class="phase-info">
+          <div class="phase-name">التفسير</div>
+          <div class="phase-status" id="ps2">في الانتظار</div>
+        </div>
+      </div>
+      <div class="phase-control" id="pc3" onclick="broadcastPhase(3)">
+        <span class="phase-ico">🔬</span>
+        <div class="phase-info">
+          <div class="phase-name">التطبيق</div>
+          <div class="phase-status" id="ps3">في الانتظار</div>
+        </div>
+      </div>
+      <div class="phase-control" id="pc4" onclick="broadcastPhase(4)">
+        <span class="phase-ico">🌟</span>
+        <div class="phase-info">
+          <div class="phase-name">التقييم الختامي</div>
+          <div class="phase-status" id="ps4">في الانتظار</div>
+        </div>
+      </div>
+
+      <button class="btn-broadcast" onclick="broadcastPhase(currentPhase)">📡 بث المرحلة الحالية</button>
+
+      <div style="margin-top:4px;">
+        <div class="panel-title">📊 تقدم الصف</div>
+        <div id="phaseProgressBars" style="display:flex;flex-direction:column;gap:6px;margin-top:6px;"></div>
+      </div>
+    </div>
+
+    <!-- Center: Student Grid -->
+    <div class="center-panel">
+      <div class="section-head">
+        <div style="font-size:.82rem;font-weight:700;color:var(--text2);">👩‍🎓 شبكة الطالبات — <span id="totalCount">0</span> طالبة</div>
+        <div style="display:flex;gap:8px;">
+          <button class="tool-btn" style="width:auto;padding:6px 12px;font-size:.75rem;" onclick="openGroupOverlay()">👥 توزيع المجموعات</button>
+          <button class="tool-btn" style="width:auto;padding:6px 12px;font-size:.75rem;" onclick="refreshStudents()">🔄</button>
+        </div>
+      </div>
+      <div class="student-grid" id="studentGrid"></div>
+    </div>
+
+    <!-- Right Panel: Tools -->
+    <div class="right-panel">
+
+      <!-- Quick Poll -->
+      <div class="tool-card">
+        <div class="tool-card-title">⚡ أدوات سريعة</div>
+        <button class="tool-btn" onclick="openPollOverlay()">📊 إطلاق استطلاع سريع</button>
+        <button class="tool-btn" onclick="sendBroadcastMsg('attention')">🔔 اطلبي الانتباه!</button>
+        <button class="tool-btn" onclick="sendBroadcastMsg('pause')">⏸ توقفي لحظة</button>
+        <button class="tool-btn" onclick="sendBroadcastMsg('check')">✅ تحققي من عملك</button>
+        <button class="tool-btn" onclick="sendBroadcastMsg('celebrate')">🎉 ممتاز! استمري</button>
+      </div>
+
+      <!-- Quick Message -->
+      <div class="tool-card">
+        <div class="tool-card-title">💬 رسالة سريعة</div>
+        <textarea id="quickMsgInput" class="quick-msg-input" rows="3" placeholder="اكتبي رسالة لكل الطالبات..."></textarea>
+        <button class="btn-send-msg" onclick="sendQuickMessage()">📤 إرسال للجميع</button>
+      </div>
+
+      <!-- Live Poll Results -->
+      <div class="tool-card" id="pollResultsCard" style="display:none;">
+        <div class="tool-card-title">📊 نتائج الاستطلاع</div>
+        <div id="pollQuestion" style="font-size:.82rem;font-weight:700;margin-bottom:10px;color:var(--gold2);"></div>
+        <div id="pollBars"></div>
+        <div style="font-size:.72rem;color:var(--text2);margin-top:8px;" id="pollResponseCount"></div>
+      </div>
+
+      <!-- Assessment -->
+      <div class="tool-card">
+        <div class="tool-card-title">📝 التقييم</div>
+        <button class="tool-btn" onclick="launchAssessment('self')">🪞 تقييم ذاتي</button>
+        <button class="tool-btn" onclick="launchAssessment('peer')">👭 تقييم أقران</button>
+        <button class="tool-btn" onclick="launchAssessment('group')">👥 تقييم جماعي</button>
+        <button class="tool-btn" onclick="launchAssessment('exit')">🎫 بطاقة الخروج</button>
+      </div>
+
+      <!-- Session info -->
+      <div class="tool-card">
+        <div class="tool-card-title">ℹ️ الجلسة</div>
+        <div style="font-size:.75rem;color:var(--text2);line-height:1.8;">
+          🆔 <span id="sessionIdLabel" style="font-family:monospace;color:var(--text);">—</span><br>
+          🔗 رابط الطالبة: <span id="studentLink" style="color:var(--sky);word-break:break-all;font-size:.68rem;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Poll Overlay -->
+<div id="pollOverlay" onclick="e=>e.target===this&&closePollOverlay()">
+  <div id="pollBox">
+    <div class="poll-title">📊 استطلاع سريع</div>
+    <textarea id="pollQ" class="poll-input" rows="2" placeholder="السؤال..."></textarea>
+    <div class="poll-opts">
+      <div class="poll-opt">🔵 <input id="opt1" placeholder="الخيار الأول"></div>
+      <div class="poll-opt">🟢 <input id="opt2" placeholder="الخيار الثاني"></div>
+      <div class="poll-opt">🟡 <input id="opt3" placeholder="الخيار الثالث (اختياري)"></div>
+      <div class="poll-opt">🔴 <input id="opt4" placeholder="الخيار الرابع (اختياري)"></div>
+    </div>
+    <div class="poll-actions">
+      <button class="btn-cancel" onclick="closePollOverlay()">إلغاء</button>
+      <button class="btn-launch-poll" onclick="launchPoll()">🚀 إطلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- Group Overlay -->
+<div id="groupOverlay">
+  <div id="groupBox">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <div class="poll-title" style="margin:0;">👥 توزيع المجموعات</div>
+      <button class="btn-cancel" style="width:auto;padding:6px 14px;" onclick="closeGroupOverlay()">✕</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button class="tool-btn active-tool" id="gbVark" style="flex:1;justify-content:center;" onclick="doGroup('VARK')">🎯 VARK</button>
+      <button class="tool-btn" id="gbRand" style="flex:1;justify-content:center;" onclick="doGroup('random')">🎲 عشوائي</button>
+      <button class="tool-btn" id="gbLevel" style="flex:1;justify-content:center;" onclick="doGroup('level')">📊 مستوى</button>
+    </div>
+    <div class="group-grid" id="groupGrid"></div>
+  </div>
+</div>
+
+<!-- End Confirm -->
+<div id="endConfirm">
+  <div class="confirm-box">
+    <div class="confirm-title">⏹ إنهاء الحصة؟</div>
+    <div class="confirm-sub">سيتم حفظ جميع البيانات والتقدم في Supabase. لا يمكن التراجع بعد الإنهاء.</div>
+    <div class="confirm-btns">
+      <button class="btn-confirm-cancel" onclick="closeEndConfirm()">العودة</button>
+      <button class="btn-confirm-end" onclick="endSession()">إنهاء وحفظ</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SUPA_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM3ODk3NTgsImV4cCI6MjA1OTM2NTc1OH0.AErz8DSl0MoFoNrLQXSMVVSHsFerIEPQPM26CgocfIM';
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+// ── State ──
+let sessionId = null;
+let currentClass = '';
+let currentGrade = '';
+let currentSection = '';
+let currentTopic = '';
+let currentPhase = 0;
+let sessionDuration = 45;
+let sessionTimer = null;
+let timerSec = 0;
+let students = [];
+let studentProgress = {};
+let groupingMode = 'VARK';
+let liveChannel = null;
+let pollActive = false;
+let pollData = null;
+let pollResponses = {};
+
+// sections map
+const GRADE_SECTIONS = {
+  KG1:['A','B','C'],KG2:['A','B','C'],
+  '1':['A','B','C','D','E','F'],'2':['A','B','C','D','E','F'],
+  '3':['A','B','C','D','E'],'4':['A','B','C','D','E','F'],
+  '5':['A','B','C','D'],'6':['A','B','C'],'7':['A','B','C'],
+  '8':['A','B','C'],'9':['A','B','C'],'10':['A','B','C'],
+  '11':['A','B','C'],'12':['A','B','C'],
+};
+
+const avatarColors=['#6366f1','#10b981','#f43f5e','#0ea5e9','#8b5cf6','#f59e0b','#ec4899','#14b8a6'];
+const phases=['التهيئة','الاستكشاف','التفسير','التطبيق','التقييم'];
+
+// ── Setup ──
+function onSetupGradeChange(){
+  const grade=document.getElementById('setupGrade').value;
+  const secSel=document.getElementById('setupSection');
+  secSel.innerHTML='<option value="">— اختر الشعبة —</option>';
+  if(!grade) return;
+  (GRADE_SECTIONS[grade]||['A','B','C']).forEach(s=>{
+    const o=document.createElement('option');
+    o.value=s; o.textContent=grade+s;
+    secSel.appendChild(o);
+  });
+}
+
+async function launchSession(){
+  const grade=document.getElementById('setupGrade').value;
+  const section=document.getElementById('setupSection').value;
+  const topic=document.getElementById('setupTopic').value.trim();
+  const dur=parseInt(document.getElementById('setupDuration').value)||45;
+  groupingMode=document.getElementById('setupGrouping').value;
+
+  if(!grade||!section){showToast('⚠️ اختاري الصف والشعبة أولاً');return;}
+  if(!topic){showToast('⚠️ أدخلي موضوع الحصة');return;}
+
+  currentGrade=grade; currentSection=section;
+  currentClass=grade+section; currentTopic=topic; sessionDuration=dur;
+
+  const btn=document.getElementById('btnLaunch');
+  btn.disabled=true; btn.textContent='⏳ جاري التجهيز...';
+
+  // Load students
+  await loadStudents();
+
+  // Create session in Supabase
+  sessionId='SES-'+Date.now();
+  try{
+    await sb.from('lesson_sessions').insert({
+      id:sessionId, class_key:currentClass, topic:currentTopic,
+      status:'active', phase:0, teacher_id:'munira.almarri',
+      started_at:new Date().toISOString()
+    });
+  }catch(e){ console.warn('lesson_sessions insert:',e); }
+
+  // Subscribe realtime
+  subscribeRealtime();
+
+  // Launch UI
+  document.getElementById('setupScreen').style.display='none';
+  const ls=document.getElementById('liveScreen');
+  ls.style.display='flex';
+  ls.style.flexDirection='column';
+
+  document.getElementById('liveClassLabel').textContent='📚 '+currentClass+' — '+currentTopic;
+  document.getElementById('sessionIdLabel').textContent=sessionId;
+  document.getElementById('studentLink').textContent=
+    window.location.origin+'/apps/edoos-teacher/student_lesson.html?session='+sessionId+'&class='+currentClass;
+
+  // Start timer
+  timerSec=sessionDuration*60;
+  updateTimerDisplay();
+  sessionTimer=setInterval(tickTimer,1000);
+
+  buildStudentGrid();
+  updatePhaseControls(0);
+  buildPhaseProgressBars();
+  showToast('✅ الحصة انطلقت! '+students.length+' طالبة');
+}
+
+async function loadStudents(){
+  let data=null;
+  try{
+    const r=await fetch('/data/students.json');
+    if(r.ok) data=await r.json();
+  }catch{}
+  if(!data){
+    try{
+      const r2=await fetch('https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/students.json');
+      data=await r2.json();
+    }catch{}
+  }
+  const list=data&&data[currentClass];
+  if(list&&Array.isArray(list)){
+    students=list.map((s,i)=>({
+      id:'s'+i,
+      name: s.name_ar||s.name||s.name_en||'طالبة '+(i+1),
+      vark: s.vark||(['V','A','R','K'][i%4]),
+      level: s.level||'متوسط',
+      status:'offline', phase:0, helpRequest:false
+    }));
+  }else{
+    // Demo students if no data
+    students=Array.from({length:24},(_,i)=>({
+      id:'s'+i,name:'طالبة '+(i+1),
+      vark:(['V','A','R','K'][i%4]),
+      level:'متوسط',status:'offline',phase:0,helpRequest:false
+    }));
+  }
+  document.getElementById('totalCount').textContent=students.length;
+}
+
+// ── Student Grid ──
+function buildStudentGrid(){
+  const grid=document.getElementById('studentGrid');
+  grid.innerHTML='';
+  students.forEach((s,i)=>{
+    const color=avatarColors[i%avatarColors.length];
+    const initials=s.name.charAt(0);
+    const p=studentProgress[s.id]||{phase:0,status:'offline',help:false};
+    const statusCls=p.status==='active'?'active':p.help?'help':'offline';
+    const phaseLbl=p.phase<phases.length?phases[p.phase]:'—';
+    const phaseCls=p.phase===currentPhase?'active':p.phase>currentPhase?'done':'';
+    grid.innerHTML+=`
+    <div class="student-tile ${statusCls}" id="tile-${s.id}" onclick="pingStudent('${s.id}')">
+      ${p.help?'<span class="help-flag">🆘</span>':''}
+      <div class="stu-avatar" style="background:${color}22;color:${color};border-color:${color};">${initials}</div>
+      <div class="stu-name">${s.name}</div>
+      <span class="vark-tag vark-${s.vark}">${s.vark}</span>
+      <span class="stu-phase-badge ${phaseCls}">${phaseLbl}</span>
+    </div>`;
+  });
+  updateStatBadges();
+}
+
+function refreshStudents(){ buildStudentGrid(); }
+
+function pingStudent(sid){
+  const stu=students.find(s=>s.id===sid);
+  if(stu) showToast('👁️ تفقد شاشة '+stu.name);
+}
+
+function updateStatBadges(){
+  let active=0,help=0,idle=0;
+  students.forEach(s=>{
+    const p=studentProgress[s.id]||{};
+    if(p.help) help++;
+    else if(p.status==='active') active++;
+    else idle++;
+  });
+  document.getElementById('statActive').textContent=active;
+  document.getElementById('statHelp').textContent=help;
+  document.getElementById('statIdle').textContent=idle;
+}
+
+// ── Phase Controls ──
+function broadcastPhase(idx){
+  currentPhase=idx;
+  updatePhaseControls(idx);
+
+  // Update Supabase
+  sb.from('lesson_sessions').update({phase:idx}).eq('id',sessionId).then(()=>{});
+
+  // Broadcast via realtime channel
+  if(liveChannel){
+    liveChannel.send({type:'broadcast',event:'phase_change',payload:{phase:idx}});
+  }
+
+  showToast('📡 تم بث المرحلة: '+phases[idx]);
+  buildPhaseProgressBars();
+}
+
+function updatePhaseControls(idx){
+  for(let i=0;i<5;i++){
+    const pc=document.getElementById('pc'+i);
+    const ps=document.getElementById('ps'+i);
+    if(!pc) continue;
+    pc.classList.remove('active-phase','broadcasting');
+    if(i===idx){pc.classList.add('active-phase','broadcasting');ps.textContent='🔴 يُبث الآن';}
+    else if(i<idx){ps.textContent='✅ مكتملة';}
+    else{ps.textContent='في الانتظار';}
+  }
+}
+
+function buildPhaseProgressBars(){
+  const cont=document.getElementById('phaseProgressBars');
+  cont.innerHTML='';
+  phases.forEach((ph,i)=>{
+    const count=students.filter(s=>(studentProgress[s.id]||{}).phase===i).length;
+    const pct=students.length?Math.round((count/students.length)*100):0;
+    cont.innerHTML+=`
+    <div class="poll-result-bar">
+      <div class="poll-result-label"><span>${ph}</span><span>${count}</span></div>
+      <div class="poll-result-track"><div class="poll-result-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  });
+}
+
+// ── Realtime ──
+function subscribeRealtime(){
+  liveChannel = sb.channel('session-'+sessionId, {config:{broadcast:{self:false}}});
+
+  liveChannel
+    .on('broadcast', {event:'student_update'}, ({payload})=>{
+      const {student_id, phase, status, help} = payload;
+      studentProgress[student_id]={phase:phase||0, status:status||'active', help:!!help};
+      const tile=document.getElementById('tile-'+student_id);
+      if(tile) updateStudentTile(student_id);
+      updateStatBadges();
+      buildPhaseProgressBars();
+    })
+    .on('broadcast', {event:'help_request'}, ({payload})=>{
+      const {student_id, name} = payload;
+      if(studentProgress[student_id]) studentProgress[student_id].help=true;
+      const tile=document.getElementById('tile-'+student_id);
+      if(tile){tile.classList.add('help'); tile.innerHTML='<span class="help-flag">🆘</span>'+tile.innerHTML;}
+      document.getElementById('statHelp').textContent=
+        parseInt(document.getElementById('statHelp').textContent||0)+1;
+      showToast('🆘 '+name+' تطلب مساعدة!');
+    })
+    .on('broadcast', {event:'poll_answer'}, ({payload})=>{
+      handlePollAnswer(payload);
+    })
+    .subscribe();
+}
+
+function updateStudentTile(sid){
+  const s=students.find(st=>st.id===sid);
+  if(!s) return;
+  const i=students.indexOf(s);
+  const color=avatarColors[i%avatarColors.length];
+  const p=studentProgress[sid]||{phase:0,status:'offline',help:false};
+  const statusCls=p.status==='active'?'active':p.help?'help':'offline';
+  const phaseLbl=p.phase<phases.length?phases[p.phase]:'—';
+  const phaseCls=p.phase===currentPhase?'active':p.phase>currentPhase?'done':'';
+  const tile=document.getElementById('tile-'+sid);
+  if(!tile) return;
+  tile.className='student-tile '+statusCls;
+  tile.innerHTML=`
+    ${p.help?'<span class="help-flag">🆘</span>':''}
+    <div class="stu-avatar" style="background:${color}22;color:${color};border-color:${color};">${s.name.charAt(0)}</div>
+    <div class="stu-name">${s.name}</div>
+    <span class="vark-tag vark-${s.vark}">${s.vark}</span>
+    <span class="stu-phase-badge ${phaseCls}">${phaseLbl}</span>`;
+}
+
+// ── Timer ──
+function tickTimer(){
+  timerSec--;
+  if(timerSec<=0){clearInterval(sessionTimer);showToast('⏰ انتهى وقت الحصة!');return;}
+  updateTimerDisplay();
+}
+
+function updateTimerDisplay(){
+  const m=Math.floor(timerSec/60), s=timerSec%60;
+  document.getElementById('liveTimer').textContent=
+    String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
+
+// ── Broadcast Messages ──
+function sendBroadcastMsg(type){
+  const msgs={
+    attention:'🔔 اطلبي الانتباه! استمعي للمعلمة',
+    pause:'⏸ توقفي لحظة — لا تكملي حتى إشارة المعلمة',
+    check:'✅ تحققي من عملك قبل المتابعة',
+    celebrate:'🎉 ممتاز! استمري في العمل الرائع'
+  };
+  if(liveChannel){
+    liveChannel.send({type:'broadcast',event:'teacher_msg',payload:{msg:msgs[type],type}});
+  }
+  showToast('📢 تم الإرسال: '+msgs[type].substring(0,30)+'...');
+}
+
+function sendQuickMessage(){
+  const msg=document.getElementById('quickMsgInput').value.trim();
+  if(!msg){showToast('⚠️ الرسالة فارغة');return;}
+  if(liveChannel){
+    liveChannel.send({type:'broadcast',event:'teacher_msg',payload:{msg,type:'custom'}});
+  }
+  document.getElementById('quickMsgInput').value='';
+  showToast('✅ تم إرسال الرسالة للجميع');
+}
+
+// ── Poll ──
+function openPollOverlay(){document.getElementById('pollOverlay').style.display='flex';}
+function closePollOverlay(){document.getElementById('pollOverlay').style.display='none';}
+
+function launchPoll(){
+  const q=document.getElementById('pollQ').value.trim();
+  const opts=[
+    document.getElementById('opt1').value.trim(),
+    document.getElementById('opt2').value.trim(),
+    document.getElementById('opt3').value.trim(),
+    document.getElementById('opt4').value.trim(),
+  ].filter(Boolean);
+
+  if(!q||opts.length<2){showToast('⚠️ أدخلي السؤال وخيارين على الأقل');return;}
+
+  pollData={question:q,options:opts};
+  pollResponses={};
+  opts.forEach((_,i)=>pollResponses[i]=0);
+
+  if(liveChannel){
+    liveChannel.send({type:'broadcast',event:'poll_start',payload:{question:q,options:opts}});
+  }
+
+  // Show results card
+  const card=document.getElementById('pollResultsCard');
+  card.style.display='block';
+  document.getElementById('pollQuestion').textContent=q;
+  renderPollBars();
+
+  closePollOverlay();
+  pollActive=true;
+  showToast('📊 تم إطلاق الاستطلاع!');
+}
+
+function handlePollAnswer({option_idx}){
+  if(!pollActive||option_idx===undefined) return;
+  pollResponses[option_idx]=(pollResponses[option_idx]||0)+1;
+  renderPollBars();
+}
+
+function renderPollBars(){
+  if(!pollData) return;
+  const total=Object.values(pollResponses).reduce((a,b)=>a+b,0);
+  const bars=document.getElementById('pollBars');
+  bars.innerHTML='';
+  pollData.options.forEach((opt,i)=>{
+    const cnt=pollResponses[i]||0;
+    const pct=total?Math.round((cnt/total)*100):0;
+    bars.innerHTML+=`
+    <div class="poll-result-bar">
+      <div class="poll-result-label"><span>${opt}</span><span>${pct}%</span></div>
+      <div class="poll-result-track"><div class="poll-result-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  });
+  document.getElementById('pollResponseCount').textContent=total+' من '+students.length+' أجابت';
+}
+
+// ── Groups ──
+function openGroupOverlay(){document.getElementById('groupOverlay').style.display='flex'; doGroup(groupingMode);}
+function closeGroupOverlay(){document.getElementById('groupOverlay').style.display='none';}
+
+function doGroup(mode){
+  groupingMode=mode;
+  ['gbVark','gbRand','gbLevel'].forEach(id=>document.getElementById(id)?.classList.remove('active-tool'));
+  const btnMap={VARK:'gbVark',random:'gbRand',level:'gbLevel'};
+  if(btnMap[mode]) document.getElementById(btnMap[mode])?.classList.add('active-tool');
+
+  let groups=[];
+  const shuffled=[...students].sort(()=>Math.random()-.5);
+
+  if(mode==='VARK'){
+    const varkGroups={V:[],A:[],R:[],K:[]};
+    shuffled.forEach(s=>varkGroups[s.vark]?.push(s));
+    groups=Object.entries(varkGroups).map(([k,v])=>({name:'مجموعة '+k,members:v})).filter(g=>g.members.length);
+  } else if(mode==='level'){
+    const lvls={متقدم:[],متوسط:[],دعم:[]};
+    shuffled.forEach(s=>{const l=s.level||'متوسط';if(lvls[l])lvls[l].push(s);});
+    groups=Object.entries(lvls).map(([k,v])=>({name:'مستوى '+k,members:v})).filter(g=>g.members.length);
+  } else {
+    const size=4;
+    for(let i=0;i<shuffled.length;i+=size){
+      groups.push({name:'مجموعة '+(Math.floor(i/size)+1),members:shuffled.slice(i,i+size)});
+    }
+  }
+
+  const grid=document.getElementById('groupGrid');
+  grid.innerHTML='';
+  groups.forEach(g=>{
+    grid.innerHTML+=`
+    <div class="group-card">
+      <div class="group-card-title">${g.name} (${g.members.length})</div>
+      ${g.members.map(m=>`<div class="group-member">• ${m.name} <span class="vark-tag vark-${m.vark}">${m.vark}</span></div>`).join('')}
+    </div>`;
+  });
+
+  // Broadcast groups
+  if(liveChannel){
+    liveChannel.send({type:'broadcast',event:'groups',payload:{groups:groups.map(g=>({name:g.name,members:g.members.map(m=>m.id)}))}});
+  }
+}
+
+// ── Assessment ──
+function launchAssessment(type){
+  const labels={self:'التقييم الذاتي',peer:'تقييم الأقران',group:'التقييم الجماعي',exit:'بطاقة الخروج'};
+  if(liveChannel){
+    liveChannel.send({type:'broadcast',event:'assessment_start',payload:{type,label:labels[type]}});
+  }
+  showToast('📝 تم إرسال '+labels[type]+' للطالبات');
+}
+
+// ── End Session ──
+function askEndSession(){document.getElementById('endConfirm').style.display='flex';}
+function closeEndConfirm(){document.getElementById('endConfirm').style.display='none';}
+
+async function endSession(){
+  clearInterval(sessionTimer);
+  if(liveChannel){
+    liveChannel.send({type:'broadcast',event:'session_end',payload:{msg:'انتهت الحصة. شكراً!'}});
+    await sb.removeChannel(liveChannel);
+  }
+  try{
+    await sb.from('lesson_sessions').update({
+      status:'completed', ended_at:new Date().toISOString(),
+      final_phase:currentPhase
+    }).eq('id',sessionId);
+  }catch(e){}
+  showToast('✅ تم حفظ الحصة بنجاح!');
+  setTimeout(()=>window.location.href='index.html', 2000);
+}
+
+// ── Toast ──
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// Simulate some student activity (demo)
+function simulateDemoActivity(){
+  if(!students.length) return;
+  const s=students[Math.floor(Math.random()*students.length)];
+  if(!studentProgress[s.id]) studentProgress[s.id]={phase:0,status:'offline',help:false};
+  studentProgress[s.id].status='active';
+  if(Math.random()>.7) studentProgress[s.id].phase=Math.min(currentPhase,4);
+  updateStudentTile(s.id);
+  updateStatBadges();
+  buildPhaseProgressBars();
+}
+setInterval(simulateDemoActivity,4000);
+</script>
+</body>
+</html>
