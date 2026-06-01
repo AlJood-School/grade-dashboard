@@ -678,14 +678,25 @@ let _studentsCache = null;
 
 async function loadStudents() {
   if (_studentsCache) return _studentsCache;
-  try {
-    const resp = await fetch('https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/students.json');
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    _studentsCache = await resp.json();
-  } catch(e) {
-    console.warn('Students load failed:', e);
-    _studentsCache = {};
+  // Try Vercel first (faster), then GitHub raw as fallback
+  const urls = [
+    'https://grade-dashboard-beta.vercel.app/data/students.json',
+    'https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/students.json'
+  ];
+  for (const url of urls) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const resp = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      _studentsCache = await resp.json();
+      return _studentsCache;
+    } catch(e) {
+      console.warn('Students load failed from', url, e);
+    }
   }
+  _studentsCache = {};
   return _studentsCache;
 }
 
