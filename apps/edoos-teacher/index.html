@@ -424,11 +424,11 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
 
     <!-- Class Selector -->
     <div class="att-class-selector">
-      <button class="att-class-btn active" onclick="selectClass(this,'3ب')">الصف 3ب</button>
-      <button class="att-class-btn" onclick="selectClass(this,'2أ')">الصف 2أ</button>
-      <button class="att-class-btn" onclick="selectClass(this,'4أ')">الصف 4أ</button>
-      <button class="att-class-btn" onclick="selectClass(this,'5ب')">الصف 5ب</button>
-      <button class="att-class-btn" onclick="selectClass(this,'6أ')">الصف 6أ</button>
+      <button class="att-class-btn active" onclick="selectClass(this,'3B')">3B</button>
+      <button class="att-class-btn" onclick="selectClass(this,'2A')">2A</button>
+      <button class="att-class-btn" onclick="selectClass(this,'4A')">4A</button>
+      <button class="att-class-btn" onclick="selectClass(this,'5B')">5B</button>
+      <button class="att-class-btn" onclick="selectClass(this,'6A')">6A</button>
     </div>
 
     <!-- Donut + Stats -->
@@ -865,7 +865,8 @@ function showToast(msg){
 }
 
 // ── ATTENDANCE ──
-const students3b=[
+// --- بيانات قديمة تبقى كـ fallback ---
+const students3b_fallback=[
   {name:'نورة السعيدي',vark:'V'},
   {name:'مريم الزيدي',vark:'K'},
   {name:'فاطمة المهري',vark:'A'},
@@ -891,13 +892,59 @@ const students3b=[
   {name:'إيمان الفلاسي',vark:'A'},
   {name:'صفاء المطيري',vark:'R'}
 ];
+// ── Dynamic students from students.json ──
+let currentClassStudents = [];
+let currentClassKey = '3B';
+let _allStudentsData = null;
+
+async function fetchAllStudents() {
+  if (_allStudentsData) return _allStudentsData;
+  try {
+    const r = await fetch('/data/students.json');
+    if (r.ok) { _allStudentsData = await r.json(); return _allStudentsData; }
+  } catch {}
+  try {
+    const r2 = await fetch('https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/students.json');
+    _allStudentsData = await r2.json();
+  } catch { _allStudentsData = {}; }
+  return _allStudentsData;
+}
+
+async function loadClassStudents(key) {
+  const data = await fetchAllStudents();
+  const list = data[key];
+  if (list && Array.isArray(list)) {
+    currentClassStudents = list.map(s => ({
+      name: s.name_ar || s.name || s.name_en || 'طالبة',
+      vark: s.vark || '—'
+    }));
+  } else {
+    currentClassStudents = students3b_fallback;
+  }
+  for (const k in attStatus) delete attStatus[k]; // reset attendance
+  buildAttGrid();
+  updateAttStats();
+  updateSummaryStats(data);
+}
+
+function updateSummaryStats(data) {
+  // حساب إجمالي الطلاب عبر صفوف المعلمة
+  const myClasses = ['3B','2A','4A','5B','6A'];
+  let total = 0;
+  myClasses.forEach(k => { if(data[k]) total += data[k].length; });
+  const el = document.querySelector('.card.emerald .card-value');
+  if (el) el.textContent = total;
+  const sub = document.querySelector('.card.emerald .card-sub');
+  if (sub) sub.textContent = `عبر ${myClasses.length} صفوف`;
+}
+
 const attStatus={};
 const avatarColors=['#6366f1','#10b981','#f43f5e','#0ea5e9','#8b5cf6','#f6c90e','#ec4899'];
 
 function buildAttGrid(){
   const grid=document.getElementById('attGrid');
   grid.innerHTML='';
-  students3b.forEach((s,i)=>{
+  currentClassStudents.forEach((s,i)=>{
     const status=attStatus[i]||'present';
     const color=avatarColors[i%avatarColors.length];
     grid.innerHTML+=`
@@ -922,7 +969,7 @@ function setAtt(idx,status){
 }
 
 function updateAttStats(){
-  const total=students3b.length;
+  const total=currentClassStudents.length;
   let present=0,late=0,absent=0;
   for(let i=0;i<total;i++){
     const s=attStatus[i]||'present';
@@ -963,10 +1010,13 @@ function updateAttStats(){
   }
   if(donutText) donutText.textContent=pct+'%';
 }
-function selectClass(btn,cls){
+async function selectClass(btn,cls){
   document.querySelectorAll('.att-class-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  showToast('تم تحديد '+cls);
+  currentClassKey = cls;
+  showToast('⏳ جاري تحميل '+cls+'...');
+  await loadClassStudents(cls);
+  showToast('✅ تم تحميل '+cls+' — '+currentClassStudents.length+' طالبة');
 }
 function saveAttendance(){showToast('✅ تم حفظ الحضور في Supabase بنجاح!');}
 
@@ -1308,7 +1358,7 @@ function sendGemini(){
 }
 
 // ── INIT ──
-buildAttGrid();
+loadClassStudents('3B'); // تحميل الصف الافتراضي من students.json
 buildStudentsGrid(allStudents);
 buildGrades();
 </script>

@@ -221,29 +221,29 @@ textarea{min-height:72px}
         <div class="fg g3">
           <div class="f">
             <label><span class="rq">*</span> الصف الدراسي</label>
-            <select id="f_grade">
+            <select id="f_grade" onchange="onGradeChange()">
               <option value="">— اختر الصف —</option>
               <optgroup label="رياض الأطفال">
                 <option value="KG1">KG1 — روضة أولى</option>
                 <option value="KG2">KG2 — روضة ثانية</option>
               </optgroup>
               <optgroup label="الحلقة الأولى (1–4)">
-                <option value="الصف الأول">الصف الأول</option>
-                <option value="الصف الثاني">الصف الثاني</option>
-                <option value="الصف الثالث">الصف الثالث</option>
-                <option value="الصف الرابع">الصف الرابع</option>
+                <option value="1">Grade 1 — الصف الأول</option>
+                <option value="2">Grade 2 — الصف الثاني</option>
+                <option value="3">Grade 3 — الصف الثالث</option>
+                <option value="4">Grade 4 — الصف الرابع</option>
               </optgroup>
               <optgroup label="الحلقة الثانية (5–9)">
-                <option value="الصف الخامس">الصف الخامس</option>
-                <option value="الصف السادس">الصف السادس</option>
-                <option value="الصف السابع">الصف السابع</option>
-                <option value="الصف الثامن">الصف الثامن</option>
-                <option value="الصف التاسع">الصف التاسع</option>
+                <option value="5">Grade 5 — الصف الخامس</option>
+                <option value="6">Grade 6 — الصف السادس</option>
+                <option value="7">Grade 7 — الصف السابع</option>
+                <option value="8">Grade 8 — الصف الثامن</option>
+                <option value="9">Grade 9 — الصف التاسع</option>
               </optgroup>
               <optgroup label="الحلقة الثالثة (10–12)">
-                <option value="الصف العاشر">الصف العاشر</option>
-                <option value="الصف الحادي عشر">الصف الحادي عشر</option>
-                <option value="الصف الثاني عشر">الصف الثاني عشر</option>
+                <option value="10">Grade 10 — الصف العاشر</option>
+                <option value="11">Grade 11 — الصف الحادي عشر</option>
+                <option value="12">Grade 12 — الصف الثاني عشر</option>
               </optgroup>
             </select>
           </div>
@@ -317,13 +317,9 @@ textarea{min-height:72px}
             <input type="number" id="f_students" value="25" min="1" max="50">
           </div>
           <div class="f">
-            <label>الفصل / الشعبة</label>
-            <select id="f_section">
-              <option value="أ">الشعبة أ</option>
-              <option value="ب">الشعبة ب</option>
-              <option value="ج">الشعبة ج</option>
-              <option value="د">الشعبة د</option>
-              <option value="هـ">الشعبة هـ</option>
+            <label>الفصل / الشعبة <span style="font-size:.72rem;color:var(--muted)" id="sectionCountHint"></span></label>
+            <select id="f_section" onchange="autoFillStudents()">
+              <option value="">— اختر الشعبة —</option>
             </select>
           </div>
           <div class="f">
@@ -486,6 +482,81 @@ textarea{min-height:72px}
 
 </div><!-- end main-wrap -->
 <script>
+// ===== GRADE/SECTION/STUDENTS SMART LOGIC =====
+let _studentsData = null;
+
+// Sections available per grade (based on students.json)
+const GRADE_SECTIONS = {
+  'KG1': ['A','B','C'],
+  'KG2': ['A','B','C'],
+  '1':   ['A','B','C','D','E','F'],
+  '2':   ['A','B','C','D','E','F'],
+  '3':   ['A','B','C','D','E'],
+  '4':   ['A','B','C','D','E','F'],
+  '5':   ['A','B','C','D'],
+  '6':   ['A','B','C'],
+  '7':   ['A','B','C'],
+  '8':   ['A','B','C'],
+  '9':   ['A','B','C'],
+  '10':  ['A','B','C'],
+  '11':  ['A','B','C'],
+  '12':  ['A','B','C'],
+};
+
+async function fetchStudentsData() {
+  if (_studentsData) return _studentsData;
+  try {
+    const res = await fetch('/data/students.json');
+    if (!res.ok) throw new Error();
+    _studentsData = await res.json();
+  } catch {
+    try {
+      const r2 = await fetch('https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/students.json');
+      _studentsData = await r2.json();
+    } catch { _studentsData = {}; }
+  }
+  return _studentsData;
+}
+
+function onGradeChange() {
+  const grade = document.getElementById('f_grade').value;
+  const secSel = document.getElementById('f_section');
+  secSel.innerHTML = '<option value="">— اختر الشعبة —</option>';
+  document.getElementById('sectionCountHint').textContent = '';
+  document.getElementById('f_students').value = '';
+
+  if (!grade) return;
+  const sections = GRADE_SECTIONS[grade] || ['A','B','C'];
+  sections.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s;
+    opt.textContent = `${grade}${s}`;
+    secSel.appendChild(opt);
+  });
+  // auto-select if only one
+  if (sections.length === 1) { secSel.value = sections[0]; autoFillStudents(); }
+}
+
+async function autoFillStudents() {
+  const grade = document.getElementById('f_grade').value;
+  const section = document.getElementById('f_section').value;
+  if (!grade || !section) return;
+
+  const key = grade + section; // e.g. "3B", "KG1A"
+  const data = await fetchStudentsData();
+  const hint = document.getElementById('sectionCountHint');
+
+  if (data[key] && Array.isArray(data[key])) {
+    const count = data[key].length;
+    document.getElementById('f_students').value = count;
+    hint.textContent = `(${count} طالبة)`;
+    hint.style.color = 'var(--pl)';
+  } else {
+    hint.textContent = '(بيانات غير متوفرة)';
+    hint.style.color = 'var(--muted)';
+  }
+}
+
 // ============================================================
 // CONFIG
 // ============================================================
