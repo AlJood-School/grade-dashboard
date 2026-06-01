@@ -100,6 +100,28 @@ body.special-mode{font-size:25px;}
 .emoji-radio.selected{border-color:var(--gold);background:#fffbeb;}
 .help-btn{position:fixed;bottom:80px;right:20px;background:var(--danger);color:white;border:none;border-radius:50px;padding:12px 20px;font-size:1rem;font-weight:700;cursor:pointer;z-index:1000;box-shadow:0 4px 20px rgba(239,68,68,.4);transition:all .2s;display:none;}
 .help-btn:hover{transform:scale(1.05);}
+
+#emergencyExitBtn {
+  position: fixed;
+  bottom: 90px;
+  right: 24px;
+  z-index: 9000;
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 50px;
+  padding: 10px 18px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-family: 'Tajawal', sans-serif;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(220,38,38,0.45);
+  display: none;
+  align-items: center;
+  gap: 6px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+#emergencyExitBtn:hover { transform: scale(1.06); box-shadow: 0 6px 20px rgba(220,38,38,0.55); }
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:2000;display:none;align-items:center;justify-content:center;}
 .modal-overlay.open{display:flex;}
 .modal-box{background:white;border-radius:20px;padding:30px;max-width:520px;width:90%;max-height:90vh;overflow-y:auto;animation:bounce-in .3s;}
@@ -1562,6 +1584,9 @@ function toggleWu4Chip(el) { el.classList.toggle('selected'); }
   </div>
 </div>
 
+<!-- EMERGENCY EXIT BUTTON -->
+<button id="emergencyExitBtn" onclick="confirmEmergencyExit()">⚡ خروج طارئ</button>
+
 <!-- Teacher Panel -->
 <div class="teacher-panel" id="teacherPanel">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -2105,6 +2130,7 @@ async function loadStudents(section){
   }catch(e){ console.error('loadStudents error:', e); }
   nameSelect.innerHTML='<option value="">-- Select name --</option>';
   names.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; nameSelect.appendChild(o); });
+  window._loadedStudentsForSection = names;
 }
 
 function toggleSpecialMode(){
@@ -2127,6 +2153,34 @@ async function markPresent() {
   if (!sec || !name){ showNotif('⚠️ Please select your name first! / اختر اسمك أولاً'); return; }
   const btn = document.getElementById('startBtn');
   if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Saving...'; }
+
+  // ── Duplicate prevention: check if this student already joined today ──
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const existing = await db.collection('obs_attendance')
+      .where('studentName', '==', name)
+      .where('section', '==', sec)
+      .where('grade', '==', 4)
+      .get();
+    const todayEntries = existing.docs.filter(d => {
+      const ts = d.data().timestamp;
+      if (!ts) return false;
+      const entryDate = ts.toDate ? ts.toDate() : new Date(ts.seconds * 1000);
+      return entryDate >= todayStart;
+    });
+    if (todayEntries.length > 0) {
+      if (btn) { btn.disabled = false; btn.innerHTML = '✅ أنا هنا! · I\'m Here! 🎉'; }
+      const resume = confirm(`⚠️ ${name} — دخلت الحصة سابقاً اليوم!\n\nهل تريد متابعة من حيث توقفت؟\n\n${name} — you already joined today!\nResume from where you left off?`);
+      if (resume) {
+        const cel = document.getElementById('attendanceCelebration');
+        const nameEl = document.getElementById('celebName');
+        if (cel) { if (nameEl) nameEl.textContent = '👋 مرحباً مجدداً ' + name + '!'; cel.style.display = 'flex'; }
+        setTimeout(() => { if (cel) cel.style.display = 'none'; startLesson(); }, 2000);
+      }
+      return;
+    }
+  } catch(dupErr) { console.warn('Duplicate check failed:', dupErr); }
 
   playJoinChime();
 
@@ -2171,6 +2225,22 @@ function playJoinChime() {
   } catch(e) {}
 }
 
+function confirmEmergencyExit() {
+  const confirmed = confirm('⚡ هل تريد الخروج من الحصة؟\n\nسيتم حفظ تقدمك تلقائياً.\n\nDo you want to leave the lesson? Your progress will be saved.');
+  if (!confirmed) return;
+  // Save current state
+  try { saveState(); } catch(e) {}
+  try { saveToFirestore({ status: 'student_left', endReason: 'emergency_exit' }); } catch(e) {}
+  // Notify teacher
+  if (studentName && sectionName) {
+    try { db.collection('help_requests').add({ studentName, section: sectionName, grade: 4, phase: currentPhase, type: 'emergency_exit', sessionId, timestamp: firebase.firestore.FieldValue.serverTimestamp(), resolved: false }); } catch(e) {}
+  }
+  // Reset and reload
+  document.getElementById('emergencyExitBtn').style.display = 'none';
+  document.getElementById('helpBtn').style.display = 'none';
+  window.location.reload();
+}
+
 function startLesson(){
   sectionName=document.getElementById('sectionSelect').value;
   studentName=document.getElementById('nameSelect').value;
@@ -2186,6 +2256,8 @@ function startLesson(){
   document.getElementById('appHeader').style.display='flex';
   document.getElementById('progressContainer').style.display='block';
   document.getElementById('helpBtn').style.display='block';
+  const emergBtn = document.getElementById('emergencyExitBtn');
+  if (emergBtn) emergBtn.style.display = 'flex';
   startLessonTimer();
   saveToFirestore({status:'in_progress',startTime:firebase.firestore.FieldValue.serverTimestamp()});
   if(isSpecialNeeds) notifySpecialNeeds();
@@ -2233,7 +2305,21 @@ function showPhase(idx){
   saveState();
 }
 
-function nextPhase(){ if(currentPhase<12){ saveCurrentPhase(); showPhase(currentPhase+1); } }
+function nextPhase(){
+  if(currentPhase<12){
+    saveCurrentPhase();
+    // Visual checkpoint confirmation
+    try {
+      const toast = document.createElement('div');
+      toast.textContent = '💾 تم الحفظ ✓';
+      toast.style.cssText = 'position:fixed;bottom:150px;right:24px;background:#22c55e;color:#fff;padding:8px 16px;border-radius:20px;font-size:0.82rem;font-family:Tajawal,sans-serif;font-weight:700;z-index:9999;opacity:0;transition:opacity 0.3s;pointer-events:none;';
+      document.body.appendChild(toast);
+      setTimeout(() => { toast.style.opacity = '1'; }, 50);
+      setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 2000);
+    } catch(e) {}
+    showPhase(currentPhase+1);
+  }
+}
 function goBack(){
   if(currentPhase<=1) return;
   saveCurrentPhase();
@@ -2400,7 +2486,10 @@ function checkTF(qi,answer){
     const badge=document.getElementById('tfScoreBadge');
     if(badge) badge.textContent=`Score: ${score}/${tfAnswers.length} ${score>=tfAnswers.length*0.8?'🌟':'👍'}`;
     document.getElementById('tfScore').style.display='block';
-    document.getElementById('nextTF').style.display='inline-block';
+    const nextBtn=document.getElementById('nextTF');
+    nextBtn.style.display='inline-block';
+    // Scroll the Next button into view so student can see it
+    setTimeout(()=>{ nextBtn.scrollIntoView({behavior:'smooth',block:'center'}); },300);
     if(score===tfAnswers.length) successSound();
   }
 }
@@ -3567,6 +3656,38 @@ window.addEventListener('beforeunload', function() {
   try { db.collection('active_sessions').doc('grade4_munira').delete(); } catch(e){}
 });
 
+// Absent students renderer
+function renderAbsentStudents(presentNames, fullList) {
+  let absentEl = document.getElementById('tp-absent-list');
+  if (!absentEl) {
+    const grid = document.getElementById('teacherStudentList');
+    if (!grid) return;
+    const wrapper = document.createElement('div');
+    wrapper.id = 'tp-absent-wrapper';
+    wrapper.style.cssText = 'margin-top:16px;padding-top:12px;border-top:2px dashed rgba(239,68,68,0.3);';
+    wrapper.innerHTML = '<div style="font-size:0.8rem;font-weight:700;color:#ef4444;margin-bottom:8px;font-family:Tajawal,sans-serif;">❌ غائبون / Absent</div><div id="tp-absent-list" style="display:flex;flex-wrap:wrap;gap:6px;"></div>';
+    if (grid.parentNode) grid.parentNode.insertBefore(wrapper, grid.nextSibling);
+    absentEl = document.getElementById('tp-absent-list');
+  }
+  if (!absentEl) return;
+  const absents = fullList.filter(s => {
+    const sName = typeof s === 'object' ? (s.nameAr || s.name || '') : s;
+    return sName && !presentNames.some(p => p === sName.trim());
+  });
+  if (!absents.length) {
+    const wrapper = document.getElementById('tp-absent-wrapper');
+    if (wrapper) wrapper.style.display = 'none';
+    return;
+  }
+  const wrapper2 = document.getElementById('tp-absent-wrapper');
+  if (wrapper2) wrapper2.style.display = 'block';
+  absentEl.innerHTML = absents.map(s => {
+    const sName = typeof s === 'object' ? (s.nameAr || s.name || '') : s;
+    const isSEN = typeof s === 'object' && s.specialNeeds;
+    return `<span style="background:${isSEN ? 'rgba(139,92,246,0.15)' : 'rgba(239,68,68,0.08)'};border:1px solid ${isSEN ? 'rgba(139,92,246,0.4)' : 'rgba(239,68,68,0.3)'};border-radius:20px;padding:3px 10px;font-size:0.78rem;color:${isSEN ? '#7c3aed' : '#dc2626'};font-family:Tajawal,sans-serif;">${isSEN ? '💙 ' : ''}${sName}</span>`;
+  }).join('');
+}
+
 function loadTeacherData(){
   const list=document.getElementById('teacherStudentList');
   if(list) list.innerHTML='<p style="color:rgba(255,255,255,.6)">Loading students...</p>';
@@ -3593,6 +3714,9 @@ function loadTeacherData(){
       `;
       list.appendChild(card);
     });
+    // Compute absent students
+    const presentNames = snap.docs.map(d => (d.data().studentName || '').trim());
+    renderAbsentStudents(presentNames, window._loadedStudentsForSection || []);
   });
   
   const helpList=document.getElementById('helpRequestsList');
