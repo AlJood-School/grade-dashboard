@@ -519,6 +519,80 @@ async function fetchStudentsData() {
   return _studentsData;
 }
 
+
+// ============================================================
+// VARK — جلب بيانات حقيقية من Supabase
+// ============================================================
+async function fetchVARKStats(grade, section) {
+  const panel = document.getElementById('varkStatsPanel');
+  const barsEl = document.getElementById('varkBarsContainer');
+  const previewEl = document.getElementById('varkGroupPreview');
+  
+  panel.style.display = 'none';
+  varkClassData = null;
+  
+  if (!sb || !grade || !section) return;
+  
+  try {
+    const { data, error } = await sb
+      .from('vark_results')
+      .select('student_name, dominant_style, v_score, a_score, r_score, k_score')
+      .eq('grade', String(grade))
+      .eq('section', String(section))
+      .eq('is_latest', true)
+      .eq('school_id', 'aljood');
+    
+    if (error || !data || data.length === 0) {
+      barsEl.innerHTML = '<div style="font-size:.8rem;color:var(--muted)">⚠️ لا توجد بيانات VARK لهذا الصف بعد — سيستخدم Gemini توزيعاً متوازناً</div>';
+      panel.style.display = 'block';
+      return;
+    }
+    
+    // تجميع البيانات
+    const groups = { V: [], A: [], R: [], K: [], MULTI: [] };
+    data.forEach(s => {
+      const style = s.dominant_style || 'V';
+      if (groups[style]) groups[style].push(s.student_name);
+      else groups['MULTI'].push(s.student_name);
+    });
+    
+    const total = data.length;
+    const labels = { V:'👁️ بصري', A:'👂 سمعي', R:'📖 قرائي', K:'✋ حركي', MULTI:'🌈 متعدد' };
+    const colors = { V:'#F59E0B', A:'#10B981', R:'#3B82F6', K:'#EC4899', MULTI:'#8B5CF6' };
+    
+    // عرض الأشرطة
+    barsEl.innerHTML = Object.entries(groups)
+      .filter(([,v]) => v.length > 0)
+      .map(([k,v]) => {
+        const pct = Math.round((v.length/total)*100);
+        return `<div>
+          <div style="display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:3px;">
+            <span style="font-weight:700;color:${colors[k]}">${labels[k]}</span>
+            <span style="color:var(--muted)">${v.length} طالبة (${pct}%)</span>
+          </div>
+          <div style="background:var(--border);border-radius:99px;height:8px;overflow:hidden;">
+            <div style="width:${pct}%;height:100%;background:${colors[k]};border-radius:99px;transition:width .5s;"></div>
+          </div>
+        </div>`;
+      }).join('');
+    
+    // معاينة المجموعات
+    const covered = Object.entries(groups).filter(([,v]) => v.length > 0);
+    previewEl.innerHTML = '<div style="font-weight:700;color:var(--txt);margin-bottom:4px;">👥 المجموعات عند اختيار VARK:</div>' +
+      covered.map(([k,v]) => 
+        `<span style="color:${colors[k]};font-weight:600">${labels[k]}: </span>${v.slice(0,3).join('، ')}${v.length>3?` وآخرون (+${v.length-3})`:''}  `
+      ).join('<br>');
+    
+    panel.style.display = 'block';
+    
+    // حفظ البيانات للاستخدام في Gemini
+    varkClassData = { groups, total, labels, colors, rawData: data };
+    
+  } catch(e) {
+    console.warn('VARK fetch error:', e);
+  }
+}
+
 function onGradeChange() {
   const grade = document.getElementById('f_grade').value;
   const secSel = document.getElementById('f_section');
@@ -556,6 +630,8 @@ async function autoFillStudents() {
     hint.textContent = '(بيانات غير متوفرة)';
     hint.style.color = 'var(--muted)';
   }
+  // جلب بيانات VARK الحقيقية
+  fetchVARKStats(grade, section);
 }
 
 // ============================================================
@@ -565,6 +641,8 @@ const SUPA_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM3ODk3NTgsImV4cCI6MjA1OTM2NTc1OH0.AErz8DSl0MoFoNrLQXSMVVSHsFerIEPQPM26CgocfIM';
 let sb;
 let currentPlan = null;
+let varkClassData = null; // بيانات VARK الحقيقية للصف المختار
+
 let activeTimers = {};
 
 // Init Supabase
@@ -645,7 +723,19 @@ async function generateLesson() {
     }
     if (!apiKey) throw new Error('مفتاح Gemini غير موجود في إعدادات النظام');
 
-    const prompt = buildGeminiPrompt({grade,subject,topic,duration,students,section,model,unit,motiv,grpMethod,diffLevels,assessTypes,spedAdapt,notes});
+    // تجهيز ملخص VARK الحقيقي
+    let varkSummary = 'لا توجد بيانات — استخدم توزيعاً متوازناً';
+    if (varkClassData && varkClassData.groups) {
+      const g = varkClassData.groups;
+      const parts = [];
+      if (g.V?.length) parts.push(`بصري: ${g.V.length} طالبة (${g.V.join('، ')})`);
+      if (g.A?.length) parts.push(`سمعي: ${g.A.length} طالبة (${g.A.join('، ')})`);
+      if (g.R?.length) parts.push(`قرائي: ${g.R.length} طالبة (${g.R.join('، ')})`);
+      if (g.K?.length) parts.push(`حركي: ${g.K.length} طالبة (${g.K.join('، ')})`);
+      if (g.MULTI?.length) parts.push(`متعدد: ${g.MULTI.length} طالبة (${g.MULTI.join('، ')})`);
+      varkSummary = parts.join(' | ');
+    }
+    const prompt = buildGeminiPrompt({grade,subject,topic,duration,students,section,model,unit,motiv,grpMethod,diffLevels,assessTypes,spedAdapt,notes,varkSummary});
 
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
@@ -706,6 +796,7 @@ function buildGeminiPrompt(p) {
 - النموذج التربوي: ${p.model}
 - نوع التهيئة: ${p.motiv}
 - توزيع المجموعات: ${p.grpMethod}
+- بيانات VARK الحقيقية للصف: ${p.varkSummary}
 - مستويات التمايز: ${p.diffLevels.join(', ')}
 - أنواع التقييم: ${p.assessTypes.join(', ')}
 - تعديلات أصحاب الهمم: ${p.spedAdapt ? 'نعم، مطلوبة في كل مرحلة' : 'لا'}
@@ -805,12 +896,13 @@ function buildGeminiPrompt(p) {
   ],
   "groups": {
     "method": "${p.grpMethod}",
-    "description": "شرح آلية التوزيع",
+    "description": "شرح آلية التوزيع بناءً على البيانات الفعلية",
+    "vark_data_used": "${p.varkSummary}",
     "groups": [
-      {"name": "مجموعة البصريين", "vark_type": "V", "color": "#F59E0B", "activities": "أنشطة بصرية مفصلة"},
-      {"name": "مجموعة السمعيين", "vark_type": "A", "color": "#10B981", "activities": "أنشطة سمعية مفصلة"},
-      {"name": "مجموعة القراء والكتّاب", "vark_type": "R", "color": "#3B82F6", "activities": "أنشطة قرائية مفصلة"},
-      {"name": "مجموعة الحركيين", "vark_type": "K", "color": "#EC4899", "activities": "أنشطة حركية مفصلة"}
+      {"name": "مجموعة البصريين", "vark_type": "V", "color": "#F59E0B", "activities": "أنشطة بصرية مفصلة ومناسبة لعدد الطلاب الفعلي"},
+      {"name": "مجموعة السمعيين", "vark_type": "A", "color": "#10B981", "activities": "أنشطة سمعية مفصلة ومناسبة لعدد الطلاب الفعلي"},
+      {"name": "مجموعة القراء والكتّاب", "vark_type": "R", "color": "#3B82F6", "activities": "أنشطة قرائية مفصلة ومناسبة لعدد الطلاب الفعلي"},
+      {"name": "مجموعة الحركيين", "vark_type": "K", "color": "#EC4899", "activities": "أنشطة حركية مفصلة ومناسبة لعدد الطلاب الفعلي"}
     ]
   },
   "assessment": {
