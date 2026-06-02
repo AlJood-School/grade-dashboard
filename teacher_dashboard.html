@@ -774,6 +774,8 @@ async function loadGradeData() {
   }));
 
   renderGradeTable(grade, term);
+  // جلب الدرجات المحفوظة من Supabase
+  await loadSavedGrades(grade, section, term);
 }
 
 function renderGradeTable(grade, term) {
@@ -786,7 +788,7 @@ function renderGradeTable(grade, term) {
       <td><input class="grade-inp" id="gf_${i}" type="number" min="0" max="40" placeholder="—" oninput="recalcRow(${i})" value="${s.t_curr_form||''}"></td>
       <td>${cycle1 ? '<span style="color:#9ca3af;font-size:11px">تكويني مستمر</span>' : `<input class="grade-inp" id="gs_${i}" type="number" min="0" max="60" placeholder="—" oninput="recalcRow(${i})" value="${s.t_curr_summ||''}">`}</td>
       <td id="gtt_${i}" style="font-weight:700;color:var(--navy)">—</td>
-      <td><input class="grade-inp" id="gt1_${i}" type="number" min="0" max="100" placeholder="—" value="${s.t1_total||''}"></td>
+      <td><input class="grade-inp" id="gt1_${i}" type="number" min="0" max="100" placeholder="—" value="${s.t1_total||''}" oninput="scheduleGradeSave(${i})"></td>
       <td id="gfinal_${i}" style="font-weight:700">—</td>
       <td id="gstatus_${i}">—</td>
     </tr>
@@ -805,7 +807,91 @@ function recalcRow(i) {
   const el = document.getElementById('gtt_' + i);
   if (el) el.textContent = total > 0 ? total.toFixed(1) : '—';
   gpStudents[i].t_curr_total = total;
+  scheduleGradeSave(i);
 }
+
+// ======= حفظ وجلب الدرجات =======
+
+async function loadSavedGrades(grade, section, term) {
+  const { data, error } = await sb.from('student_grades')
+    .select('*')
+    .eq('school_id', 'aljood')
+    .eq('grade', grade)
+    .eq('section', section)
+    .eq('term', term);
+
+  if (error || !data || data.length === 0) return;
+
+  data.forEach(row => {
+    const idx = gpStudents.findIndex(s => s.name === row.student_name);
+    if (idx === -1) return;
+
+    if (row.formative !== null && row.formative !== undefined) {
+      const el = document.getElementById('gf_' + idx);
+      if (el) { el.value = row.formative; gpStudents[idx].t_curr_form = row.formative; }
+    }
+    if (row.summative !== null && row.summative !== undefined) {
+      const el = document.getElementById('gs_' + idx);
+      if (el) { el.value = row.summative; gpStudents[idx].t_curr_summ = row.summative; }
+    }
+    if (row.term1_total !== null && row.term1_total !== undefined) {
+      const el = document.getElementById('gt1_' + idx);
+      if (el) el.value = row.term1_total;
+    }
+    recalcRow(idx);
+  });
+
+  const status = document.getElementById('gp-save-status');
+  if (status) {
+    status.textContent = `✅ تم تحميل بيانات ${data.length} طالبة`;
+    status.style.color = '#16a34a';
+  }
+}
+
+const _saveTimers = {};
+function scheduleGradeSave(i) {
+  clearTimeout(_saveTimers[i]);
+  _saveTimers[i] = setTimeout(() => saveGradeRow(i), 1000);
+}
+
+async function saveGradeRow(i) {
+  const grade = document.getElementById('gp-grade').value;
+  const section = document.getElementById('gp-section').value;
+  const term = parseInt(document.getElementById('gp-term').value);
+  const student = gpStudents[i];
+  if (!student || !grade || !section) return;
+
+  const form = document.getElementById('gf_' + i)?.value;
+  const summ = document.getElementById('gs_' + i)?.value;
+  const t1   = document.getElementById('gt1_' + i)?.value;
+
+  const payload = {
+    school_id: 'aljood',
+    grade: grade,
+    section: section,
+    student_name: student.name,
+    term: term,
+    formative:   form  !== '' && form  !== undefined ? parseFloat(form)  : null,
+    summative:   summ  !== '' && summ  !== undefined ? parseFloat(summ)  : null,
+    term1_total: t1    !== '' && t1    !== undefined ? parseFloat(t1)    : null,
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await sb.from('student_grades')
+    .upsert(payload, { onConflict: 'school_id,grade,section,student_name,term' });
+
+  const status = document.getElementById('gp-save-status');
+  if (!status) return;
+  if (error) {
+    status.textContent = '❌ خطأ في الحفظ: ' + error.message;
+    status.style.color = '#dc2626';
+  } else {
+    status.textContent = `💾 تم حفظ: ${student.name}`;
+    status.style.color = '#16a34a';
+    setTimeout(() => { if (status.textContent.startsWith('💾')) status.textContent = ''; }, 2500);
+  }
+}
+
 
 function calculatePredictions() {
   const term = parseInt(document.getElementById('gp-term').value) || 2;
