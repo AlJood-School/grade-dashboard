@@ -484,6 +484,28 @@ h1,h2,h3,.title-font { font-family: 'Tajawal', sans-serif; }
   font-family:'Tajawal', sans-serif;
 }
 #helpBtn:hover { transform:scale(1.05); }
+
+#emergencyExitBtn {
+  position: fixed;
+  bottom: 90px;
+  right: 24px;
+  z-index: 9000;
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 50px;
+  padding: 10px 18px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-family: 'Tajawal', sans-serif;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(220,38,38,0.45);
+  display: none;
+  align-items: center;
+  gap: 6px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+#emergencyExitBtn:hover { transform: scale(1.06); box-shadow: 0 6px 20px rgba(220,38,38,0.55); }
 .help-modal {
   position:fixed; inset:0;
   background:rgba(0,0,0,0.6);
@@ -1398,6 +1420,23 @@ footer {
   </div>
 </div>
 
+<!-- EMERGENCY EXIT BUTTON -->
+<button id="emergencyExitBtn" onclick="confirmEmergencyExit()">💾 حفظ والخروج</button>
+
+<!-- EXIT CONFIRMATION MODAL -->
+<div class="help-modal" id="exitConfirmModal" style="z-index:99999;">
+  <div class="help-panel" style="max-width:360px;text-align:center;">
+    <div style="font-size:2.5rem;margin-bottom:8px;">💾</div>
+    <h3 style="font-family:'Tajawal', sans-serif;color:var(--navy);margin-bottom:8px;">هل تريد الخروج؟</h3>
+    <p style="font-family:'Tajawal', sans-serif;color:#555;font-size:0.95rem;margin-bottom:6px;">سيتم حفظ تقدمك تلقائياً ✅</p>
+    <p style="color:#555;font-size:0.88rem;margin-bottom:18px;">Do you want to leave? Your progress will be saved.</p>
+    <div style="display:flex;gap:12px;justify-content:center;">
+      <button onclick="doEmergencyExit()" style="background:#dc2626;color:white;border:none;border-radius:12px;padding:12px 24px;font-size:1rem;font-family:'Tajawal',sans-serif;font-weight:700;cursor:pointer;">نعم، خروج ✓</button>
+      <button onclick="document.getElementById('exitConfirmModal').classList.remove('open')" style="background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;border-radius:12px;padding:12px 24px;font-size:1rem;font-family:'Tajawal',sans-serif;font-weight:700;cursor:pointer;">إلغاء ✗</button>
+    </div>
+  </div>
+</div>
+
 <!-- TEACHER PANEL — REDESIGNED -->
 <div id="teacherPanel">
 
@@ -2134,6 +2173,15 @@ function forceNextPhase() { _doNextPhase(); }
 function _doNextPhase() {
   saveCurrentPhaseData();
   saveSession();
+  // Visual checkpoint confirmation
+  try {
+    const toast = document.createElement('div');
+    toast.textContent = '💾 تم الحفظ ✓';
+    toast.style.cssText = 'position:fixed;bottom:150px;right:24px;background:#22c55e;color:#fff;padding:8px 16px;border-radius:20px;font-size:0.82rem;font-family:Tajawal,sans-serif;font-weight:700;z-index:9999;opacity:0;transition:opacity 0.3s;pointer-events:none;';
+    document.body.appendChild(toast);
+    setTimeout(() => { toast.style.opacity = '1'; }, 50);
+    setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 2000);
+  } catch(e) {}
   const next = currentPhase + 1;
   if (next <= 10) {
     launchConfetti(30);
@@ -2768,6 +2816,39 @@ function loadTeacherData() {
     }, err => console.warn('Teacher listener error:', err));
 }
 
+// Absent students renderer
+function renderAbsentStudents(presentNames, fullList) {
+  let absentEl = document.getElementById('tp-absent-list');
+  if (!absentEl) {
+    // Create the absent section in teacher panel
+    const grid = document.getElementById('teacherStudentList');
+    if (!grid) return;
+    const wrapper = document.createElement('div');
+    wrapper.id = 'tp-absent-wrapper';
+    wrapper.style.cssText = 'margin-top:16px;padding-top:12px;border-top:2px dashed rgba(239,68,68,0.3);';
+    wrapper.innerHTML = '<div style="font-size:0.8rem;font-weight:700;color:#ef4444;margin-bottom:8px;font-family:Tajawal,sans-serif;">❌ غائبون / Absent</div><div id="tp-absent-list" style="display:flex;flex-wrap:wrap;gap:6px;"></div>';
+    if (grid.parentNode) grid.parentNode.insertBefore(wrapper, grid.nextSibling);
+    absentEl = document.getElementById('tp-absent-list');
+  }
+  if (!absentEl) return;
+  const absents = fullList.filter(s => {
+    const sName = typeof s === 'object' ? (s.nameAr || s.name || '') : s;
+    return sName && !presentNames.some(p => p === sName.trim());
+  });
+  if (!absents.length) {
+    const wrapper = document.getElementById('tp-absent-wrapper');
+    if (wrapper) wrapper.style.display = 'none';
+    return;
+  }
+  const wrapper2 = document.getElementById('tp-absent-wrapper');
+  if (wrapper2) wrapper2.style.display = 'block';
+  absentEl.innerHTML = absents.map(s => {
+    const sName = typeof s === 'object' ? (s.nameAr || s.name || '') : s;
+    const isSEN = typeof s === 'object' && s.specialNeeds;
+    return `<span style="background:${isSEN ? 'rgba(139,92,246,0.15)' : 'rgba(239,68,68,0.08)'};border:1px solid ${isSEN ? 'rgba(139,92,246,0.4)' : 'rgba(239,68,68,0.3)'};border-radius:20px;padding:3px 10px;font-size:0.78rem;color:${isSEN ? '#7c3aed' : '#dc2626'};font-family:Tajawal,sans-serif;">${isSEN ? '💙 ' : ''}${sName}</span>`;
+  }).join('');
+}
+
 // Global help requests cache for teacher panel
 let _helpCache = {};
 
@@ -2775,10 +2856,15 @@ function renderTeacherStudents(students) {
   const container = document.getElementById('teacherStudentList');
   if (!students.length) {
     container.innerHTML = '<div style="text-align:center;color:#888;padding:30px;"><div style="font-size:2rem;">📭</div><p>No students connected yet...</p></div>';
+    // Show absent banner if we have student list
+    renderAbsentStudents([], []);
     return;
   }
   // Update sidebar stats
   updateTPSidebar(students);
+  // Compute absent students
+  const presentNames = students.map(s => (s.studentName || '').trim());
+  renderAbsentStudents(presentNames, window._loadedStudentsForSection || []);
   // Update phase chips
   renderTPPhaseChips(students);
   
@@ -3360,6 +3446,7 @@ async function loadNameSelector(sec) {
   nameSelect.innerHTML = '<option value="">Loading... 📚</option>';
   nameSelect.disabled = true;
   loadedStudents = await loadStudents(sec);
+  window._loadedStudentsForSection = loadedStudents;
   nameSelect.innerHTML = '<option value="">— Choose your name —</option>' +
     loadedStudents.map(n => { const nm = typeof n === 'object' ? (n.name || n.nameAr || n.nameEn || '') : n; return `<option value="${nm}">${nm}</option>`; }).join('');
   nameSelect.disabled = false;
@@ -3410,6 +3497,33 @@ async function markPresent() {
   if (!sec || !name) return;
   const btn = document.getElementById('startBtn');
   if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Saving...'; }
+
+  // ── Duplicate prevention: check if this student already joined today ──
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const existing = await db.collection('obs_attendance')
+      .where('studentName', '==', name)
+      .where('section', '==', sec)
+      .where('grade', '==', GRADE)
+      .get();
+    const todayEntries = existing.docs.filter(d => {
+      const ts = d.data().timestamp;
+      if (!ts) return false;
+      const entryDate = ts.toDate ? ts.toDate() : new Date(ts.seconds * 1000);
+      return entryDate >= todayStart;
+    });
+    if (todayEntries.length > 0) {
+      if (btn) { btn.disabled = false; btn.innerHTML = '✅ أنا هنا! / I\'m Here!'; }
+      const resume = confirm(`⚠️ ${name} — دخلت الحصة سابقاً اليوم!\n\nهل تريد متابعة من حيث توقفت؟\n\n${name} — you already joined today!\nResume from where you left off?`);
+      if (resume) {
+        // Restore session and continue
+        if (cel) { if (nameEl) nameEl.textContent = '👋 مرحباً مجدداً ' + name + '!'; cel.style.display = 'flex'; }
+        setTimeout(() => { if (cel) cel.style.display = 'none'; startLesson(); }, 2000);
+      }
+      return;
+    }
+  } catch(dupErr) { console.warn('Duplicate check failed:', dupErr); }
 
   // Play join chime
   playJoinChime();
@@ -3484,6 +3598,8 @@ async function startLesson() {
   updatePhaseBadge();
   renderJourneyMap();
   document.getElementById('helpBtn').style.display = 'flex';
+  const emergBtn = document.getElementById('emergencyExitBtn');
+  if (emergBtn) emergBtn.style.display = 'flex';
 
   // ── KIOSK MODE: Request fullscreen ──
   try {
@@ -6512,6 +6628,30 @@ function clearFingerCanvas() {
 // KIOSK MODE — Exit Detection & Alarm
 // ════════════════════════════════════════════════════
 let exitAlertShown = false;
+
+function confirmEmergencyExit() {
+  // Use custom modal — confirm() is blocked in some browsers/kiosk contexts
+  document.getElementById('exitConfirmModal').classList.add('open');
+}
+
+function doEmergencyExit() {
+  document.getElementById('exitConfirmModal').classList.remove('open');
+  // Save current state
+  try { saveState(); } catch(e) {}
+  try { saveSession({ status: 'student_left', endReason: 'emergency_exit' }); } catch(e) {}
+  // Notify teacher
+  if (studentName && studentSection) {
+    try { db.collection(HELP_COLLECTION).add({ studentName, section: studentSection, grade: GRADE, phase: currentPhase, type: 'emergency_exit', sessionId, timestamp: firebase.firestore.FieldValue.serverTimestamp(), resolved: false }); } catch(e) {}
+  }
+  // Reset and go back to registration
+  currentPhase = -1;
+  studentName = '';
+  studentSection = '';
+  document.getElementById('emergencyExitBtn').style.display = 'none';
+  document.getElementById('helpBtn').style.display = 'none';
+  // Reload page to reset all state cleanly
+  window.location.reload();
+}
 
 function setupExitDetection() {
   // 1. Page visibility change (tab switch, lock screen, etc.)
