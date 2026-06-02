@@ -141,11 +141,37 @@ const PlatformTheme = (() => {
   // ============================================================
   // تطبيق الثيم
   // ============================================================
+  function hexToRgb(hex) {
+    hex = hex.trim().replace('#','');
+    if (hex.length === 3) hex = hex.split('').map(c=>c+c).join('');
+    const r = parseInt(hex.slice(0,2),16);
+    const g = parseInt(hex.slice(2,4),16);
+    const b = parseInt(hex.slice(4,6),16);
+    return isNaN(r) ? null : {r,g,b};
+  }
+
+  function syncDerivedVars() {
+    // بعد تطبيق الثيم، نحدّث المتغيرات المشتقة (--gold, --gold-light, --border, --primary-rgb)
+    // حتى تتجاوب الصفحات التي تستخدم rgba() محلية
+    requestAnimationFrame(() => {
+      const primary = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
+      const rgb = hexToRgb(primary);
+      if (!rgb) return;
+      const root = document.documentElement.style;
+      root.setProperty('--primary-rgb', `${rgb.r},${rgb.g},${rgb.b}`);
+      root.setProperty('--gold',         primary);
+      root.setProperty('--gold-light',   `rgba(${rgb.r},${rgb.g},${rgb.b},0.15)`);
+      root.setProperty('--border',       `rgba(${rgb.r},${rgb.g},${rgb.b},0.2)`);
+      root.setProperty('--shadow-gold',  `rgba(${rgb.r},${rgb.g},${rgb.b},0.3)`);
+    });
+  }
+
   function applyTheme(key) {
     if (!THEMES[key]) key = 'classic';
     document.documentElement.setAttribute('data-theme', key);
     currentTheme = key;
     highlightActiveSwatch(key);
+    syncDerivedVars();
   }
 
   function highlightActiveSwatch(key) {
