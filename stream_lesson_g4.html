@@ -2900,6 +2900,20 @@ function renderImagineQuestions(container){
       };
       choicesDiv.appendChild(btn);
     });
+    // Restore visual state if already answered (e.g. after state restore)
+    if(phaseData.imagine['q'+qi] !== undefined){
+      const saved = phaseData.imagine['q'+qi];
+      Array.from(choicesDiv.children).forEach((c,i)=>{
+        c.onclick = null;
+        if(i === q.correct) c.classList.add('correct');
+        else if(i === saved.given) c.classList.add('incorrect');
+      });
+      const fbEl = div.querySelector('#ima_fb_'+qi);
+      if(fbEl){
+        if(saved.correct){ fbEl.className='feedback-msg feedback-correct'; fbEl.textContent='✅ Correct! / صحيح!'; }
+        else{ fbEl.className='feedback-msg feedback-incorrect'; fbEl.textContent='❌ Not quite! Think again / حاول مجدداً!'; }
+      }
+    }
     container.appendChild(div);
     if(isSpecialNeeds){const ab=document.createElement('button');ab.className='audio-btn';ab.textContent='🔊 Listen';ab.onclick=()=>speak(q.q);div.querySelector('.question-text').appendChild(ab);}
   });
@@ -2928,7 +2942,8 @@ function _advInit(num) {
     undoStack: [], redoStack: [],
     shapes: [],
     dragShape: null, dragOffX: 0, dragOffY: 0,
-    snapshot: null
+    snapshot: null,
+    snapshotData: null
   };
   const st = _advState[num];
 
@@ -3006,12 +3021,18 @@ function _advInit(num) {
 
   function _renderAll() {
     ctx.clearRect(0, 0, W, H);
-    _drawBg(ctx);
-    if (st.snapshot) { const img = new Image(); img.src = st.snapshot; img.complete && ctx.drawImage(img, 0, 0); }
+    if (st.snapshotData) {
+      ctx.putImageData(st.snapshotData, 0, 0);
+    } else {
+      _drawBg(ctx);
+    }
     st.shapes.forEach(s => _drawStamp(ctx, s));
   }
 
-  function _saveSnapshot() { st.snapshot = canvas.toDataURL(); }
+  function _saveSnapshot() {
+    st.snapshot = canvas.toDataURL();
+    st.snapshotData = ctx.getImageData(0, 0, W, H);
+  }
 
   function _floodFill(sx, sy, fillColor) {
     const imgData = ctx.getImageData(0, 0, W, H);
@@ -3053,6 +3074,9 @@ function _advInit(num) {
   canvas.addEventListener('touchstart', e => { e.preventDefault(); onDown(e); }, {passive:false});
   canvas.addEventListener('touchmove', e => { e.preventDefault(); onMove(e); }, {passive:false});
   canvas.addEventListener('touchend', e => { e.preventDefault(); onUp(e); }, {passive:false});
+  // Initialize with white background so _renderAll always has a valid snapshot
+  _drawBg(ctx);
+  _saveSnapshot();
 
   function onDown(e) {
     const [x, y] = _getPos(e);
@@ -3090,8 +3114,11 @@ function _advInit(num) {
       ctx.strokeStyle = st.color; ctx.lineWidth = px; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.lineTo(x, y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x, y);
     } else if (st.tool === 'erase') {
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = px * 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.strokeStyle = 'rgba(0,0,0,1)'; ctx.lineWidth = px * 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.lineTo(x, y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x, y);
+      ctx.restore();
     } else {
       _renderAll();
       ctx.strokeStyle = st.color; ctx.lineWidth = px; ctx.lineCap = 'round';
@@ -3153,11 +3180,12 @@ function advSetBg(num, bg, btn) {
   // re-render using internal _advInit's _renderAll via a trick: reinit snapshot
   const img = new Image();
   if (st.snapshot) {
-    img.onload = () => { ctx.clearRect(0,0,canvas.width,canvas.height); _advDrawBg(ctx,canvas.width,canvas.height,bg); ctx.drawImage(img,0,0,canvas.width,canvas.height); st.shapes.forEach(s=>_advDrawStampExternal(ctx,s)); st.snapshot=canvas.toDataURL(); };
+    img.onload = () => { ctx.clearRect(0,0,canvas.width,canvas.height); _advDrawBg(ctx,canvas.width,canvas.height,bg); ctx.drawImage(img,0,0,canvas.width,canvas.height); st.shapes.forEach(s=>_advDrawStampExternal(ctx,s)); st.snapshot=canvas.toDataURL(); st.snapshotData=ctx.getImageData(0,0,canvas.width,canvas.height); };
     img.src = st.snapshot;
   } else {
     _advDrawBg(ctx, canvas.width, canvas.height, bg);
     st.snapshot = canvas.toDataURL();
+    st.snapshotData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   }
 }
 
@@ -3227,7 +3255,7 @@ function advUndo(num) {
   const prev = st.undoStack.pop();
   const ctx = canvas.getContext('2d');
   const img = new Image();
-  img.onload = () => { ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0); st.snapshot = prev; };
+  img.onload = () => { ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0); st.snapshot = prev; st.snapshotData = ctx.getImageData(0,0,canvas.width,canvas.height); };
   img.src = prev;
 }
 
@@ -3240,7 +3268,7 @@ function advRedo(num) {
   const next = st.redoStack.pop();
   const ctx = canvas.getContext('2d');
   const img = new Image();
-  img.onload = () => { ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0); st.snapshot = next; };
+  img.onload = () => { ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0); st.snapshot = next; st.snapshotData = ctx.getImageData(0,0,canvas.width,canvas.height); };
   img.src = next;
 }
 
@@ -3254,6 +3282,7 @@ function advClear(num) {
   ctx.clearRect(0,0,canvas.width,canvas.height);
   _advDrawBg(ctx, canvas.width, canvas.height, st.bg);
   st.snapshot = canvas.toDataURL();
+  st.snapshotData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 }
 
 // Keep old names as aliases so existing code doesn't break
