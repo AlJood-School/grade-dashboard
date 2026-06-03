@@ -7,6 +7,87 @@
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script>
+// ===== SUPABASE CONFIG (REST API مباشر — لا CDN) =====
+window.G4_SUPA_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+window.G4_SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+
+async function saveProgressSupa(extraStatus) {
+  if (!studentName || !sectionName) return;
+  const body = {
+    student_name: studentName,
+    section: sectionName,
+    grade: 4,
+    phase: currentPhase,
+    progress_json: {
+      goalCorrect: goalCorrect,
+      mcqAnswers: mcqAnswers,
+      tfAnswers: tfAnswers,
+      phaseData: phaseData,
+      keiroLevel: keiroLevel,
+      codeArranged: codeArranged,
+      testChecked: testChecked,
+      isSpecialNeeds: isSpecialNeeds,
+      lang: lang
+    },
+    status: extraStatus || 'in_progress',
+    school_year: '2025-2026',
+    updated_at: new Date().toISOString()
+  };
+  try {
+    await fetch(window.G4_SUPA_URL + '/rest/v1/stream_progress_g4', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': window.G4_SUPA_KEY,
+        'Authorization': 'Bearer ' + window.G4_SUPA_KEY,
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify(body)
+    });
+  } catch(e) { console.warn('Supa save error:', e); }
+}
+
+async function saveScoreSupa(totalScore) {
+  if (!studentName || !sectionName) return;
+  const body = {
+    student_name: studentName,
+    section: sectionName,
+    grade: 4,
+    phase: 12,
+    total_score: totalScore,
+    progress_json: { totalScore: totalScore, isSpecialNeeds: isSpecialNeeds },
+    status: 'completed',
+    school_year: '2025-2026',
+    updated_at: new Date().toISOString()
+  };
+  try {
+    await fetch(window.G4_SUPA_URL + '/rest/v1/stream_progress_g4', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': window.G4_SUPA_KEY,
+        'Authorization': 'Bearer ' + window.G4_SUPA_KEY,
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify(body)
+    });
+  } catch(e) { console.warn('Supa score save error:', e); }
+}
+
+async function loadProgressSupa(name, section) {
+  try {
+    const r = await fetch(
+      window.G4_SUPA_URL + '/rest/v1/stream_progress_g4?student_name=eq.' +
+      encodeURIComponent(name) + '&section=eq.' + encodeURIComponent(section) +
+      '&school_year=eq.2025-2026&status=eq.in_progress&select=*&limit=1',
+      { headers: { 'apikey': window.G4_SUPA_KEY, 'Authorization': 'Bearer ' + window.G4_SUPA_KEY } }
+    );
+    const rows = await r.json();
+    return (rows && rows.length > 0) ? rows[0] : null;
+  } catch(e) { return null; }
+}
+</script>
 <style>
 :root{--navy:#1a2744;--navy-light:#243461;--gold:#c9a84c;--gold-light:#f0c96b;--orange:#f97316;--orange-light:#fed7aa;--white:#ffffff;--bg:#eef2ff;--success:#22c55e;--warning:#f59e0b;--danger:#ef4444;--special-needs:#8b5cf6;}
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -2244,22 +2325,22 @@ function confirmEmergencyExit() {
     </div>`;
   document.body.appendChild(overlay);
   document.getElementById('_exitNo').onclick = () => overlay.remove();
-  document.getElementById('_exitYes').onclick = () => {
+  document.getElementById('_exitYes').onclick = async () => {
     overlay.remove();
-    // Save to Firestore
+    // ✅ حفظ في Supabase أولاً (موثوق 100%)
+    await saveProgressSupa('in_progress');
+    // Firebase (احتياطي)
     try { saveToFirestore({ status: 'student_left', endReason: 'save_exit', phase: currentPhase }); } catch(e) {}
-    // Notify teacher
+    // إشعار المعلمة
     if (studentName && sectionName) {
       try { db.collection('help_requests').add({ studentName, section: sectionName, grade: 4, phase: currentPhase, type: 'save_exit', sessionId, timestamp: firebase.firestore.FieldValue.serverTimestamp(), resolved: false }); } catch(e) {}
     }
-    // ✅ Clear session so next student starts fresh
     try { sessionStorage.removeItem(SESS_KEY); } catch(e) {}
-    // Reload fresh (no restore)
     window.location.reload();
   };
 }
 
-function startLesson(){
+async function startLesson(){
   sectionName=document.getElementById('sectionSelect').value;
   studentName=document.getElementById('nameSelect').value;
   // Auto-detect special needs from Firebase data
@@ -2276,15 +2357,71 @@ function startLesson(){
   document.getElementById('helpBtn').style.display='block';
   const emergBtn = document.getElementById('emergencyExitBtn');
   if (emergBtn) emergBtn.style.display = 'flex';
+
+  // ✅ تحقق من وجود تقدم محفوظ في Supabase
+  const saved = await loadProgressSupa(studentName, sectionName);
+  if(saved && saved.phase > 1){
+    showResumePrompt(saved);
+    return;
+  }
+
   startLessonTimer();
   saveToFirestore({status:'in_progress',startTime:firebase.firestore.FieldValue.serverTimestamp()});
   if(isSpecialNeeds) notifySpecialNeeds();
-  // Show journey map first, then phase 1
   document.getElementById('observerBtn').style.display='block';
   buildJourneyMap();
   currentPhase=1;
-  // Show motivational warmup BEFORE journey map
   showWarmupG4();
+}
+
+function showResumePrompt(saved){
+  const overlay = document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:Tajawal,sans-serif;';
+  overlay.innerHTML=`
+    <div style="background:#fff;border-radius:20px;padding:32px 28px;max-width:380px;width:92%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.4);">
+      <div style="font-size:3rem;margin-bottom:8px;">⏩</div>
+      <h3 style="color:#1a2744;margin-bottom:8px;font-size:1.25rem;">مرحباً مجدداً ${saved.student_name}!</h3>
+      <p style="color:#64748b;font-size:0.95rem;margin-bottom:8px;">وجدنا تقدمك السابق 🎉</p>
+      <div style="background:#f0fdf4;border-radius:12px;padding:12px;margin-bottom:20px;">
+        <div style="font-size:1rem;color:#15803d;font-weight:700;">📍 توقفت عند المرحلة ${saved.phase} من 11</div>
+        <div style="font-size:0.85rem;color:#64748b;margin-top:4px;">${new Date(saved.updated_at).toLocaleDateString('ar-AE')}</div>
+      </div>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        <button id="_resumeNo" style="padding:10px 20px;border-radius:12px;border:2px solid #cbd5e1;background:#f1f5f9;color:#475569;font-size:1rem;font-family:Tajawal,sans-serif;cursor:pointer;font-weight:700;">🔄 ابدأ من جديد</button>
+        <button id="_resumeYes" style="padding:10px 20px;border-radius:12px;border:none;background:#1a2744;color:#fff;font-size:1rem;font-family:Tajawal,sans-serif;cursor:pointer;font-weight:700;">✅ استكمال من حيث توقفت</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('_resumeNo').onclick = () => {
+    overlay.remove();
+    startLessonTimer();
+    saveToFirestore({status:'in_progress',startTime:firebase.firestore.FieldValue.serverTimestamp()});
+    if(isSpecialNeeds) notifySpecialNeeds();
+    document.getElementById('observerBtn').style.display='block';
+    buildJourneyMap();
+    currentPhase=1;
+    showWarmupG4();
+  };
+  document.getElementById('_resumeYes').onclick = () => {
+    overlay.remove();
+    // استعادة البيانات المحفوظة
+    const p = saved.progress_json || {};
+    if(p.goalCorrect !== undefined) goalCorrect = p.goalCorrect;
+    if(p.mcqAnswers) mcqAnswers = p.mcqAnswers;
+    if(p.tfAnswers) tfAnswers = p.tfAnswers;
+    if(p.phaseData) phaseData = p.phaseData;
+    if(p.keiroLevel) keiroLevel = p.keiroLevel;
+    if(p.codeArranged !== undefined) codeArranged = p.codeArranged;
+    if(p.testChecked) testChecked = p.testChecked;
+    if(p.lang) lang = p.lang;
+    startLessonTimer();
+    if(isSpecialNeeds) notifySpecialNeeds();
+    document.getElementById('observerBtn').style.display='block';
+    buildJourneyMap();
+    currentPhase = saved.phase;
+    showPhase(currentPhase);
+    showNotif('✅ استُكمل درسك من المرحلة ' + currentPhase);
+  };
 }
 
 // ===== NAVIGATION =====
@@ -3450,6 +3587,9 @@ async function finishLesson(){
   const totalScore=Math.round(((goalCorrect?1:0)+(mcqScore/mcqAnswers.length*3)+(tfScore/tfAnswers.length*2)+testScore/5*4)/10*10);
   
   clearSavedState();
+  // ✅ حفظ الدرجة النهائية في Supabase
+  await saveScoreSupa(totalScore);
+  // Firebase (احتياطي)
   await saveToFirestore({
     status:'completed',
     endTime:firebase.firestore.FieldValue.serverTimestamp(),
