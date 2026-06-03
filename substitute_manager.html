@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔄 نظام حصص الاحتياط الذكي — EduOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#0f1729;--surf:#1a2744;--surf2:#243461;--surf3:#2d3e6b;
+  --gold:#c9a84c;--gold2:#f0c96b;--emerald:#10b981;--emerald2:#34d399;
+  --rose:#f43f5e;--sky:#0ea5e9;--violet:#8b5cf6;--amber:#f59e0b;
+  --teal:#00d4aa;--text:#e8eaf6;--text2:#94a3b8;--bord:rgba(255,255,255,0.08);
+  --radius:14px;--font:'Cairo',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{min-height:100%;font-family:var(--font);background:var(--bg);color:var(--text);}
+
+/* ── HEADER ── */
+.page-header{
+  background:var(--surf);border-bottom:1px solid var(--bord);
+  padding:14px 24px;display:flex;align-items:center;gap:14px;
+  position:sticky;top:0;z-index:100;
+}
+.header-icon{font-size:1.8rem;}
+.header-title{font-size:1.1rem;font-weight:900;color:var(--gold2);}
+.header-sub{font-size:.75rem;color:var(--text2);}
+.header-date{margin-right:auto;background:var(--surf2);border:1px solid var(--bord);
+  border-radius:99px;padding:5px 14px;font-size:.8rem;font-weight:700;color:var(--teal);}
+.btn-back{background:var(--surf2);color:var(--text2);border:1px solid var(--bord);
+  border-radius:10px;padding:8px 14px;font-size:.8rem;font-weight:700;cursor:pointer;
+  font-family:var(--font);text-decoration:none;display:flex;align-items:center;gap:6px;}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:0;background:var(--surf);border-bottom:1px solid var(--bord);padding:0 24px;}
+.tab-btn{padding:12px 20px;font-size:.85rem;font-weight:700;font-family:var(--font);
+  background:none;border:none;color:var(--text2);cursor:pointer;border-bottom:3px solid transparent;
+  transition:all .2s;}
+.tab-btn.active{color:var(--gold2);border-bottom-color:var(--gold);}
+
+/* ── MAIN ── */
+.page-body{padding:24px;max-width:960px;margin:0 auto;}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* ── CARDS ── */
+.card{background:var(--surf);border:1px solid var(--bord);border-radius:16px;padding:20px;margin-bottom:16px;}
+.card-title{font-size:.82rem;font-weight:800;color:var(--text2);text-transform:uppercase;
+  letter-spacing:.5px;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.field-label{font-size:.78rem;font-weight:700;color:var(--text2);margin-bottom:6px;display:block;}
+.field-select,.field-input{width:100%;background:var(--surf2);border:1.5px solid var(--bord);
+  border-radius:10px;padding:10px 14px;color:var(--text);font-family:var(--font);
+  font-size:.88rem;outline:none;transition:border-color .2s;}
+.field-select:focus,.field-input:focus{border-color:var(--gold);}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;}
+.mb14{margin-bottom:14px;}
+
+/* ── REASON CHIPS ── */
+.reason-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
+.reason-chip{background:var(--surf2);border:1.5px solid var(--bord);border-radius:99px;
+  padding:7px 14px;font-size:.78rem;font-weight:700;cursor:pointer;color:var(--text2);
+  transition:all .2s;font-family:var(--font);}
+.reason-chip:hover,.reason-chip.selected{border-color:var(--amber);background:rgba(245,158,11,.1);color:var(--amber);}
+.reason-chip.sick.selected{border-color:var(--rose);background:rgba(244,63,94,.1);color:var(--rose);}
+.reason-chip.external.selected{border-color:var(--emerald);background:rgba(16,185,129,.1);color:var(--emerald2);}
+.reason-chip.admin.selected{border-color:var(--sky);background:rgba(14,165,233,.1);color:var(--sky);}
+
+/* ── CAPACITY BAR ── */
+.capacity-wrap{margin-top:4px;}
+.capacity-track{background:var(--surf3);border-radius:99px;height:8px;overflow:hidden;margin-top:4px;}
+.capacity-fill{height:100%;border-radius:99px;transition:width .4s;}
+.capacity-fill.safe{background:linear-gradient(90deg,var(--emerald),var(--teal));}
+.capacity-fill.warn{background:linear-gradient(90deg,var(--amber),#d97706);}
+.capacity-fill.full{background:linear-gradient(90deg,var(--rose),#dc2626);}
+
+/* ── SUBSTITUTE SUGGESTIONS ── */
+.sub-list{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
+.sub-card{background:var(--surf2);border:1.5px solid var(--bord);border-radius:12px;
+  padding:12px 16px;display:flex;align-items:center;gap:12px;transition:all .2s;}
+.sub-card:hover{border-color:var(--gold);}
+.sub-card.at-limit{opacity:.45;pointer-events:none;border-color:var(--rose);}
+.sub-rank{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:.78rem;font-weight:800;flex-shrink:0;}
+.sub-rank.r1{background:rgba(201,168,76,.2);color:var(--gold2);}
+.sub-rank.r2{background:rgba(14,165,233,.15);color:var(--sky);}
+.sub-rank.r3{background:rgba(139,92,246,.15);color:#c4b5fd;}
+.sub-rank.rx{background:var(--surf3);color:var(--text2);}
+.sub-info{flex:1;}
+.sub-name{font-size:.88rem;font-weight:800;}
+.sub-meta{font-size:.72rem;color:var(--text2);margin-top:2px;}
+.sub-badge{font-size:.68rem;padding:2px 8px;border-radius:99px;margin-right:6px;font-weight:700;}
+.sub-badge.citizen{background:rgba(16,185,129,.15);color:var(--emerald2);}
+.sub-badge.expat{background:rgba(14,165,233,.15);color:var(--sky);}
+.sub-badge.daily{background:rgba(245,158,11,.15);color:var(--amber);}
+.btn-assign{background:linear-gradient(135deg,var(--teal),var(--emerald));color:white;
+  border:none;border-radius:10px;padding:8px 16px;font-size:.8rem;font-weight:800;
+  cursor:pointer;font-family:var(--font);flex-shrink:0;}
+.btn-assign:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,212,170,.3);}
+.conflict-warn{background:rgba(244,63,94,.08);border:1px solid rgba(244,63,94,.25);
+  border-radius:8px;padding:8px 12px;font-size:.75rem;color:var(--rose);margin-bottom:10px;
+  display:flex;align-items:center;gap:6px;}
+
+/* ── SUBSTITUTE LOG TABLE ── */
+.log-table{width:100%;border-collapse:collapse;font-size:.8rem;}
+.log-table th{background:var(--surf2);padding:10px 12px;text-align:right;font-weight:800;
+  color:var(--text2);border-bottom:1px solid var(--bord);}
+.log-table td{padding:10px 12px;border-bottom:1px solid var(--bord);color:var(--text);}
+.log-table tr:hover td{background:rgba(255,255,255,.02);}
+.status-badge{display:inline-block;font-size:.68rem;font-weight:700;padding:3px 9px;
+  border-radius:99px;}
+.status-badge.assigned{background:rgba(245,158,11,.15);color:var(--amber);}
+.status-badge.confirmed{background:rgba(14,165,233,.15);color:var(--sky);}
+.status-badge.completed{background:rgba(16,185,129,.15);color:var(--emerald2);}
+
+/* ── WORKLOAD TABLE ── */
+.wl-row{display:flex;align-items:center;gap:12px;background:var(--surf2);border-radius:10px;
+  padding:10px 16px;margin-bottom:8px;}
+.wl-name{font-size:.85rem;font-weight:700;min-width:160px;}
+.wl-type-badge{font-size:.65rem;font-weight:700;padding:2px 8px;border-radius:99px;}
+.wl-wrap{flex:1;}
+.wl-nums{font-size:.72rem;color:var(--text2);margin-bottom:3px;display:flex;justify-content:space-between;}
+
+/* ── BUTTONS ── */
+.btn-primary{background:linear-gradient(135deg,var(--gold),var(--amber));color:#0f1729;
+  border:none;border-radius:12px;padding:13px 24px;font-size:.95rem;font-weight:800;
+  font-family:var(--font);cursor:pointer;transition:all .2s;width:100%;}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(201,168,76,.4);}
+.btn-primary:disabled{opacity:.5;transform:none;cursor:not-allowed;}
+.btn-sec{background:var(--surf2);color:var(--text);border:1px solid var(--bord);
+  border-radius:10px;padding:10px 20px;font-size:.85rem;font-weight:700;
+  font-family:var(--font);cursor:pointer;}
+
+/* ── AI RULE REMINDER ── */
+.ai-reminder{background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);
+  border-radius:10px;padding:12px;font-size:.72rem;color:var(--amber);line-height:1.7;
+  margin-top:14px;text-align:center;}
+
+/* ── ALGORITHM LEGEND ── */
+.algo-steps{display:flex;flex-direction:column;gap:6px;margin:10px 0;}
+.algo-step{display:flex;align-items:center;gap:8px;font-size:.75rem;color:var(--text2);}
+.algo-num{width:22px;height:22px;border-radius:50%;background:var(--surf2);
+  border:1px solid var(--bord);display:flex;align-items:center;justify-content:center;
+  font-size:.7rem;font-weight:800;flex-shrink:0;}
+
+/* ── EMPTY STATE ── */
+.empty-state{text-align:center;padding:40px 20px;color:var(--text2);}
+.empty-state .e-icon{font-size:3rem;margin-bottom:12px;}
+.empty-state .e-msg{font-size:.88rem;}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--surf2);border:1px solid var(--bord);border-radius:12px;
+  padding:10px 20px;font-size:.85rem;font-weight:600;opacity:0;
+  transition:all .3s;z-index:3000;white-space:nowrap;}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ── LOADING ── */
+.loading{text-align:center;padding:24px;color:var(--text2);font-size:.85rem;}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="page-header">
+  <a href="index.html" class="btn-back">← رجوع</a>
+  <span class="header-icon">🔄</span>
+  <div>
+    <div class="header-title">نظام حصص الاحتياط الذكي</div>
+    <div class="header-sub">خوارزمية التوزيع التلقائي + تتبع النصاب الأسبوعي</div>
+  </div>
+  <div class="header-date" id="headerDate">—</div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('register')">📋 تسجيل غياب</button>
+  <button class="tab-btn" onclick="switchTab('today')">📅 حصص اليوم</button>
+  <button class="tab-btn" onclick="switchTab('workload')">📊 النصاب الأسبوعي</button>
+  <button class="tab-btn" onclick="switchTab('bookings')">🔬 حجوزات المرافق</button>
+</div>
+
+<div class="page-body">
+
+<!-- ══ TAB 1: تسجيل غياب ══ -->
+<div id="tab-register" class="tab-panel active">
+
+  <div class="card">
+    <div class="card-title">👩‍🏫 بيانات الغياب</div>
+
+    <div class="form-row">
+      <div>
+        <label class="field-label">المعلمة الغائبة</label>
+        <select id="absentTeacher" class="field-select" onchange="onAbsentTeacherChange()">
+          <option value="">— اختري المعلمة —</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">تاريخ الغياب</label>
+        <input type="date" id="absenceDate" class="field-input" onchange="onDateChange()">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div>
+        <label class="field-label">الحصة</label>
+        <select id="absencePeriod" class="field-select" onchange="checkConflictsAndSuggest()">
+          <option value="">— رقم الحصة —</option>
+          <option value="1">1️⃣ الحصة الأولى</option>
+          <option value="2">2️⃣ الحصة الثانية</option>
+          <option value="3">3️⃣ الحصة الثالثة</option>
+          <option value="4">4️⃣ الحصة الرابعة</option>
+          <option value="5">5️⃣ الحصة الخامسة</option>
+          <option value="6">6️⃣ الحصة السادسة</option>
+          <option value="7">7️⃣ الحصة السابعة</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">الصف والشعبة</label>
+        <input type="text" id="absenceClass" class="field-input" placeholder="مثال: 3A أو 5B" readonly>
+      </div>
+    </div>
+
+    <div class="mb14">
+      <label class="field-label">سبب الغياب</label>
+      <div class="reason-chips">
+        <button class="reason-chip sick" onclick="selectReason('sick',this)">🤒 مرض</button>
+        <button class="reason-chip admin" onclick="selectReason('admin_release',this)">📋 تفريغ إداري</button>
+        <button class="reason-chip external" onclick="selectReason('external_activity',this)">🏆 مشاركة خارجية</button>
+        <button class="reason-chip" onclick="selectReason('other',this)">📝 أخرى</button>
+      </div>
+    </div>
+
+    <div class="mb14" id="otherDetailWrap" style="display:none;">
+      <label class="field-label">تفاصيل السبب</label>
+      <input type="text" id="absenceDetail" class="field-input" placeholder="اكتبي تفاصيل إضافية...">
+    </div>
+  </div>
+
+  <!-- تعارض المرافق -->
+  <div id="conflictWarning" style="display:none;" class="conflict-warn">
+    ⚠️ <span id="conflictText">تحذير: موظفة المختبر/المكتبة لديها حجز في هذه الحصة — لا يمكن تكليفها بالاحتياط</span>
+  </div>
+
+  <!-- مقترحات الاحتياط -->
+  <div class="card" id="suggestCard" style="display:none;">
+    <div class="card-title">🤖 مقترحات الاحتياط — خوارزمية الأولوية</div>
+
+    <div class="algo-steps" id="algoLegend">
+      <div class="algo-step"><div class="algo-num">1</div>معلمات الحلقة نفسها (الأقل نصاباً)</div>
+      <div class="algo-step"><div class="algo-num">2</div>معلمات الحلقة الأخرى</div>
+      <div class="algo-step"><div class="algo-num">3</div>رئيسات الأقسام</div>
+      <div class="algo-step"><div class="algo-num">4</div>أمينات المختبرات/المكتبة (إن لم يكن لديهن حجز)</div>
+      <div class="algo-step"><div class="algo-num">⛔</div>مستثنيات: السكرتيرة + الوكيلات + المديرة</div>
+    </div>
+
+    <div class="sub-list" id="suggestList">
+      <div class="loading">⏳ جاري تحليل النصاب وإيجاد الأنسب...</div>
+    </div>
+  </div>
+
+  <!-- المعلمة المختارة -->
+  <div class="card" id="selectedSubCard" style="display:none;border-color:rgba(0,212,170,.3);">
+    <div class="card-title" style="color:var(--teal);">✅ المعلمة البديلة المختارة</div>
+    <div id="selectedSubInfo" style="font-size:.88rem;color:var(--text);"></div>
+
+    <div class="mb14" style="margin-top:14px;">
+      <label class="field-label">ملاحظات للمعلمة البديلة (اختياري)</label>
+      <textarea id="subNotes" class="field-input" rows="2" style="resize:none;"
+        placeholder="مثال: الطلاب في صفحة 45 — ورقة العمل جاهزة على المكتب..."></textarea>
+    </div>
+
+    <div style="display:flex;gap:10px;">
+      <button class="btn-primary" onclick="confirmAssignment()">🔄 تأكيد التكليف وحفظ</button>
+      <button class="btn-sec" onclick="cancelSelection()">إلغاء الاختيار</button>
+    </div>
+
+    <div class="ai-reminder">
+      🤖 عند التكليف: تُضاف الحصة تلقائياً لنصاب المعلمة البديلة<br>
+      وتُضاف كدليل في بورتفوليوها — المعلمة الأصلية تتلقى ملخصاً عند عودتها
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ TAB 2: حصص اليوم ══ -->
+<div id="tab-today" class="tab-panel">
+  <div class="card">
+    <div class="card-title">📅 حصص الاحتياط — <span id="todayLabel">اليوم</span></div>
+    <div id="todayLogContent">
+      <div class="loading">⏳ جاري التحميل...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TAB 3: النصاب الأسبوعي ══ -->
+<div id="tab-workload" class="tab-panel">
+  <div class="card">
+    <div class="card-title">📊 نصاب المعلمات الأسبوعي</div>
+    <div style="font-size:.75rem;color:var(--text2);margin-bottom:14px;background:var(--surf2);border-radius:8px;padding:10px;">
+      🇦🇪 مواطنة: <strong style="color:var(--gold2);">24 حصة</strong> كحد أقصى &nbsp;|&nbsp;
+      🌍 وافدة: <strong style="color:var(--sky);">30 حصة</strong> كحد أقصى &nbsp;|&nbsp;
+      💰 أجر يومي: <strong style="color:var(--amber);">بلا حد</strong> (يُحتسب مالياً)
+    </div>
+    <div id="workloadContent">
+      <div class="loading">⏳ جاري تحميل بيانات النصاب...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TAB 4: حجوزات المرافق ══ -->
+<div id="tab-bookings" class="tab-panel">
+  <div class="card">
+    <div class="card-title" style="justify-content:space-between;">
+      🔬 جدول حجوزات المختبرات والمكتبة
+      <button class="btn-sec" style="font-size:.78rem;padding:6px 12px;" onclick="openNewBookingModal()">+ حجز جديد</button>
+    </div>
+    <p style="font-size:.75rem;color:var(--text2);margin-bottom:14px;line-height:1.6;">
+      الحجوزات هنا تُستخدم تلقائياً عند اقتراح الاحتياط —
+      إذا كانت موظفة المختبر/المكتبة محجوزة في نفس الحصة، يستثنيها النظام تلقائياً.
+    </p>
+    <div id="bookingsContent">
+      <div class="loading">⏳ جاري التحميل...</div>
+    </div>
+  </div>
+
+  <!-- نموذج حجز جديد -->
+  <div id="newBookingForm" style="display:none;" class="card" style="border-color:rgba(14,165,233,.3);">
+    <div class="card-title" style="color:var(--sky);">➕ حجز جديد</div>
+    <div class="form-row">
+      <div>
+        <label class="field-label">نوع المرفق</label>
+        <select id="bkFacility" class="field-select">
+          <option value="lab">🔬 مختبر علوم</option>
+          <option value="library">📚 مكتبة</option>
+          <option value="lab_computer">💻 مختبر حاسوب</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">التاريخ</label>
+        <input type="date" id="bkDate" class="field-input">
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label class="field-label">الحصة</label>
+        <select id="bkPeriod" class="field-select">
+          <option value="1">1️⃣ أولى</option>
+          <option value="2">2️⃣ ثانية</option>
+          <option value="3">3️⃣ ثالثة</option>
+          <option value="4">4️⃣ رابعة</option>
+          <option value="5">5️⃣ خامسة</option>
+          <option value="6">6️⃣ سادسة</option>
+          <option value="7">7️⃣ سابعة</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">الصف</label>
+        <input type="text" id="bkClass" class="field-input" placeholder="مثال: 5A">
+      </div>
+    </div>
+    <div class="mb14">
+      <label class="field-label">الهدف من الحجز</label>
+      <input type="text" id="bkPurpose" class="field-input" placeholder="مثال: تجربة البصريات — الفصل الثاني">
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn-primary" style="flex:2;" onclick="saveBooking()">💾 حفظ الحجز</button>
+      <button class="btn-sec" onclick="closeNewBookingModal()">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- end page-body -->
+
+<div id="toast"></div>
+
+<script>
+const SUPA_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+const MANAGER_ID = 'noor';
+const EXCLUDED_ROLES = ['secretary','vice_principal','principal']; // مستثنيات الاحتياط
+
+// ── STATE ──
+let allStaff = [];
+let weeklyLog = {};
+let facilityBookings = [];
+let selectedAbsentTeacher = null;
+let selectedSubTeacher = null;
+let absenceReason = null;
+
+// ── INIT ──
+window.addEventListener('DOMContentLoaded', async () => {
+  const today = new Date();
+  document.getElementById('absenceDate').valueAsDate = today;
+  document.getElementById('bkDate').valueAsDate = today;
+  document.getElementById('headerDate').textContent = today.toLocaleDateString('ar-AE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  document.getElementById('todayLabel').textContent = today.toLocaleDateString('ar-AE',{month:'short',day:'numeric'});
+
+  await Promise.all([loadStaff(), loadWeeklyLog(), loadFacilityBookings()]);
+  populateAbsentSelect();
+  loadTodayLog();
+  renderWorkload();
+  renderBookings();
+});
+
+// ── LOAD STAFF ──
+async function loadStaff() {
+  try {
+    const r = await fetch('/data/staff.json');
+    if (r.ok) {
+      const data = await r.json();
+      allStaff = Array.isArray(data) ? data : Object.values(data).flat();
+    }
+  } catch(e) {}
+  // Fallback: demo staff
+  if (!allStaff.length) {
+    allStaff = [
+      {id:'munira.almarri',name:'منيرة المري',role:'teacher',type:'citizen',cycle:'first',subject:'علوم',periods_this_week:18},
+      {id:'fatima.ali',name:'فاطمة علي',role:'teacher',type:'expat',cycle:'first',subject:'رياضيات',periods_this_week:22},
+      {id:'sara.hassan',name:'سارة حسن',role:'teacher',type:'citizen',cycle:'second',subject:'لغة عربية',periods_this_week:20},
+      {id:'noura.kh',name:'نورة خالد',role:'teacher',type:'citizen',cycle:'first',subject:'تربية إسلامية',periods_this_week:15},
+      {id:'hessa.m',name:'حصة محمد',role:'head_of_department',type:'citizen',cycle:'first',subject:'علوم اجتماعية',periods_this_week:16},
+      {id:'mariam.lab',name:'مريم — أمينة مختبر',role:'lab_technician',type:'expat',cycle:'all',subject:'مختبر',periods_this_week:8},
+      {id:'reem.lib',name:'ريم — أمينة مكتبة',role:'librarian',type:'citizen',cycle:'all',subject:'مكتبة',periods_this_week:6},
+      {id:'aisha.admin',name:'عائشة — إدارية',role:'admin',type:'citizen',cycle:'all',subject:'إدارة',periods_this_week:5},
+    ];
+  }
+}
+
+async function loadWeeklyLog() {
+  try {
+    const monday = getMondayOfWeek(new Date()).toISOString().split('T')[0];
+    const { data } = await sb.from('weekly_period_log')
+      .select('*')
+      .eq('week_start', monday);
+    if (data) data.forEach(r => { weeklyLog[r.teacher_id] = r; });
+  } catch(e) { console.warn(e); }
+}
+
+async function loadFacilityBookings() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const { data } = await sb.from('facility_bookings')
+      .select('*')
+      .gte('booking_date', today)
+      .eq('status','confirmed');
+    if (data) facilityBookings = data;
+  } catch(e) {}
+}
+
+// ── POPULATE SELECT ──
+function populateAbsentSelect() {
+  const sel = document.getElementById('absentTeacher');
+  const teachers = allStaff.filter(s => s.role === 'teacher' || s.role === 'head_of_department');
+  teachers.forEach(t => {
+    const o = document.createElement('option');
+    o.value = t.id;
+    o.textContent = t.name;
+    sel.appendChild(o);
+  });
+}
+
+function onAbsentTeacherChange() {
+  const id = document.getElementById('absentTeacher').value;
+  selectedAbsentTeacher = allStaff.find(s => s.id === id) || null;
+  if (selectedAbsentTeacher) {
+    document.getElementById('absenceClass').value = selectedAbsentTeacher.class_key || selectedAbsentTeacher.default_class || '';
+  }
+  checkConflictsAndSuggest();
+}
+
+function onDateChange() {
+  checkConflictsAndSuggest();
+}
+
+// ── REASON CHIPS ──
+function selectReason(r, el) {
+  absenceReason = r;
+  document.querySelectorAll('.reason-chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('otherDetailWrap').style.display = r === 'other' ? 'block' : 'none';
+  checkConflictsAndSuggest();
+}
+
+// ── CONFLICTS + SUGGESTIONS ──
+async function checkConflictsAndSuggest() {
+  const period = parseInt(document.getElementById('absencePeriod').value);
+  const date = document.getElementById('absenceDate').value;
+  if (!selectedAbsentTeacher || !period || !date) return;
+
+  // تحقق من تعارض المرافق
+  const conflicts = facilityBookings.filter(b =>
+    b.booking_date === date && b.period_number === period
+  );
+
+  const conflictDiv = document.getElementById('conflictWarning');
+  const conflictedFacilityStaff = [];
+  if (conflicts.length) {
+    conflictDiv.style.display = 'flex';
+    document.getElementById('conflictText').textContent =
+      `⚠️ تعارض في الحصة ${period}: ${conflicts.map(c => c.facility_type === 'lab' ? 'مختبر محجوز' : 'مكتبة محجوزة').join(' + ')} — موظفات المرافق مستثنيات تلقائياً`;
+    // تحديد موظفات المرافق المتعارضة
+    allStaff.filter(s => s.role === 'lab_technician' || s.role === 'librarian').forEach(s => {
+      conflictedFacilityStaff.push(s.id);
+    });
+  } else {
+    conflictDiv.style.display = 'none';
+  }
+
+  // بناء قائمة المقترحين
+  document.getElementById('suggestCard').style.display = 'block';
+  renderSuggestions(conflictedFacilityStaff, period, date);
+}
+
+function renderSuggestions(conflictedIds, period, date) {
+  const absentId = selectedAbsentTeacher?.id;
+  const absentCycle = selectedAbsentTeacher?.cycle || 'first';
+  const monday = getMondayOfWeek(new Date(date || new Date())).toISOString().split('T')[0];
+
+  // المستثنيات الثابتة
+  const alwaysExcluded = allStaff.filter(s => EXCLUDED_ROLES.includes(s.role)).map(s => s.id);
+  const excluded = new Set([...alwaysExcluded, ...conflictedIds, absentId]);
+
+  const eligible = allStaff.filter(s => !excluded.has(s.id));
+
+  // احسب النصاب الحالي لكل معلمة
+  function getCurrentPeriods(staffId) {
+    const log = weeklyLog[staffId];
+    if (log) return (log.regular_periods || 0) + (log.substitute_periods || 0);
+    const s = allStaff.find(x => x.id === staffId);
+    return s?.periods_this_week || 0;
+  }
+
+  function getMaxAllowed(s) {
+    if (s.type === 'citizen') return 24;
+    if (s.type === 'expat') return 30;
+    return 999; // أجر يومي
+  }
+
+  // ترتيب حسب خوارزمية الأولوية
+  const scored = eligible.map(s => {
+    const currPeriods = getCurrentPeriods(s.id);
+    const maxAllowed = getMaxAllowed(s);
+    const atLimit = currPeriods >= maxAllowed;
+    const remaining = maxAllowed - currPeriods;
+
+    let priority = 99;
+    if (s.role === 'teacher') {
+      if (s.cycle === absentCycle) priority = 1; // نفس الحلقة
+      else priority = 2; // حلقة أخرى
+    } else if (s.role === 'head_of_department') priority = 3;
+    else if (s.role === 'lab_technician' || s.role === 'librarian') priority = 4;
+    else priority = 5;
+
+    return { ...s, priority, currPeriods, maxAllowed, atLimit, remaining };
+  });
+
+  scored.sort((a, b) => {
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    return a.currPeriods - b.currPeriods; // الأقل نصاباً أولاً
+  });
+
+  const list = document.getElementById('suggestList');
+  if (!scored.length) {
+    list.innerHTML = '<div class="empty-state"><div class="e-icon">😔</div><div class="e-msg">لا يوجد معلمات متاحات في هذه الحصة</div></div>';
+    return;
+  }
+
+  const rankClasses = ['r1','r2','r3','rx'];
+  const typeLabels = {citizen:'مواطنة',expat:'وافدة',daily:'أجر يومي'};
+
+  list.innerHTML = scored.slice(0, 6).map((s, i) => {
+    const rankNum = i < 3 ? (i + 1) : '•';
+    const rankCls = i < 3 ? rankClasses[i] : rankClasses[3];
+    const limitColor = s.atLimit ? 'var(--rose)' : s.remaining <= 3 ? 'var(--amber)' : 'var(--emerald)';
+    const limitText = s.atLimit ? '🔴 وصلت للحد' : `متبقي ${s.remaining} حصة`;
+    const priorityLabel = ['نفس الحلقة ⭐','حلقة أخرى','رئيسة قسم','موظفة مرفق','إدارية'];
+    return `
+    <div class="sub-card ${s.atLimit ? 'at-limit' : ''}">
+      <div class="sub-rank ${rankCls}">${rankNum}</div>
+      <div class="sub-info">
+        <div class="sub-name">${s.name}</div>
+        <div class="sub-meta">
+          <span class="sub-badge ${s.type}">${typeLabels[s.type] || s.type}</span>
+          ${priorityLabel[s.priority - 1] || ''} &nbsp;·&nbsp;
+          <span style="color:${limitColor};">${limitText}</span>
+          &nbsp;·&nbsp; ${s.currPeriods}/${s.maxAllowed} حصة
+        </div>
+      </div>
+      ${s.atLimit
+        ? '<span style="font-size:.75rem;color:var(--rose);">⛔ لا يمكن التكليف</span>'
+        : `<button class="btn-assign" onclick="selectSubstitute('${s.id}')">اختيار ✓</button>`
+      }
+    </div>`;
+  }).join('');
+}
+
+// ── اختيار المعلمة البديلة ──
+function selectSubstitute(staffId) {
+  selectedSubTeacher = allStaff.find(s => s.id === staffId);
+  if (!selectedSubTeacher) return;
+
+  const currPeriods = weeklyLog[staffId]
+    ? (weeklyLog[staffId].regular_periods || 0) + (weeklyLog[staffId].substitute_periods || 0)
+    : (selectedSubTeacher.periods_this_week || 0);
+  const maxAllowed = selectedSubTeacher.type === 'citizen' ? 24 : selectedSubTeacher.type === 'expat' ? 30 : 999;
+  const typeLabels = {citizen:'مواطنة',expat:'وافدة',daily:'أجر يومي'};
+
+  document.getElementById('selectedSubInfo').innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;background:var(--surf2);border-radius:10px;padding:12px;">
+      <div style="font-size:2rem;">👩‍🏫</div>
+      <div>
+        <div style="font-weight:800;font-size:.95rem;">${selectedSubTeacher.name}</div>
+        <div style="font-size:.75rem;color:var(--text2);margin-top:3px;">
+          ${typeLabels[selectedSubTeacher.type] || selectedSubTeacher.type} &nbsp;·&nbsp;
+          النصاب الحالي: ${currPeriods}/${maxAllowed} حصة &nbsp;·&nbsp;
+          بعد التكليف: ${currPeriods + 1}/${maxAllowed}
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('selectedSubCard').style.display = 'block';
+  document.getElementById('selectedSubCard').scrollIntoView({behavior:'smooth'});
+}
+
+function cancelSelection() {
+  selectedSubTeacher = null;
+  document.getElementById('selectedSubCard').style.display = 'none';
+}
+
+// ── تأكيد التكليف ──
+async function confirmAssignment() {
+  if (!selectedAbsentTeacher || !selectedSubTeacher || !absenceReason) {
+    showToast('⚠️ أكملي جميع البيانات المطلوبة');
+    return;
+  }
+
+  const period = parseInt(document.getElementById('absencePeriod').value);
+  const date = document.getElementById('absenceDate').value;
+  const classKey = document.getElementById('absenceClass').value || '—';
+  const notes = document.getElementById('subNotes').value.trim();
+  const detail = document.getElementById('absenceDetail').value.trim();
+
+  if (!period || !date) { showToast('⚠️ حددي الحصة والتاريخ'); return; }
+
+  const reasonLabels = {sick:'مرض 🤒',admin_release:'تفريغ إداري 📋',external_activity:'مشاركة خارجية 🏆',other:'أخرى 📝'};
+
+  try {
+    // 1. إدراج في substitute_log
+    const { error } = await sb.from('substitute_log').insert({
+      session_date: date,
+      period_number: period,
+      class_key: classKey,
+      original_teacher_id: selectedAbsentTeacher.id,
+      original_teacher_name: selectedAbsentTeacher.name,
+      absence_reason: absenceReason,
+      absence_detail: detail || reasonLabels[absenceReason],
+      substitute_teacher_id: selectedSubTeacher.id,
+      substitute_teacher_name: selectedSubTeacher.name,
+      substitute_type: selectedSubTeacher.type || 'citizen',
+      status: 'assigned',
+      lesson_summary: notes || null
+    });
+    if (error) throw error;
+
+    // 2. تحديث النصاب الأسبوعي للمعلمة البديلة
+    const monday = getMondayOfWeek(new Date(date)).toISOString().split('T')[0];
+    const maxAllowed = selectedSubTeacher.type === 'citizen' ? 24 : selectedSubTeacher.type === 'expat' ? 30 : 999;
+    const currLog = weeklyLog[selectedSubTeacher.id];
+    if (currLog) {
+      await sb.from('weekly_period_log').update({
+        substitute_periods: (currLog.substitute_periods || 0) + 1,
+        updated_at: new Date().toISOString()
+      }).eq('teacher_id', selectedSubTeacher.id).eq('week_start', monday);
+    } else {
+      await sb.from('weekly_period_log').upsert({
+        teacher_id: selectedSubTeacher.id,
+        teacher_name: selectedSubTeacher.name,
+        teacher_type: selectedSubTeacher.type || 'citizen',
+        week_start: monday,
+        regular_periods: selectedSubTeacher.periods_this_week || 0,
+        substitute_periods: 1,
+        max_allowed: maxAllowed
+      }, { onConflict: 'teacher_id,week_start' });
+    }
+
+    showToast(`✅ تم التكليف: ${selectedSubTeacher.name} تغطي حصة ${selectedAbsentTeacher.name}`);
+    resetRegisterForm();
+    loadTodayLog();
+    switchTab('today');
+
+  } catch(e) {
+    console.error(e);
+    showToast('❌ خطأ في الحفظ: ' + (e.message || 'تحقق من الاتصال'));
+  }
+}
+
+function resetRegisterForm() {
+  document.getElementById('absentTeacher').value = '';
+  document.getElementById('absencePeriod').value = '';
+  document.getElementById('absenceClass').value = '';
+  document.getElementById('subNotes').value = '';
+  document.querySelectorAll('.reason-chip').forEach(c => c.classList.remove('selected'));
+  absenceReason = null;
+  selectedAbsentTeacher = null;
+  selectedSubTeacher = null;
+  document.getElementById('suggestCard').style.display = 'none';
+  document.getElementById('selectedSubCard').style.display = 'none';
+  document.getElementById('conflictWarning').style.display = 'none';
+}
+
+// ── حصص اليوم ──
+async function loadTodayLog() {
+  const today = new Date().toISOString().split('T')[0];
+  try {
+    const { data } = await sb.from('substitute_log')
+      .select('*')
+      .eq('session_date', today)
+      .order('period_number');
+
+    renderTodayLog(data || []);
+  } catch(e) {
+    document.getElementById('todayLogContent').innerHTML = '<div class="empty-state"><div class="e-msg">❌ تعذّر تحميل البيانات</div></div>';
+  }
+}
+
+function renderTodayLog(rows) {
+  const cont = document.getElementById('todayLogContent');
+  if (!rows.length) {
+    cont.innerHTML = `<div class="empty-state"><div class="e-icon">✅</div><div class="e-msg">لا حصص احتياط مسجّلة اليوم</div></div>`;
+    return;
+  }
+
+  const reasonEmoji = {sick:'🤒',admin_release:'📋',external_activity:'🏆',other:'📝'};
+  const statusClass = {assigned:'assigned',confirmed:'confirmed',completed:'completed'};
+  const statusLabel = {assigned:'مكلَّفة',confirmed:'أكّدت',completed:'أكملت'};
+
+  cont.innerHTML = `
+    <table class="log-table">
+      <thead>
+        <tr>
+          <th>الحصة</th><th>الصف</th><th>الأصلية</th><th>السبب</th><th>البديلة</th><th>الحالة</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => `
+        <tr>
+          <td>${r.period_number}</td>
+          <td>${r.class_key || '—'}</td>
+          <td>${r.original_teacher_name || r.original_teacher_id}</td>
+          <td>${reasonEmoji[r.absence_reason] || '📝'} ${r.absence_detail || r.absence_reason}</td>
+          <td>${r.substitute_teacher_name || r.substitute_teacher_id}</td>
+          <td><span class="status-badge ${statusClass[r.status] || 'assigned'}">${statusLabel[r.status] || r.status}</span></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+// ── النصاب الأسبوعي ──
+function renderWorkload() {
+  const cont = document.getElementById('workloadContent');
+  if (!allStaff.length) { cont.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>'; return; }
+
+  const typeLabels = {citizen:'🇦🇪 مواطنة',expat:'🌍 وافدة',daily:'💰 أجر يومي'};
+  const typeBadge = {citizen:'citizen',expat:'expat',daily:'daily'};
+
+  const teachers = allStaff.filter(s => s.role === 'teacher' || s.role === 'head_of_department');
+  cont.innerHTML = teachers.map(s => {
+    const log = weeklyLog[s.id];
+    const curr = log ? (log.regular_periods || 0) + (log.substitute_periods || 0) : (s.periods_this_week || 0);
+    const maxAllowed = s.type === 'citizen' ? 24 : s.type === 'expat' ? 30 : 999;
+    const pct = maxAllowed < 999 ? Math.min(100, Math.round((curr / maxAllowed) * 100)) : Math.round((curr / 30) * 100);
+    const fillCls = pct >= 100 ? 'full' : pct >= 80 ? 'warn' : 'safe';
+    const displayMax = maxAllowed < 999 ? maxAllowed : '∞';
+    return `
+    <div class="wl-row">
+      <div>
+        <div class="wl-name">${s.name}</div>
+        <span class="wl-type-badge ${typeBadge[s.type] || 'expat'}" style="font-size:.65rem;padding:2px 8px;border-radius:99px;">${typeLabels[s.type] || s.type}</span>
+      </div>
+      <div class="wl-wrap">
+        <div class="wl-nums">
+          <span>${s.subject || '—'}</span>
+          <span style="color:${fillCls==='full'?'var(--rose)':fillCls==='warn'?'var(--amber)':'var(--emerald2);'}">
+            ${curr} / ${displayMax} حصة ${pct >= 100 ? '🔴 ممتلئ' : ''}
+          </span>
+        </div>
+        <div class="capacity-track">
+          <div class="capacity-fill ${fillCls}" style="width:${Math.min(pct,100)}%;"></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── حجوزات المرافق ──
+function renderBookings() {
+  const cont = document.getElementById('bookingsContent');
+  if (!facilityBookings.length) {
+    cont.innerHTML = '<div class="empty-state"><div class="e-icon">📅</div><div class="e-msg">لا حجوزات مسجّلة — اضغطي "+ حجز جديد" لإضافة أول حجز</div></div>';
+    return;
+  }
+
+  const facilityEmoji = {lab:'🔬',library:'📚',lab_computer:'💻'};
+  cont.innerHTML = `
+    <table class="log-table">
+      <thead>
+        <tr><th>التاريخ</th><th>المرفق</th><th>الحصة</th><th>الصف</th><th>الهدف</th></tr>
+      </thead>
+      <tbody>
+        ${facilityBookings.map(b => `
+        <tr>
+          <td>${b.booking_date}</td>
+          <td>${facilityEmoji[b.facility_type] || '🏢'} ${b.facility_name || b.facility_type}</td>
+          <td>${b.period_number}</td>
+          <td>${b.class_key || '—'}</td>
+          <td style="color:var(--text2);">${b.purpose || '—'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function openNewBookingModal() {
+  document.getElementById('newBookingForm').style.display = 'block';
+  document.getElementById('newBookingForm').scrollIntoView({behavior:'smooth'});
+}
+
+function closeNewBookingModal() {
+  document.getElementById('newBookingForm').style.display = 'none';
+}
+
+async function saveBooking() {
+  const facility = document.getElementById('bkFacility').value;
+  const date = document.getElementById('bkDate').value;
+  const period = parseInt(document.getElementById('bkPeriod').value);
+  const classKey = document.getElementById('bkClass').value.trim();
+  const purpose = document.getElementById('bkPurpose').value.trim();
+
+  if (!facility || !date || !period) { showToast('⚠️ أكملي بيانات الحجز'); return; }
+
+  // تحقق من تعارض
+  const conflict = facilityBookings.find(b => b.booking_date === date && b.period_number === period && b.facility_type === facility);
+  if (conflict) { showToast('❌ هذا المرفق محجوز بالفعل في هذا الوقت'); return; }
+
+  try {
+    const { error } = await sb.from('facility_bookings').insert({
+      facility_type: facility,
+      booked_by_teacher_id: MANAGER_ID,
+      class_key: classKey || null,
+      booking_date: date,
+      period_number: period,
+      purpose: purpose || null,
+      status: 'confirmed'
+    });
+    if (error) throw error;
+    showToast('✅ تم حفظ الحجز');
+    closeNewBookingModal();
+    await loadFacilityBookings();
+    renderBookings();
+  } catch(e) {
+    showToast('❌ خطأ في الحفظ');
+    console.error(e);
+  }
+}
+
+// ── TABS ──
+function switchTab(tab) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  event.currentTarget?.classList.add('active');
+  if (tab === 'today') loadTodayLog();
+  if (tab === 'workload') renderWorkload();
+  if (tab === 'bookings') renderBookings();
+}
+
+// ── UTILS ──
+function getMondayOfWeek(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  // أسبوع الخليج يبدأ الأحد = 0
+  const diff = (day === 0) ? 0 : day === 6 ? 1 : -(day - 1);
+  d.setDate(d.getDate() + diff);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>
