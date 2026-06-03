@@ -1068,12 +1068,26 @@ const WL_SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 // Make globally accessible for non-module scripts
 window.WL_SUPA_URL = WL_SUPA_URL;
 window.WL_SUPA_KEY = WL_SUPA_KEY;
-let _wlSB = null;
-async function getWLSB() {
-  if (_wlSB) return _wlSB;
-  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
-  _wlSB = createClient(WL_SUPA_URL, WL_SUPA_KEY);
-  return _wlSB;
+// ── Direct REST helper — no CDN dependency ──
+async function wlRest(table, method, body, query) {
+  method = method || 'GET';
+  const base = window.WL_SUPA_URL + '/rest/v1/' + table;
+  const url = query ? base + '?' + query : base;
+  const headers = {
+    'apikey': window.WL_SUPA_KEY,
+    'Authorization': 'Bearer ' + window.WL_SUPA_KEY,
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  };
+  if (method === 'POST') headers['Prefer'] = 'return=minimal';
+  if (method === 'UPSERT') { method = 'POST'; headers['Prefer'] = 'resolution=merge-duplicates,return=minimal'; }
+  if (method === 'DELETE') headers['Prefer'] = 'return=minimal';
+  const opts = { method: method, headers: headers };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  if (!res.ok) { const err = await res.text(); throw new Error(err); }
+  if (method === 'GET') { return res.json(); }
+  return null;
 }
 console.log('✅ Supabase ready (weekly lessons)');
 // Supabase ready
@@ -1231,25 +1245,24 @@ async function saveProgressToSupabase() {
   if (browseMode) return true;
   if (!currentStudent || !currentClass || currentWeek === null) return false;
   try {
-    const sb = await getWLSB();
     const progressId = (currentClass + '_' + currentStudent).replace(/\s+/g,'_').replace(/[^\w\u0600-\u06FF]/g,'');
-    const { error } = await sb.from('student_progress').upsert({
+    await wlRest('student_progress', 'UPSERT', {
       progress_id: progressId, student_name: currentStudent, class_name: currentClass,
       grade: currentGrade, section: currentSection, week: currentWeek, stage: currentStage,
       slide_idx: currentSlideIdx, quiz_idx: currentQuizIdx, quiz_scores: quizScores,
       completed: false, saved_at: new Date().toISOString()
-    }, { onConflict: 'progress_id' });
-    if (error) console.error('Save error:', error.message);
-    return !error;
+    });
+    return true;
   } catch(e) { console.error('Save progress error:', e); return false; }
 }
 
 async function loadProgressFromSupabase(studentName, className) {
   if (!studentName || !className) return null;
   try {
-    const sb = await getWLSB();
     const progressId = (className + '_' + studentName).replace(/\s+/g,'_').replace(/[^\w\u0600-\u06FF]/g,'');
-    const { data } = await sb.from('student_progress').select('*').eq('progress_id', progressId).maybeSingle();
+    const rows = await wlRest('student_progress', 'GET', null,
+      'progress_id=eq.' + encodeURIComponent(progressId) + '&limit=1');
+    const data = rows && rows[0];
     if (data && !data.completed && data.week !== null && data.week !== undefined) {
       return {
         studentName: data.student_name, className: data.class_name,
@@ -1265,9 +1278,8 @@ async function loadProgressFromSupabase(studentName, className) {
 async function clearProgressFromSupabase() {
   if (!currentStudent || !currentClass) return;
   try {
-    const sb = await getWLSB();
     const progressId = (currentClass + '_' + currentStudent).replace(/\s+/g,'_').replace(/[^\w\u0600-\u06FF]/g,'');
-    await sb.from('student_progress').delete().eq('progress_id', progressId);
+    await wlRest('student_progress', 'DELETE', null, 'progress_id=eq.' + encodeURIComponent(progressId));
   } catch(e) {}
 }
 
@@ -1556,16 +1568,13 @@ async function goToWeeks() {
 
   // Load completed weeks from Supabase
   try {
-    const sb2 = await getWLSB();
-    const { data: prevResults } = await sb2
-      .from('weekly_results')
-      .select('week, score')
-      .eq('student_name', currentStudent)
-      .eq('class_name', currentClass || '');
+    const q = 'select=week,score&student_name=eq.' + encodeURIComponent(currentStudent) +
+              '&class_name=eq.' + encodeURIComponent(currentClass || '');
+    const prevResults = await wlRest('weekly_results', 'GET', null, q);
     if (prevResults && prevResults.length > 0) {
       const key = (currentClass || '') + '_' + (currentStudent || '');
-      prevResults.forEach(r => {
-        const score = r.score ?? 0;
+      prevResults.forEach(function(r) {
+        const score = r.score != null ? r.score : 0;
         completedWeeks[key + '_' + r.week] = { done: true, score: Math.round(score) };
       });
     }
@@ -2231,27 +2240,26 @@ async function submitLesson() {
 
 async function saveToSupabase(data) {
   const statusEl = document.getElementById('supabase-status');
-  if (statusEl) { statusEl.textContent = '⏳ جاري الحفظ في Supabase...'; statusEl.className = 'alert alert-info'; statusEl.style.display = 'block'; }
+  if (statusEl) { statusEl.textContent = '⏳ جاري الحفظ...'; statusEl.className = 'alert alert-info'; statusEl.style.display = 'block'; }
   try {
-    const sb = await getWLSB();
-    const { error } = await sb.from('weekly_results').insert({
+    await wlRest('weekly_results', 'POST', {
       student_name: data.studentName || data.name || '',
       class_name: data.cls || data.className || data.class || '',
       grade: String(data.grade || ''),
-      score: data.totalScore ?? data.quizScore ?? data.score ?? 0,
+      score: data.totalScore != null ? data.totalScore : (data.quizScore != null ? data.quizScore : (data.score != null ? data.score : 0)),
       total: data.max || data.total || 10,
       week: String(data.week || ''),
       subject: data.subject || 'تقنية',
       created_at: new Date().toISOString()
     });
     if (statusEl) {
-      statusEl.textContent = error ? '⚠️ خطأ في الحفظ — تم الحفظ محلياً' : '✅ تم حفظ نتيجتك بنجاح! 🎉';
-      statusEl.className = error ? 'alert alert-warning' : 'alert alert-success';
-      if (!error) setTimeout(() => { if (statusEl) statusEl.style.display = 'none'; }, 4000);
+      statusEl.textContent = '✅ تم حفظ نتيجتك بنجاح! 🎉';
+      statusEl.className = 'alert alert-success';
+      setTimeout(() => { if (statusEl) statusEl.style.display = 'none'; }, 4000);
     }
   } catch(e) {
     console.error('Supabase save error:', e);
-    if (statusEl) { statusEl.textContent = '⚠️ خطأ: ' + e.message; statusEl.className = 'alert alert-warning'; }
+    if (statusEl) { statusEl.textContent = '⚠️ خطأ في الحفظ: ' + e.message; statusEl.className = 'alert alert-warning'; }
   }
 }
 async function saveToFirebase(data) { return saveToSupabase(data); } // backward compat alias
