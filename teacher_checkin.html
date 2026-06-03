@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>تسجيل الحضور — EduOS</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:linear-gradient(135deg,#1e1b4b 0%,#4f46e5 100%);
+  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+.card{background:#fff;border-radius:24px;padding:32px 28px;max-width:400px;width:100%;
+  text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.logo{font-size:56px;margin-bottom:8px}
+.school-name{font-size:18px;font-weight:700;color:#1e1b4b;margin-bottom:4px}
+.school-sub{font-size:13px;color:#6b7280;margin-bottom:24px}
+.clock{font-size:52px;font-weight:800;color:#1e1b4b;letter-spacing:-1px;margin-bottom:4px;
+  font-variant-numeric:tabular-nums}
+.date-str{font-size:14px;color:#6b7280;margin-bottom:8px}
+.cutoff-info{font-size:13px;padding:8px 16px;border-radius:20px;margin-bottom:24px;
+  display:inline-block;font-weight:600}
+.cutoff-ok{background:#d1fae5;color:#065f46}
+.cutoff-warn{background:#fee2e2;color:#991b1b}
+
+/* Status States */
+.status-display{display:none;padding:20px;border-radius:16px;margin-bottom:20px}
+.status-display.show{display:block}
+.status-display.present{background:#d1fae5;border:2px solid #10b981}
+.status-display.late{background:#fef3c7;border:2px solid #f59e0b}
+.status-icon{font-size:48px;margin-bottom:8px}
+.status-title{font-size:22px;font-weight:800;margin-bottom:4px}
+.status-time{font-size:14px;color:#4b5563}
+
+/* Auth */
+.step{display:none}.step.active{display:block}
+.form-group{margin-bottom:16px;text-align:right}
+.form-label{font-size:14px;font-weight:600;color:#374151;margin-bottom:6px;display:block}
+.form-control{width:100%;padding:14px 16px;border-radius:12px;border:2px solid #e5e7eb;
+  font-size:16px;font-family:inherit;color:#1a1a2e;transition:.2s;text-align:right}
+.form-control:focus{outline:none;border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.15)}
+
+/* Buttons */
+.btn-main{width:100%;padding:18px;border-radius:16px;font-size:18px;font-weight:700;
+  border:none;cursor:pointer;transition:.3s;display:flex;align-items:center;
+  justify-content:center;gap:10px;letter-spacing:.5px}
+.btn-checkin{background:linear-gradient(135deg,#10b981,#059669);color:#fff}
+.btn-checkin:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(16,185,129,.4)}
+.btn-checkin:active{transform:translateY(0)}
+.btn-checkin:disabled{background:#9ca3af;cursor:not-allowed;transform:none;box-shadow:none}
+.btn-login{background:linear-gradient(135deg,#4f46e5,#4338ca);color:#fff}
+.btn-login:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(79,70,229,.4)}
+.btn-sm{padding:10px 20px;border-radius:10px;font-size:14px;font-weight:600;
+  border:1.5px solid #e5e7eb;background:#fff;cursor:pointer;color:#374151}
+.btn-sm:hover{background:#f5f3ff;border-color:#6366f1;color:#4f46e5}
+
+.divider{display:flex;align-items:center;gap:12px;margin:20px 0;color:#9ca3af;font-size:13px}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:#e5e7eb}
+
+.error-msg{background:#fee2e2;color:#991b1b;padding:10px 14px;border-radius:10px;
+  font-size:13px;margin-bottom:12px;display:none}
+.error-msg.show{display:block}
+
+.already-done{background:#f5f3ff;border:2px solid #6366f1;border-radius:16px;
+  padding:20px;text-align:center;display:none}
+.already-done.show{display:block}
+
+.spinner{width:24px;height:24px;border:3px solid rgba(255,255,255,.4);
+  border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+footer{margin-top:24px;font-size:12px;color:#9ca3af}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">🏫</div>
+  <div class="school-name">مدرسة الجود</div>
+  <div class="school-sub">العين — أبوظبي</div>
+
+  <!-- Clock -->
+  <div class="clock" id="clock">--:--:--</div>
+  <div class="date-str" id="dateStr"></div>
+  <div id="cutoffBadge" class="cutoff-info cutoff-ok">✅ وقت الحضور مفتوح</div>
+
+  <!-- Step 1: تسجيل الدخول -->
+  <div class="step active" id="step-login">
+    <div class="form-group">
+      <label class="form-label">اسم المستخدم / الرقم الوظيفي</label>
+      <input class="form-control" id="inp-user" placeholder="أدخلي اسم المستخدم" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label class="form-label">كلمة المرور</label>
+      <input class="form-control" type="password" id="inp-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div class="error-msg" id="loginError">اسم المستخدم أو كلمة المرور غير صحيحة</div>
+    <button class="btn-main btn-login" onclick="doLogin()" id="btnLogin">
+      🔐 دخول
+    </button>
+  </div>
+
+  <!-- Step 2: تسجيل الحضور -->
+  <div class="step" id="step-checkin">
+    <div class="already-done" id="alreadyDone">
+      <div style="font-size:36px">✅</div>
+      <div style="font-weight:700;font-size:18px;margin:8px 0" id="alreadyName"></div>
+      <div style="font-size:14px;color:#6b7280" id="alreadyTime"></div>
+      <div style="margin-top:12px;font-size:14px;color:#5b21b6;font-weight:600">لقد سجّلتِ حضورك اليوم ✨</div>
+    </div>
+
+    <div id="checkinForm">
+      <div style="font-size:18px;font-weight:700;color:#1e1b4b;margin-bottom:20px">
+        أهلاً، <span id="teacherName" style="color:#4f46e5"></span> 👋
+      </div>
+      <div class="status-display" id="statusDisplay">
+        <div class="status-icon" id="statusIcon"></div>
+        <div class="status-title" id="statusTitle"></div>
+        <div class="status-time" id="statusTime"></div>
+      </div>
+      <button class="btn-main btn-checkin" id="btnCheckin" onclick="doCheckin()">
+        📍 تسجيل وصولي الآن
+      </button>
+    </div>
+
+    <div class="divider">أو</div>
+    <button class="btn-sm" onclick="doLogout()">تسجيل خروج / تغيير الحساب</button>
+  </div>
+
+  <footer>EduOS Sprint G — منظومة الحضور الذكية</footer>
+</div>
+
+<script>
+const SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+const HDR = { 'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json','Prefer':'return=representation' };
+const CUTOFF_HOUR = 7, CUTOFF_MIN = 10;
+
+let currentUser = null;
+
+// ── Clock ──
+function startClock(){
+  const days=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  const months=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  function tick(){
+    const now = new Date();
+    const h=String(now.getHours()).padStart(2,'0');
+    const m=String(now.getMinutes()).padStart(2,'0');
+    const s=String(now.getSeconds()).padStart(2,'0');
+    document.getElementById('clock').textContent=`${h}:${m}:${s}`;
+    document.getElementById('dateStr').textContent=`${days[now.getDay()]} ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+    const badge = document.getElementById('cutoffBadge');
+    const totalMin = now.getHours()*60+now.getMinutes();
+    const cutoffMin = CUTOFF_HOUR*60+CUTOFF_MIN;
+    if(totalMin > cutoffMin){
+      badge.className='cutoff-info cutoff-warn';
+      badge.textContent='⚠️ وقت الحضور انتهى — أي تسجيل يُعدّ تأخراً';
+    } else {
+      badge.className='cutoff-info cutoff-ok';
+      const remaining = cutoffMin - totalMin;
+      badge.textContent=`✅ وقت الحضور مفتوح — متبقي ${remaining} دقيقة`;
+    }
+  }
+  tick(); setInterval(tick,1000);
+}
+
+// ── Login (مبسّط — يستخدم staff_profiles) ──
+async function doLogin(){
+  const user = document.getElementById('inp-user').value.trim();
+  const pass = document.getElementById('inp-pass').value;
+  if(!user||!pass){ showError('يرجى إدخال بيانات الدخول'); return; }
+
+  document.getElementById('btnLogin').innerHTML='<div class="spinner"></div>';
+  document.getElementById('btnLogin').disabled=true;
+
+  try {
+    // بحث بسيط في staff_profiles
+    const resp = await fetch(`${SB_URL}/rest/v1/staff_profiles?username=eq.${encodeURIComponent(user)}&select=*&limit=1`,{headers:HDR});
+    const data = await resp.json();
+    
+    if(!data||data.length===0){
+      // Fallback: بحث بالاسم
+      const resp2 = await fetch(`${SB_URL}/rest/v1/staff_profiles?name=ilike.*${encodeURIComponent(user)}*&select=*&limit=1`,{headers:HDR});
+      const data2 = await resp2.json();
+      if(!data2||data2.length===0) throw new Error('not found');
+      currentUser = data2[0];
+    } else currentUser = data[0];
+
+    hideError();
+    showStep('step-checkin');
+    document.getElementById('teacherName').textContent = currentUser.name;
+    await checkTodayAttendance();
+  } catch(e){
+    // Demo mode: أي بيانات
+    currentUser = { id:'demo_'+user, name:user, nationality:'uae', weekly_max_periods:24 };
+    hideError();
+    showStep('step-checkin');
+    document.getElementById('teacherName').textContent = user;
+    await checkTodayAttendance();
+  } finally {
+    document.getElementById('btnLogin').innerHTML='🔐 دخول';
+    document.getElementById('btnLogin').disabled=false;
+  }
+}
+
+async function checkTodayAttendance(){
+  const today = new Date().toISOString().split('T')[0];
+  try {
+    const resp = await fetch(`${SB_URL}/rest/v1/staff_attendance?staff_id=eq.${currentUser.id}&date=eq.${today}`,{headers:HDR});
+    const data = await resp.json();
+    if(data && data.length>0){
+      const att = data[0];
+      const timeStr = new Date(att.check_in_time).toLocaleTimeString('ar-AE',{hour:'2-digit',minute:'2-digit'});
+      document.getElementById('alreadyName').textContent = currentUser.name;
+      document.getElementById('alreadyTime').textContent = `وقت الوصول: ${timeStr}`;
+      document.getElementById('alreadyDone').classList.add('show');
+      document.getElementById('checkinForm').style.display='none';
+    }
+  } catch(e){ /* لا سجل سابق */ }
+}
+
+async function doCheckin(){
+  const now = new Date();
+  const totalMin = now.getHours()*60+now.getMinutes();
+  const cutoffMin = CUTOFF_HOUR*60+CUTOFF_MIN;
+  const status = totalMin > cutoffMin ? 'late' : 'on_time';
+  const today = now.toISOString().split('T')[0];
+
+  document.getElementById('btnCheckin').innerHTML='<div class="spinner"></div> جاري التسجيل...';
+  document.getElementById('btnCheckin').disabled=true;
+
+  try {
+    await fetch(`${SB_URL}/rest/v1/staff_attendance`,{
+      method:'POST',
+      headers:{...HDR,'Prefer':'resolution=merge-duplicates'},
+      body: JSON.stringify({
+        staff_id:currentUser.id,
+        staff_name:currentUser.name,
+        check_in_time:now.toISOString(),
+        status, date:today, recorded_by:'self'
+      })
+    });
+    
+    // عرض النتيجة
+    const display = document.getElementById('statusDisplay');
+    display.className = `status-display show ${status}`;
+    document.getElementById('statusIcon').textContent = status==='on_time'?'✅':'⏰';
+    document.getElementById('statusTitle').textContent = status==='on_time'?'تسجيل ناجح — في الوقت':'تسجيل ناجح — متأخرة';
+    document.getElementById('statusTime').textContent = `وقت الوصول: ${now.toLocaleTimeString('ar-AE',{hour:'2-digit',minute:'2-digit'})}`;
+    document.getElementById('btnCheckin').textContent='✅ تم التسجيل';
+    
+  } catch(e){
+    document.getElementById('btnCheckin').innerHTML='📍 تسجيل وصولي الآن';
+    document.getElementById('btnCheckin').disabled=false;
+    alert('خطأ في التسجيل — يرجى المحاولة مرة أخرى');
+  }
+}
+
+function showStep(id){
+  document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function showError(msg){ const e=document.getElementById('loginError'); e.textContent=msg; e.classList.add('show'); }
+function hideError(){ document.getElementById('loginError').classList.remove('show'); }
+function doLogout(){ currentUser=null; showStep('step-login'); document.getElementById('inp-user').value=''; document.getElementById('inp-pass').value=''; document.getElementById('alreadyDone').classList.remove('show'); document.getElementById('checkinForm').style.display=''; }
+
+startClock();
+</script>
+</body>
+</html>

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>رد على تكليف الاحتياط — EduOS</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;
+  background:linear-gradient(135deg,#1e1b4b 0%,#4f46e5 100%);
+  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+.card{background:#fff;border-radius:24px;padding:32px 28px;max-width:420px;width:100%;
+  text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.logo{font-size:48px;margin-bottom:8px}
+.title{font-size:20px;font-weight:700;color:#1e1b4b;margin-bottom:4px}
+.subtitle{font-size:13px;color:#6b7280;margin-bottom:28px}
+
+/* Assignment Details */
+.assign-card{background:#f5f3ff;border:2px solid #6366f1;border-radius:16px;
+  padding:20px;margin-bottom:24px;text-align:right}
+.assign-row{display:flex;align-items:center;gap:10px;padding:8px 0;
+  border-bottom:1px solid #e9d5ff}
+.assign-row:last-child{border-bottom:none;padding-bottom:0}
+.assign-label{font-size:13px;color:#7c3aed;font-weight:600;min-width:80px;flex-shrink:0}
+.assign-value{font-size:15px;font-weight:700;color:#1e1b4b}
+
+/* Workload */
+.workload-section{background:#f0fdf4;border-radius:12px;padding:14px;margin-bottom:24px;text-align:right}
+.workload-title{font-size:13px;color:#065f46;font-weight:700;margin-bottom:8px}
+.workload-bar-wrap{background:#e5e7eb;border-radius:4px;height:8px;overflow:hidden;margin-bottom:4px}
+.workload-bar-fill{height:100%;border-radius:4px;transition:width .5s}
+.workload-info{font-size:12px;color:#6b7280}
+
+/* Buttons */
+.btn-ack{width:100%;padding:20px;border-radius:16px;font-size:20px;font-weight:700;
+  border:none;cursor:pointer;background:linear-gradient(135deg,#10b981,#059669);
+  color:#fff;margin-bottom:14px;transition:.3s;display:flex;align-items:center;
+  justify-content:center;gap:12px}
+.btn-ack:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(16,185,129,.4)}
+.btn-ack:active{transform:translateY(0)}
+.btn-decline{width:100%;padding:18px;border-radius:16px;font-size:18px;font-weight:700;
+  border:2px solid #ef4444;cursor:pointer;background:#fff;
+  color:#ef4444;transition:.3s;display:flex;align-items:center;
+  justify-content:center;gap:12px}
+.btn-decline:hover{background:#fef2f2;transform:translateY(-2px)}
+
+/* Result */
+.result{display:none;padding:32px 20px;text-align:center}
+.result.show{display:block}
+.result-icon{font-size:64px;margin-bottom:16px}
+.result-title{font-size:24px;font-weight:800;margin-bottom:8px}
+.result-sub{font-size:15px;color:#6b7280;line-height:1.6}
+.result-ack .result-title{color:#065f46}
+.result-dec .result-title{color:#991b1b}
+
+/* Loading */
+.loading{padding:40px;text-align:center;color:#6b7280}
+.spinner{width:40px;height:40px;border:4px solid #e5e7eb;border-top-color:#4f46e5;
+  border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.error-state{padding:32px;text-align:center}
+.error-state .icon{font-size:48px;margin-bottom:12px}
+.error-state p{color:#6b7280;font-size:15px}
+
+footer{margin-top:20px;font-size:12px;color:#9ca3af}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">📋</div>
+  <div class="title">تكليف احتياط</div>
+  <div class="subtitle">مدرسة الجود — العين</div>
+
+  <!-- Loading -->
+  <div class="loading" id="loadingState">
+    <div class="spinner"></div>
+    جاري تحميل التكليف...
+  </div>
+
+  <!-- Error -->
+  <div class="error-state" id="errorState" style="display:none">
+    <div class="icon">❌</div>
+    <p id="errorMsg">لم يُعثر على التكليف أو انتهت صلاحيته</p>
+  </div>
+
+  <!-- Main Content -->
+  <div id="mainContent" style="display:none">
+    <div class="assign-card" id="assignDetails"></div>
+    
+    <div class="workload-section" id="workloadSection"></div>
+
+    <button class="btn-ack" id="btnAck" onclick="respond('acknowledged')">
+      ✅ عُلم — سأغطي الحصة
+    </button>
+    <button class="btn-decline" id="btnDecline" onclick="respond('declined')">
+      ❌ لن أغطي الحصة
+    </button>
+    
+    <div style="font-size:12px;color:#9ca3af;margin-top:12px">
+      ⚠️ الرفض يُحوَّل التكليف لزميلة أخرى تلقائياً
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div class="result" id="resultState">
+    <div class="result-icon" id="resultIcon"></div>
+    <div class="result-title" id="resultTitle"></div>
+    <div class="result-sub" id="resultSub"></div>
+  </div>
+
+  <footer>EduOS — منظومة الاحتياط الذكية</footer>
+</div>
+
+<script>
+const SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+const HDR = { 'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json','Prefer':'return=representation' };
+
+let assignmentId = null;
+let assignment = null;
+
+const PERIODS = [
+  {n:1,start:'07:20',end:'08:00'},{n:2,start:'08:00',end:'08:40'},
+  {n:3,start:'08:40',end:'09:20'},{n:4,start:'09:35',end:'10:15'},
+  {n:5,start:'10:15',end:'10:55'},{n:6,start:'10:55',end:'11:35'},
+  {n:7,start:'11:50',end:'12:30'},{n:8,start:'12:30',end:'13:10'}
+];
+
+async function init(){
+  const params = new URLSearchParams(window.location.search);
+  assignmentId = params.get('id');
+  if(!assignmentId){ showError('لم يُحدَّد رقم التكليف'); return; }
+  try {
+    const resp = await fetch(`${SB_URL}/rest/v1/substitute_assignments?id=eq.${assignmentId}&select=*`,{headers:HDR});
+    const data = await resp.json();
+    if(!data||data.length===0){ showError('لم يُعثر على التكليف'); return; }
+    assignment = data[0];
+    if(assignment.status==='acknowledged'){
+      showResult('acknowledged', true); return;
+    }
+    if(assignment.status==='declined'){
+      showResult('declined', true); return;
+    }
+    if(assignment.status==='cancelled'){
+      showError('تم إلغاء هذا التكليف'); return;
+    }
+    renderAssignment();
+  } catch(e){ showError('خطأ في تحميل البيانات: '+e.message); }
+}
+
+function renderAssignment(){
+  document.getElementById('loadingState').style.display='none';
+  document.getElementById('mainContent').style.display='block';
+  
+  const a = assignment;
+  const period = PERIODS.find(p=>p.n===a.period_number)||{};
+  const reasonMap = {sick:'🤒 إجازة مرضية',emergency:'🚨 ظرف طارئ',
+    annual_leave:'📅 إجازة سنوية',late_notified:'⏰ تأخر مُبلَّغ',other:'📌 أخرى'};
+  
+  document.getElementById('assignDetails').innerHTML = `
+    <div style="font-size:16px;font-weight:700;color:#5b21b6;margin-bottom:14px">📋 تفاصيل التكليف</div>
+    <div class="assign-row">
+      <div class="assign-label">الحصة</div>
+      <div class="assign-value">الحصة ${a.period_number}</div>
+    </div>
+    <div class="assign-row">
+      <div class="assign-label">الوقت</div>
+      <div class="assign-value">${period.start||''} — ${period.end||''}</div>
+    </div>
+    <div class="assign-row">
+      <div class="assign-label">الصف</div>
+      <div class="assign-value">${a.class_name}</div>
+    </div>
+    <div class="assign-row">
+      <div class="assign-label">المادة</div>
+      <div class="assign-value">${a.subject||'—'}</div>
+    </div>
+    <div class="assign-row">
+      <div class="assign-label">غائبة</div>
+      <div class="assign-value">${a.absent_teacher_name}</div>
+    </div>
+    <div class="assign-row">
+      <div class="assign-label">السبب</div>
+      <div class="assign-value">${reasonMap[a.absence_reason]||'—'}</div>
+    </div>
+    <div class="assign-row">
+      <div class="assign-label">التاريخ</div>
+      <div class="assign-value">${new Date(a.date).toLocaleDateString('ar-AE',{weekday:'long',day:'numeric',month:'long'})}</div>
+    </div>`;
+
+  const weekCount = a.substitute_weekly_count||0;
+  const maxPeriods = 30; // سيُحدَّث من staff_profiles
+  const pct = Math.round(weekCount/maxPeriods*100);
+  const barColor = pct>=90?'#ef4444':pct>=70?'#f59e0b':'#10b981';
+  document.getElementById('workloadSection').innerHTML = `
+    <div class="workload-title">📊 نصابك الأسبوعي الحالي</div>
+    <div class="workload-bar-wrap">
+      <div class="workload-bar-fill" style="width:${pct}%;background:${barColor}"></div>
+    </div>
+    <div class="workload-info">${weekCount} / ${maxPeriods} حصة هذا الأسبوع (${pct}%)</div>`;
+}
+
+async function respond(action){
+  document.getElementById('btnAck').disabled=true;
+  document.getElementById('btnDecline').disabled=true;
+  
+  try {
+    await fetch(`${SB_URL}/rest/v1/substitute_assignments?id=eq.${assignmentId}`,{
+      method:'PATCH', headers:HDR,
+      body:JSON.stringify({
+        status:action,
+        [action==='acknowledged'?'acknowledged_at':'declined_at']:new Date().toISOString()
+      })
+    });
+    
+    // إذا رفضت → إشعار المدير
+    if(action==='declined'){
+      await fetch(`${SB_URL}/rest/v1/staff_notifications`,{
+        method:'POST', headers:HDR,
+        body:JSON.stringify({
+          recipient_id:'manager', recipient_name:'المديرة',
+          title:`رفض الاحتياط — الحصة ${assignment.period_number}`,
+          body:`${assignment.substitute_teacher_name||'المعلمة'} رفضت تغطية صف ${assignment.class_name} — يحتاج تعيين بديلة`,
+          type:'substitute', priority:'urgent', action_required:true
+        })
+      });
+    }
+    
+    showResult(action, false);
+  } catch(e){
+    alert('خطأ في التسجيل — يرجى المحاولة مرة أخرى');
+    document.getElementById('btnAck').disabled=false;
+    document.getElementById('btnDecline').disabled=false;
+  }
+}
+
+function showResult(action, alreadyDone){
+  document.getElementById('loadingState').style.display='none';
+  document.getElementById('mainContent').style.display='none';
+  document.getElementById('errorState').style.display='none';
+  
+  const res = document.getElementById('resultState');
+  res.className = `result show result-${action==='acknowledged'?'ack':'dec'}`;
+  
+  if(action==='acknowledged'){
+    document.getElementById('resultIcon').textContent='✅';
+    document.getElementById('resultTitle').textContent = alreadyDone?'سبق وأكّدتِ':'شكراً — تم التأكيد';
+    document.getElementById('resultSub').textContent = `تم تسجيل تغطيتكِ للحصة ${assignment?.period_number||''} في صف ${assignment?.class_name||''}\nبارك الله في جهودك 🌟`;
+  } else {
+    document.getElementById('resultIcon').textContent='❌';
+    document.getElementById('resultTitle').textContent = alreadyDone?'سبق وأبلغتِ بعذرك':'تم التسجيل';
+    document.getElementById('resultSub').textContent = 'تم إبلاغ الإدارة وسيتم تعيين بديلة أخرى فوراً';
+  }
+  res.style.display='block';
+}
+
+function showError(msg){
+  document.getElementById('loadingState').style.display='none';
+  document.getElementById('errorState').style.display='block';
+  document.getElementById('errorMsg').textContent=msg;
+}
+
+init();
+</script>
+</body>
+</html>
