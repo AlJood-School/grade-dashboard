@@ -1540,11 +1540,29 @@ function goToNameSelect() {
 
 // onNameSelect defined above (async version with Supabase)
 
-function goToWeeks() {
+async function goToWeeks() {
   if (!currentStudent) return;
   showScreen('screen-weeks');
   document.getElementById('greeting-name').textContent = 
     '👋 أهلاً ' + currentStudent + ' | ' + (currentClass || '');
+
+  // Load completed weeks from Supabase
+  try {
+    const sb2 = await getWLSB();
+    const { data: prevResults } = await sb2
+      .from('weekly_results')
+      .select('week, score')
+      .eq('student_name', currentStudent)
+      .eq('class_name', currentClass || '');
+    if (prevResults && prevResults.length > 0) {
+      const key = (currentClass || '') + '_' + (currentStudent || '');
+      prevResults.forEach(r => {
+        const score = r.score ?? 0;
+        completedWeeks[key + '_' + r.week] = { done: true, score: Math.round(score) };
+      });
+    }
+  } catch(e) { console.warn('Could not load completed weeks:', e); }
+
   renderWeeksGrid();
   listenForAIAssistant();
 }
