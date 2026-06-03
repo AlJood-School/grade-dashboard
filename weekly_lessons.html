@@ -2400,25 +2400,30 @@ function toggleWeeksProgress() {
 async function setTeacherFilter(week, cls) { renderTeacherTable(); }
 
 async function loadTeacherData() {
-  document.getElementById('teacher-loading').style.display = 'block';
+  const loadingEl = document.getElementById('teacher-loading');
+  loadingEl.style.display = 'block';
+  loadingEl.innerHTML = '<span class="loading-dots">⏳ جاري تحميل النتائج من Supabase...</span>';
   document.getElementById('teacher-table-wrap').style.display = 'none';
   document.getElementById('teacher-empty').style.display = 'none';
 
   try {
-    if (false) { // Supabase always ready
-      setTimeout(loadTeacherData, 2000);
-      return;
-    }
-    // Supabase: load results from weekly_results table
-    let wlQuery = (await getWLSB()).from('weekly_results').select('*').order('created_at', { ascending: false });
-    if (selectedClass) wlQuery = wlQuery.eq('class_name', selectedClass);
-    const { data: snapshotData, error: wlErr } = await wlQuery;
-    if (wlErr) console.error('Supabase weekly_results error:', wlErr);
+    // Use fetch directly for maximum reliability
+    const url = WL_SUPA_URL + '/rest/v1/weekly_results?select=*&order=created_at.desc&limit=2000';
+    const resp = await fetch(url, {
+      headers: {
+        'apikey': WL_SUPA_KEY,
+        'Authorization': 'Bearer ' + WL_SUPA_KEY
+      }
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status + ': ' + await resp.text());
+    const snapshotData = await resp.json();
+    console.log('Loaded', snapshotData.length, 'records from weekly_results');
+
     allTeacherData = (snapshotData || []).map(d => ({
       studentName: d.student_name || d.studentName || '',
-      totalScore:  d.score ?? d.totalScore ?? 0,
-      quizScore:   d.quiz_score ?? d.quizScore ?? null,
-      activityScore: d.activity_score ?? d.activityScore ?? null,
+      totalScore:  d.score != null ? Number(d.score) : (d.totalScore != null ? Number(d.totalScore) : 0),
+      quizScore:   d.quiz_score != null ? Number(d.quiz_score) : (d.quizScore != null ? Number(d.quizScore) : 0),
+      activityScore: d.activity_score != null ? Number(d.activity_score) : (d.activityScore != null ? Number(d.activityScore) : 0),
       week:        d.week || '',
       grade:       d.grade || '',
       cls:         d.class_name || d.cls || '',
@@ -2426,15 +2431,16 @@ async function loadTeacherData() {
       className:   d.class_name || d.cls || '',
       completedAt: d.completed_at || d.created_at || null,
       savedAt:     d.created_at || null,
-      selfRate:    d.self_rate ?? d.selfRate ?? 0,
+      selfRate:    d.self_rate != null ? Number(d.self_rate) : (d.selfRate != null ? Number(d.selfRate) : 0),
       exitText:    d.exit_text || d.exitText || ''
     }));
-    console.log('Loaded', allTeacherData.length, 'records');
-    renderWeeksProgress();
+
+    try { renderWeeksProgress(); } catch(e2) { console.warn('renderWeeksProgress error:', e2); }
     renderTeacherTable();
   } catch(e) {
     console.error('Load error:', e);
-    document.getElementById('teacher-loading').innerHTML = '⚠️ خطأ في التحميل. تأكد من الاتصال بالإنترنت.';
+    loadingEl.style.display = 'block';
+    loadingEl.innerHTML = '⚠️ خطأ في تحميل البيانات: ' + e.message + '<br><button onclick="loadTeacherData()" style="margin-top:10px;padding:8px 20px;background:#0a1628;color:#c9a227;border:none;border-radius:8px;cursor:pointer;font-weight:700;">🔄 إعادة المحاولة</button>';
   }
 }
 
