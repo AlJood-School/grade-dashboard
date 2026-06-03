@@ -7,6 +7,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script>
+window.G3_SUPA_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+window.G3_SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYzMDM0NDksImV4cCI6MjA2MTg3OTQ0OX0.RRMv87UNGnSgZDT75xfxNy0iBO_X-vRi3jbVb-Kut74';
+</script>
 <style>
 :root {
   --navy: #1a2744;
@@ -1619,6 +1623,9 @@ function recalcOverallLevel() {
   updateObserverAdaptive(newLevel, totalCorrect, totalPossible);
 }
 let phaseData = {};
+// ── Live Scoring ──────────────────────────────────────────────
+const G3_PHASE_WEIGHTS = {p2:15, p4:25, p5:10, p6:25, p7:10, p8:15};
+let phaseEarned = {};
 let isLangAR = false;
 let timersPaused = false;
 let _isReviewMode = false; // Set true when navigating back to prevent timer restart
@@ -2004,6 +2011,40 @@ async function saveSession(extraData = {}) {
   } catch(e) { console.warn('Save failed:', e); }
 }
 
+function updateLiveScoreG3(phase, earned) {
+  phaseEarned[phase] = Math.round(Math.max(0, Math.min(earned, G3_PHASE_WEIGHTS[phase] ?? earned)));
+  const total = Math.round(Object.values(phaseEarned).reduce((a, b) => a + b, 0));
+  const badge = document.getElementById('phaseBadge');
+  if (badge) { badge.textContent = `🏆 ${total}/100`; badge.style.display = 'inline-block'; }
+  saveLiveScoreSupaG3(total);
+}
+
+async function saveLiveScoreSupaG3(runningScore) {
+  if (!studentName || !studentSection) return;
+  try {
+    await fetch(window.G3_SUPA_URL + '/rest/v1/stream_progress_g3', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': window.G3_SUPA_KEY,
+        'Authorization': 'Bearer ' + window.G3_SUPA_KEY,
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify({
+        student_name: studentName,
+        section: studentSection,
+        grade: 3,
+        phase: currentPhase,
+        total_score: runningScore,
+        progress_json: { phaseEarned, runningScore, isSpecialNeeds },
+        status: currentPhase >= 10 ? 'completed' : 'in_progress',
+        school_year: '2025-2026',
+        updated_at: new Date().toISOString()
+      })
+    });
+  } catch(e) { console.warn('Live save G3 error:', e); }
+}
+
 async function saveHelpRequest(type) {
   if (!sessionId) return null;
   try {
@@ -2145,6 +2186,8 @@ function nextPhase() {
 }
 function forceNextPhase() { _doNextPhase(); }
 function _doNextPhase() {
+  if (currentPhase === 5 && phaseEarned['p5'] === undefined) updateLiveScoreG3('p5', 10);
+  if (currentPhase === 7 && phaseEarned['p7'] === undefined) updateLiveScoreG3('p7', 10);
   saveCurrentPhaseData();
   saveSession();
   // Visual checkpoint confirmation
@@ -3791,6 +3834,7 @@ function placeKeyword(word, targetWord) {
       scoreEl.style.display = 'inline-block';
       launchConfetti(40);
       document.getElementById('nextKwBtn').disabled = false;
+      updateLiveScoreG3('p2', done / total * 15);
     }
   } else {
     playWrong();
@@ -4059,6 +4103,7 @@ function answerTF(idx, answer, correct) {
     phaseData.p3_score = score;
     // Global adaptive: Phase 3 T/F complete
     globalScores.p3 = { score: score, total: qs.length };
+    updateLiveScoreG3('p4', score / qs.length * 25);
     recalcOverallLevel();
     const nextBtn = document.getElementById('nextTFBtn');
     nextBtn.disabled = false;
@@ -5127,6 +5172,7 @@ function placeBlock(id, slotId, slotEl) {
       document.getElementById('nextCodeBtn').disabled = false;
       // Global adaptive: Phase 5b code builder complete ✅
       globalScores.p5b = true;
+      updateLiveScoreG3('p6', 25);
       recalcOverallLevel();
     }
   } else {
@@ -5288,6 +5334,7 @@ function toggleTestItem(i) {
   document.getElementById('testScore').textContent = `Score: ${score}/5`;
   if (score >= 3) { document.getElementById('nextTestBtn').disabled = false; }
   if (score === 5) launchConfetti(30);
+  updateLiveScoreG3('p8', score / 5 * 15);
 }
 
 // ============================================================
@@ -5463,7 +5510,7 @@ function renderCelebration() {
       </div>
       <div class="card" style="text-align:center;padding:16px;">
         <div style="font-size:1.5rem;">⭐</div>
-        <div style="font-weight:700;">${score}/10</div>
+        <div style="font-weight:700;">${score}/100</div>
         <div style="color:#888;font-size:0.85rem;">Total Score</div>
       </div>
       <div class="card" style="text-align:center;padding:16px;">
@@ -5796,7 +5843,7 @@ async function generatePoster(studentData) {
   // Score
   ctx.fillStyle = '#1a2744';
   ctx.font = 'bold 22px Arial';
-  ctx.fillText(`⭐ ${studentData.score}/10`, 400, scoreY + 38);
+  ctx.fillText(`⭐ ${studentData.score}/100`, 400, scoreY + 38);
 
   // Special needs badge
   if (studentData.isSpecialNeeds) {
