@@ -681,6 +681,18 @@ th .th-check{width:16px;height:16px;cursor:pointer;accent-color:#ef4444}
           </div>
         </div>
 
+        <!-- شريط المشروع -->
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:10px;padding:10px 14px">
+          <span style="font-weight:700;color:#C2410C;font-size:.9rem">🏆 عمود المشروع —</span>
+          <span style="font-size:.85rem;color:#92400E">الدرجة الكاملة:</span>
+          <input type="number" id="projMaxInput" value="30" min="1" max="200" onchange="updateProjectMax()"
+            style="width:64px;padding:4px 8px;border-radius:7px;border:1.5px solid #FB923C;font-family:'Cairo',sans-serif;font-size:.9rem;font-weight:700;text-align:center">
+          <button onclick="setAllProjectGrades()" style="padding:6px 16px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;border:none;border-radius:8px;font-family:'Cairo',sans-serif;font-size:.82rem;font-weight:700;cursor:pointer">
+            ✏️ اكتب للجميع الدرجة الكاملة
+          </button>
+          <span id="projSaveStatus" style="font-size:.8rem;color:#16A34A;display:none">✅ تم الحفظ</span>
+        </div>
+
         <!-- KPIs -->
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:18px">
           <div class="kpi"><div class="kpi-top"><div class="kpi-ico grn">👩‍🎓</div></div><div class="kpi-val" id="srTotalCount">—</div><div class="kpi-lbl">إجمالي الطالبات</div></div>
@@ -2987,10 +2999,104 @@ let _srSortAsc = false;
 
 let _unifiedData = [];
 let _unifiedWeeks = [];
+let _projectGrades = {};   // key: "name||section" → grade number
+let _projectMaxGrade = 30; // الدرجة الكاملة للمشروع
+
+// ─── دوال المشروع ───────────────────────────────────────────
+function projKey(name, section) {
+  return (name||'').trim() + '||' + (section||'').trim().toUpperCase();
+}
+
+async function loadProjectGrades() {
+  try {
+    const H = { 'apikey': SUPA_ANON, 'Authorization': 'Bearer ' + SUPA_ANON };
+    const r = await fetch(`${SUPA_URL}/rest/v1/app_settings?key=eq.project_grades_data&select=value`, { headers: H });
+    if (r.ok) {
+      const d = await r.json();
+      if (d.length && d[0].value) {
+        const parsed = JSON.parse(d[0].value);
+        _projectGrades = parsed.grades || {};
+        _projectMaxGrade = parsed.maxGrade || 30;
+        const inp = document.getElementById('projMaxInput');
+        if (inp) inp.value = _projectMaxGrade;
+      }
+    }
+  } catch(e) { console.warn('project grades load error', e); }
+}
+
+async function saveProjectGradesDB() {
+  try {
+    const H = { 'apikey': SUPA_ANON, 'Authorization': 'Bearer ' + SUPA_ANON,
+                'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' };
+    const payload = JSON.stringify({ maxGrade: _projectMaxGrade, grades: _projectGrades });
+    await fetch(`${SUPA_URL}/rest/v1/app_settings`, {
+      method: 'POST',
+      headers: H,
+      body: JSON.stringify({ key: 'project_grades_data', value: payload })
+    });
+    const st = document.getElementById('projSaveStatus');
+    if (st) { st.style.display='inline'; setTimeout(()=>{ st.style.display='none'; }, 2000); }
+  } catch(e) { console.warn('save project error', e); }
+}
+
+function updateProjectMax() {
+  const v = parseInt(document.getElementById('projMaxInput').value);
+  if (!isNaN(v) && v > 0) { _projectMaxGrade = v; renderUnified(); saveProjectGradesDB(); }
+}
+
+function setAllProjectGrades() {
+  const max = parseInt(document.getElementById('projMaxInput').value) || 30;
+  _projectMaxGrade = max;
+  _unifiedData.forEach(r => {
+    _projectGrades[projKey(r.name, r.section)] = max;
+  });
+  renderUnified();
+  saveProjectGradesDB();
+}
+
+let _projSaveTimer = null;
+function onProjInputChange(key, val) {
+  const v = parseInt(val);
+  _projectGrades[key] = isNaN(v) ? null : v;
+  clearTimeout(_projSaveTimer);
+  _projSaveTimer = setTimeout(saveProjectGradesDB, 800);
+}
+
+function onProjCellInput(key, val) {
+  const v = parseInt(val);
+  _projectGrades[key] = isNaN(v) || val==='' ? null : v;
+  // تحديث المجموع في نفس الصف دون إعادة رسم الجدول كاملاً
+  clearTimeout(_projSaveTimer);
+  _projSaveTimer = setTimeout(() => {
+    saveProjectGradesDB();
+    // نُحدّث خلية المجموع فقط
+    document.querySelectorAll('#srBody tr').forEach(tr => {
+      const nameCell = tr.querySelector('td:nth-child(2)');
+      const secCell  = tr.querySelector('td:nth-child(3) span');
+      if (!nameCell || !secCell) return;
+      const pk = projKey(nameCell.textContent.trim(), secCell.textContent.trim());
+      if (pk !== key) return;
+      const totalCell = tr.querySelector('td:last-child');
+      const r = _unifiedData.find(x => projKey(x.name, x.section) === pk);
+      if (!r || !totalCell) return;
+      let t = 0;
+      if (r.g3 !== null) t += r.g3;
+      if (r.g4 !== null) t += r.g4;
+      _unifiedWeeks.forEach(w => { if (r.weeks[w] != null) t += r.weeks[w]; });
+      if (r.worksheet !== null) t += r.worksheet;
+      const pn = _projectGrades[pk];
+      if (pn != null) t += pn;
+      totalCell.textContent = t;
+    });
+  }, 600);
+}
+// ─────────────────────────────────────────────────────────────
 
 async function loadStreamResults() {
   document.getElementById('srBody').innerHTML = '<tr class="empty"><td colspan="20">⏳ جاري تحميل كل النتائج...</td></tr>';
   document.getElementById('srEmpty').style.display = 'none';
+
+  await loadProjectGrades();
 
   const H = { 'apikey': SUPA_ANON, 'Authorization': 'Bearer ' + SUPA_ANON };
   const [r3, r4, rw, rws] = await Promise.all([
@@ -3122,7 +3228,7 @@ function renderUnified() {
   const thead = document.getElementById('srHead');
   let hHTML = '<tr><th>#</th><th>اسم الطالبة</th><th>الشعبة</th><th>🤖 G3<br><small style="font-weight:400">/100</small></th><th>🚀 G4<br><small style="font-weight:400">/100</small></th>';
   _unifiedWeeks.forEach(w => hHTML += `<th>📖 أ.${w}<br><small style="font-weight:400">/10</small></th>`);
-  hHTML += '<th>📄 ورقة</th><th style="background:#EFF6FF;color:#1D4ED8">المجموع</th></tr>';
+  hHTML += `<th>📄 ورقة</th><th style="background:#FFF7ED;color:#C2410C">🏆 المشروع<br><small style="font-weight:400">/${_projectMaxGrade}</small></th><th style="background:#EFF6FF;color:#1D4ED8">المجموع</th></tr>`;
   thead.innerHTML = hHTML;
 
   if (!data.length) {
@@ -3140,19 +3246,33 @@ function renderUnified() {
     const wkc  = _unifiedWeeks.map(w => r.weeks[w] != null ? numCell(r.weeks[w], 10) : misCell()).join('');
     const wsc  = r.worksheet !== null ? numCell(r.worksheet, 10)   : misCell();
 
+    // عمود المشروع — قابل للتعديل
+    const pk = projKey(r.name, r.section);
+    const projVal = _projectGrades[pk] != null ? _projectGrades[pk] : '';
+    const projCell = `<td style="background:#FFF7ED;padding:4px 6px">
+      <input type="number" min="0" max="${_projectMaxGrade + 100}" value="${projVal}"
+        placeholder="—"
+        oninput="onProjCellInput('${pk.replace(/'/g,"\\'")}', this.value)"
+        style="width:58px;padding:3px 6px;border-radius:6px;border:1.5px solid #FB923C;
+               font-family:'Cairo',sans-serif;font-size:.88rem;font-weight:700;
+               text-align:center;background:#FFFBF5;color:#C2410C">
+    </td>`;
+
     let total = 0;
     if (r.g3 !== null) total += r.g3;
     if (r.g4 !== null) total += r.g4;
     _unifiedWeeks.forEach(w => { if (r.weeks[w] != null) total += r.weeks[w]; });
     if (r.worksheet !== null) total += r.worksheet;
-    const hasAny = r.g3!==null||r.g4!==null||r.worksheet!==null||_unifiedWeeks.some(w=>r.weeks[w]!=null);
+    const projNum = _projectGrades[pk];
+    if (projNum != null) total += projNum;
+    const hasAny = r.g3!==null||r.g4!==null||r.worksheet!==null||_unifiedWeeks.some(w=>r.weeks[w]!=null)||projNum!=null;
     const totalC = `<td style="font-weight:800;color:#1D4ED8;font-size:1rem;background:#EFF6FF">${hasAny ? total : '—'}</td>`;
 
     return `<tr>
       <td style="color:var(--g400);font-size:.82rem">${i+1}</td>
       <td style="font-weight:700">${r.name||'—'}</td>
       <td><span style="background:#EFF6FF;color:#1D4ED8;padding:2px 10px;border-radius:20px;font-size:.8rem;font-weight:700">${r.section||'—'}</span></td>
-      ${g3c}${g4c}${wkc}${wsc}${totalC}
+      ${g3c}${g4c}${wkc}${wsc}${projCell}${totalC}
     </tr>`;
   });
   document.getElementById('srBody').innerHTML = rows.join('');
@@ -3170,16 +3290,18 @@ function misCell() {
 
 function exportUnifiedCSV() {
   if (!_unifiedData.length) { alert('لا توجد بيانات للتصدير'); return; }
-  const hdrs = ['#','الاسم','الشعبة','G3',  'G4', ..._unifiedWeeks.map(w=>`أ.${w}`), 'ورقة', 'المجموع'];
+  const hdrs = ['#','الاسم','الشعبة','G3','G4',..._unifiedWeeks.map(w=>`أ.${w}`),'ورقة',`المشروع/${_projectMaxGrade}`,'المجموع'];
   const rows = _unifiedData.map((r, i) => {
     let total = 0;
     if (r.g3 !== null) total += r.g3;
     if (r.g4 !== null) total += r.g4;
     _unifiedWeeks.forEach(w => { if (r.weeks[w] != null) total += r.weeks[w]; });
     if (r.worksheet !== null) total += r.worksheet;
+    const pk = projKey(r.name, r.section);
+    const pv = _projectGrades[pk]; if (pv != null) total += pv;
     return [i+1, r.name, r.section, r.g3??'ناقص', r.g4??'ناقص',
       ..._unifiedWeeks.map(w => r.weeks[w]??'ناقص'),
-      r.worksheet??'ناقص', total].join(',');
+      r.worksheet??'ناقص', pv??'—', total].join(',');
   });
   const csv = '\uFEFF' + [hdrs.join(','), ...rows].join('\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
