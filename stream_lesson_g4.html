@@ -3707,6 +3707,20 @@ async function finishLesson(){
     ? Math.round(Object.values(phaseEarned).reduce((a,b)=>a+b,0))
     : Math.round(((goalCorrect?1:0)+(mcqScore/mcqAnswers.length*3)+(tfScore/tfAnswers.length*2)+testScore/5*4)/10*10);
   
+  // ✅ حفظ بيانات البوستر في ذاكرة الصفحة قبل مسح الجلسة
+  window._posterCache = {
+    name:         studentName,
+    section:      sectionName,
+    isSpecialNeeds: isSpecialNeeds,
+    robotName:    phaseData.p4_robotName     || '',
+    envProblem:   phaseData.p4_envProblem    || '',
+    envLocation:  phaseData.p4_envLocation   || '',
+    chosenDesign: phaseData.chosenDesign     || 0,
+    level:        keiroLevel                 || 'advanced',
+    totalScore:   totalScore,
+    mcqCorrect:   mcqAnswers.filter(a=>a&&a.correct).length,
+    tfCorrect:    tfAnswers.filter(a=>a&&a.correct).length,
+  };
   clearSavedState();
   // ✅ حفظ الدرجة النهائية في Supabase
   await saveScoreSupa(totalScore);
@@ -3756,31 +3770,37 @@ async function generatePoster(studentData){
   try{
     const canvas=document.getElementById('posterCanvas');
     const ctx=canvas.getContext('2d');
-    canvas.width=800; canvas.height=600;
-    
+    canvas.width=800; canvas.height=720;
+
+    // ─── ENV PROBLEM / LOCATION LABELS ──────────────────────
+    const ENV_PROB_LABELS = {water:'🌊 Water Pollution',air:'🌫️ Air Pollution',waste:'🗑️ Waste Management',trees:'🌳 Deforestation',energy:'☀️ Renewable Energy',factory:'🏭 Factory Pollution'};
+    const ENV_LOC_LABELS  = {ocean:'🌊 Ocean',city:'🏙️ City',forest:'🌳 Forest',factory:'🏭 Factory',neighborhood:'🏡 Neighborhood',school:'🏫 School'};
+    const ENV_PROB_AR = {water:'تلوث الماء',air:'تلوث الهواء',waste:'إدارة النفايات',trees:'قطع الأشجار',energy:'الطاقة المتجددة',factory:'تلوث المصانع'};
+    const ENV_LOC_AR  = {ocean:'المحيط',city:'المدينة',forest:'الغابة',factory:'المصنع',neighborhood:'الحي',school:'المدرسة'};
+
     // Background
-    const grad=ctx.createLinearGradient(0,0,800,600);
+    const grad=ctx.createLinearGradient(0,0,800,720);
     grad.addColorStop(0,'#1a2744');
     grad.addColorStop(1,'#243461');
     ctx.fillStyle=grad;
-    ctx.fillRect(0,0,800,600);
-    
+    ctx.fillRect(0,0,800,720);
+
     // Gold border
     ctx.strokeStyle='#c9a84c';
     ctx.lineWidth=8;
-    ctx.strokeRect(20,20,760,560);
-    
+    ctx.strokeRect(20,20,760,680);
+
     // Inner border
     ctx.strokeStyle='rgba(201,168,76,0.3)';
     ctx.lineWidth=2;
-    ctx.strokeRect(30,30,740,540);
-    
+    ctx.strokeRect(30,30,740,660);
+
     // Title
     ctx.fillStyle='#c9a84c';
     ctx.font='bold 32px Arial';
     ctx.textAlign='center';
     ctx.fillText('🚆 STREAM Grade 4 — Al-Jood School 🚆',400,75);
-    
+
     // Student name
     ctx.fillStyle='#ffffff';
     ctx.font='bold 26px Arial';
@@ -3788,106 +3808,164 @@ async function generatePoster(studentData){
     ctx.font='18px Arial';
     ctx.fillStyle='rgba(255,255,255,0.8)';
     ctx.fillText('Grade 4 — Section '+studentData.section+' | '+new Date().toLocaleDateString('en-GB'),400,150);
-    
+
     // Divider
     ctx.strokeStyle='rgba(201,168,76,0.5)';
     ctx.lineWidth=2;
     ctx.beginPath(); ctx.moveTo(40,165); ctx.lineTo(760,165); ctx.stroke();
-    
-    // Screenshot if available
+
+    // ─── ROBOT NAME BAND ─────────────────────────────────────
+    const rName = studentData.robotName || '—';
+    ctx.fillStyle='rgba(255,255,255,0.07)';
+    ctx.beginPath();
+    if(ctx.roundRect) ctx.roundRect(40,172,720,46,10); else ctx.rect(40,172,720,46);
+    ctx.fill();
+    ctx.fillStyle='#c9a84c';
+    ctx.font='bold 13px Arial';
+    ctx.textAlign='left';
+    ctx.fillText('🤖 ROBOT NAME:',52,192);
+    ctx.fillStyle='#ffffff';
+    ctx.font='bold 20px Arial';
+    ctx.fillText(rName,190,195);
+    ctx.fillStyle='rgba(255,255,255,0.5)';
+    ctx.font='12px Arial';
+    ctx.textAlign='right';
+    ctx.fillText('اسم الروبوت',755,195);
+
+    // ─── SCREENSHOT (left) + MISSION (right) ─────────────────
+    const bodyY = 226;
+    // Screenshot
     if(studentData.screenshot){
       try{
         const img=new Image();
         img.src=studentData.screenshot;
         await new Promise((r,rej)=>{img.onload=r;img.onerror=rej;setTimeout(r,3000);});
-        ctx.drawImage(img,40,175,280,185);
+        ctx.drawImage(img,40,bodyY,270,170);
         ctx.strokeStyle='#c9a84c';
         ctx.lineWidth=3;
-        ctx.strokeRect(40,175,280,185);
-      }catch(e){}
+        ctx.strokeRect(40,bodyY,270,170);
+      }catch(e){
+        ctx.fillStyle='rgba(255,255,255,0.1)';
+        ctx.fillRect(40,bodyY,270,170);
+        ctx.fillStyle='rgba(255,255,255,0.4)';
+        ctx.font='48px Arial';
+        ctx.textAlign='center';
+        ctx.fillText('🚆',175,bodyY+95);
+      }
+    } else {
+      ctx.fillStyle='rgba(255,255,255,0.1)';
+      ctx.fillRect(40,bodyY,270,170);
+      ctx.fillStyle='rgba(255,255,255,0.4)';
+      ctx.font='48px Arial';
+      ctx.textAlign='center';
+      ctx.fillText('🚆',175,bodyY+95);
     }
-    
-    // CDT stages
-    ctx.fillStyle='rgba(255,255,255,0.1)';
+
+    // Mission section (right)
+    ctx.fillStyle='rgba(255,255,255,0.08)';
     ctx.beginPath();
-    if(ctx.roundRect) ctx.roundRect(335,175,415,185,10); else ctx.rect(335,175,415,185);
+    if(ctx.roundRect) ctx.roundRect(325,bodyY,430,170,10); else ctx.rect(325,bodyY,430,170);
     ctx.fill();
-    ctx.strokeStyle='rgba(201,168,76,0.4)';
+    ctx.strokeStyle='rgba(201,168,76,0.35)';
     ctx.lineWidth=1;
     ctx.stroke();
-    
+
     ctx.fillStyle='#c9a84c';
-    ctx.font='bold 18px Arial';
+    ctx.font='bold 14px Arial';
     ctx.textAlign='left';
-    ctx.fillText('CDT Design Process:',345,205);
-    const stages=[['ASK ✅','IMAGINE ✅'],['PLAN ✅','CREATE ✅'],['TEST ✅','IMPROVE ✅']];
-    stages.forEach((pair,row)=>{
-      pair.forEach((s,col)=>{
-        ctx.fillStyle='#22c55e';
-        ctx.font='bold 16px Arial';
-        ctx.fillText(s,345+col*200,235+row*40);
-      });
+    ctx.fillText('🌍 ROBOT MISSION / مهمة الروبوت',338,bodyY+22);
+
+    // Env problem box
+    const probId = studentData.envProblem || '';
+    const locId  = studentData.envLocation || '';
+    const probEn = ENV_PROB_LABELS[probId] || '—';
+    const locEn  = ENV_LOC_LABELS[locId]   || '—';
+    const probAr = ENV_PROB_AR[probId] || '';
+    const locAr  = ENV_LOC_AR[locId]  || '';
+
+    ctx.fillStyle='rgba(34,197,94,0.15)';
+    ctx.beginPath();
+    if(ctx.roundRect) ctx.roundRect(335,bodyY+34,195,56,8); else ctx.rect(335,bodyY+34,195,56);
+    ctx.fill();
+    ctx.strokeStyle='#22c55e';ctx.lineWidth=1;ctx.stroke();
+    ctx.fillStyle='#22c55e';ctx.font='bold 11px Arial';ctx.textAlign='left';
+    ctx.fillText('Environmental Problem:',342,bodyY+49);
+    ctx.fillStyle='#ffffff';ctx.font='bold 15px Arial';
+    ctx.fillText(probEn,342,bodyY+67);
+    ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='11px Arial';
+    ctx.fillText(probAr,342,bodyY+82);
+
+    // Env location box
+    ctx.fillStyle='rgba(59,130,246,0.15)';
+    ctx.beginPath();
+    if(ctx.roundRect) ctx.roundRect(542,bodyY+34,205,56,8); else ctx.rect(542,bodyY+34,205,56);
+    ctx.fill();
+    ctx.strokeStyle='#3b82f6';ctx.lineWidth=1;ctx.stroke();
+    ctx.fillStyle='#3b82f6';ctx.font='bold 11px Arial';ctx.textAlign='left';
+    ctx.fillText('Location / الموقع:',550,bodyY+49);
+    ctx.fillStyle='#ffffff';ctx.font='bold 15px Arial';
+    ctx.fillText(locEn,550,bodyY+67);
+    ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='11px Arial';
+    ctx.fillText(locAr,550,bodyY+82);
+
+    // CDT stages (2 rows × 3)
+    ctx.fillStyle='#c9a84c';ctx.font='bold 12px Arial';ctx.textAlign='left';
+    ctx.fillText('CDT Journey:',338,bodyY+106);
+    const stageList=['ASK ✅','IMAGINE ✅','PLAN ✅','CREATE ✅','TEST ✅','IMPROVE ✅'];
+    stageList.forEach((s,i)=>{
+      ctx.fillStyle='#22c55e';ctx.font='bold 13px Arial';
+      ctx.fillText(s, 338+(i%3)*140, bodyY+125+(Math.floor(i/3)*20));
     });
-    
-    // Level badge
+
+    // ─── LEVEL + SCORE BAR ───────────────────────────────────
+    const barY = 410;
     const levelColors={advanced:'#c9a84c',intermediate:'#3b82f6',basic:'#22c55e'};
     ctx.fillStyle=levelColors[studentData.level]||'#c9a84c';
     ctx.beginPath();
-    if(ctx.roundRect) ctx.roundRect(40,375,360,55,25); else ctx.rect(40,375,360,55);
+    if(ctx.roundRect) ctx.roundRect(40,barY,360,52,26); else ctx.rect(40,barY,360,52);
     ctx.fill();
-    ctx.fillStyle='#fff';
-    ctx.font='bold 20px Arial';
-    ctx.textAlign='center';
-    ctx.fillText('🤖 Keiro Level: '+studentData.level.toUpperCase(),220,408);
-    
-    // Score badge
+    ctx.fillStyle='#fff';ctx.font='bold 19px Arial';ctx.textAlign='center';
+    ctx.fillText('🤖 Keiro Level: '+(studentData.level||'advanced').toUpperCase(),220,barY+32);
+
     ctx.fillStyle='rgba(201,168,76,0.2)';
     ctx.beginPath();
-    if(ctx.roundRect) ctx.roundRect(420,375,360,55,25); else ctx.rect(420,375,360,55);
+    if(ctx.roundRect) ctx.roundRect(420,barY,340,52,26); else ctx.rect(420,barY,340,52);
     ctx.fill();
-    ctx.strokeStyle='#c9a84c';
-    ctx.lineWidth=2;
-    ctx.stroke();
-    ctx.fillStyle='#f0c96b';
-    ctx.font='bold 20px Arial';
-    ctx.fillText('🏆 Score: '+studentData.score+'/10',600,408);
-    
-    // AI description
+    ctx.strokeStyle='#c9a84c';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='#f0c96b';ctx.font='bold 22px Arial';ctx.textAlign='center';
+    ctx.fillText('🏆 Score: '+studentData.score+'/100',590,barY+32);
+
+    // ─── AI DESCRIPTION ──────────────────────────────────────
     try{
       const desc=await generatePosterDescription(studentData);
-      ctx.fillStyle='rgba(255,255,255,0.08)';
+      ctx.fillStyle='rgba(255,255,255,0.07)';
       ctx.beginPath();
-      if(ctx.roundRect) ctx.roundRect(40,445,720,95,10); else ctx.rect(40,445,720,95);
+      if(ctx.roundRect) ctx.roundRect(40,475,720,90,10); else ctx.rect(40,475,720,90);
       ctx.fill();
-      ctx.fillStyle='#f0c96b';
-      ctx.font='italic 15px Arial';
-      ctx.textAlign='center';
-      const words=desc.replace(/\n/g,' ').split(' ');
-      let line=''; let y=475;
-      words.forEach(w=>{ const test=line+w+' '; if(ctx.measureText(test).width>680){ctx.fillText(line.trim(),400,y);line=w+' ';y+=22;}else line=test; });
-      if(line.trim()) ctx.fillText(line.trim(),400,y);
+      ctx.fillStyle='#f0c96b';ctx.font='italic 14px Arial';ctx.textAlign='center';
+      const words2=desc.replace(/\n/g,' ').split(' ');
+      let line2=''; let yy=500;
+      words2.forEach(w=>{ const test=line2+w+' '; if(ctx.measureText(test).width>690){ctx.fillText(line2.trim(),400,yy);line2=w+' ';yy+=21;}else line2=test; });
+      if(line2.trim()) ctx.fillText(line2.trim(),400,yy);
     }catch(e){
-      ctx.fillStyle='rgba(255,255,255,0.5)';
-      ctx.font='15px Arial';
-      ctx.textAlign='center';
-      ctx.fillText('Line-following train project completed successfully!',400,480);
+      ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='14px Arial';ctx.textAlign='center';
+      ctx.fillText('Line-following train project completed successfully! 🚆',400,510);
     }
-    
+
     // Special needs badge
-    if(studentData.isSpecialNeeds||isSpecialNeeds){
+    if(studentData.isSpecialNeeds){
       ctx.fillStyle='#7c3aed';
       ctx.beginPath();
-      if(ctx.roundRect) ctx.roundRect(570,550,190,30,15); else ctx.rect(570,550,190,30);
+      if(ctx.roundRect) ctx.roundRect(570,580,190,30,15); else ctx.rect(570,580,190,30);
       ctx.fill();
-      ctx.fillStyle='white'; ctx.font='bold 13px Arial'; ctx.textAlign='center';
-      ctx.fillText('🏆 بطل اليوم / Hero of the Day',665,570);
+      ctx.fillStyle='white';ctx.font='bold 13px Arial';ctx.textAlign='center';
+      ctx.fillText('🏆 بطل اليوم / Hero of the Day',665,600);
     }
-    
+
     // Footer
     ctx.fillStyle='rgba(255,255,255,0.4)';
-    ctx.font='12px Arial';
-    ctx.textAlign='center';
-    ctx.fillText('©️ منيرة علي محمد المري · munira.almarri@moe.sch.ae · © 2026',400,587);
+    ctx.font='12px Arial';ctx.textAlign='center';
+    ctx.fillText('©️ منيرة علي محمد المري · munira.almarri@moe.sch.ae · © 2026',400,707);
     
     const dataURL=canvas.toDataURL('image/png');
     const img=document.getElementById('posterImg');
@@ -4682,13 +4760,22 @@ function generatePosterNow(){
   const photoToUse = trainPhotoBase64 || keiroScreenshotBase64;
   document.getElementById('trainPhotoSection').style.display = 'none';
   document.getElementById('posterLoading').style.display = 'block';
-  const totalScore = window._lastTotalScore || 0;
+  // ✅ استخدام الكاش أولاً — يضمن البيانات حتى لو مُسحت الجلسة
+  const _c = window._posterCache || {};
+  const totalScore = (_c.totalScore !== undefined) ? _c.totalScore : (window._lastTotalScore || 0);
   generatePoster({
-    name: studentName,
-    section: sectionName,
-    level: keiroLevel,
-    score: totalScore,
-    screenshot: photoToUse
+    name:         _c.name        || studentName  || '—',
+    section:      _c.section     || sectionName  || '—',
+    level:        _c.level       || keiroLevel   || 'advanced',
+    score:        totalScore,
+    screenshot:   photoToUse,
+    robotName:    _c.robotName   || phaseData.p4_robotName  || '',
+    envProblem:   _c.envProblem  || phaseData.p4_envProblem || '',
+    envLocation:  _c.envLocation || phaseData.p4_envLocation|| '',
+    chosenDesign: (_c.chosenDesign !== undefined) ? _c.chosenDesign : (phaseData.chosenDesign || 0),
+    mcqCorrect:   _c.mcqCorrect  || 0,
+    tfCorrect:    _c.tfCorrect   || 0,
+    isSpecialNeeds: _c.isSpecialNeeds || isSpecialNeeds,
   });
 }
 

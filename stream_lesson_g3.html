@@ -5500,6 +5500,20 @@ function renderCelebration() {
   const score = calculateTotalScore();
   phaseData.totalScore = score;
   saveSession({ status:'completed', totalScore: score });
+  // ✅ حفظ بيانات البوستر في ذاكرة الصفحة قبل مسح الجلسة
+  window._posterCache = {
+    name:         studentName,
+    section:      studentSection,
+    isSpecialNeeds: isSpecialNeeds,
+    robotName:    phaseData.p4_robotName  || '',
+    whoHelp:      phaseData.p4_whoHelp    || '',
+    howHelp:      phaseData.p4_howHelp    || '',
+    level:        programmingLevel,
+    score:        score,
+    materials:    JSON.parse(JSON.stringify(phaseData.p2_materials || [])),
+    drawing:      phaseData.p4_drawing    || null,
+    keywords:     phaseData.p1_keywords   || {},
+  };
   clearSavedState(); // Lesson finished — no need to restore on next visit
   return `
   <div class="celebration-screen">
@@ -5601,18 +5615,20 @@ async function generatePosterDescription(studentData) {
 }
 
 async function generateAndShowPoster() {
+  // ✅ استخدام الكاش أولاً — يضمن البيانات حتى لو مُسحت الجلسة
+  const _c = window._posterCache || {};
   const studentData = {
-    name: studentName,
-    section: studentSection,
-    robotName: phaseData.p4_robotName || 'My Robot',
-    whoHelp: phaseData.p4_whoHelp || '',
-    howHelp: phaseData.p4_howHelp || '',
-    level: programmingLevel,
-    score: calculateTotalScore(),
-    screenshot: window._robotPhotoData || phaseData.p6_screenshot || phaseData.p4_drawing || null,
-    isSpecialNeeds,
-    materials: phaseData.p2_materials || [],
-    date: new Date().toLocaleDateString('en-GB')
+    name:          _c.name         || studentName         || '—',
+    section:       _c.section      || studentSection      || '—',
+    robotName:     _c.robotName    || phaseData.p4_robotName || 'My Robot',
+    whoHelp:       _c.whoHelp      || phaseData.p4_whoHelp || '',
+    howHelp:       _c.howHelp      || phaseData.p4_howHelp || '',
+    level:         _c.level        || programmingLevel     || 'advanced',
+    score:         (_c.score !== undefined) ? _c.score : calculateTotalScore(),
+    screenshot:    window._robotPhotoData || phaseData.p6_screenshot || _c.drawing || phaseData.p4_drawing || null,
+    isSpecialNeeds: (_c.isSpecialNeeds !== undefined) ? _c.isSpecialNeeds : isSpecialNeeds,
+    materials:     _c.materials    || phaseData.p2_materials || [],
+    date:          new Date().toLocaleDateString('en-GB')
   };
   showModal('⏳ Generating your poster... please wait!');
   const pngData = await generatePoster(studentData);
