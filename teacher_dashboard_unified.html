@@ -3084,12 +3084,19 @@ function renderUnified() {
   const q = (document.getElementById('srSearch').value || '').trim().toLowerCase();
   const missingOnly = document.getElementById('srMissingOnly').checked;
 
+  // دالة مساعدة: هل الطالبة من صف ثالث أم رابع؟
+  const isGrade3 = r => r.section && r.section.toString().startsWith('3');
+  const isGrade4 = r => r.section && r.section.toString().startsWith('4');
+
   let data = _unifiedData.filter(r => {
     if (section !== 'all' && r.section !== section) return false;
     if (q && !r.name.toLowerCase().includes(q)) return false;
     if (missingOnly) {
-      const hasMissing = r.g3 === null || r.g4 === null || r.worksheet === null
-        || _unifiedWeeks.some(w => r.weeks[w] == null);
+      // ناقصة = لم تكمل الحصة المناسبة لصفها
+      let hasMissing = false;
+      if (isGrade3(r)) hasMissing = r.g3 === null || r.worksheet === null || _unifiedWeeks.some(w => r.weeks[w] == null);
+      else if (isGrade4(r)) hasMissing = r.g4 === null || r.worksheet === null || _unifiedWeeks.some(w => r.weeks[w] == null);
+      else hasMissing = true;
       if (!hasMissing) return false;
     }
     return true;
@@ -3099,9 +3106,12 @@ function renderUnified() {
   const total = _unifiedData.length;
   const g3done  = _unifiedData.filter(r => r.g3 !== null).length;
   const g4done  = _unifiedData.filter(r => r.g4 !== null).length;
-  const complete = _unifiedData.filter(r =>
-    r.g3 !== null && r.g4 !== null && r.worksheet !== null && _unifiedWeeks.every(w => r.weeks[w] != null)
-  ).length;
+  // مكتملة = أكملت الحصة المناسبة لصفها + الأسابيع + ورقة العمل
+  const complete = _unifiedData.filter(r => {
+    if (isGrade3(r)) return r.g3 !== null && r.worksheet !== null && _unifiedWeeks.every(w => r.weeks[w] != null);
+    if (isGrade4(r)) return r.g4 !== null && r.worksheet !== null && _unifiedWeeks.every(w => r.weeks[w] != null);
+    return false;
+  }).length;
   document.getElementById('srTotalCount').textContent = total;
   document.getElementById('srG3Count').textContent    = g3done;
   document.getElementById('srG4Count').textContent    = g4done;
@@ -3120,10 +3130,13 @@ function renderUnified() {
     return;
   }
 
+  const naCell = () => `<td style="text-align:center;color:#94A3B8;font-size:.9rem">—</td>`;
+
   document.getElementById('srEmpty').style.display = 'none';
   const rows = data.map((r, i) => {
-    const g3c  = r.g3       !== null ? numCell(r.g3, 100)          : misCell();
-    const g4c  = r.g4       !== null ? numCell(r.g4, 100)          : misCell();
+    // G3 فقط للثالث — G4 فقط للرابع — "—" للآخر
+    const g3c = isGrade3(r) ? (r.g3 !== null ? numCell(r.g3, 100) : misCell()) : naCell();
+    const g4c = isGrade4(r) ? (r.g4 !== null ? numCell(r.g4, 100) : misCell()) : naCell();
     const wkc  = _unifiedWeeks.map(w => r.weeks[w] != null ? numCell(r.weeks[w], 10) : misCell()).join('');
     const wsc  = r.worksheet !== null ? numCell(r.worksheet, 10)   : misCell();
 
