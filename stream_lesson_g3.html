@@ -2071,7 +2071,8 @@ async function saveHelpRequest(type) {
 // LANGUAGE TOGGLE
 // ============================================================
 function toggleLang() {
-  // Save timer state before re-render (to avoid reset)
+  // Save scroll + timer before re-render
+  const savedScrollY = window.scrollY || document.documentElement.scrollTop || 0;
   const savedRem = currentActivityTimer ? currentActivityTimer.remaining : null;
   const savedTot = currentActivityTimer ? currentActivityTimer.total : null;
   isLangAR = !isLangAR;
@@ -2085,6 +2086,10 @@ function toggleLang() {
     currentActivityTimer.total = savedTot;
     updateTimerDisplay(savedRem, savedTot, 'activityTimer');
   }
+  // 🔴 Restore scroll position — prevents student from seeing "beginning of lesson"
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: savedScrollY, behavior: 'instant' });
+  });
 }
 function toggleKeyboard() {
   isLangAR = !isLangAR;
@@ -4299,7 +4304,7 @@ function renderPlan() {
       </div>
       <!-- Main Canvas -->
       <div class="canvas-container">
-        <canvas id="drawCanvas" width="520" height="320"></canvas>
+        <canvas id="drawCanvas" width="520" height="320" style="width:100%;height:auto;display:block;touch-action:none;"></canvas>
       </div>
       <div class="canvas-tip">💡 Click shape → place on canvas → drag to move | Select shape → ✕ to delete</div>
       <div style="margin-top:12px;">
@@ -5647,125 +5652,107 @@ async function generateAndShowPoster() {
 async function generatePoster(studentData) {
   const canvas = document.getElementById('posterCanvas');
   if (!canvas) return null;
-  canvas.width = 800; canvas.height = 1050;
+
+  const W = 800, H = 1130;
+  canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
 
-  // ── BACKGROUND ──────────────────────────────────────
-  ctx.fillStyle = '#f8faff';
-  ctx.fillRect(0, 0, 800, 1050);
+  // ── HELPERS ──────────────────────────────────────────
+  function grad(x0,y0,x1,y1,stops){
+    const g=ctx.createLinearGradient(x0,y0,x1,y1);
+    stops.forEach(([p,c])=>g.addColorStop(p,c)); return g;
+  }
+  function star(cx,cy,r,col){
+    ctx.fillStyle=col;
+    ctx.font=`${r*2}px Arial`;
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText('★',cx,cy);
+    ctx.textBaseline='alphabetic';
+  }
 
-  // ── TOP HEADER BAND ─────────────────────────────────
-  const headerGrad = ctx.createLinearGradient(0, 0, 800, 0);
-  headerGrad.addColorStop(0, '#1a2744');
-  headerGrad.addColorStop(1, '#243461');
-  ctx.fillStyle = headerGrad;
-  ctx.fillRect(0, 0, 800, 130);
+  // ── PAGE BACKGROUND ──────────────────────────────────
+  ctx.fillStyle = grad(0,0,0,H, [[0,'#fdfaf3'],[0.5,'#f8f4ea'],[1,'#fdfaf3']]);
+  ctx.fillRect(0,0,W,H);
 
-  // Gold accent line
+  // Subtle dot pattern for texture
+  ctx.fillStyle = 'rgba(201,168,76,0.06)';
+  for(let x=20;x<W;x+=40) for(let y=20;y<H;y+=40){
+    ctx.beginPath(); ctx.arc(x,y,1.5,0,Math.PI*2); ctx.fill();
+  }
+
+  // ── HEADER BAND (0–165) ──────────────────────────────
+  const hGrad = grad(0,0,W,0, [[0,'#0f172a'],[0.5,'#1a2744'],[1,'#0f172a']]);
+  ctx.fillStyle = hGrad;
+  ctx.beginPath(); roundRectPath(ctx,0,0,W,165,0); ctx.fill();
+
+  // Gold shimmer line top
+  ctx.fillStyle = grad(0,0,W,0, [[0,'rgba(201,168,76,0)'],[0.3,'#c9a84c'],[0.7,'#e8c96a'],[1,'rgba(201,168,76,0)']]);
+  ctx.fillRect(0,0,W,3);
+
+  // Corner stars
+  star(38,32,14,'rgba(201,168,76,0.5)');
+  star(W-38,32,14,'rgba(201,168,76,0.5)');
+  star(38,H-32,14,'rgba(201,168,76,0.4)');
+  star(W-38,H-32,14,'rgba(201,168,76,0.4)');
+
+  // School name — Arabic
   ctx.fillStyle = '#c9a84c';
-  ctx.fillRect(0, 130, 800, 5);
-
-  // School name
-  ctx.fillStyle = '#c9a84c';
-  ctx.font = 'bold 20px "Tajawal", Arial';
+  ctx.font = 'bold 22px Arial';
   ctx.textAlign = 'center';
-  ctx.fillText('روضة ومدرسة الجود  |  Al Jood School', 400, 40);
+  ctx.fillText('روضة ومدرسة الجود — Al Jood School', W/2, 38);
+
+  // Divider line in header
+  ctx.strokeStyle = 'rgba(201,168,76,0.35)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(80,50); ctx.lineTo(W-80,50); ctx.stroke();
 
   // Subject line
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.font = '16px Arial';
-  ctx.fillText('CCDI & AI — Computing, Creative Design & Innovation', 400, 68);
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.font = '14px Arial';
+  ctx.fillText('CCDI & AI  ·  Computing, Creative Design & Innovation', W/2, 72);
 
   // Event title
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 28px Arial';
-  ctx.fillText('🤖 STREAM Day Achievement', 400, 108);
+  ctx.font = 'bold 30px Arial';
+  ctx.fillText('🏆 STREAM Day Achievement', W/2, 112);
 
-  // ── STUDENT INFO SECTION ─────────────────────────────
-  ctx.fillStyle = '#1a2744';
-  ctx.font = 'bold 32px "Tajawal", Arial';
-  ctx.fillText(studentData.name, 400, 175);
+  // Gold accent subtitle
+  ctx.fillStyle = '#e8c96a';
+  ctx.font = '15px Arial';
+  ctx.fillText('Grade 3  ·  2025–2026  ·  العين، أبوظبي', W/2, 142);
+
+  // Gold accent bar bottom of header
+  ctx.fillStyle = grad(0,0,W,0, [[0,'#c9a84c'],[0.5,'#e8c96a'],[1,'#c9a84c']]);
+  ctx.fillRect(0,165,W,5);
+
+  // ── STUDENT NAME BAND (170–240) ──────────────────────
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,170,W,75);
+
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 34px Arial';
+  ctx.fillText(studentData.name || '—', W/2, 210);
 
   ctx.fillStyle = '#64748b';
-  ctx.font = '16px Arial';
-  ctx.fillText(`Grade 3  ·  Section ${studentData.section}  ·  ${studentData.date}`, 400, 200);
+  ctx.font = '15px Arial';
+  ctx.fillText(`الصف الثالث  ·  الشعبة ${studentData.section || '—'}  ·  ${studentData.date || ''}`, W/2, 235);
 
-  // ── MISSION SECTION ──────────────────────────────────
-  const missionY = 220;
-  // Mission card background
-  const missionGrad = ctx.createLinearGradient(0, missionY, 0, missionY + 110);
-  missionGrad.addColorStop(0, '#fffbeb');
-  missionGrad.addColorStop(1, '#fef9e7');
-  ctx.fillStyle = missionGrad;
-  roundRectPath(ctx, 30, missionY, 740, 110, 14);
-  ctx.fill();
-  ctx.strokeStyle = '#c9a84c';
-  ctx.lineWidth = 2;
-  roundRectPath(ctx, 30, missionY, 740, 110, 14);
-  ctx.stroke();
+  // Gold divider
+  ctx.fillStyle = grad(0,0,W,0, [[0,'rgba(201,168,76,0)'],[0.2,'#c9a84c'],[0.8,'#c9a84c'],[1,'rgba(201,168,76,0)']]);
+  ctx.fillRect(0,244,W,3);
 
-  ctx.fillStyle = '#1a2744';
-  ctx.font = 'bold 16px Arial';
-  ctx.textAlign = 'left';
-  ctx.fillText('🎯 MY ROBOT\'S MISSION', 50, missionY + 26);
+  // ── ROBOT DRAWING / IMAGE (250–560) ──────────────────
+  const imgX=30, imgY=252, imgW=740, imgH=290;
 
-  // WHO
-  const whoId = studentData.whoHelp || '';
-  const howId = studentData.howHelp || '';
-  const WHO_LABELS = { elderly:'👴 Elderly', children:'👧 Children', sick:'🏥 Sick People', teacher:'👩‍🏫 Teachers', animals:'🐾 Animals', family:'👨‍👩‍👧 Family' };
-  const HOW_LABELS = { carry:'📦 Carry things', medicine:'💊 Medicine reminders', clean:'🧹 Clean up', cook:'🍳 Help cooking', read:'📚 Read & learn', guide:'🗺️ Guide & navigate' };
-  const WHO_AR = { elderly:'كبار السن', children:'الأطفال', sick:'المرضى', teacher:'المعلمين', animals:'الحيوانات', family:'العائلة' };
-  const HOW_AR = { carry:'حمل الأشياء', medicine:'تذكير الدواء', clean:'التنظيف', cook:'المساعدة في الطهي', read:'القراءة والتعلم', guide:'التوجيه والإرشاد' };
+  // Frame background
+  ctx.fillStyle = grad(imgX,imgY,imgX,imgY+imgH, [[0,'#e8edf5'],[1,'#d5dce9']]);
+  ctx.beginPath(); roundRectPath(ctx,imgX,imgY,imgW,imgH,16); ctx.fill();
 
-  // Who box
-  ctx.fillStyle = '#eff6ff';
-  roundRectPath(ctx, 50, missionY + 38, 310, 58, 10);
-  ctx.fill();
-  ctx.strokeStyle = '#3b82f6';
-  ctx.lineWidth = 1.5;
-  roundRectPath(ctx, 50, missionY + 38, 310, 58, 10);
-  ctx.stroke();
-  ctx.fillStyle = '#1e40af';
-  ctx.font = 'bold 13px Arial';
-  ctx.fillText('Helps:', 65, missionY + 58);
-  ctx.fillStyle = '#1a2744';
-  ctx.font = 'bold 17px Arial';
-  ctx.fillText(WHO_LABELS[whoId] || '—', 110, missionY + 58);
-  ctx.fillStyle = '#64748b';
-  ctx.font = '13px "Tajawal", Arial';
-  ctx.fillText(WHO_AR[whoId] || '', 65, missionY + 82);
-
-  // How box
-  ctx.fillStyle = '#f0fdf4';
-  roundRectPath(ctx, 380, missionY + 38, 380, 58, 10);
-  ctx.fill();
-  ctx.strokeStyle = '#22c55e';
-  ctx.lineWidth = 1.5;
-  roundRectPath(ctx, 380, missionY + 38, 380, 58, 10);
-  ctx.stroke();
-  ctx.fillStyle = '#166534';
-  ctx.font = 'bold 13px Arial';
-  ctx.fillText('By:', 395, missionY + 58);
-  ctx.fillStyle = '#1a2744';
-  ctx.font = 'bold 17px Arial';
-  ctx.fillText(HOW_LABELS[howId] || '—', 420, missionY + 58);
-  ctx.fillStyle = '#64748b';
-  ctx.font = '13px "Tajawal", Arial';
-  ctx.fillText(HOW_AR[howId] || '', 395, missionY + 82);
-
-  ctx.textAlign = 'center';
-
-  // ── ROBOT IMAGE + NAME SECTION ───────────────────────
-  const imgY = 350;
-
-  // Left: image/drawing
-  ctx.fillStyle = '#f1f5f9';
-  roundRectPath(ctx, 30, imgY, 340, 240, 14);
-  ctx.fill();
-  ctx.strokeStyle = '#c9a84c';
-  ctx.lineWidth = 2.5;
-  roundRectPath(ctx, 30, imgY, 340, 240, 14);
-  ctx.stroke();
+  // Gold frame border
+  ctx.strokeStyle = grad(imgX,imgY,imgX+imgW,imgY, [[0,'#c9a84c'],[0.5,'#e8c96a'],[1,'#c9a84c']]);
+  ctx.lineWidth = 3;
+  ctx.beginPath(); roundRectPath(ctx,imgX,imgY,imgW,imgH,16); ctx.stroke();
 
   if (studentData.screenshot) {
     try {
@@ -5774,184 +5761,261 @@ async function generatePoster(studentData) {
         img.crossOrigin = 'anonymous';
         img.onload = () => {
           ctx.save();
-          roundRectPath(ctx, 30, imgY, 340, 240, 14);
-          ctx.clip();
-          // Cover-fit
-          const scale = Math.max(340 / img.width, 240 / img.height);
-          const iw = img.width * scale, ih = img.height * scale;
-          ctx.drawImage(img, 30 + (340 - iw) / 2, imgY + (240 - ih) / 2, iw, ih);
+          ctx.beginPath(); roundRectPath(ctx,imgX+2,imgY+2,imgW-4,imgH-4,14); ctx.clip();
+          const scale = Math.max(imgW/img.width, imgH/img.height);
+          const iw=img.width*scale, ih=img.height*scale;
+          ctx.drawImage(img, imgX+(imgW-iw)/2, imgY+(imgH-ih)/2, iw, ih);
           ctx.restore();
           res();
         };
         img.onerror = res;
         img.src = studentData.screenshot;
       });
-    } catch (e) {}
+    } catch(e) {}
   } else {
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '64px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('🤖', 200, imgY + 130);
+    // Beautiful robot placeholder drawn with canvas shapes
+    const cx=W/2, cy=imgY+imgH/2;
+
+    // Robot body
+    ctx.fillStyle = grad(cx-60,cy-70,cx+60,cy+70, [[0,'#3b82f6'],[1,'#1e40af']]);
+    roundRectPath(ctx,cx-55,cy-55,110,110,18); ctx.fill();
+
+    // Robot head
+    ctx.fillStyle = grad(cx-40,cy-120,cx+40,cy-60, [[0,'#60a5fa'],[1,'#3b82f6']]);
+    roundRectPath(ctx,cx-38,cy-120,76,65,12); ctx.fill();
+
+    // Eyes
+    ctx.fillStyle='#ffffff';
+    ctx.beginPath(); ctx.arc(cx-14,cy-100,10,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx+14,cy-100,10,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#1e40af';
+    ctx.beginPath(); ctx.arc(cx-14,cy-100,5,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx+14,cy-100,5,0,Math.PI*2); ctx.fill();
+    // Eye glow
+    ctx.fillStyle='rgba(255,255,255,0.9)';
+    ctx.beginPath(); ctx.arc(cx-11,cy-103,2,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx+17,cy-103,2,0,Math.PI*2); ctx.fill();
+
+    // Mouth
+    ctx.strokeStyle='#ffffff'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(cx,cy-85,10,0.2,Math.PI-0.2); ctx.stroke();
+
+    // Antenna
+    ctx.strokeStyle='#93c5fd'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(cx,cy-120); ctx.lineTo(cx,cy-140); ctx.stroke();
+    ctx.fillStyle='#fbbf24';
+    ctx.beginPath(); ctx.arc(cx,cy-143,6,0,Math.PI*2); ctx.fill();
+
+    // Arms
+    ctx.fillStyle=grad(cx+55,cy-20,cx+95,cy+20, [[0,'#60a5fa'],[1,'#3b82f6']]);
+    roundRectPath(ctx,cx+58,cy-25,40,50,10); ctx.fill();
+    ctx.fillStyle=grad(cx-95,cy-20,cx-55,cy+20, [[0,'#3b82f6'],[1,'#60a5fa']]);
+    roundRectPath(ctx,cx-98,cy-25,40,50,10); ctx.fill();
+
+    // Legs
+    ctx.fillStyle=grad(cx-35,cy+55,cx-10,cy+100, [[0,'#2563eb'],[1,'#1e40af']]);
+    roundRectPath(ctx,cx-35,cy+55,35,60,10); ctx.fill();
+    ctx.fillStyle=grad(cx+10,cy+55,cx+35,cy+100, [[0,'#2563eb'],[1,'#1e40af']]);
+    roundRectPath(ctx,cx+0,cy+55,35,60,10); ctx.fill();
+
+    // Chest screen
+    ctx.fillStyle='rgba(0,0,0,0.25)';
+    roundRectPath(ctx,cx-30,cy-30,60,40,8); ctx.fill();
+    ctx.fillStyle='#22d3ee';
+    ctx.font='bold 10px Arial'; ctx.textAlign='center';
+    ctx.fillText('100%',cx,cy-5);
+
+    // Draw robot name below
+    ctx.fillStyle='#1a2744';
+    ctx.font='bold 22px Arial'; ctx.textAlign='center';
+    const rn = studentData.robotName || 'My Robot';
+    ctx.fillText(`🤖 ${rn}`, W/2, imgY+imgH-16);
   }
 
-  // Right: robot name + description
-  const rightX = 390;
-  ctx.textAlign = 'left';
-
-  // Robot name label
-  ctx.fillStyle = '#64748b';
-  ctx.font = '13px Arial';
-  ctx.fillText('ROBOT NAME', rightX, imgY + 28);
-
-  // Robot name value
-  ctx.fillStyle = '#1a2744';
-  ctx.font = 'bold 28px "Tajawal", Arial';
-  const rName = studentData.robotName || 'My Robot';
-  // Wrap if too long
-  if (ctx.measureText(rName).width > 370) {
-    ctx.font = 'bold 20px "Tajawal", Arial';
+  // Robot name overlay badge (always shown if screenshot exists)
+  if (studentData.screenshot && studentData.robotName) {
+    const rn=studentData.robotName;
+    ctx.fillStyle='rgba(15,23,42,0.82)';
+    const rnW=Math.max(200, ctx.measureText(`🤖 ${rn}`).width+40);
+    roundRectPath(ctx,W/2-rnW/2,imgY+imgH-48,rnW,36,18); ctx.fill();
+    ctx.fillStyle='#e8c96a';
+    ctx.font='bold 18px Arial'; ctx.textAlign='center';
+    ctx.fillText(`🤖 ${rn}`,W/2,imgY+imgH-25);
   }
-  ctx.fillText(rName, rightX, imgY + 60);
 
-  // Gold line under robot name
-  ctx.fillStyle = '#c9a84c';
-  ctx.fillRect(rightX, imgY + 70, 360, 3);
+  // ── MISSION ROW (572–660) ─────────────────────────────
+  const mY=572;
+  const whoId = studentData.whoHelp || '';
+  const howId = studentData.howHelp || '';
+  const WHO_MAP = { elderly:['👴','Elderly','كبار السن'], children:['👧','Children','الأطفال'], sick:['🏥','Sick People','المرضى'], teacher:['👩‍🏫','Teachers','المعلمين'], animals:['🐾','Animals','الحيوانات'], family:['👨‍👩‍👧','Family','العائلة'] };
+  const HOW_MAP = { carry:['📦','Carry things','حمل الأشياء'], medicine:['💊','Medicine','تذكير الدواء'], clean:['🧹','Clean up','التنظيف'], cook:['🍳','Cooking','الطهي'], read:['📚','Read & learn','القراءة'], guide:['🗺️','Navigate','التوجيه'] };
 
-  // STREAM phases on right side
-  ctx.fillStyle = '#1a2744';
-  ctx.font = 'bold 13px Arial';
-  ctx.fillText('STREAM JOURNEY', rightX, imgY + 100);
+  // Mission section title
+  ctx.fillStyle='#1a2744'; ctx.font='bold 15px Arial'; ctx.textAlign='left';
+  ctx.fillText('🎯  ROBOT MISSION', 35, mY+22);
 
-  const stages = [
-    { label: 'ASK', desc: 'Identified the problem' },
-    { label: 'IMAGINE', desc: 'Brainstormed ideas' },
-    { label: 'PLAN', desc: 'Designed the robot' },
-    { label: 'CREATE', desc: 'Built with materials' },
-    { label: 'TEST', desc: 'Tested the prototype' },
-    { label: 'IMPROVE', desc: 'Reflected & improved' },
+  // Who card
+  ctx.fillStyle=grad(35,mY+30,35,mY+85, [[0,'#dbeafe'],[1,'#bfdbfe']]);
+  roundRectPath(ctx,35,mY+30,360,58,12); ctx.fill();
+  ctx.strokeStyle='#3b82f6'; ctx.lineWidth=1.5;
+  roundRectPath(ctx,35,mY+30,360,58,12); ctx.stroke();
+  ctx.fillStyle='#1e3a8a'; ctx.font='bold 12px Arial'; ctx.textAlign='left';
+  ctx.fillText('HELPS', 52, mY+49);
+  const whoD=WHO_MAP[whoId];
+  ctx.fillStyle='#0f172a'; ctx.font='bold 20px Arial';
+  ctx.fillText(whoD ? `${whoD[0]} ${whoD[1]}` : '— Not selected', 52, mY+74);
+  if(whoD){ ctx.fillStyle='#3b82f6'; ctx.font='13px Arial'; ctx.fillText(whoD[2],52+Math.min(ctx.measureText(`${whoD[0]} ${whoD[1]}`).width,240)+12,mY+74); }
+
+  // How card
+  ctx.fillStyle=grad(405,mY+30,405,mY+85, [[0,'#dcfce7'],[1,'#bbf7d0']]);
+  roundRectPath(ctx,405,mY+30,360,58,12); ctx.fill();
+  ctx.strokeStyle='#22c55e'; ctx.lineWidth=1.5;
+  roundRectPath(ctx,405,mY+30,360,58,12); ctx.stroke();
+  ctx.fillStyle='#14532d'; ctx.font='bold 12px Arial'; ctx.textAlign='left';
+  ctx.fillText('BY DOING', 422, mY+49);
+  const howD=HOW_MAP[howId];
+  ctx.fillStyle='#0f172a'; ctx.font='bold 20px Arial';
+  ctx.fillText(howD ? `${howD[0]} ${howD[1]}` : '— Not selected', 422, mY+74);
+  if(howD){ ctx.fillStyle='#16a34a'; ctx.font='13px Arial'; ctx.fillText(howD[2],422+Math.min(ctx.measureText(`${howD[0]} ${howD[1]}`).width,200)+10,mY+74); }
+
+  // ── STREAM JOURNEY BADGES (672–728) ──────────────────
+  const sY=672;
+  ctx.fillStyle='#1a2744'; ctx.font='bold 13px Arial'; ctx.textAlign='left';
+  ctx.fillText('✅  STREAM JOURNEY COMPLETED', 35, sY+16);
+
+  const stages=[
+    {l:'S',name:'Science',col:'#ef4444'},
+    {l:'T',name:'Technology',col:'#f97316'},
+    {l:'R',name:'Reading',col:'#eab308'},
+    {l:'E',name:'Engineering',col:'#22c55e'},
+    {l:'A',name:'Art',col:'#3b82f6'},
+    {l:'M',name:'Math',col:'#8b5cf6'}
   ];
-  const stageColors = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6'];
-  stages.forEach((s, i) => {
-    const sx = rightX + (i % 2) * 185;
-    const sy = imgY + 120 + Math.floor(i / 2) * 48;
-    ctx.fillStyle = stageColors[i];
-    ctx.beginPath(); roundRectPath(ctx, sx, sy, 170, 36, 8); ctx.fill();
-    ctx.fillStyle = 'white';
-    ctx.font = 'bold 13px Arial';
-    ctx.fillText(`✅ ${s.label}`, sx + 10, sy + 15);
-    ctx.font = '10px Arial';
-    ctx.fillText(s.desc, sx + 10, sy + 28);
+  const badgeW=110, gap=12, startX=35;
+  stages.forEach((s,i)=>{
+    const bx=startX+i*(badgeW+gap), by=sY+24;
+    const bg=grad(bx,by,bx,by+46, [[0,s.col+'dd'],[1,s.col+'99']]);
+    ctx.fillStyle=bg; roundRectPath(ctx,bx,by,badgeW,46,10); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.2)';
+    roundRectPath(ctx,bx,by,badgeW,23,10); ctx.fill();
+    ctx.fillStyle='white'; ctx.font='bold 18px Arial'; ctx.textAlign='center';
+    ctx.fillText(s.l, bx+badgeW/2, by+18);
+    ctx.font='bold 9px Arial';
+    ctx.fillText(s.name.toUpperCase(), bx+badgeW/2, by+38);
   });
 
-  ctx.textAlign = 'center';
-
-  // ── SCORE & LEVEL BAR ────────────────────────────────
-  const scoreY = 610;
-  ctx.fillStyle = '#f1f5f9';
-  roundRectPath(ctx, 30, scoreY, 740, 70, 14);
-  ctx.fill();
-  ctx.strokeStyle = '#e2e8f0';
-  ctx.lineWidth = 1.5;
-  roundRectPath(ctx, 30, scoreY, 740, 70, 14);
-  ctx.stroke();
+  // ── SCORE BAR (736–800) ──────────────────────────────
+  const scY=736;
+  ctx.fillStyle=grad(30,scY,30,scY+64, [[0,'#1e293b'],[1,'#0f172a']]);
+  roundRectPath(ctx,30,scY,740,64,14); ctx.fill();
+  ctx.strokeStyle='rgba(201,168,76,0.4)'; ctx.lineWidth=1.5;
+  roundRectPath(ctx,30,scY,740,64,14); ctx.stroke();
 
   // Level badge
-  const levelColors = { advanced: '#c9a84c', intermediate: '#3b82f6', basic: '#22c55e' };
-  const levelBg = levelColors[studentData.level] || '#c9a84c';
-  ctx.fillStyle = levelBg;
-  roundRectPath(ctx, 50, scoreY + 12, 200, 44, 22);
-  ctx.fill();
-  ctx.fillStyle = 'white';
-  ctx.font = 'bold 17px Arial';
-  ctx.textAlign = 'center';
-  ctx.fillText(`💻 ${studentData.level.toUpperCase()}`, 150, scoreY + 38);
+  const lvlCols={advanced:'#c9a84c',intermediate:'#3b82f6',basic:'#22c55e'};
+  const lvlCol=lvlCols[studentData.level]||'#c9a84c';
+  ctx.fillStyle=lvlCol;
+  roundRectPath(ctx,46,scY+10,200,44,22); ctx.fill();
+  ctx.fillStyle='white'; ctx.font='bold 15px Arial'; ctx.textAlign='center';
+  ctx.fillText(`💻 ${(studentData.level||'advanced').toUpperCase()}`,146,scY+36);
 
-  // Score
-  ctx.fillStyle = '#1a2744';
-  ctx.font = 'bold 22px Arial';
-  ctx.fillText(`⭐ ${studentData.score}/100`, 400, scoreY + 38);
+  // Score ring visual
+  const score=studentData.score||0;
+  const ringCx=W/2, ringCy=scY+32;
+  ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.lineWidth=10;
+  ctx.beginPath(); ctx.arc(ringCx,ringCy,22,0,Math.PI*2); ctx.stroke();
+  ctx.strokeStyle='#c9a84c'; ctx.lineWidth=10;
+  ctx.beginPath(); ctx.arc(ringCx,ringCy,22,-Math.PI/2,-Math.PI/2+Math.PI*2*(score/100)); ctx.stroke();
+  ctx.fillStyle='white'; ctx.font='bold 14px Arial'; ctx.textAlign='center';
+  ctx.fillText(`${score}`,ringCx,ringCy+5);
+  ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.font='10px Arial';
+  ctx.fillText('/100',ringCx,ringCy+18);
 
-  // Special needs badge
-  if (studentData.isSpecialNeeds) {
-    ctx.fillStyle = '#8b5cf6';
-    roundRectPath(ctx, 570, scoreY + 12, 180, 44, 22);
-    ctx.fill();
-    ctx.fillStyle = 'white';
-    ctx.font = 'bold 16px "Tajawal", Arial';
-    ctx.fillText('بطل اليوم 🏆', 660, scoreY + 38);
+  // Stars row
+  const starScore=Math.round(score/20);
+  for(let i=0;i<5;i++){
+    ctx.fillStyle= i<starScore ? '#fbbf24' : 'rgba(255,255,255,0.2)';
+    ctx.font='22px Arial'; ctx.textAlign='center';
+    ctx.fillText('★', 480+i*38, scY+38);
   }
 
-  // ── MATERIALS USED ───────────────────────────────────
-  const matsY = 700;
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#1a2744';
-  ctx.font = 'bold 14px Arial';
-  ctx.fillText('🧰 Materials Used:', 50, matsY);
-  const PLAN_MATS = ['Cardboard box','Plastic bottle','Paper cups','Aluminum foil','Rubber bands','Markers','Tape/Glue'];
-  const usedMats = (studentData.materials || []).map(i => PLAN_MATS[i]).filter(Boolean);
-  if (usedMats.length === 0) usedMats.push('Recycled materials');
-  ctx.fillStyle = '#475569';
-  ctx.font = '13px Arial';
-  ctx.fillText(usedMats.join('  ·  '), 50, matsY + 22);
-  ctx.textAlign = 'center';
+  // Special needs badge
+  if(studentData.isSpecialNeeds){
+    ctx.fillStyle='#7c3aed';
+    roundRectPath(ctx,560,scY+10,200,44,22); ctx.fill();
+    ctx.fillStyle='white'; ctx.font='bold 14px Arial'; ctx.textAlign='center';
+    ctx.fillText('بطل اليوم 🏆',660,scY+36);
+  }
 
-  // ── AI DESCRIPTION ───────────────────────────────────
-  const aiY = 750;
-  ctx.fillStyle = '#f8f9ff';
-  roundRectPath(ctx, 30, aiY, 740, 90, 12);
-  ctx.fill();
-  ctx.strokeStyle = '#c7d2fe';
-  ctx.lineWidth = 1.5;
-  roundRectPath(ctx, 30, aiY, 740, 90, 12);
-  ctx.stroke();
+  // ── MATERIALS (808–844) ──────────────────────────────
+  const matY=808;
+  ctx.fillStyle='#f0f4ff';
+  roundRectPath(ctx,30,matY,740,40,10); ctx.fill();
+  ctx.strokeStyle='#c7d2fe'; ctx.lineWidth=1.2;
+  roundRectPath(ctx,30,matY,740,40,10); ctx.stroke();
+  const MATS=['Cardboard box','Plastic bottle','Paper cups','Aluminum foil','Rubber bands','Markers','Tape/Glue'];
+  const used=(studentData.materials||[]).map(i=>MATS[i]).filter(Boolean);
+  if(!used.length) used.push('Recycled materials');
+  ctx.fillStyle='#1e40af'; ctx.font='bold 12px Arial'; ctx.textAlign='left';
+  ctx.fillText('🧰 Materials: ', 46, matY+25);
+  ctx.fillStyle='#334155'; ctx.font='13px Arial';
+  ctx.fillText(used.join('  ·  '), 148, matY+25);
+
+  // ── AI DESCRIPTION (852–940) ─────────────────────────
+  const aiY=852;
+  ctx.fillStyle=grad(30,aiY,30,aiY+90, [[0,'#fefce8'],[1,'#fef9c3']]);
+  roundRectPath(ctx,30,aiY,740,90,14); ctx.fill();
+  ctx.strokeStyle='#fbbf24'; ctx.lineWidth=1.5;
+  roundRectPath(ctx,30,aiY,740,90,14); ctx.stroke();
+
+  // Quote mark
+  ctx.fillStyle='rgba(251,191,36,0.35)';
+  ctx.font='bold 72px Georgia,serif'; ctx.textAlign='left';
+  ctx.fillText('"',38,aiY+72);
 
   try {
     const desc = await generatePosterDescription(studentData);
-    if (desc) {
-      ctx.fillStyle = '#3730a3';
-      ctx.font = 'italic 14px Arial';
-      wrapText(ctx, desc, 400, aiY + 28, 700, 22);
-    } else {
-      ctx.fillStyle = '#64748b';
-      ctx.font = 'italic 14px Arial';
-      ctx.fillText(`${studentData.name} designed an amazing helper robot using STREAM skills!`, 400, aiY + 45);
-    }
-  } catch (e) {
-    ctx.fillStyle = '#64748b';
-    ctx.font = 'italic 14px Arial';
-    ctx.fillText(`${studentData.name} showed creativity and innovation in building a helper robot!`, 400, aiY + 45);
+    ctx.fillStyle = '#92400e';
+    ctx.font = 'italic 14px Georgia, Arial';
+    ctx.textAlign = 'center';
+    const txt = desc || `${studentData.name} built an amazing helper robot and completed every STREAM challenge! A true innovator! 🌟`;
+    wrapText(ctx, txt, W/2, aiY+30, 660, 22);
+  } catch(e) {
+    ctx.fillStyle='#92400e'; ctx.font='italic 14px Georgia, Arial'; ctx.textAlign='center';
+    ctx.fillText(`${studentData.name} completed STREAM Day with creativity and innovation! 🌟`, W/2, aiY+50);
   }
 
-  // ── GOLD BORDER ──────────────────────────────────────
-  ctx.strokeStyle = '#c9a84c';
-  ctx.lineWidth = 6;
-  roundRectPath(ctx, 8, 8, 784, 1034, 18);
-  ctx.stroke();
+  // ── FOOTER (950–1010) ─────────────────────────────────
+  const ftY=950;
+  ctx.fillStyle=grad(0,ftY,0,ftY+60, [[0,'#0f172a'],[1,'#1a2744']]);
+  ctx.fillRect(0,ftY,W,H-ftY);
 
-  // Inner thin border
-  ctx.strokeStyle = 'rgba(201,168,76,0.3)';
-  ctx.lineWidth = 1.5;
-  roundRectPath(ctx, 16, 16, 768, 1018, 14);
-  ctx.stroke();
+  ctx.strokeStyle='rgba(201,168,76,0.6)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,ftY); ctx.lineTo(W,ftY); ctx.stroke();
 
-  // ── FOOTER ───────────────────────────────────────────
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '11px Arial';
-  ctx.textAlign = 'center';
-  ctx.fillText('© منيرة علي محمد المري  ·  munira.almarri@moe.sch.ae  ·  © 2026', 400, 1035);
+  ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.font='11px Arial'; ctx.textAlign='center';
+  ctx.fillText('© منيرة علي محمد المري  ·  رقم حق المؤلف 1614-2026  ·  munira.almarri@moe.sch.ae', W/2, ftY+28);
+  ctx.fillStyle='rgba(201,168,76,0.6)'; ctx.font='10px Arial';
+  ctx.fillText('EduOS — Al Jood School  ·  العين، أبوظبي  ·  2025–2026', W/2, ftY+48);
+
+  // ── OUTER GOLD BORDER ────────────────────────────────
+  ctx.strokeStyle = grad(0,0,W,H, [[0,'#c9a84c'],[0.5,'#e8c96a'],[1,'#c9a84c']]);
+  ctx.lineWidth = 7;
+  ctx.beginPath(); roundRectPath(ctx,5,5,W-10,H-10,20); ctx.stroke();
+  ctx.strokeStyle='rgba(201,168,76,0.3)'; ctx.lineWidth=2;
+  ctx.beginPath(); roundRectPath(ctx,14,14,W-28,H-28,16); ctx.stroke();
 
   const pngData = canvas.toDataURL('image/png');
   // Show poster in modal canvas
   const modalCanvas = document.querySelector('#posterModal canvas');
   if (modalCanvas && modalCanvas !== canvas) {
-    modalCanvas.width = 800; modalCanvas.height = 1050;
+    modalCanvas.width = W; modalCanvas.height = H;
     const mCtx = modalCanvas.getContext('2d');
     const img = new Image(); img.onload = () => mCtx.drawImage(img, 0, 0); img.src = pngData;
   }
   // Save to Firestore
   try { await db.collection(COLLECTION).doc(sessionId).update({ posterPng: pngData }); } catch(e) {}
   window._posterData = pngData;
-  // Show in the modal poster canvas
   const posterModalCanvas = document.getElementById('posterCanvas');
   if (posterModalCanvas) { posterModalCanvas.style.display = 'block'; }
   return pngData;
