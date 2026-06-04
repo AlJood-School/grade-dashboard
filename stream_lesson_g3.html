@@ -1327,7 +1327,9 @@ footer {
 <!-- HEADER -->
 <header id="appHeader">
   <div class="logo">🤖 STREAM Day — Grade 3</div>
-  <div id="totalTimer">⏱️ Lesson: <span id="totalTimerDisplay">45:00</span> &nbsp;<span id="currentPhaseChip" style="display:none;background:var(--gold);color:var(--navy);font-weight:700;font-size:0.82rem;padding:3px 12px;border-radius:20px;font-family:'Tajawal',sans-serif;"></span></div>
+  <div id="totalTimer" style="display:flex;align-items:center;gap:8px;">⏱️ Lesson: <span id="totalTimerDisplay">45:00</span> &nbsp;<span id="currentPhaseChip" style="display:none;background:var(--gold);color:var(--navy);font-weight:700;font-size:0.82rem;padding:3px 12px;border-radius:20px;font-family:'Tajawal',sans-serif;"></span>
+    <span id="liveScoreChip" style="display:none;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;font-weight:700;font-size:0.82rem;padding:4px 14px;border-radius:20px;font-family:'Tajawal',sans-serif;box-shadow:0 2px 8px rgba(124,58,237,0.4);">⭐ 0/100</span>
+  </div>
   <div id="headerRight">
     <span id="phaseBadge" style="display:none;background:var(--gold);color:var(--navy);font-weight:700;font-size:0.8rem;padding:4px 14px;border-radius:20px;font-family:'Tajawal',sans-serif;white-space:nowrap;box-shadow:0 2px 8px rgba(230,184,0,0.35);"></span>
     <span id="snHeaderBadge">💙 دعم خاص</span>
@@ -2014,6 +2016,13 @@ async function saveSession(extraData = {}) {
 function updateLiveScoreG3(phase, earned) {
   phaseEarned[phase] = Math.round(Math.max(0, Math.min(earned, G3_PHASE_WEIGHTS[phase] ?? earned)));
   const total = Math.round(Object.values(phaseEarned).reduce((a, b) => a + b, 0));
+  // ── Show live score chip to student ──
+  const chip = document.getElementById('liveScoreChip');
+  if (chip) {
+    chip.style.display = 'inline-block';
+    const emoji = total >= 80 ? '🌟' : total >= 60 ? '⭐' : '💪';
+    chip.textContent = emoji + ' ' + total + '/100';
+  }
   const badge = document.getElementById('phaseBadge');
   if (badge) { badge.textContent = `🏆 ${total}/100`; badge.style.display = 'inline-block'; }
   saveLiveScoreSupaG3(total);
@@ -2145,7 +2154,7 @@ function tryGoToPhase(target) {
 function goToPhase(phase) {
   updateTtsFabVisibility();
   phaseWrongCount = 0; // Reset wrong count for new phase
-  tfAnswers = {};       // Reset TF answers
+  tfAnswers = phaseData.p3_tf ? Object.assign({}, phaseData.p3_tf) : {};   // Restore TF answers
   if (currentActivityTimer) currentActivityTimer.stop();
   currentPhase = phase;
   updateProgressBar();
@@ -4099,7 +4108,8 @@ function answerTF(idx, answer, correct) {
     const area = document.getElementById('tfScoreArea');
     area.style.display = 'block';
     const emoji = score === qs.length ? '🌟' : score >= qs.length * 0.6 ? '⭐' : '💪';
-    area.innerHTML = `<div class="score-badge">${emoji} Score: ${score}/${qs.length}</div>`;
+    area.innerHTML = `<div class="score-badge">${emoji} Score: ${score}/${qs.length} — ${Math.round(score/qs.length*100)}%</div>
+      <div style="font-family:'Tajawal',sans-serif;font-size:0.9rem;color:#94a3b8;margin-top:4px;">درجتك في هذه المرحلة: ${Math.round(score/qs.length*25)}/25</div>`;
     phaseData.p3_score = score;
     // Global adaptive: Phase 3 T/F complete
     globalScores.p3 = { score: score, total: qs.length };
@@ -6028,11 +6038,39 @@ function initPhaseLogic(phase) {
     case 3:
       // Timer starts only AFTER NeoPixels intro is dismissed
       if (_neoIntroSeen) startPhaseTimer(PHASE_TIMERS[3]);
-      // restore T/F answers
-      const savedTF = phaseData.p3_tf || {};
-      Object.entries(savedTF).forEach(([idx,correct]) => {
-        if(!correct) return; // only restore if they want to see results
-      });
+      // restore T/F answers visual state
+      setTimeout(() => {
+        const savedTF = phaseData.p3_tf || {};
+        const qs3 = isSpecialNeeds ? TF_QUESTIONS.slice(0,3) : TF_QUESTIONS;
+        Object.entries(savedTF).forEach(([idx, isCorrect]) => {
+          const i = parseInt(idx);
+          const trueBtn  = document.getElementById('tfTrue'  + i);
+          const falseBtn = document.getElementById('tfFalse' + i);
+          const fb       = document.getElementById('tfFb'    + i);
+          if (trueBtn)  trueBtn.disabled  = true;
+          if (falseBtn) falseBtn.disabled = true;
+          if (isCorrect) {
+            if (trueBtn)  trueBtn.style.background  = 'linear-gradient(135deg,#22c55e,#16a34a)';
+            if (fb) { fb.className = 'feedback-box correct'; fb.textContent = '✅ ' + (TF_QUESTIONS[i]?.exp || 'Correct!'); }
+          } else {
+            if (falseBtn) falseBtn.style.background = 'linear-gradient(135deg,#ef4444,#dc2626)';
+            const ans = TF_QUESTIONS[i]?.answer ? 'TRUE ✅' : 'FALSE ❌';
+            if (fb) { fb.className = 'feedback-box wrong'; fb.textContent = '❌ Answer: ' + ans + ' — ' + (TF_QUESTIONS[i]?.exp || ''); }
+          }
+        });
+        // If all answered, re-show score and enable next
+        if (Object.keys(savedTF).length === qs3.length) {
+          const sc = Object.values(savedTF).filter(Boolean).length;
+          const area = document.getElementById('tfScoreArea');
+          if (area) {
+            area.style.display = 'block';
+            const em = sc === qs3.length ? '🌟' : sc >= qs3.length * 0.6 ? '⭐' : '💪';
+            area.innerHTML = '<div class="score-badge">' + em + ' Score: ' + sc + '/' + qs3.length + ' — ' + Math.round(sc/qs3.length*100) + '%</div>';
+          }
+          const nextBtn = document.getElementById('nextTFBtn');
+          if (nextBtn) nextBtn.disabled = false;
+        }
+      }, 150);
       break;
     case 4:
       startPhaseTimer(PHASE_TIMERS[4]);

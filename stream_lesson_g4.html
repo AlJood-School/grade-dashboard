@@ -78,6 +78,13 @@ async function saveScoreSupa(totalScore) {
 function updateLiveScoreG4(phase, earned) {
   phaseEarned[phase] = Math.round(Math.max(0, Math.min(earned, G4_PHASE_WEIGHTS[phase] ?? earned)));
   const total = Math.round(Object.values(phaseEarned).reduce((a, b) => a + b, 0));
+  // ── Show live score chip to student ──
+  const chip = document.getElementById('liveScoreChip');
+  if (chip) {
+    chip.style.display = 'inline-block';
+    const emoji = total >= 80 ? '🌟' : total >= 60 ? '⭐' : '💪';
+    chip.textContent = emoji + ' ' + total + '/100';
+  }
   const badge = document.getElementById('phaseBadge');
   if (badge) { badge.textContent = `🏆 ${total}/100`; badge.style.display = 'inline-block'; }
   saveLiveScoreSupa(total);
@@ -514,6 +521,7 @@ footer{text-align:center;padding:20px;color:#64748b;font-size:.85rem;border-top:
   </div>
   <div class="header-right">
     <span class="lesson-timer-badge" id="lessonTimerBadge">⏱️ 45:00</span>
+    <span id="liveScoreChip" style="display:none;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;font-weight:700;font-size:0.78rem;padding:4px 14px;border-radius:20px;font-family:'Tajawal',sans-serif;box-shadow:0 2px 8px rgba(124,58,237,0.4);">⭐ 0/100</span>
     <span id="phaseBadge" style="display:none;background:var(--gold,#e6b800);color:#0d1b2a;font-weight:700;font-size:0.78rem;padding:4px 12px;border-radius:20px;font-family:'Tajawal',sans-serif;white-space:nowrap;box-shadow:0 2px 8px rgba(230,184,0,0.35);"></span>
     <button class="lang-btn" onclick="toggleLang()" id="langBtn">🌐 AR</button>
     <button class="teacher-btn" onclick="openTeacher()" id="teacherBtn" style="display:none">👩‍🏫</button>
@@ -2641,10 +2649,20 @@ const TF_PART1_COUNT = 3; // first 3 = Part 1, rest = Part 2
 
 function renderTF(){
   const qs = isSpecialNeeds ? tfQuestions.slice(0,3) : tfQuestions;
-  tfAnswers = [];
-  qs.forEach(() => tfAnswers.push(null));
-  _tfCurrentIndex = 0;
-  _renderTFQuestion(0);
+  // Restore saved answers if going back, else fresh start
+  const saved = phaseData.p3_tf;
+  if (saved && Array.isArray(saved) && saved.length === qs.length) {
+    tfAnswers = [...saved];
+    // Find first unanswered or show last answered
+    const firstUnanswered = tfAnswers.findIndex(a => a === null);
+    _tfCurrentIndex = firstUnanswered >= 0 ? firstUnanswered : qs.length - 1;
+    _renderTFQuestion(_tfCurrentIndex);
+  } else {
+    tfAnswers = [];
+    qs.forEach(() => tfAnswers.push(null));
+    _tfCurrentIndex = 0;
+    _renderTFQuestion(0);
+  }
 }
 
 function _renderTFQuestion(qi){
@@ -2690,6 +2708,29 @@ function _renderTFQuestion(qi){
   document.getElementById('nextTF').style.display = 'none';
   document.getElementById('tfScore').style.display = 'none';
   window.scrollTo({top: 0, behavior: 'smooth'});
+  // If this question was already answered, restore visual state
+  setTimeout(() => {
+    const ans = tfAnswers[qi];
+    if (ans !== null && ans !== undefined) {
+      const tb = document.getElementById('tf_t_' + qi);
+      const fb_btn = document.getElementById('tf_f_' + qi);
+      const feedbackEl = document.getElementById('tf_fb_' + qi);
+      if (tb) tb.onclick = null;
+      if (fb_btn) fb_btn.onclick = null;
+      if (ans.correct) {
+        if (ans.given && tb)  { tb.classList.add('correct'); }
+        else if (fb_btn)       { fb_btn.classList.add('correct'); }
+        if (feedbackEl) { feedbackEl.className = 'feedback-msg feedback-correct'; feedbackEl.textContent = '✅ Correct! / صحيح!'; }
+      } else {
+        const qs2 = isSpecialNeeds ? tfQuestions.slice(0,3) : tfQuestions;
+        const q2 = qs2[qi];
+        if (ans.given && tb)  { tb.classList.add('incorrect'); }
+        else if (fb_btn)       { fb_btn.classList.add('incorrect'); }
+        if (q2 && tb && fb_btn) { (q2.correct ? tb : fb_btn).classList.add('correct'); }
+        if (feedbackEl) { feedbackEl.className = 'feedback-msg feedback-incorrect'; feedbackEl.textContent = '❌ The correct answer is ' + (q2?.correct ? 'TRUE / صح' : 'FALSE / خطأ'); }
+      }
+    }
+  }, 50);
 }
 
 function checkTF(qi, answer){
@@ -2697,6 +2738,7 @@ function checkTF(qi, answer){
   const qs = isSpecialNeeds ? tfQuestions.slice(0,3) : tfQuestions;
   const q = qs[qi];
   tfAnswers[qi] = {given: answer, correct: answer === q.correct};
+  phaseData.p3_tf = [...tfAnswers]; // persist for back navigation
   const tb = document.getElementById('tf_t_' + qi);
   const fb_el = document.getElementById('tf_f_' + qi);
   const feedbackEl = document.getElementById('tf_fb_' + qi);
@@ -2720,7 +2762,9 @@ function checkTF(qi, answer){
     // Show final score + Next Phase button
     const score = tfAnswers.filter(a => a && a.correct).length;
     const badge = document.getElementById('tfScoreBadge');
-    if(badge) badge.textContent = `Score: ${score}/${qs.length} ${score >= qs.length * 0.8 ? '🌟' : '👍'}`;
+    const pct6 = Math.round(score/qs.length*100);
+    const pts6 = Math.round(score/qs.length*20);
+    if(badge) badge.textContent = `${score >= qs.length * 0.8 ? '🌟' : '⭐'} Score: ${score}/${qs.length} — ${pct6}% — درجتك: ${pts6}/20`;
     document.getElementById('tfScore').style.display = 'block';
     const nextBtn = document.getElementById('nextTF');
     nextBtn.style.display = 'inline-block';
