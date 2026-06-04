@@ -1829,50 +1829,42 @@ async function loadNonSubmitters() {
     const resp = await fetch(STURL);
     const allStudents = await resp.json();
 
-    // 2. Fetch all submissions from Firebase
-    const fbSnap = await fetch(
-      `https://firestore.googleapis.com/v1/projects/${FB}/databases/(default)/documents:runQuery?key=${FBKEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          structuredQuery: {
-            from: [{ collectionId: 'worksheets_grade3' }],
-            where: { fieldFilter: { field: { fieldPath: 'status' }, op: 'EQUAL', value: { stringValue: 'submitted' } } }
-          }
-        })
-      }
-    );
-    const fbData = await fbSnap.json();
+    // 2. Fetch submissions from Supabase (G3 + G4)
+    const headers = { 'apikey': SUPA_ANON, 'Authorization': 'Bearer ' + SUPA_ANON };
+    const [r3, r4] = await Promise.all([
+      fetch(`${SUPA_URL}/rest/v1/stream_progress_g3?select=student_name,section,status&limit=1000`, { headers }),
+      fetch(`${SUPA_URL}/rest/v1/stream_progress_g4?select=student_name,section,status&limit=1000`, { headers })
+    ]);
+    const d3 = r3.ok ? await r3.json() : [];
+    const d4 = r4.ok ? await r4.json() : [];
 
-    // Build set of submitted students
+    // Build set of students who have any progress saved
     const submittedSet = new Set();
-    (fbData || []).forEach(row => {
-      if (row.document) {
-        const d = row.document.fields || {};
-        const name = d.studentName?.stringValue || d.student_name?.stringValue || '';
-        const sec  = d.section?.stringValue || d.sectionName?.stringValue || '';
-        if (name && sec) submittedSet.add(`${sec}|${name}`);
-      }
+    [...d3, ...d4].forEach(row => {
+      const name = row.student_name || '';
+      const sec  = row.section || '';
+      if (name && sec) submittedSet.add(`${sec}|${name}`);
     });
 
-    // 3. Build nsAllData
+    // 3. Build nsAllData — use all sections from allStudents
     nsAllData = [];
-    const targetSecs = ['3A','3B','3C','3D','3E'];
+    const targetSecs = Object.keys(allStudents);
     let totalStudents = 0, totalSubmitted = 0;
 
     targetSecs.forEach(sec => {
       const secStudents = allStudents[sec] || [];
       secStudents.forEach(st => {
         totalStudents++;
-        const submitted = submittedSet.has(`${sec}|${st.nameAr}`) ||
-                          submittedSet.has(`${sec}|${st.nameEn}`) ||
-                          submittedSet.has(`${sec}|${st.nameEn?.split(' ').slice(0,2).join(' ')}`);
+        const nameAr = st.nameAr || '';
+        const nameEn = st.nameEn || '';
+        const submitted = submittedSet.has(`${sec}|${nameAr}`) ||
+                          submittedSet.has(`${sec}|${nameEn}`) ||
+                          submittedSet.has(`${sec}|${nameEn.split(' ').slice(0,2).join(' ')}`);
         if (submitted) totalSubmitted++;
         if (!submitted) {
           nsAllData.push({
-            name: st.nameAr || st.nameEn,
-            nameEn: st.nameEn,
+            name: nameAr || nameEn,
+            nameEn: nameEn,
             section: sec,
             phone: st.parentPhone || '',
             parentName: st.parentName || '',
@@ -3010,8 +3002,8 @@ async function loadStreamResults() {
 
   const headers = { 'apikey': SUPA_ANON, 'Authorization': 'Bearer ' + SUPA_ANON };
   const [r3, r4] = await Promise.all([
-    fetch(`${SUPA_URL}/rest/v1/stream_progress_g3?select=*&order=completed_at.desc&limit=500`, { headers }),
-    fetch(`${SUPA_URL}/rest/v1/stream_progress_g4?select=*&order=completed_at.desc&limit=500`, { headers })
+    fetch(`${SUPA_URL}/rest/v1/stream_progress_g3?select=*&order=updated_at.desc&limit=500`, { headers }),
+    fetch(`${SUPA_URL}/rest/v1/stream_progress_g4?select=*&order=updated_at.desc&limit=500`, { headers })
   ]);
   const d3 = r3.ok ? await r3.json() : [];
   const d4 = r4.ok ? await r4.json() : [];
