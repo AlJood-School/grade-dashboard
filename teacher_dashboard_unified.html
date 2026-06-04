@@ -347,6 +347,7 @@ th .th-check{width:16px;height:16px;cursor:pointer;accent-color:#ef4444}
       <div class="nav-sec-lbl">المحتوى التعليمي</div>
       <button class="nav-btn" onclick="go('lessons',this)"><span class="nav-ico">📅</span><span>الدروس الأسبوعية</span></button>
       <button class="nav-btn" onclick="go('stream',this)"><span class="nav-ico">🎯</span><span>يوم STREAM</span></button>
+      <button class="nav-btn" onclick="go('streamresults',this)"><span class="nav-ico">📊</span><span>نتائج STREAM</span><span class="nav-badge green" id="srBadge">—</span></button>
       <button class="nav-btn" onclick="go('stats',this)"><span class="nav-ico">📊</span><span>الإحصائيات</span></button>
     </div>
     <div class="nav-sec">
@@ -662,6 +663,57 @@ th .th-check{width:16px;height:16px;cursor:pointer;accent-color:#ef4444}
         </div>
       </div>
 
+      <!-- ════════ STREAM RESULTS ════════ -->
+      <div id="sec-streamresults" class="sec">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+          <div class="sec-title" style="margin-bottom:0">📊 نتائج حصص STREAM</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <select id="srGradeFilter" onchange="loadStreamResults()" style="padding:7px 12px;border-radius:8px;border:1px solid var(--g200);font-family:'Cairo',sans-serif;font-size:.85rem;cursor:pointer">
+              <option value="all">كل الصفوف</option>
+              <option value="g3">الصف الثالث</option>
+              <option value="g4">الصف الرابع</option>
+            </select>
+            <select id="srSectionFilter" onchange="loadStreamResults()" style="padding:7px 12px;border-radius:8px;border:1px solid var(--g200);font-family:'Cairo',sans-serif;font-size:.85rem;cursor:pointer">
+              <option value="all">كل الشعب</option>
+            </select>
+            <input id="srSearch" type="text" placeholder="🔍 بحث بالاسم..." oninput="filterStreamResults()" style="padding:7px 12px;border-radius:8px;border:1px solid var(--g200);font-family:'Cairo',sans-serif;font-size:.85rem;min-width:160px">
+            <button onclick="exportStreamCSV()" style="padding:7px 14px;background:linear-gradient(135deg,#10B981,#059669);color:#fff;border:none;border-radius:8px;font-family:'Cairo',sans-serif;font-size:.82rem;font-weight:700;cursor:pointer">⬇️ تصدير CSV</button>
+          </div>
+        </div>
+
+        <!-- KPIs -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:18px" id="srKpis">
+          <div class="kpi"><div class="kpi-top"><div class="kpi-ico grn">👩‍🎓</div></div><div class="kpi-val" id="srTotalCount">—</div><div class="kpi-lbl">إجمالي الطالبات</div></div>
+          <div class="kpi"><div class="kpi-top"><div class="kpi-ico sky">🎓</div></div><div class="kpi-val" id="srG3Count">—</div><div class="kpi-lbl">طالبات G3</div></div>
+          <div class="kpi"><div class="kpi-top"><div class="kpi-ico ind">🎓</div></div><div class="kpi-val" id="srG4Count">—</div><div class="kpi-lbl">طالبات G4</div></div>
+          <div class="kpi"><div class="kpi-top"><div class="kpi-ico amb">⭐</div></div><div class="kpi-val" id="srAvgScore">—</div><div class="kpi-lbl">متوسط الدرجة</div></div>
+          <div class="kpi"><div class="kpi-top"><div class="kpi-ico grn">🏆</div></div><div class="kpi-val" id="srTopScore">—</div><div class="kpi-lbl">أعلى درجة</div></div>
+        </div>
+
+        <!-- الجدول -->
+        <div style="overflow-x:auto;border-radius:12px;border:1px solid var(--g200)">
+          <table class="dtbl" id="srTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th onclick="sortSR('student_name')" style="cursor:pointer">اسم الطالبة ↕</th>
+                <th onclick="sortSR('section')" style="cursor:pointer">الشعبة ↕</th>
+                <th>الصف</th>
+                <th onclick="sortSR('score')" style="cursor:pointer">الدرجة /100 ↕</th>
+                <th>المستوى</th>
+                <th>التفاصيل</th>
+                <th onclick="sortSR('completed_at')" style="cursor:pointer">التاريخ ↕</th>
+              </tr>
+            </thead>
+            <tbody id="srBody"><tr class="empty"><td colspan="8">⏳ جاري التحميل...</td></tr></tbody>
+          </table>
+        </div>
+        <div id="srEmpty" style="display:none;text-align:center;padding:40px;color:var(--g400);font-size:.95rem">
+          <div style="font-size:2.5rem;margin-bottom:10px">📭</div>
+          لا توجد نتائج بعد — أرسلي الطالبات للحصة أولاً
+        </div>
+      </div>
+
       <!-- ════════ ADMIN ════════ -->
       <div id="sec-admin" class="sec">
         <div class="hero">
@@ -836,20 +888,30 @@ th .th-check{width:16px;height:16px;cursor:pointer;accent-color:#ef4444}
         <!-- Special Needs Management -->
         <div class="card">
           <div class="card-head">
-            <div class="card-title">💙 أصحاب الهمم — جميع الصفوف</div>
-            <div style="font-size:.8rem;color:var(--g500)">يُحدَّث تلقائياً من بيانات الطلاب الرسمية</div>
+            <div class="card-title">🌈 إدارة أصحاب الهمم</div>
+            <div style="font-size:.8rem;color:var(--g500)">الكشف التلقائي عند تسجيل دخول الطالب</div>
           </div>
           <div style="padding:16px">
-            <!-- Grade filter tabs -->
-            <div id="snGradeFilters" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
-            <!-- Stats summary -->
-            <div id="snStatsBar" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
-            <!-- Student list -->
+            <div style="display:none">
+              <div>
+                <label style="font-size:.8rem;font-weight:700;color:var(--g600);display:block;margin-bottom:5px">الشعبة</label>
+                <select id="snSection" style="width:100%;padding:9px 12px;border:1px solid var(--g200);border-radius:8px;font-family:inherit;font-size:.9rem">
+                  <option value="3A">3A</option><option value="3B">3B</option><option value="3C">3C</option><option value="3D">3D</option><option value="3E">3E</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:.8rem;font-weight:700;color:var(--g600);display:block;margin-bottom:5px">اسم الطالب</label>
+                <input id="snStudentName" type="text" placeholder="اكتب اسم الطالب..." style="width:100%;padding:9px 12px;border:1px solid var(--g200);border-radius:8px;font-family:inherit;font-size:.9rem">
+              </div>
+              <button class="btn btn-primary" onclick="addSpecialNeedsStudent()">➕ إضافة</button>
+            </div>
             <div id="snListWrap" style="min-height:60px">
               <div style="text-align:center;color:var(--g400);padding:20px;font-size:.9rem">⏳ جاري التحميل...</div>
             </div>
           </div>
         </div>
+      </div>
+
       <!-- ════════ STATS ════════ -->
       <div id="sec-stats" class="sec">
         <div class="sec-title">📊 إحصائيات مفصّلة</div>
@@ -939,7 +1001,7 @@ function doLogin() {
 // ═══════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════
-const TITLES = { overview:'نظرة عامة', worksheets:'أوراق الطلاب', parents:'تفاعل أولياء الأمور', ai:'مساعد الذكاء الاصطناعي', lessons:'الدروس الأسبوعية', stream:'يوم STREAM', stats:'الإحصائيات', admin:'⚙️ إعدادات البوابة', nonsubmit:'📋 من لم يسلِّم', classcodes:'🔑 أكواد الشعب' };
+const TITLES = { overview:'نظرة عامة', worksheets:'أوراق الطلاب', parents:'تفاعل أولياء الأمور', ai:'مساعد الذكاء الاصطناعي', lessons:'الدروس الأسبوعية', stream:'يوم STREAM', streamresults:'📊 نتائج STREAM', stats:'الإحصائيات', admin:'⚙️ إعدادات البوابة', nonsubmit:'📋 من لم يسلِّم', classcodes:'🔑 أكواد الشعب' };
 function go(sec, btn) {
   document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -950,11 +1012,12 @@ function go(sec, btn) {
     if(nb) nb.classList.add('active');
   }
   document.getElementById('crumb').textContent = TITLES[sec] || sec;
-  if (sec === 'parents')  renderEngagement();
-  if (sec === 'stats')    renderStats();
-  if (sec === 'admin')    { loadBannerStatus(); loadManualNews(); loadMaintStatus(); }
+  if (sec === 'parents')       renderEngagement();
+  if (sec === 'stats')         renderStats();
+  if (sec === 'admin')         { loadBannerStatus(); loadManualNews(); loadMaintStatus(); }
   if (sec === 'nonsubmit' && nsAllData.length === 0) loadNonSubmitters();
-  if (sec === 'classcodes') loadClassCodes();
+  if (sec === 'classcodes')    loadClassCodes();
+  if (sec === 'streamresults') loadStreamResults();
   closeSB();
 }
 // ═══════════════════════════════════════
@@ -2089,28 +2152,8 @@ async function saveCode(sec, enabled) {
   }
 }
 
-let snCurrentGrade = 'all';
-
-function getSNGradeLabel(sec) {
-  if (!sec) return '؟';
-  if (sec.startsWith('KG1')) return 'روضة 1';
-  if (sec.startsWith('KG2')) return 'روضة 2';
-  const m = sec.match(/^(\d+)/);
-  return m ? `صف ${m[1]}` : sec;
-}
-
-function getSNGradeKey(sec) {
-  if (!sec) return '?';
-  if (sec.startsWith('KG1')) return 'KG1';
-  if (sec.startsWith('KG2')) return 'KG2';
-  const m = sec.match(/^(\d+)/);
-  return m ? m[1] : sec;
-}
-
 async function loadSNList() {
   const wrap = document.getElementById('snListWrap');
-  const filtersWrap = document.getElementById('snGradeFilters');
-  const statsWrap = document.getElementById('snStatsBar');
   if (!wrap) return;
   try {
     const items = [];
@@ -2119,73 +2162,71 @@ async function loadSNList() {
         if (st.specialNeeds === true) {
           items.push({
             name: st.nameAr || st.nameEn || '؟',
-            section: sec,
-            gradeKey: getSNGradeKey(sec),
-            gradeLabel: getSNGradeLabel(sec)
+            section: sec
           });
         }
       });
     });
     items.sort((a,b) => a.section.localeCompare(b.section));
-
-    const gradeCounts = {};
-    items.forEach(it => {
-      gradeCounts[it.gradeKey] = (gradeCounts[it.gradeKey] || 0) + 1;
-    });
-
-    const gradeOrder = ['KG1','KG2','1','2','3','4','5','6','7','8'];
-    const presentGrades = gradeOrder.filter(g => gradeCounts[g]);
-
-    if (filtersWrap) {
-      const allActive = snCurrentGrade === 'all';
-      let fHtml = `<button onclick="snFilterGrade('all')" style="padding:5px 14px;border-radius:20px;border:none;cursor:pointer;font-family:inherit;font-size:.82rem;font-weight:700;background:${allActive?'var(--primary)':'var(--g100)'};color:${allActive?'#fff':'var(--g600)'}">🌍 جميع الصفوف (${items.length})</button>`;
-      presentGrades.forEach(g => {
-        const label = g === 'KG1' ? 'روضة 1' : g === 'KG2' ? 'روضة 2' : `صف ${g}`;
-        const active = snCurrentGrade === g;
-        fHtml += `<button onclick="snFilterGrade('${g}')" style="padding:5px 14px;border-radius:20px;border:none;cursor:pointer;font-family:inherit;font-size:.82rem;font-weight:700;background:${active?'#7c3aed':'var(--g100)'};color:${active?'#fff':'var(--g600)'}">💙 ${label} (${gradeCounts[g]})</button>`;
-      });
-      filtersWrap.innerHTML = fHtml;
-    }
-
-    if (statsWrap) {
-      statsWrap.innerHTML = presentGrades.map(g => {
-        const label = g === 'KG1' ? 'روضة 1' : g === 'KG2' ? 'روضة 2' : `صف ${g}`;
-        return `<div style="background:linear-gradient(135deg,#f3e8ff,#ede9fe);border:1px solid #c4b5fd;border-radius:12px;padding:8px 14px;text-align:center;min-width:70px"><div style="font-size:1.1rem;font-weight:800;color:#5b21b6">${gradeCounts[g]}</div><div style="font-size:.72rem;color:#7c3aed;font-weight:600">${label}</div></div>`;
-      }).join('') + `<div style="background:linear-gradient(135deg,#ddd6fe,#c4b5fd);border:1px solid #a78bfa;border-radius:12px;padding:8px 14px;text-align:center;min-width:70px"><div style="font-size:1.1rem;font-weight:800;color:#3b0764">${items.length}</div><div style="font-size:.72rem;color:#6d28d9;font-weight:700">الإجمالي</div></div>`;
-    }
-
-    const filtered = snCurrentGrade === 'all' ? items : items.filter(it => it.gradeKey === snCurrentGrade);
-
-    if (!filtered.length) {
-      wrap.innerHTML = '<div style="text-align:center;color:var(--g400);padding:16px;font-size:.9rem">لا يوجد طلاب أصحاب همم في هذا الصف</div>';
+    if (!items.length) {
+      wrap.innerHTML = '<div style="text-align:center;color:var(--g400);padding:16px;font-size:.9rem">لا يوجد طلاب أصحاب همم مسجّلون حالياً</div>';
       return;
     }
-
-    const bySection = {};
-    filtered.forEach(it => {
-      if (!bySection[it.section]) bySection[it.section] = [];
-      bySection[it.section].push(it);
-    });
-
-    wrap.innerHTML = `<div style="margin-bottom:8px;font-size:.78rem;color:var(--g500)">المصدر: بيانات الطلاب الرسمية (students.json) — يُحدَّث تلقائياً</div>` +
-      Object.entries(bySection).sort(([a],[b])=>a.localeCompare(b)).map(([sec, sts]) =>
-        `<div style="margin-bottom:12px"><div style="font-size:.78rem;font-weight:700;color:#7c3aed;margin-bottom:6px;padding:3px 10px;background:#f3e8ff;border-radius:8px;display:inline-block">📚 شعبة ${sec} — ${sts.length} طالب</div><div style="display:flex;flex-wrap:wrap;gap:6px">` +
-        sts.map(it => `<div style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#f3e8ff,#ede9fe);border:1px solid #c4b5fd;border-radius:20px;padding:5px 12px;font-size:.85rem"><span>💙</span><span style="font-weight:700;color:#5b21b6">${it.name}</span></div>`).join('') +
-        `</div></div>`
-      ).join('');
+    wrap.innerHTML = `<div style="margin-bottom:10px;font-size:.8rem;color:var(--g500)">المصدر: بيانات الطلاب الرسمية (students.json) — إجمالي: ${items.length} طالب</div>` +
+      `<div style="display:flex;flex-wrap:wrap;gap:8px">` +
+      items.map(it => `
+        <div style="display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,#f3e8ff,#ede9fe);
+                    border:1px solid #c4b5fd;border-radius:20px;padding:6px 14px;font-size:.88rem">
+          <span>💙</span>
+          <span style="font-weight:700;color:#5b21b6">${it.name}</span>
+          <span style="color:#7c3aed;font-size:.78rem">${it.section}</span>
+        </div>`).join('') +
+      '</div>';
   } catch(e) {
-    if (wrap) wrap.innerHTML = '<div style="color:var(--danger);font-size:.85rem;padding:8px">خطأ في التحميل</div>';
+    wrap.innerHTML = '<div style="color:var(--danger);font-size:.85rem;padding:8px">خطأ في التحميل</div>';
   }
 }
 
-function snFilterGrade(grade) {
-  snCurrentGrade = grade;
-  loadSNList();
+async function addSpecialNeedsStudent() {
+  const section = document.getElementById('snSection').value;
+  const name = document.getElementById('snStudentName').value.trim();
+  if (!name) { showToast('أدخل اسم الطالب', 'error'); return; }
+  try {
+    await fetch(
+      `https://firestore.googleapis.com/v1/projects/${FB}/databases/(default)/documents/special_needs_students?key=${FBKEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            studentName: { stringValue: name },
+            section:     { stringValue: section },
+            enabled:     { booleanValue: true },
+            addedAt:     { timestampValue: new Date().toISOString() }
+          }
+        })
+      }
+    );
+    document.getElementById('snStudentName').value = '';
+    showToast(`✅ تمت إضافة ${name} كطالب من أصحاب الهمم`, 'success');
+    loadSNList();
+  } catch(e) {
+    showToast('خطأ في الإضافة', 'error');
+  }
 }
 
-
-
-
+async function removeSN(docId) {
+  try {
+    await fetch(
+      `https://firestore.googleapis.com/v1/projects/${FB}/databases/(default)/documents/special_needs_students/${docId}?key=${FBKEY}`,
+      { method: 'DELETE' }
+    );
+    showToast('تم الحذف', 'info');
+    loadSNList();
+  } catch(e) {
+    showToast('خطأ في الحذف', 'error');
+  }
+}
 
 // Navigation hook merged into main go() function above
 
@@ -2195,28 +2236,13 @@ function snFilterGrade(grade) {
 let allStudentsVARK = [];
 let varkData = {};
 
-// Load VARK from Supabase (with localStorage fallback)
-async function initVARK() {
-  varkData = {};
-  try {
-    // حاول القراءة من Supabase
-    const res = await fetch(`${SUPA_URL}/rest/v1/students?select=id,vark_style,vark_secondary&vark_style=not.is.null`, {
-      headers: { 'apikey': SUPA_ANON, 'Authorization': 'Bearer ' + SUPA_ANON }
-    });
-    if (res.ok) {
-      const rows = await res.json();
-      rows.forEach(r => {
-        if (r.vark_style) varkData[r.id] = { primary: r.vark_style, secondary: r.vark_secondary || '' };
-      });
-    }
-  } catch(e) {
-    // fallback من localStorage
-    varkData = JSON.parse(localStorage.getItem('vark_data') || '{}');
-  }
+// Load VARK from localStorage (client-side for now)
+function initVARK() {
+  varkData = JSON.parse(localStorage.getItem('vark_data') || '{}');
 }
 
 async function loadVARKSection() {
-  await initVARK();
+  initVARK();
   try {
     const res = await fetch(SUPABASE_URL + '/rest/v1/students?select=id,name,grade,class&order=name&limit=200', {
       headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON }
@@ -2279,7 +2305,7 @@ function filterVARK(type, btn) {
   renderVARK(filtered);
 }
 
-async function setVARK(id, name) {
+function setVARK(id, name) {
   const opts = ['V — 👁️ بصري', 'A — 👂 سمعي', 'R — 📖 قرائي', 'K — 🤸 حركي'];
   const choice = prompt(`نمط التعلم الرئيسي لـ ${name}:\n\n` + opts.map((o,i) => `${i+1}. ${o}`).join('\n') + '\n\nأدخلي رقم النمط:');
   if (!choice) return;
@@ -2287,24 +2313,7 @@ async function setVARK(id, name) {
   const primary = map[choice.trim()];
   if (!primary) { showToast('اختيار غير صحيح', 'error'); return; }
   varkData[id] = { ...(varkData[id]||{}), primary };
-
-  // حفظ في Supabase
-  try {
-    await fetch(`${SUPA_URL}/rest/v1/students?id=eq.${id}`, {
-      method: 'PATCH',
-      headers: {
-        'apikey': SUPA_ANON,
-        'Authorization': 'Bearer ' + SUPA_ANON,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=minimal'
-      },
-      body: JSON.stringify({ vark_style: primary })
-    });
-  } catch(e) {
-    // fallback: localStorage فقط
-    localStorage.setItem('vark_data', JSON.stringify(varkData));
-  }
-
+  localStorage.setItem('vark_data', JSON.stringify(varkData));
   renderVARK(allStudentsVARK);
   updateVARKStats(allStudentsVARK);
   showToast(`تم تعيين نمط ${primary} لـ ${name}`, 'success');
@@ -2986,5 +2995,177 @@ async function loadAttendanceToday() {
   </div>
 </div>
 
+
+<script>
+// ═══════════════════════════════════════
+// STREAM RESULTS — نتائج حصص STREAM
+// ═══════════════════════════════════════
+let _srAllData = [];
+let _srSortKey = 'completed_at';
+let _srSortAsc = false;
+
+async function loadStreamResults() {
+  document.getElementById('srBody').innerHTML = '<tr class="empty"><td colspan="8">⏳ جاري التحميل...</td></tr>';
+  document.getElementById('srEmpty').style.display = 'none';
+
+  const headers = { 'apikey': SUPA_ANON, 'Authorization': 'Bearer ' + SUPA_ANON };
+  const [r3, r4] = await Promise.all([
+    fetch(`${SUPA_URL}/rest/v1/stream_progress_g3?select=*&order=completed_at.desc&limit=500`, { headers }),
+    fetch(`${SUPA_URL}/rest/v1/stream_progress_g4?select=*&order=completed_at.desc&limit=500`, { headers })
+  ]);
+  const d3 = r3.ok ? await r3.json() : [];
+  const d4 = r4.ok ? await r4.json() : [];
+
+  // tag grade
+  const all = [
+    ...d3.map(r => ({ ...r, _grade: 'g3' })),
+    ...d4.map(r => ({ ...r, _grade: 'g4' }))
+  ];
+  _srAllData = all;
+
+  // populate section filter
+  const sections = [...new Set(all.map(r => r.section || r.class_name || '').filter(Boolean))].sort();
+  const sf = document.getElementById('srSectionFilter');
+  sf.innerHTML = '<option value="all">كل الشعب</option>';
+  sections.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sf.appendChild(o); });
+
+  // badge
+  document.getElementById('srBadge').textContent = all.length || '0';
+
+  renderStreamResults();
+}
+
+function getScoreField(row) {
+  // try various field names
+  return row.total_score ?? row.score ?? row.final_score ?? row.totalScore ?? null;
+}
+
+function renderStreamResults() {
+  const grade = document.getElementById('srGradeFilter').value;
+  const section = document.getElementById('srSectionFilter').value;
+  const q = (document.getElementById('srSearch').value || '').trim().toLowerCase();
+
+  let data = _srAllData.filter(r => {
+    if (grade !== 'all' && r._grade !== grade) return false;
+    if (section !== 'all' && (r.section || r.class_name || '') !== section) return false;
+    if (q) {
+      const name = (r.student_name || r.name || '').toLowerCase();
+      if (!name.includes(q)) return false;
+    }
+    return true;
+  });
+
+  // sort
+  data.sort((a, b) => {
+    let va = a[_srSortKey], vb = b[_srSortKey];
+    if (_srSortKey === 'score') { va = getScoreField(a) ?? 0; vb = getScoreField(b) ?? 0; }
+    if (va < vb) return _srSortAsc ? -1 : 1;
+    if (va > vb) return _srSortAsc ? 1 : -1;
+    return 0;
+  });
+
+  // KPIs
+  const g3 = _srAllData.filter(r => r._grade === 'g3').length;
+  const g4 = _srAllData.filter(r => r._grade === 'g4').length;
+  document.getElementById('srTotalCount').textContent = _srAllData.length;
+  document.getElementById('srG3Count').textContent = g3;
+  document.getElementById('srG4Count').textContent = g4;
+
+  const scores = _srAllData.map(r => getScoreField(r)).filter(s => s !== null && !isNaN(s));
+  document.getElementById('srAvgScore').textContent = scores.length ? (scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1) : '—';
+  document.getElementById('srTopScore').textContent = scores.length ? Math.max(...scores) : '—';
+
+  if (!data.length) {
+    document.getElementById('srBody').innerHTML = '';
+    document.getElementById('srEmpty').style.display = 'block';
+    return;
+  }
+  document.getElementById('srEmpty').style.display = 'none';
+
+  const rows = data.map((r, i) => {
+    const name = r.student_name || r.name || '—';
+    const section = r.section || r.class_name || '—';
+    const grade_lbl = r._grade === 'g3' ? '<span style="background:#EFF6FF;color:#1D4ED8;padding:2px 8px;border-radius:20px;font-size:.78rem;font-weight:700">G3</span>'
+                                        : '<span style="background:#F0FDF4;color:#15803D;padding:2px 8px;border-radius:20px;font-size:.78rem;font-weight:700">G4</span>';
+    const score = getScoreField(r);
+    const scorePct = score !== null ? Math.round((score / 100) * 100) : null;
+    const scoreColor = scorePct === null ? '#94A3B8' : scorePct >= 80 ? '#10B981' : scorePct >= 60 ? '#F59E0B' : '#EF4444';
+    const scoreBar = score !== null
+      ? `<div style="display:flex;align-items:center;gap:7px">
+           <div style="flex:1;background:#E2E8F0;border-radius:4px;height:6px;min-width:60px">
+             <div style="width:${scorePct}%;background:${scoreColor};height:6px;border-radius:4px;transition:width .4s"></div>
+           </div>
+           <span style="font-weight:800;color:${scoreColor}">${score}/100</span>
+         </div>`
+      : '<span style="color:#94A3B8">—</span>';
+
+    const level = score === null ? '—' : score >= 85 ? '🌟 متقدمة' : score >= 65 ? '✅ متوسطة' : '📚 مبتدئة';
+
+    // details from G3
+    let details = '';
+    if (r._grade === 'g3') {
+      const robot = r.robot_name || r.p4_robotName || '';
+      const material = r.chosen_material || '';
+      if (robot) details += `🤖 ${robot}`;
+      if (material) details += `${robot ? ' · ' : ''}♻️ ${material}`;
+    } else {
+      const env = r.env_problem || r.selected_env || '';
+      const keiro = r.keiro_level || '';
+      if (env) details += `🌿 ${env}`;
+      if (keiro) details += `${env ? ' · ' : ''}🚂 Lv.${keiro}`;
+    }
+    if (!details) details = '<span style="color:#94A3B8">—</span>';
+
+    const date = r.completed_at ? new Date(r.completed_at).toLocaleDateString('ar-AE', {day:'2-digit',month:'short',year:'numeric'}) : '—';
+
+    return `<tr>
+      <td style="color:var(--g400)">${i+1}</td>
+      <td style="font-weight:700">${name}</td>
+      <td>${section}</td>
+      <td>${grade_lbl}</td>
+      <td style="min-width:130px">${scoreBar}</td>
+      <td style="font-size:.82rem">${level}</td>
+      <td style="font-size:.8rem;color:var(--g500)">${details}</td>
+      <td style="font-size:.8rem;color:var(--g400)">${date}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('srBody').innerHTML = rows;
+}
+
+function filterStreamResults() { renderStreamResults(); }
+
+function sortSR(key) {
+  if (_srSortKey === key) _srSortAsc = !_srSortAsc;
+  else { _srSortKey = key; _srSortAsc = false; }
+  renderStreamResults();
+}
+
+function exportStreamCSV() {
+  const grade = document.getElementById('srGradeFilter').value;
+  const section = document.getElementById('srSectionFilter').value;
+  let data = _srAllData.filter(r => {
+    if (grade !== 'all' && r._grade !== grade) return false;
+    if (section !== 'all' && (r.section || r.class_name || '') !== section) return false;
+    return true;
+  });
+  if (!data.length) { alert('لا توجد بيانات للتصدير'); return; }
+
+  const headers = ['#', 'الاسم', 'الشعبة', 'الصف', 'الدرجة/100', 'المستوى', 'التاريخ'];
+  const rows = data.map((r, i) => {
+    const score = getScoreField(r);
+    const level = score === null ? '—' : score >= 85 ? 'متقدمة' : score >= 65 ? 'متوسطة' : 'مبتدئة';
+    const date = r.completed_at ? new Date(r.completed_at).toLocaleDateString('ar-AE') : '—';
+    return [i+1, r.student_name||r.name||'—', r.section||r.class_name||'—', r._grade.toUpperCase(), score??'—', level, date].join(',');
+  });
+
+  const csv = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `STREAM_Results_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+</script>
 </body>
 </html>
