@@ -955,7 +955,7 @@ const COL  = 'worksheets_grade3';
 const SUPA_URL  = 'https://zuyizaiugpmhmeycqton.supabase.co';
 const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
 const STURL= 'https://grade-dashboard-beta.vercel.app/data/students.json';
-const PWD  = 'AlJood@2026';
+const PWD  = '5565';
 
 // ── استعادة الجلسة عند الرفريش ──
 (function checkSession() {
@@ -3010,29 +3010,41 @@ function projKey(name, section) {
 async function loadProjectGrades() {
   try {
     const H = { 'apikey': SUPA_ANON, 'Authorization': 'Bearer ' + SUPA_ANON };
-    const r = await fetch(`${SUPA_URL}/rest/v1/app_settings?key=eq.project_grades_data&select=value`, { headers: H });
+    const r = await fetch(`${SUPA_URL}/rest/v1/project_grades?select=student_name,class_name,score&limit=2000`, { headers: H });
     if (r.ok) {
-      const d = await r.json();
-      if (d.length && d[0].value) {
-        const parsed = JSON.parse(d[0].value);
-        _projectGrades = parsed.grades || {};
-        _projectMaxGrade = parsed.maxGrade || 30;
-        const inp = document.getElementById('projMaxInput');
-        if (inp) inp.value = _projectMaxGrade;
-      }
+      const rows = await r.json();
+      _projectGrades = {};
+      rows.forEach(row => {
+        _projectGrades[projKey(row.student_name, row.class_name)] = row.score;
+      });
     }
   } catch(e) { console.warn('project grades load error', e); }
 }
 
 async function saveProjectGradesDB() {
   try {
-    const H = { 'apikey': SUPA_ANON, 'Authorization': 'Bearer ' + SUPA_ANON,
-                'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' };
-    const payload = JSON.stringify({ maxGrade: _projectMaxGrade, grades: _projectGrades });
-    await fetch(`${SUPA_URL}/rest/v1/app_settings`, {
+    const H = {
+      'apikey': SUPA_ANON,
+      'Authorization': 'Bearer ' + SUPA_ANON,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates,return=minimal'
+    };
+    const records = Object.entries(_projectGrades)
+      .filter(([k, v]) => v !== null && v !== undefined)
+      .map(([k, v]) => {
+        const parts = k.split('||');
+        return {
+          student_name: parts[0] || '',
+          class_name: parts[1] || '',
+          score: parseInt(v),
+          updated_at: new Date().toISOString()
+        };
+      });
+    if (records.length === 0) return;
+    await fetch(`${SUPA_URL}/rest/v1/project_grades`, {
       method: 'POST',
       headers: H,
-      body: JSON.stringify({ key: 'project_grades_data', value: payload })
+      body: JSON.stringify(records)
     });
     const st = document.getElementById('projSaveStatus');
     if (st) { st.style.display='inline'; setTimeout(()=>{ st.style.display='none'; }, 2000); }
