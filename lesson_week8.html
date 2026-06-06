@@ -203,43 +203,56 @@ body{font-family:'Cairo',sans-serif;background:var(--bg);color:var(--txt);min-he
 .b-g4{background:#e3f2fd;color:var(--g4);}
 </style>
 
-<!-- Firebase SDK -->
-<script type="module">
-  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-  import { getFirestore, collection, addDoc, onSnapshot, orderBy, query, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+<!-- Supabase — لا Firebase لا localStorage -->
+<script>
+  const SUPA_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+  const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyDri3r5AtyyduyiTS5GzIHOn-XSduhALpM",
-    authDomain: "aljood-school.firebaseapp.com",
-    projectId: "aljood-school",
-    storageBucket: "aljood-school.firebasestorage.app",
-    messagingSenderId: "278563135138",
-    appId: "1:278563135138:web:de89305eddca23fc1241fb"
-  };
-
-  const app = initializeApp(firebaseConfig, 'week8');
-  const db = getFirestore(app);
-
-  // Save result to Firestore
   window.saveToFirestore_w8 = async function(record) {
     try {
-      await addDoc(collection(db, 'lesson_results_w8'), {
-        ...record,
-        timestamp: serverTimestamp()
+      const payload = {
+        name: record.name || '',
+        grade: String(record.grade || ''),
+        class_id: record.classId || String(record.grade || ''),
+        date: record.date || new Date().toLocaleDateString('ar-AE'),
+        diag: record.diag || 0,
+        act: record.act || 0,
+        ws: record.ws || 0,
+        exit_score: record.exit || 0,
+        total: record.total || 0,
+        level: record.level || ''
+      };
+      const res = await fetch(SUPA_URL + '/rest/v1/lesson_results_w8', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPA_KEY,
+          'Authorization': 'Bearer ' + SUPA_KEY
+        },
+        body: JSON.stringify(payload)
       });
-      console.log('✅ Saved to Firestore (week8)');
+      if(res.ok) console.log('✅ Saved to Supabase (w8)');
+      else console.warn('Supabase save error:', await res.text());
     } catch(e) {
-      console.error('Firestore save error:', e);
+      console.warn('Save error:', e);
     }
   };
 
-  // Listen to results in real-time
   window.listenFirestoreResults_w8 = function(callback) {
-    const q = query(collection(db, 'lesson_results_w8'), orderBy('timestamp','desc'));
-    return onSnapshot(q, snap => {
-      const data = snap.docs.map(d => d.data());
-      callback(data);
-    });
+    const fetchData = async () => {
+      try {
+        const res = await fetch(SUPA_URL + '/rest/v1/lesson_results_w8?order=created_at.desc', {
+          headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+        });
+        if(res.ok) {
+          const data = await res.json();
+          callback(data.map(r => ({...r, exit: r.exit_score, classId: r.class_id})));
+        }
+      } catch(e) { console.warn('Fetch error:', e); }
+    };
+    fetchData();
+    const interval = setInterval(fetchData, 5000);
+    return () => clearInterval(interval);
   };
 </script>
 </head>
@@ -717,7 +730,7 @@ function llStartLesson() {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;border-bottom:2px solid var(--bg);padding-bottom:14px;">
       <div>
         <h2>👩‍🏫 لوحة المعلمة — تحليل أداء الطلاب</h2>
-        <p style="font-size:.8rem;color:var(--muted);">🔥 بيانات حية من Firebase — الأسبوع الثامن</p>
+        <p style="font-size:.8rem;color:var(--muted);">⚡ بيانات حية من Supabase — الأسبوع الثامن</p>
       </div>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-ok" onclick="exportCSV()"><i class="fas fa-download"></i> تصدير CSV</button>
@@ -1264,18 +1277,8 @@ function showResults(){
     diag: ST.scores.diag, act: ST.scores.act, ws: ST.scores.ws, exit: ST.scores.exit,
     total, level: lvlTxt.replace(/[⭐📚]/g,'').trim()
   };
-  const existing = JSON.parse(localStorage.getItem('lesson_results_w8')||'[]');
-  existing.push(record);
-  localStorage.setItem('lesson_results_w8', JSON.stringify(existing));
-  // Save to Firestore
-  if(typeof window.saveToFirestore_w8 === 'function') {
-    window.saveToFirestore_w8(record);
-  } else {
-    // Retry after Firebase loads
-    setTimeout(() => {
-      if(typeof window.saveToFirestore_w8 === 'function') window.saveToFirestore_w8(record);
-    }, 3000);
-  }
+  // حفظ في Supabase — لا localStorage لا Firebase
+  if(typeof window.saveToFirestore_w8 === 'function') window.saveToFirestore_w8(record);
 }
 
 function shareResult(){
@@ -1308,9 +1311,10 @@ let _unsubW8 = null;
 function openTeacher(){
   document.getElementById('tp').style.display='block';
   sessionStorage.setItem('teacherPanelW8','1');
-  document.getElementById('tSummary').innerHTML='<div style="color:var(--muted);font-size:.85rem;padding:10px;">⏳ جارٍ تحميل البيانات من Firebase...</div>';
+  document.getElementById('tSummary').innerHTML='<div style="color:var(--muted);font-size:.85rem;padding:10px;">⏳ جارٍ تحميل البيانات من Supabase...</div>';
 
   function renderData(data) {
+    window._lastW8Data = data;
     const tbody = document.getElementById('rTbody');
     tbody.innerHTML='';
     document.getElementById('tEmpty').style.display = data.length?'none':'block';
@@ -1338,26 +1342,8 @@ function openTeacher(){
     }
   }
 
-  if(typeof window.listenFirestoreResults_w8 === 'function') {
-    if(_unsubW8) _unsubW8();
-    _unsubW8 = window.listenFirestoreResults_w8(renderData);
-  } else {
-    // Firebase not loaded yet, retry
-    let attempts = 0;
-    const retryInterval = setInterval(() => {
-      attempts++;
-      if(typeof window.listenFirestoreResults_w8 === 'function') {
-        clearInterval(retryInterval);
-        if(_unsubW8) _unsubW8();
-        _unsubW8 = window.listenFirestoreResults_w8(renderData);
-      } else if(attempts >= 10) {
-        clearInterval(retryInterval);
-        // Fallback to localStorage
-        const data = JSON.parse(localStorage.getItem('lesson_results_w8')||'[]');
-        renderData(data);
-      }
-    }, 500);
-  }
+  if(_unsubW8) _unsubW8();
+  _unsubW8 = window.listenFirestoreResults_w8(renderData);
 }
 
 function closeTeacher(){
@@ -1371,8 +1357,8 @@ function stat(icon, label, val){
 }
 
 function exportCSV(){
-  const data = JSON.parse(localStorage.getItem('lesson_results_w8')||'[]');
-  if(!data.length){ alert('لا توجد بيانات!'); return; }
+  const data = window._lastW8Data || [];
+  if(!data.length){ alert('لا توجد بيانات! افتحي لوحة المعلمة أولاً.'); return; }
   const headers = ['الاسم','الصف','التشخيص','النشاط','ورقة العمل','الخروج','المجموع','المستوى','التاريخ'];
   const rows = data.map(r=>[r.name,r.grade,r.diag,r.act,r.ws,r.exit,r.total,r.level,r.date]);
   const csv = [headers, ...rows].map(r=>r.join(',')).join('\n');

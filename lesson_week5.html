@@ -5,43 +5,56 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🤖 AI Lesson — الذكاء الاصطناعي | مدرسة الجود</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-<!-- Firebase -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+<!-- Supabase — لا Firebase لا localStorage -->
+<script>
+  const SUPA_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+  const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyDri3r5AtyyduyiTS5GzIHOn-XSduhALpM",
-    authDomain: "aljood-school.firebaseapp.com",
-    projectId: "aljood-school",
-    storageBucket: "aljood-school.firebasestorage.app",
-    messagingSenderId: "278563135138",
-    appId: "1:278563135138:web:de89305eddca23fc1241fb"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-
-  // Save result to Firestore
   window.saveToFirestore = async function(record) {
     try {
-      await addDoc(collection(db, "lesson_results"), {
-        ...record,
-        timestamp: serverTimestamp()
+      const payload = {
+        name: record.name || '',
+        grade: String(record.grade || ''),
+        cls: record.cls || '',
+        date: record.date || new Date().toLocaleDateString('ar-AE'),
+        diag: record.diag || 0,
+        act: record.act || 0,
+        ws: record.ws || 0,
+        exit_score: record.exit || 0,
+        total: record.total || 0,
+        level: record.level || ''
+      };
+      const res = await fetch(SUPA_URL + '/rest/v1/lesson_results_w5', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPA_KEY,
+          'Authorization': 'Bearer ' + SUPA_KEY
+        },
+        body: JSON.stringify(payload)
       });
-      console.log("✅ Result saved to Firebase");
+      if(res.ok) console.log('✅ Result saved to Supabase (w5)');
+      else console.warn('Supabase save error:', await res.text());
     } catch(e) {
-      console.warn("Firebase save error:", e);
+      console.warn('Save error:', e);
     }
   };
 
-  // Listen to Firestore results for teacher panel
   window.listenFirestoreResults = function(callback) {
-    const q = query(collection(db, "lesson_results"), orderBy("timestamp", "desc"));
-    return onSnapshot(q, (snap) => {
-      const data = snap.docs.map(d => ({id: d.id, ...d.data()}));
-      callback(data);
-    });
+    const fetchData = async () => {
+      try {
+        const res = await fetch(SUPA_URL + '/rest/v1/lesson_results_w5?order=created_at.desc', {
+          headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+        });
+        if(res.ok) {
+          const data = await res.json();
+          callback(data.map(r => ({...r, exit: r.exit_score})));
+        }
+      } catch(e) { console.warn('Fetch error:', e); }
+    };
+    fetchData();
+    const interval = setInterval(fetchData, 5000);
+    return () => clearInterval(interval);
   };
 </script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -590,7 +603,7 @@ body{font-family:'Cairo',sans-serif;background:var(--bg);color:var(--txt);min-he
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;border-bottom:2px solid var(--bg);padding-bottom:14px;">
       <div>
         <h2>👩‍🏫 لوحة المعلمة — تحليل أداء الطلاب</h2>
-        <p style="font-size:.8rem;color:var(--ok);">🔥 بيانات حية من Firebase — تتحدث تلقائياً</p>
+        <p style="font-size:.8rem;color:var(--ok);">⚡ بيانات حية من Supabase — تتحدث كل 5 ثوانٍ</p>
       </div>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-ok" onclick="exportCSV5()"><i class="fas fa-download"></i> تصدير CSV</button>
@@ -1159,11 +1172,7 @@ function showResults(){
     diag: ST.scores.diag, act: ST.scores.act, ws: ST.scores.ws, exit: ST.scores.exit,
     total, level: lvlTxt.replace(/[⭐📚]/g,'').trim()
   };
-  // Save locally (backup)
-  const existing = JSON.parse(localStorage.getItem('lesson_results')||'[]');
-  existing.push(record);
-  localStorage.setItem('lesson_results', JSON.stringify(existing));
-  // Save to Firebase (real-time sync for teacher panel)
+  // حفظ في Supabase — لا localStorage لا Firebase
   if(window.saveToFirestore) window.saveToFirestore(record);
 }
 
@@ -1346,39 +1355,21 @@ function openTeacher(){
 
   // Show loading
   document.getElementById('tEmpty').style.display='block';
-  document.getElementById('tEmpty').innerHTML='<div style="font-size:2rem">⏳</div><div>جاري الاتصال بـ Firebase...</div>';
+  document.getElementById('tEmpty').innerHTML='<div style="font-size:2rem">⏳</div><div>جاري الاتصال بـ Supabase...</div>';
   document.querySelector('#tp .rt').style.display='none';
   document.getElementById('tSummary').innerHTML='';
 
-  // Wait for Firebase to be ready (retry up to 5 seconds)
-  let attempts = 0;
-  const tryConnect = () => {
-    attempts++;
-    if(window.listenFirestoreResults){
-      if(_teacherUnsubscribe) _teacherUnsubscribe();
-      _teacherUnsubscribe = window.listenFirestoreResults(function(data){
-        window._lastFirebaseData = data;
-        if(data.length === 0){
-          document.getElementById('tEmpty').style.display='block';
-          document.getElementById('tEmpty').innerHTML='<div style="font-size:2.5rem">📭</div><div>لا توجد بيانات بعد — ستظهر هنا بعد انتهاء الطلاب من الدرس</div>';
-          document.querySelector('#tp .rt').style.display='none';
-        } else {
-          renderTeacherData(data);
-        }
-      });
-    } else if(attempts < 50) {
-      // Retry every 100ms for 5 seconds
-      setTimeout(tryConnect, 100);
+  if(_teacherUnsubscribe) _teacherUnsubscribe();
+  _teacherUnsubscribe = window.listenFirestoreResults(function(data){
+    window._lastFirebaseData = data;
+    if(data.length === 0){
+      document.getElementById('tEmpty').style.display='block';
+      document.getElementById('tEmpty').innerHTML='<div style="font-size:2.5rem">📭</div><div>لا توجد بيانات بعد — ستظهر هنا بعد انتهاء الطلاب من الدرس</div>';
+      document.querySelector('#tp .rt').style.display='none';
     } else {
-      // Fallback to localStorage
-      const data = JSON.parse(localStorage.getItem('lesson_results')||'[]');
       renderTeacherData(data);
-      if(!data.length){
-        document.getElementById('tEmpty').innerHTML='<div style="font-size:2.5rem">📭</div><div>لا توجد بيانات بعد</div>';
-      }
     }
-  };
-  tryConnect();
+  });
 }
 
 function closeTeacher(){
@@ -1390,8 +1381,7 @@ function closeTeacher(){
 // Restore teacher panel on refresh
 window.addEventListener('DOMContentLoaded', function(){
   if(sessionStorage.getItem('teacherOpen')==='1'){
-    // Small delay to let Firebase initialize first
-    setTimeout(openTeacher, 800);
+    setTimeout(openTeacher, 300);
   }
 });
 
@@ -1400,8 +1390,7 @@ function stat(icon, label, val){
 }
 
 function exportCSV(){
-  // Try to get data from the last known Firebase snapshot, fall back to localStorage
-  const data = window._lastFirebaseData || JSON.parse(localStorage.getItem('lesson_results')||'[]');
+  const data = window._lastFirebaseData || [];
   if(!data.length){ alert('لا توجد بيانات!'); return; }
   const headers = ['الاسم','الصف','التشخيص','النشاط','ورقة العمل','الخروج','المجموع','المستوى','التاريخ'];
   const rows = data.map(r=>[r.name,r.grade,r.diag,r.act,r.ws,r.exit,r.total,r.level,r.date]);
