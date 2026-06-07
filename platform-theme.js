@@ -1,351 +1,267 @@
 /**
- * platform-theme.js — بوابة الجود
- * نظام الهوية البصرية الذكية
- * المؤلف: منيرة المري — شهادة حق المؤلف 1614-2026
- *
- * الاستخدام:
- *   <link rel="stylesheet" href="/platform-theme.css">
- *   <script src="/platform-theme.js"></script>
- *   <!-- تُستدعى init تلقائياً عند تحميل الصفحة -->
+ * ═══════════════════════════════════════════════════════════════
+ *  EduOS — محرك الثيمات الذكي
+ *  المؤلف: منيرة المري — شهادة حق المؤلف 1614-2026
+ *  القاعدة: لا localStorage أبداً — يُستخدم sessionStorage فقط
+ * ═══════════════════════════════════════════════════════════════
  */
 
-const PlatformTheme = (() => {
+const EduTheme = (function(){
 
-  const SUPABASE_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
-  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
-
-  // ============================================================
-  // البيانات الثابتة
-  // ============================================================
-  const THEMES = {
-    // ثيمات ألوان (شخصية)
-    sky:      { label: 'سماء العين',    icon: '🌤️', color: '#0ea5e9', personal: true  },
-    palm:     { label: 'نخيل',          icon: '🌴', color: '#16a34a', personal: true  },
-    rose:     { label: 'فجر وردي',      icon: '🌸', color: '#e11d48', personal: true  },
-    gold:     { label: 'ذهب الصحراء',   icon: '🏆', color: '#d97706', personal: true  },
-    dark:     { label: 'ليلي',          icon: '🌙', color: '#818cf8', personal: true  },
-    classic:  { label: 'كلاسيك',        icon: '🔵', color: '#1d4ed8', personal: true  },
-    // ثيمات خاصة (من المديرة فقط)
-    ramadan:  { label: 'رمضان كريم',    icon: '🌙✨', color: '#7c3aed', personal: false, special: true },
-    remote:   { label: 'تعلم عن بُعد',  icon: '🏠',  color: '#0369a1', personal: false, special: true },
-    emergency:{ label: 'وضع طوارئ',     icon: '🚨',  color: '#dc2626', personal: false, special: true },
-    health:   { label: 'وضع صحي',       icon: '💧',  color: '#059669', personal: false, special: true },
-  };
-
-  // المحتوى الديني للنوافذ المنبثقة
-  // 🔴 قاعدة صارمة: صحيح البخاري أو مسلم فقط مع رقم الحديث
-  const SPECIAL_POPUPS = {
-    ramadan: {
-      icon: '🌙',
-      title: 'رمضان كريم 🌙✨',
-      items: [
-        { type: 'quran',   text: '﴿شَهْرُ رَمَضَانَ الَّذِي أُنزِلَ فِيهِ الْقُرْآنُ هُدًى لِّلنَّاسِ﴾',       ref: 'سورة البقرة: 185' },
-        { type: 'hadith',  text: '«مَنْ صَامَ رَمَضَانَ إِيمَانًا وَاحْتِسَابًا غُفِرَ لَهُ مَا تَقَدَّمَ مِنْ ذَنْبِهِ»', ref: 'صحيح البخاري: 38' },
-        { type: 'thikr',   text: 'اللَّهُمَّ إِنَّكَ عَفُوٌّ تُحِبُّ الْعَفْوَ فَاعْفُ عَنِّي',                ref: 'حصن المسلم — دعاء ليلة القدر' },
-      ]
-    },
-    remote: {
-      icon: '🏠',
-      title: 'وضع التعلم عن بُعد',
-      items: [
-        { type: 'info', text: 'تأكدي من الاتصال بالإنترنت وأن الكاميرا تعمل قبل بدء الحصة.' },
-        { type: 'info', text: 'ذكّري طالباتك بقواعد السلامة الرقمية.' },
-        { type: 'info', text: 'المنصة تعمل بشكل كامل عن بُعد — كل البيانات محفوظة.' },
-      ]
-    },
-    emergency: {
-      icon: '🚨',
-      title: '⚠️ وضع الطوارئ مُفعَّل',
-      items: [
-        { type: 'warning', text: 'تم تبسيط الواجهة لتسهيل الوصول السريع.' },
-        { type: 'warning', text: 'تأكدي من سلامة جميع الطالبات.' },
-        { type: 'warning', text: 'تواصلي مع الإدارة فور حدوث أي طارئ.' },
-      ]
-    },
-    health: {
-      icon: '💧',
-      title: '💧 وضع الاحتياطات الصحية',
-      items: [
-        { type: 'info', text: 'التباعد الاجتماعي مُفعَّل — يُرجى الالتزام.' },
-        { type: 'info', text: 'تذكير: النظافة اليدوية كل 30 دقيقة.' },
-        { type: 'info', text: 'عند ظهور أي أعراض — أبلغي الإدارة فوراً.' },
-      ]
-    },
-  };
-
-  // ============================================================
-  // المتغيرات
-  // ============================================================
-  let currentTheme = 'classic';
-  let schoolTheme  = 'classic';  // الثيم الافتراضي من المديرة
-  let specialTheme = null;        // طوارئ / رمضان / صحي / بُعد
-  let userId       = null;
-
-  // ============================================================
-  // جلب البيانات من Supabase
-  // ============================================================
-  async function fetchJSON(path) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-      headers: {
-        'apikey':        SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Content-Type':  'application/json',
+  // ── تعريف الثيمات ────────────────────────────────────────────
+  const THEMES = [
+    {
+      id: 'default',
+      name: 'ليلي بنفسجي',
+      icon: '🌌',
+      vars: {
+        '--bg':          '#0a0e1a',
+        '--surface':     '#111827',
+        '--surface2':    '#1a2235',
+        '--surface3':    '#1f2d44',
+        '--indigo':      '#6366f1',
+        '--indigo2':     '#818cf8',
+        '--emerald':     '#10b981',
+        '--emerald2':    '#34d399',
+        '--gold':        '#f6c90e',
+        '--rose':        '#f43f5e',
+        '--sky':         '#0ea5e9',
+        '--violet':      '#8b5cf6',
+        '--text':        '#f1f5f9',
+        '--text2':       'rgba(241,245,249,0.65)',
+        '--text3':       'rgba(241,245,249,0.35)',
+        '--border':      'rgba(255,255,255,0.07)',
+        '--glow-indigo': 'rgba(99,102,241,0.15)',
+        '--glow-emerald':'rgba(16,185,129,0.15)',
       }
-    });
-    if (!res.ok) return null;
-    return res.json();
-  }
-
-  async function postJSON(path, body, method = 'POST') {
-    await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-      method,
-      headers: {
-        'apikey':        SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Content-Type':  'application/json',
-        'Prefer':        'return=minimal',
-      },
-      body: JSON.stringify(body),
-    });
-  }
-
-  // ============================================================
-  // تحميل الثيمات من Supabase
-  // ============================================================
-  async function loadThemes() {
-    try {
-      // 1️⃣ ثيم المدرسة الافتراضي
-      const schoolRows = await fetchJSON('school_themes?select=theme_key,is_active&order=created_at.desc&limit=10');
-      if (schoolRows && schoolRows.length > 0) {
-        const special = schoolRows.find(r => r.is_active && THEMES[r.theme_key]?.special);
-        const def     = schoolRows.find(r => r.is_active && !THEMES[r.theme_key]?.special);
-        if (special) specialTheme = special.theme_key;
-        if (def)     schoolTheme  = def.theme_key;
+    },
+    {
+      id: 'emerald',
+      name: 'ليلي زمردي',
+      icon: '💚',
+      vars: {
+        '--bg':          '#030f0a',
+        '--surface':     '#0a1f14',
+        '--surface2':    '#122b1e',
+        '--surface3':    '#1a3828',
+        '--indigo':      '#10b981',
+        '--indigo2':     '#34d399',
+        '--emerald':     '#06b6d4',
+        '--emerald2':    '#22d3ee',
+        '--gold':        '#f6c90e',
+        '--rose':        '#f43f5e',
+        '--sky':         '#38bdf8',
+        '--violet':      '#a3e635',
+        '--text':        '#f0fdf4',
+        '--text2':       'rgba(240,253,244,0.65)',
+        '--text3':       'rgba(240,253,244,0.35)',
+        '--border':      'rgba(16,185,129,0.12)',
+        '--glow-indigo': 'rgba(16,185,129,0.15)',
+        '--glow-emerald':'rgba(6,182,212,0.15)',
       }
-
-      // 2️⃣ الثيم الشخصي للمستخدم
-      userId = getUserId();
-      let personalTheme = null;
-      if (userId) {
-        const prefRows = await fetchJSON(`user_preferences?user_id=eq.${userId}&select=theme_key&limit=1`);
-        if (prefRows && prefRows.length > 0) personalTheme = prefRows[0].theme_key;
+    },
+    {
+      id: 'gold',
+      name: 'ليلي ذهبي',
+      icon: '🌟',
+      vars: {
+        '--bg':          '#0f0a00',
+        '--surface':     '#1c1400',
+        '--surface2':    '#2a1f00',
+        '--surface3':    '#382a00',
+        '--indigo':      '#f6c90e',
+        '--indigo2':     '#fde68a',
+        '--emerald':     '#f59e0b',
+        '--emerald2':    '#fbbf24',
+        '--gold':        '#f6c90e',
+        '--rose':        '#f43f5e',
+        '--sky':         '#0ea5e9',
+        '--violet':      '#fb923c',
+        '--text':        '#fefce8',
+        '--text2':       'rgba(254,252,232,0.65)',
+        '--text3':       'rgba(254,252,232,0.35)',
+        '--border':      'rgba(246,200,14,0.1)',
+        '--glow-indigo': 'rgba(246,200,14,0.15)',
+        '--glow-emerald':'rgba(245,158,11,0.15)',
       }
-
-      // 3️⃣ الأولوية: خاص > شخصي > مدرسة
-      currentTheme = specialTheme || personalTheme || schoolTheme;
-    } catch (e) {
-      currentTheme = 'classic';
+    },
+    {
+      id: 'rose',
+      name: 'ليلي وردي',
+      icon: '🌹',
+      vars: {
+        '--bg':          '#0f0008',
+        '--surface':     '#1a0012',
+        '--surface2':    '#25001c',
+        '--surface3':    '#300026',
+        '--indigo':      '#f43f5e',
+        '--indigo2':     '#fb7185',
+        '--emerald':     '#ec4899',
+        '--emerald2':    '#f472b6',
+        '--gold':        '#f6c90e',
+        '--rose':        '#f43f5e',
+        '--sky':         '#0ea5e9',
+        '--violet':      '#e879f9',
+        '--text':        '#fff1f2',
+        '--text2':       'rgba(255,241,242,0.65)',
+        '--text3':       'rgba(255,241,242,0.35)',
+        '--border':      'rgba(244,63,94,0.1)',
+        '--glow-indigo': 'rgba(244,63,94,0.15)',
+        '--glow-emerald':'rgba(236,72,153,0.15)',
+      }
+    },
+    {
+      id: 'sky',
+      name: 'ليلي سماوي',
+      icon: '🌊',
+      vars: {
+        '--bg':          '#00080f',
+        '--surface':     '#001220',
+        '--surface2':    '#001a2e',
+        '--surface3':    '#00243d',
+        '--indigo':      '#0ea5e9',
+        '--indigo2':     '#38bdf8',
+        '--emerald':     '#06b6d4',
+        '--emerald2':    '#22d3ee',
+        '--gold':        '#f6c90e',
+        '--rose':        '#f43f5e',
+        '--sky':         '#0ea5e9',
+        '--violet':      '#818cf8',
+        '--text':        '#f0f9ff',
+        '--text2':       'rgba(240,249,255,0.65)',
+        '--text3':       'rgba(240,249,255,0.35)',
+        '--border':      'rgba(14,165,233,0.1)',
+        '--glow-indigo': 'rgba(14,165,233,0.15)',
+        '--glow-emerald':'rgba(6,182,212,0.15)',
+      }
+    },
+    {
+      id: 'violet',
+      name: 'بنفسجي ملكي',
+      icon: '👑',
+      vars: {
+        '--bg':          '#08000f',
+        '--surface':     '#120020',
+        '--surface2':    '#1a002e',
+        '--surface3':    '#22003d',
+        '--indigo':      '#8b5cf6',
+        '--indigo2':     '#a78bfa',
+        '--emerald':     '#c026d3',
+        '--emerald2':    '#d946ef',
+        '--gold':        '#f6c90e',
+        '--rose':        '#f43f5e',
+        '--sky':         '#0ea5e9',
+        '--violet':      '#8b5cf6',
+        '--text':        '#faf5ff',
+        '--text2':       'rgba(250,245,255,0.65)',
+        '--text3':       'rgba(250,245,255,0.35)',
+        '--border':      'rgba(139,92,246,0.12)',
+        '--glow-indigo': 'rgba(139,92,246,0.15)',
+        '--glow-emerald':'rgba(192,38,211,0.15)',
+      }
+    },
+    {
+      id: 'light',
+      name: 'نهاري فاتح',
+      icon: '☀️',
+      vars: {
+        '--bg':          '#f1f5f9',
+        '--surface':     '#ffffff',
+        '--surface2':    '#f8fafc',
+        '--surface3':    '#e2e8f0',
+        '--indigo':      '#4f46e5',
+        '--indigo2':     '#6366f1',
+        '--emerald':     '#059669',
+        '--emerald2':    '#10b981',
+        '--gold':        '#d97706',
+        '--rose':        '#e11d48',
+        '--sky':         '#0284c7',
+        '--violet':      '#7c3aed',
+        '--text':        '#0f172a',
+        '--text2':       'rgba(15,23,42,0.65)',
+        '--text3':       'rgba(15,23,42,0.45)',
+        '--border':      'rgba(15,23,42,0.1)',
+        '--glow-indigo': 'rgba(79,70,229,0.1)',
+        '--glow-emerald':'rgba(5,150,105,0.1)',
+      }
     }
-  }
+  ];
 
-  // ============================================================
-  // تطبيق الثيم
-  // ============================================================
-  function hexToRgb(hex) {
-    hex = hex.trim().replace('#','');
-    if (hex.length === 3) hex = hex.split('').map(c=>c+c).join('');
-    const r = parseInt(hex.slice(0,2),16);
-    const g = parseInt(hex.slice(2,4),16);
-    const b = parseInt(hex.slice(4,6),16);
-    return isNaN(r) ? null : {r,g,b};
-  }
+  let currentTheme = 'default';
 
-  function syncDerivedVars() {
-    // بعد تطبيق الثيم، نحدّث المتغيرات المشتقة (--gold, --gold-light, --border, --primary-rgb)
-    // حتى تتجاوب الصفحات التي تستخدم rgba() محلية
-    requestAnimationFrame(() => {
-      const primary = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
-      const rgb = hexToRgb(primary);
-      if (!rgb) return;
-      const root = document.documentElement.style;
-      root.setProperty('--primary-rgb', `${rgb.r},${rgb.g},${rgb.b}`);
-      root.setProperty('--gold',         primary);
-      root.setProperty('--gold-light',   `rgba(${rgb.r},${rgb.g},${rgb.b},0.15)`);
-      root.setProperty('--border',       `rgba(${rgb.r},${rgb.g},${rgb.b},0.2)`);
-      root.setProperty('--shadow-gold',  `rgba(${rgb.r},${rgb.g},${rgb.b},0.3)`);
+  // ── تطبيق الثيم ──────────────────────────────────────────────
+  function apply(id){
+    const theme = THEMES.find(t => t.id === id) || THEMES[0];
+    const root = document.documentElement;
+    Object.entries(theme.vars).forEach(([k, v]) => root.style.setProperty(k, v));
+    currentTheme = id;
+    try { sessionStorage.setItem('eduos_theme', id); } catch(e){}
+    // تحديث شكل زر الثيم
+    const btn = document.getElementById('theme-toggle-btn');
+    if(btn) btn.textContent = theme.icon;
+    // تحديث الـ active في picker إن كان مفتوحاً
+    document.querySelectorAll('.edu-theme-card').forEach(c => {
+      c.style.borderColor = c.dataset.theme === id ? 'var(--indigo)' : 'rgba(255,255,255,0.08)';
+      c.style.background = c.dataset.theme === id ? 'rgba(99,102,241,0.15)' : 'var(--surface2)';
     });
   }
 
-  function applyTheme(key) {
-    if (!THEMES[key]) key = 'classic';
-    document.documentElement.setAttribute('data-theme', key);
-    currentTheme = key;
-    highlightActiveSwatch(key);
-    syncDerivedVars();
-  }
+  // ── واجهة اختيار الثيم ───────────────────────────────────────
+  function openPicker(){
+    let overlay = document.getElementById('edu-theme-picker');
+    if(overlay){ overlay.remove(); return; }
 
-  function highlightActiveSwatch(key) {
-    document.querySelectorAll('.theme-swatch').forEach(el => {
-      el.classList.toggle('active', el.dataset.themeKey === key);
-    });
-  }
-
-  // ============================================================
-  // بناء واجهة منتقي الثيم
-  // ============================================================
-  function buildPicker() {
-    // لا تُضاف منتقي الثيم إذا كان الثيم الخاص مُفعَّلاً
-    if (specialTheme) return;
-
-    const wrapper = document.createElement('div');
-    wrapper.id = 'theme-picker';
-
-    const toggle = document.createElement('button');
-    toggle.id = 'theme-picker-toggle';
-    toggle.title = 'تغيير الثيم';
-    toggle.innerHTML = '🎨';
-    toggle.onclick = () => panel.classList.toggle('open');
-
-    const panel = document.createElement('div');
-    panel.id = 'theme-picker-panel';
-
-    const h4 = document.createElement('h4');
-    h4.textContent = 'اختاري ثيمك الشخصي';
-    panel.appendChild(h4);
-
-    const grid = document.createElement('div');
-    grid.className = 'theme-swatch-grid';
-
-    Object.entries(THEMES).forEach(([key, info]) => {
-      if (!info.personal) return; // الثيمات الخاصة لا تُعرض هنا
-      const sw = document.createElement('div');
-      sw.className = 'theme-swatch';
-      sw.dataset.themeKey = key;
-      sw.style.background = info.color;
-      sw.innerHTML = `${info.icon}<span>${info.label}</span>`;
-      sw.onclick = () => selectPersonalTheme(key);
-      grid.appendChild(sw);
-    });
-
-    panel.appendChild(grid);
-    wrapper.appendChild(toggle);
-    wrapper.appendChild(panel);
-    document.body.appendChild(wrapper);
-
-    // إغلاق عند النقر خارجه
-    document.addEventListener('click', e => {
-      if (!wrapper.contains(e.target)) panel.classList.remove('open');
-    });
-
-    highlightActiveSwatch(currentTheme);
-  }
-
-  // ============================================================
-  // حفظ الثيم الشخصي
-  // ============================================================
-  async function selectPersonalTheme(key) {
-    applyTheme(key);
-    document.getElementById('theme-picker-panel')?.classList.remove('open');
-    if (!userId) return;
-    try {
-      // UPSERT الثيم الشخصي
-      await postJSON('user_preferences', { user_id: userId, theme_key: key, updated_at: new Date().toISOString() }, 'POST');
-    } catch (e) { /* silent */ }
-  }
-
-  // ============================================================
-  // النافذة المنبثقة للثيمات الخاصة
-  // ============================================================
-  function buildPopupContainer() {
-    const overlay = document.createElement('div');
-    overlay.id = 'theme-popup-overlay';
+    overlay = document.createElement('div');
+    overlay.id = 'edu-theme-picker';
+    overlay.style.cssText = `
+      position:fixed; inset:0; z-index:99998;
+      background:rgba(0,0,0,0.6); backdrop-filter:blur(4px);
+      display:flex; align-items:center; justify-content:center;
+      font-family:'Tajawal',sans-serif; direction:rtl;
+    `;
     overlay.innerHTML = `
-      <div id="theme-popup-box">
-        <span id="theme-popup-icon"></span>
-        <div id="theme-popup-title"></div>
-        <div id="theme-popup-text"></div>
-        <button id="theme-popup-close" onclick="PlatformTheme.closePopup()">حسناً ✓</button>
-      </div>`;
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:24px;width:100%;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <div style="font-size:17px;font-weight:800;color:var(--text)">🎨 اختاري الثيم</div>
+          <button onclick="document.getElementById('edu-theme-picker').remove()"
+            style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 14px;color:var(--text2);font-family:'Tajawal',sans-serif;cursor:pointer;font-size:13px">✕ إغلاق</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
+          ${THEMES.map(t => `
+            <div class="edu-theme-card" data-theme="${t.id}"
+              onclick="EduTheme.apply('${t.id}')"
+              style="background:var(--surface2);border:2px solid ${t.id===currentTheme?'var(--indigo)':'rgba(255,255,255,0.08)'};
+                     border-radius:14px;padding:14px;cursor:pointer;text-align:center;transition:all .2s;
+                     ${t.id===currentTheme?'background:rgba(99,102,241,0.15)':''}">
+              <div style="font-size:28px;margin-bottom:8px">${t.icon}</div>
+              <div style="font-size:12px;font-weight:700;color:var(--text)">${t.name}</div>
+              ${t.id===currentTheme?'<div style="font-size:10px;color:var(--indigo2);margin-top:4px">✓ نشط</div>':''}
+            </div>
+          `).join('')}
+        </div>
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);text-align:center">
+          الثيم يُطبَّق فوراً — يُحفظ للجلسة الحالية
+        </div>
+      </div>
+    `;
+    overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
     document.body.appendChild(overlay);
   }
 
-  function showSpecialPopup(themeKey) {
-    const data = SPECIAL_POPUPS[themeKey];
-    if (!data) return;
-
-    // تحقق: هل رأت المستخدمة هذا الإشعار اليوم؟
-    const seenKey = `theme_popup_seen_${themeKey}_${new Date().toDateString()}`;
-    if (sessionStorage.getItem(seenKey)) return;
-    sessionStorage.setItem(seenKey, '1');
-
-    const icon   = document.getElementById('theme-popup-icon');
-    const title  = document.getElementById('theme-popup-title');
-    const text   = document.getElementById('theme-popup-text');
-    const overlay= document.getElementById('theme-popup-overlay');
-
-    if (!overlay) return;
-
-    icon.textContent = data.icon;
-    title.textContent = data.title;
-
-    let html = '';
-    data.items.forEach(item => {
-      const color = item.type === 'quran'   ? '#7c3aed'
-                  : item.type === 'hadith'  ? '#0369a1'
-                  : item.type === 'thikr'   ? '#059669'
-                  : item.type === 'warning' ? '#dc2626'
-                  : '#1e293b';
-      html += `<p style="margin:8px 0; color:${color}; font-size:0.95rem; line-height:1.7;">
-                 ${item.text}
-                 ${item.ref ? `<br><small style="color:#94a3b8; font-size:0.78rem;">${item.ref}</small>` : ''}
-               </p>`;
-    });
-    text.innerHTML = html;
-    overlay.classList.add('show');
+  // ── تهيئة عند التحميل ───────────────────────────────────────
+  function init(){
+    let saved = 'default';
+    try { saved = sessionStorage.getItem('eduos_theme') || 'default'; } catch(e){}
+    apply(saved);
   }
 
-  function closePopup() {
-    const overlay = document.getElementById('theme-popup-overlay');
-    if (overlay) overlay.classList.remove('show');
+  // تشغيل عند جاهزية DOM
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
   }
 
-  // ============================================================
-  // شريط الثيم العلوي
-  // ============================================================
-  function buildBanner() {
-    const banner = document.createElement('div');
-    banner.id = 'theme-banner';
-    const info = THEMES[specialTheme];
-    if (info) banner.textContent = `${info.icon} ${info.label}`;
-    document.body.insertBefore(banner, document.body.firstChild);
-  }
-
-  // ============================================================
-  // مساعدة: جلب معرف المستخدم
-  // ============================================================
-  function getUserId() {
-    // يقرأ من meta tag أو window.currentUser
-    const meta = document.querySelector('meta[name="user-id"]');
-    if (meta) return meta.content;
-    if (window.currentUser?.id) return window.currentUser.id;
-    return null;
-  }
-
-  // ============================================================
-  // تهيئة رئيسية
-  // ============================================================
-  async function init() {
-    await loadThemes();
-    applyTheme(currentTheme);
-    buildBanner();
-    buildPopupContainer();
-    buildPicker();
-    if (specialTheme) showSpecialPopup(specialTheme);
-  }
-
-  // ============================================================
-  // API العام
-  // ============================================================
-  return {
-    init,
-    applyTheme,
-    closePopup,
-    getCurrentTheme: () => currentTheme,
-    getSpecialTheme: () => specialTheme,
-    THEMES,
-  };
+  return { apply, openPicker, THEMES };
 
 })();
-
-// تهيئة تلقائية عند تحميل الصفحة
-document.addEventListener('DOMContentLoaded', () => PlatformTheme.init());
