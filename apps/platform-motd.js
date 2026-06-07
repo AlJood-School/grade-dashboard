@@ -1,520 +1,353 @@
 /**
- * ═══════════════════════════════════════════════════════════════
- *  EduOS · platform-motd.js  v3.0
- *  ─────────────────────────────────────────────────────────────
- *  نظامان منفصلان:
- *  1) POPUP  — أذكار · أحاديث · حكم · شعر → منبثق يظهر/يختفي
- *  2) TICKER — أخبار الوزارة / الدولة / إداري مدرسي
- *
- *  ⚠️  قانون صارم: لا يُدرج حديث أو ذكر إلا مِن مصدر صحيح
- *      ثابت في كتب الصحاح أو المصادر المعتمدة.
- * ═══════════════════════════════════════════════════════════════
+ * ═══════════════════════════════════════════════════════════
+ *  EduOS Platform MOTD  v4
+ *  ─────────────────────────────────────────────────────────
+ *  ① أذكار / آيات / أحاديث → تظهر في مركز الشاشة
+ *     بتأثير ضبابي هادئ (backdrop blur + fade) — 8 ثوانٍ
+ *  ② شريط أخبار إداري/وزاري → أسفل الشاشة مثل التلفاز
+ *  ③ تذكير التنفس والحركة → بعد 30 دقيقة نشاط
+ * ═══════════════════════════════════════════════════════════
  */
 
-/* ═══════════════════════════════════════════════════════════════
-   1 ▸ المحتوى الإسلامي المحقَّق
-   ─────────────────────────────────────────────────────────────
-   كل مدخل: { type, text, source }
-   type: 'dhikr' | 'hadith' | 'quran' | 'wisdom' | 'poem' | 'quote'
-══════════════════════════════════════════════════════════════ */
-const EDOOS_CONTENT = [
-
-  // ── أذكار الصباح (ثابتة بالسنة) ─────────────────────────────
-  {
-    type: 'dhikr',
-    label: '🤲 ذكر الصباح',
-    text: '«أَصْبَحْنَا وَأَصْبَحَ الْمُلْكُ لِلَّهِ، وَالْحَمْدُ لِلَّهِ، لَا إِلَهَ إِلَّا اللَّهُ وَحْدَهُ لَا شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ»',
-    source: 'صحيح مسلم'
-  },
-  {
-    type: 'dhikr',
-    label: '🤲 ذكر الصباح',
-    text: '«اللَّهُمَّ بِكَ أَصْبَحْنَا، وَبِكَ أَمْسَيْنَا، وَبِكَ نَحْيَا، وَبِكَ نَمُوتُ، وَإِلَيْكَ النُّشُورُ»',
-    source: 'سنن أبي داود — حسن'
-  },
-  {
-    type: 'dhikr',
-    label: '🤲 ذكر',
-    text: '«سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ»',
-    source: 'متفق عليه — كلمتان خفيفتان على اللسان ثقيلتان في الميزان'
-  },
-  {
-    type: 'dhikr',
-    label: '🤲 دعاء',
-    text: '«اللَّهُمَّ إِنِّي أَسْأَلُكَ الْعِلْمَ النَّافِعَ، وَالرِّزْقَ الطَّيِّبَ، وَالْعَمَلَ الْمُتَقَبَّلَ»',
-    source: 'سنن ابن ماجه — صحيح'
-  },
-  {
-    type: 'dhikr',
-    label: '🤲 ذكر',
-    text: '«حَسْبِيَ اللَّهُ لَا إِلَهَ إِلَّا هُوَ عَلَيْهِ تَوَكَّلْتُ وَهُوَ رَبُّ الْعَرْشِ الْعَظِيمِ» — سبعاً',
-    source: 'سنن أبي داود — صحيح الإسناد'
-  },
-
-  // ── آيات قرآنية ──────────────────────────────────────────────
-  {
-    type: 'quran',
-    label: '📖 آية كريمة',
-    text: '﴿وَقُل رَّبِّ زِدۡنِي عِلۡمٗا﴾',
-    source: 'سورة طه — الآية 114'
-  },
-  {
-    type: 'quran',
-    label: '📖 آية كريمة',
-    text: '﴿يَرۡفَعِ ٱللَّهُ ٱلَّذِينَ ءَامَنُواْ مِنكُمۡ وَٱلَّذِينَ أُوتُواْ ٱلۡعِلۡمَ دَرَجَٰتٖۚ﴾',
-    source: 'سورة المجادلة — الآية 11'
-  },
-  {
-    type: 'quran',
-    label: '📖 آية كريمة',
-    text: '﴿وَعَلَّمَكَ مَا لَمۡ تَكُن تَعۡلَمُۚ وَكَانَ فَضۡلُ ٱللَّهِ عَلَيۡكَ عَظِيمٗا﴾',
-    source: 'سورة النساء — الآية 113'
-  },
-  {
-    type: 'quran',
-    label: '📖 آية كريمة',
-    text: '﴿فَإِذَا عَزَمۡتَ فَتَوَكَّلۡ عَلَى ٱللَّهِۚ إِنَّ ٱللَّهَ يُحِبُّ ٱلۡمُتَوَكِّلِينَ﴾',
-    source: 'سورة آل عمران — الآية 159'
-  },
-  {
-    type: 'quran',
-    label: '📖 آية كريمة',
-    text: '﴿إِنَّ مَعَ ٱلۡعُسۡرِ يُسۡرٗا﴾',
-    source: 'سورة الشرح — الآية 6'
-  },
-
-  // ── أحاديث نبوية شريفة (صحيحة) ─────────────────────────────
-  {
-    type: 'hadith',
-    label: '🕌 حديث شريف',
-    text: '«مَنْ سَلَكَ طَرِيقاً يَلْتَمِسُ فِيهِ عِلْمًا، سَهَّلَ اللَّهُ لَهُ بِهِ طَرِيقًا إِلَى الْجَنَّةِ»',
-    source: 'صحيح مسلم — عن أبي هريرة رضي الله عنه'
-  },
-  {
-    type: 'hadith',
-    label: '🕌 حديث شريف',
-    text: '«خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ»',
-    source: 'صحيح البخاري — عن عثمان رضي الله عنه'
-  },
-  {
-    type: 'hadith',
-    label: '🕌 حديث شريف',
-    text: '«إِنَّ اللَّهَ يُحِبُّ إِذَا عَمِلَ أَحَدُكُمْ عَمَلًا أَنْ يُتْقِنَهُ»',
-    source: 'صحيح الجامع — الألباني — عن عائشة رضي الله عنها'
-  },
-  {
-    type: 'hadith',
-    label: '🕌 حديث شريف',
-    text: '«الْمُؤْمِنُ الْقَوِيُّ خَيْرٌ وَأَحَبُّ إِلَى اللَّهِ مِنَ الْمُؤْمِنِ الضَّعِيفِ»',
-    source: 'صحيح مسلم — عن أبي هريرة رضي الله عنه'
-  },
-  {
-    type: 'hadith',
-    label: '🕌 حديث شريف',
-    text: '«إِنَّمَا الأَعْمَالُ بِالنِّيَّاتِ، وَإِنَّمَا لِكُلِّ امْرِئٍ مَا نَوَى»',
-    source: 'متفق عليه — عن عمر بن الخطاب رضي الله عنه'
-  },
-  {
-    type: 'hadith',
-    label: '🕌 حديث شريف',
-    text: '«أَحَبُّ الأَعْمَالِ إِلَى اللَّهِ أَدْوَمُهَا وَإِنْ قَلَّ»',
-    source: 'متفق عليه — عن عائشة رضي الله عنها'
-  },
-  {
-    type: 'hadith',
-    label: '🕌 حديث شريف',
-    text: '«الدِّينُ النَّصِيحَةُ» قِيلَ: لِمَنْ يَا رَسُولَ اللَّهِ؟ قَالَ: «لِلَّهِ وَلِكِتَابِهِ وَلِرَسُولِهِ وَلِأَئِمَّةِ الْمُسْلِمِينَ وَعَامَّتِهِمْ»',
-    source: 'صحيح مسلم — عن تميم الداري رضي الله عنه'
-  },
-
-  // ── حكم العلماء والأئمة ─────────────────────────────────────
-  {
-    type: 'wisdom',
-    label: '💡 حكمة',
-    text: '«الوَقْتُ كَالسَّيْفِ إِنْ لَمْ تَقْطَعْهُ قَطَعَكَ»',
-    source: 'الإمام الشافعي رحمه الله'
-  },
-  {
-    type: 'wisdom',
-    label: '💡 حكمة',
-    text: '«تَعَلَّمُوا الْعِلْمَ فَإِنَّ تَعَلُّمَهُ لِلَّهِ خَشْيَةٌ، وَطَلَبَهُ عِبَادَةٌ، وَمُذَاكَرَتَهُ تَسْبِيحٌ، وَالْبَحْثَ عَنْهُ جِهَادٌ»',
-    source: 'معاذ بن جبل رضي الله عنه'
-  },
-  {
-    type: 'wisdom',
-    label: '💡 حكمة',
-    text: '«إِنَّكَ لَنْ تَتْرُكَ شَيْئًا لِلَّهِ عَزَّ وَجَلَّ إِلَّا أَبْدَلَكَ اللَّهُ بِهِ مَا هُوَ خَيْرٌ لَكَ مِنْهُ»',
-    source: 'الإمام أحمد بن حنبل رحمه الله'
-  },
-  {
-    type: 'wisdom',
-    label: '💡 حكمة',
-    text: '«مَنْ عَرَفَ نَفْسَهُ أَشْغَلَهُ ذَلِكَ عَنْ عَيْبِ غَيْرِهِ»',
-    source: 'الإمام ابن القيم الجوزية رحمه الله — مدارج السالكين'
-  },
-  {
-    type: 'wisdom',
-    label: '💡 حكمة',
-    text: '«اجْعَلْ عَمَلَكَ كُلَّهُ لِلَّهِ، وَلَا تَطْلُبْ مِنَ النَّاسِ الْجَزَاءَ فَإِنَّهُمْ لَا يَمْلِكُونَهُ»',
-    source: 'الإمام ابن تيمية رحمه الله'
-  },
-  {
-    type: 'wisdom',
-    label: '💡 حكمة',
-    text: '«الْعِلْمُ نُورٌ، وَنُورُ اللَّهِ لَا يُهْدَى لِعَاصٍ»',
-    source: 'الإمام الشافعي رحمه الله — منسوب إليه في مناقبه'
-  },
-  {
-    type: 'wisdom',
-    label: '💡 حكمة',
-    text: '«التَّعْلِيمُ فِي الصِّغَرِ كَالنَّقْشِ عَلَى الْحَجَرِ»',
-    source: 'الحسن البصري رحمه الله'
-  },
-
-  // ── أقوال حكام وعلماء المسلمين ──────────────────────────────
-  {
-    type: 'quote',
-    label: '👑 قول مأثور',
-    text: '«دَوَاءُ الْجَهْلِ السُّؤَالُ»',
-    source: 'الإمام علي بن أبي طالب رضي الله عنه'
-  },
-  {
-    type: 'quote',
-    label: '👑 قول مأثور',
-    text: '«اعْقِلْهَا وَتَوَكَّلْ»',
-    source: 'النبي ﷺ — سنن الترمذي — حسن'
-  },
-  {
-    type: 'quote',
-    label: '👑 قول مأثور',
-    text: '«كَلِمَةُ الْحِكْمَةِ ضَالَّةُ الْمُؤْمِنِ فَحَيْثُ وَجَدَهَا فَهُوَ أَحَقُّ بِهَا»',
-    source: 'سنن الترمذي — عن أبي هريرة رضي الله عنه'
-  },
-  {
-    type: 'quote',
-    label: '👑 قول مأثور',
-    text: '«مَنْ أَرَادَ الدُّنْيَا فَعَلَيْهِ بِالْعِلْمِ، وَمَنْ أَرَادَ الآخِرَةَ فَعَلَيْهِ بِالْعِلْمِ»',
-    source: 'الإمام الشافعي رحمه الله'
-  },
-
-  // ── شعر عربي إسلامي ─────────────────────────────────────────
-  {
-    type: 'poem',
-    label: '📜 بيت شعر',
-    text: 'أَلَا إِنَّ العِلْمَ حَيَاةُ الْقُلُوبِ\nكَمَا يُحْيِي الْغَيْثُ الأَرْضَ الجَدِيبَهْ',
-    source: 'أبو العتاهية — شاعر إسلامي'
-  },
-  {
-    type: 'poem',
-    label: '📜 بيت شعر',
-    text: 'وَفِي الجَهْلِ قَبْلَ الْمَوْتِ مَوْتٌ لِأَهْلِهِ\nوَأَجْسَادُهُمْ قَبْلَ الْقُبُورِ قُبُورُ',
-    source: 'أبو الطيب المتنبي'
-  },
-  {
-    type: 'poem',
-    label: '📜 بيت شعر',
-    text: 'وَإِذَا كَانَتِ النُّفُوسُ كِبَاراً\nتَعِبَتْ فِي مُرَادِهَا الأَجْسَامُ',
-    source: 'أبو الطيب المتنبي'
-  },
-  {
-    type: 'poem',
-    label: '📜 بيت شعر',
-    text: 'وَمَا الْمَرْءُ إِلَّا بِأَصْغَرَيْهِ قَلْبِهِ\nوَلِسَانِهِ فَانْظُرْ بِمَ تَنْطِقُ وَتَفْعَلُ',
-    source: 'الإمام علي رضي الله عنه — منسوب إليه في الأدب الإسلامي'
-  }
+/* ── محتوى إسلامي محقَّق ───────────────────────────────── */
+const MOTD_ITEMS = [
+  { type:'quran',   text:'﴿ وَقُل رَّبِّ زِدْنِي عِلْمًا ﴾', ref:'سورة طه: ١١٤' },
+  { type:'quran',   text:'﴿ إِنَّ اللَّهَ لَا يُضِيعُ أَجْرَ الْمُحْسِنِينَ ﴾', ref:'سورة التوبة: ١٢٠' },
+  { type:'quran',   text:'﴿ وَعَلَّمَكَ مَا لَمْ تَكُن تَعْلَمُ ۚ وَكَانَ فَضْلُ اللَّهِ عَلَيْكَ عَظِيمًا ﴾', ref:'سورة النساء: ١١٣' },
+  { type:'quran',   text:'﴿ فَإِنَّ مَعَ الْعُسْرِ يُسْرًا ۞ إِنَّ مَعَ الْعُسْرِ يُسْرًا ﴾', ref:'سورة الشرح: ٥–٦' },
+  { type:'quran',   text:'﴿ وَتَوَاصَوْا بِالْحَقِّ وَتَوَاصَوْا بِالصَّبْرِ ﴾', ref:'سورة العصر: ٣' },
+  { type:'hadith',  text:'« مَن سَلَكَ طريقًا يلتمسُ فيه علمًا سهَّلَ اللهُ له طريقًا إلى الجنَّة »', ref:'رواه مسلم' },
+  { type:'hadith',  text:'« خيركم مَن تعلَّم القرآنَ وعلَّمه »', ref:'رواه البخاري' },
+  { type:'hadith',  text:'« المؤمن القويُّ خيرٌ وأحبُّ إلى اللهِ من المؤمن الضعيف، وفي كلٍّ خير »', ref:'رواه مسلم' },
+  { type:'hadith',  text:'« إنَّ اللهَ يُحبُّ إذا عَمِلَ أحدُكم عملاً أن يُتقِنَه »', ref:'رواه الطبراني — حسن' },
+  { type:'dhikr',   text:'سبحانَ اللهِ وبحمدِه، سبحانَ اللهِ العظيم', ref:'ذكر صباحي ومسائي' },
+  { type:'dhikr',   text:'اللَّهمَّ إنِّي أسألُكَ علمًا نافعًا، ورزقًا طيِّبًا، وعملاً مُتقبَّلاً', ref:'دعاء صباح' },
+  { type:'dhikr',   text:'رَبِّ اشْرَحْ لِي صَدْرِي وَيَسِّرْ لِي أَمْرِي', ref:'سورة طه: ٢٥–٢٦' },
+  { type:'wisdom',  text:'العلمُ نورٌ يهدي صاحبَه، والجهلُ ظلامٌ يُضلُّ مَن وقعَ فيه', ref:'الإمام الشافعي' },
+  { type:'wisdom',  text:'لن ترتقيَ الأممُ إلَّا بتربيةِ أبنائها تربيةً صالحة', ref:'الشيخ محمد الغزالي' },
+  { type:'wisdom',  text:'المعلِّمُ الحقيقيُّ مَن يُشعلُ في قلبِ الطالبِ شوقًا لا ينطفئ', ref:'حكمة تربوية' },
+  { type:'poetry',  text:'إنَّ المعلِّمَ والطبيبَ كلاهُما\nلا ينصحانِ إذا هُمَا لم يُكرَما', ref:'أحمد شوقي' },
+  { type:'poetry',  text:'قُم للمعلِّمِ وَفِّهِ التبجيلا\nكادَ المعلِّمُ أن يكونَ رسولا', ref:'أحمد شوقي' },
 ];
 
-/* ═══════════════════════════════════════════════════════════════
-   2 ▸ جدول الاختبارات الرسمية (الفصل الثالث 2026)
-══════════════════════════════════════════════════════════════ */
-const EXAM_SCHEDULE = [
-  { date: '2026-06-14', name: 'اختبار الفصل الثالث — المواد الأساسية', grade: 'كل المراحل' },
-  { date: '2026-06-21', name: 'اختبار الفصل الثالث — المواد المساندة', grade: 'كل المراحل' },
-  { date: '2026-06-28', name: 'اختبار التحصيلي الختامي — الفصل الثالث', grade: 'كل المراحل' },
-  { date: '2026-07-03', name: 'آخر يوم دراسي — حفل التخرج', grade: 'كل المراحل' }
-];
+/* ── ألوان النوع ─────────────────────────────────────────── */
+const TYPE_META = {
+  quran:   { icon:'📖', label:'آية كريمة',    color:'#10b981', glow:'rgba(16,185,129,0.25)' },
+  hadith:  { icon:'🕌', label:'حديث شريف',   color:'#6366f1', glow:'rgba(99,102,241,0.25)' },
+  dhikr:   { icon:'🤲', label:'ذكر ودعاء',    color:'#f59e0b', glow:'rgba(245,158,11,0.25)' },
+  wisdom:  { icon:'💡', label:'حكمة',         color:'#0ea5e9', glow:'rgba(14,165,233,0.25)' },
+  poetry:  { icon:'✨', label:'شعر',           color:'#ec4899', glow:'rgba(236,72,153,0.25)' },
+};
 
-/* ═══════════════════════════════════════════════════════════════
-   3 ▸ شريط الأخبار (Ticker)
-   ─────────────────────────────────────────────────────────────
-   type: 'ministry' | 'state' | 'school'
-   from / to: نطاق العرض بالتاريخ (YYYY-MM-DD) — فارغ = دائم
-   duration: ثواني مكوث في الشريط لهذا الخبر (افتراضي 8)
-══════════════════════════════════════════════════════════════ */
-const NEWS_TICKER = [
-  {
-    type: 'ministry',
-    icon: '📋',
-    text: 'وزارة التعليم: بدء الفصل الدراسي الثالث — 30 مارس 2026',
-    from: '2026-03-30', to: '2026-04-10',
-    duration: 8
-  },
-  {
-    type: 'school',
-    icon: '🏫',
-    text: 'إداري: الاجتماع الدوري للمعلمات — الأحد القادم الساعة 12:00',
-    from: '2026-06-06', to: '2026-06-12',
-    duration: 10
-  },
-  {
-    type: 'state',
-    icon: '🇸🇦',
-    text: 'إجازة عيد الأضحى المبارك: 25 – 29 مايو 2026',
-    from: '2026-05-18', to: '2026-05-25',
-    duration: 8
-  }
-];
+/* ── نوافذ أذكار مركزية ──────────────────────────────────── */
+(function initMOTDPopups() {
+  let idx = Math.floor(Math.random() * MOTD_ITEMS.length);
+  let overlay = null;
 
-/* ═══════════════════════════════════════════════════════════════
-   4 ▸ منطق الإدارة الزمنية
-══════════════════════════════════════════════════════════════ */
-const EduMOTD = (() => {
-  let _popupTimer   = null;
-  let _tickerIndex  = 0;
-  let _tickerTimer  = null;
-  let _contentIndex = 0;
-  let _popupDelay   = 60000; // الفترة بين النوافذ (60 ثانية)
-
-  /* ── اختر محتوى اليوم بشكل منتظم ────────────────────────── */
-  function _getDailyContent() {
-    const today = new Date();
-    const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / 86400000);
-    return EDOOS_CONTENT[dayOfYear % EDOOS_CONTENT.length];
+  function createOverlay() {
+    overlay = document.createElement('div');
+    overlay.id = 'edu-motd-overlay';
+    overlay.style.cssText = `
+      position:fixed;inset:0;z-index:88000;
+      display:flex;align-items:center;justify-content:center;
+      background:rgba(0,0,0,0);
+      backdrop-filter:blur(0px);-webkit-backdrop-filter:blur(0px);
+      transition:background .5s ease,backdrop-filter .5s ease,-webkit-backdrop-filter .5s ease;
+      pointer-events:none;
+    `;
+    document.body.appendChild(overlay);
   }
 
-  /* ── إنشاء نافذة منبثقة ──────────────────────────────────── */
-  function _buildPopup(item, isExam = false) {
-    const el = document.createElement('div');
-    el.id = 'edumotd-popup';
+  function showNext() {
+    const item = MOTD_ITEMS[idx % MOTD_ITEMS.length];
+    idx++;
+    const meta = TYPE_META[item.type] || TYPE_META.wisdom;
 
-    const typeColors = {
-      dhikr:  { bg: '#0d4f3c', border: '#10b981', accent: '#6ee7b7' },
-      quran:  { bg: '#1e3a5f', border: '#3b82f6', accent: '#93c5fd' },
-      hadith: { bg: '#3b1f5e', border: '#8b5cf6', accent: '#c4b5fd' },
-      wisdom: { bg: '#7c2d12', border: '#f97316', accent: '#fdba74' },
-      poem:   { bg: '#134e4a', border: '#14b8a6', accent: '#99f6e4' },
-      quote:  { bg: '#1e3a2b', border: '#22c55e', accent: '#86efac' },
-      exam:   { bg: '#7f1d1d', border: '#ef4444', accent: '#fca5a5' }
-    };
+    if (!overlay) createOverlay();
 
-    const c = isExam ? typeColors.exam : (typeColors[item.type] || typeColors.wisdom);
-
-    el.style.cssText = `
-      position: fixed;
-      bottom: 52px;
-      right: 28px;
-      z-index: 99999;
-      max-width: 400px;
-      min-width: 300px;
-      background: ${c.bg};
-      border: 2px solid ${c.border};
-      border-radius: 16px;
-      padding: 20px 22px;
-      box-shadow: 0 8px 40px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.06);
-      direction: rtl;
-      font-family: 'Tajawal', 'Cairo', sans-serif;
-      opacity: 0;
-      transform: translateY(20px) scale(.97);
-      transition: opacity .45s cubic-bezier(.4,0,.2,1),
-                  transform .45s cubic-bezier(.4,0,.2,1);
-      cursor: pointer;
+    const card = document.createElement('div');
+    card.style.cssText = `
+      background:rgba(15,15,30,0.85);
+      border:1px solid ${meta.color}44;
+      border-radius:24px;
+      padding:36px 44px;
+      max-width:540px;
+      width:90%;
+      text-align:center;
+      direction:rtl;
+      font-family:'Tajawal',sans-serif;
+      box-shadow:0 0 80px ${meta.glow},0 24px 64px rgba(0,0,0,.5);
+      transform:scale(.88) translateY(16px);
+      opacity:0;
+      transition:transform .55s cubic-bezier(.34,1.56,.64,1),opacity .55s ease;
+      pointer-events:none;
     `;
 
-    const labelHtml = isExam
-      ? `<div style="font-size:11px;color:#fca5a5;letter-spacing:.5px;margin-bottom:8px;font-weight:700">⏰ تنبيه اختبار</div>`
-      : `<div style="font-size:11px;color:${c.accent};letter-spacing:.5px;margin-bottom:8px;font-weight:700">${item.label}</div>`;
-
-    const bodyText = (item.text || '').replace(/\n/g, '<br>');
-
-    el.innerHTML = `
-      ${labelHtml}
-      <div style="font-size:15.5px;color:#f8fafc;line-height:1.85;font-weight:500">${bodyText}</div>
-      <div style="font-size:11.5px;color:${c.accent};margin-top:10px;opacity:.85">— ${item.source}</div>
-      <div style="position:absolute;top:10px;left:12px;font-size:11px;color:rgba(255,255,255,.35);cursor:pointer"
-           onclick="EduMOTD.closePopup()">✕</div>
-      <div id="edumotd-progress" style="
-        position:absolute;bottom:0;left:0;height:3px;
-        background:${c.border};border-radius:0 0 14px 14px;
-        width:100%;transition:width linear;
-      "></div>
+    card.innerHTML = `
+      <div style="font-size:42px;margin-bottom:12px;filter:drop-shadow(0 0 12px ${meta.color})">${meta.icon}</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;color:${meta.color};opacity:.9;margin-bottom:14px;text-transform:uppercase">${meta.label}</div>
+      <div style="font-size:20px;font-weight:700;color:#fff;line-height:1.75;margin-bottom:14px;text-shadow:0 2px 12px rgba(0,0,0,.6)">${item.text.replace(/\n/g,'<br>')}</div>
+      <div style="font-size:12px;color:${meta.color};opacity:.8;font-style:italic">${item.ref}</div>
     `;
 
-    el.addEventListener('click', () => EduMOTD.closePopup());
-    return el;
-  }
+    overlay.innerHTML = '';
+    overlay.appendChild(card);
+    overlay.style.background = 'rgba(0,0,0,0.45)';
+    overlay.style.backdropFilter = 'blur(12px)';
+    overlay.style.webkitBackdropFilter = 'blur(12px)';
 
-  /* ── اختبارات قادمة? ─────────────────────────────────────── */
-  function _getUpcomingExam() {
-    const now = new Date();
-    for (const ex of EXAM_SCHEDULE) {
-      const d = new Date(ex.date);
-      const diff = Math.ceil((d - now) / 86400000);
-      if (diff >= 0 && diff <= 3) {
-        return {
-          type: 'exam',
-          label: '⏰ تنبيه اختبار',
-          text: diff === 0
-            ? `🔴 اليوم: ${ex.name} — ${ex.grade}`
-            : `بعد ${diff} ${diff === 1 ? 'يوم' : 'أيام'}: ${ex.name}`,
-          source: ex.grade
-        };
-      }
-    }
-    return null;
-  }
-
-  /* ── عرض نافذة ───────────────────────────────────────────── */
-  function showPopup() {
-    if (!document.body) return;
-    EduMOTD.closePopup(true); // أغلق القديمة فوراً
-
-    const examItem = _getUpcomingExam();
-    const isExam   = !!examItem;
-    const item     = isExam ? examItem : EDOOS_CONTENT[_contentIndex % EDOOS_CONTENT.length];
-    _contentIndex++;
-
-    const popup = _buildPopup(item, isExam);
-    document.body.appendChild(popup);
-
-    // Animate in
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        popup.style.opacity = '1';
-        popup.style.transform = 'translateY(0) scale(1)';
+        card.style.opacity = '1';
+        card.style.transform = 'scale(1) translateY(0)';
       });
     });
 
-    // Progress bar
-    const dur = isExam ? 9000 : 8000; // 8–9 ثانية
-    const bar = popup.querySelector('#edumotd-progress');
-    if (bar) {
-      bar.style.transition = `width ${dur}ms linear`;
-      requestAnimationFrame(() => { bar.style.width = '0%'; });
-    }
-
-    // Auto close
-    _popupTimer = setTimeout(() => EduMOTD.closePopup(), dur);
+    // اختفاء بعد 8.5 ثانية
+    setTimeout(() => {
+      card.style.opacity = '0';
+      card.style.transform = 'scale(.94) translateY(-10px)';
+      card.style.transition = 'opacity .7s ease,transform .7s ease';
+      overlay.style.background = 'rgba(0,0,0,0)';
+      overlay.style.backdropFilter = 'blur(0px)';
+      overlay.style.webkitBackdropFilter = 'blur(0px)';
+      setTimeout(() => { overlay.innerHTML = ''; }, 750);
+    }, 8500);
   }
 
-  /* ── إغلاق النافذة ───────────────────────────────────────── */
-  function closePopup(instant = false) {
-    clearTimeout(_popupTimer);
-    const el = document.getElementById('edumotd-popup');
-    if (!el) return;
-    if (instant) {
-      el.remove();
-      return;
-    }
-    el.style.opacity = '0';
-    el.style.transform = 'translateY(20px) scale(.97)';
-    setTimeout(() => el && el.remove(), 480);
-  }
+  // أول ظهور بعد 5 ثوانٍ، ثم كل 75 ثانية
+  setTimeout(showNext, 5000);
+  setInterval(showNext, 75000);
 
-  /* ── شريط الأخبار ────────────────────────────────────────── */
-  function _buildTicker() {
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-
-    const active = NEWS_TICKER.filter(n => {
-      const fromOk = !n.from || n.from <= dateStr;
-      const toOk   = !n.to   || n.to   >= dateStr;
-      return fromOk && toOk;
-    });
-
-    if (active.length === 0) return;
-
-    const tickerEl = document.getElementById('edumotd-ticker');
-    if (!tickerEl) return;
-
-    const typeStyle = {
-      ministry: { bg: 'linear-gradient(90deg,#1e3a5f,#1e40af)', badge: '#3b82f6', label: 'وزارة' },
-      state:    { bg: 'linear-gradient(90deg,#1a2e1a,#166534)', badge: '#22c55e', label: 'رسمي' },
-      school:   { bg: 'linear-gradient(90deg,#3b1f0a,#92400e)', badge: '#f59e0b', label: 'إداري' }
-    };
-
-    function showNext() {
-      const n = active[_tickerIndex % active.length];
-      const s = typeStyle[n.type] || typeStyle.school;
-      tickerEl.style.background = s.bg;
-
-      tickerEl.innerHTML = `
-        <span style="background:${s.badge};color:#fff;font-size:10px;padding:2px 8px;
-              border-radius:20px;margin-left:10px;font-weight:700;letter-spacing:.5px">${s.badge === '#22c55e' ? '🇸🇦' : n.icon} ${s.label}</span>
-        <span style="font-size:13.5px;font-weight:500;color:#f1f5f9">${n.text}</span>
-      `;
-      tickerEl.style.opacity = '1';
-      tickerEl.style.transform = 'translateY(0)';
-
-      const dur = (n.duration || 8) * 1000;
-      _tickerTimer = setTimeout(() => {
-        tickerEl.style.opacity = '0';
-        tickerEl.style.transform = 'translateY(8px)';
-        setTimeout(() => {
-          _tickerIndex++;
-          showNext();
-        }, 400);
-      }, dur);
-    }
-
-    tickerEl.style.opacity = '0';
-    tickerEl.style.transform = 'translateY(8px)';
-    tickerEl.style.transition = 'opacity .4s, transform .4s';
-    showNext();
-  }
-
-  /* ── تهيئة شريط الأخبار في DOM ──────────────────────────── */
-  function _injectTickerDOM() {
-    if (document.getElementById('edumotd-ticker')) return;
-
-    const ticker = document.createElement('div');
-    ticker.id = 'edumotd-ticker';
-    ticker.style.cssText = `
-      position: fixed;
-      bottom: 0; left: 0; right: 0;
-      z-index: 99998;
-      padding: 7px 24px;
-      display: flex;
-      align-items: center;
-      direction: rtl;
-      font-family: 'Tajawal','Cairo',sans-serif;
-      min-height: 42px;
-      background: linear-gradient(90deg,#0f172a,#1e3a5f);
-      box-shadow: 0 -2px 12px rgba(0,0,0,.35);
-    `;
-    document.body.appendChild(ticker);
-    _buildTicker();
-  }
-
-  /* ── init ────────────────────────────────────────────────── */
-  function init(opts = {}) {
-    const delay   = opts.firstDelay  ?? 8000;   // أول نافذة بعد 8 ثوان
-    const between = opts.betweenDelay ?? 60000; // كل دقيقة
-    _popupDelay = between;
-
-    function scheduleNext() {
-      showPopup();
-      _popupTimer = setTimeout(scheduleNext, between);
-    }
-
-    setTimeout(scheduleNext, delay);
-    _injectTickerDOM();
-  }
-
-  /* ── API عامة ─────────────────────────────────────────────── */
-  function addNews(item) {
-    NEWS_TICKER.push(item);
-  }
-
-  return { init, showPopup, closePopup, addNews };
+  window.EduMOTD = window.EduMOTD || {};
+  window.EduMOTD.showNow = showNext;
 })();
 
-/* ═══════════════════════════════════════════════════════════════
-   5 ▸ تشغيل تلقائي عند تحميل الصفحة
-══════════════════════════════════════════════════════════════ */
-if (typeof window !== 'undefined') {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => EduMOTD.init());
-  } else {
-    EduMOTD.init();
+/* ── شريط الأخبار (أسفل الشاشة) ─────────────────────────── */
+(function initNewsBar() {
+  const NEWS = [
+    { type:'ministry', icon:'🔵', text:'التقويم الدراسي 2025–2026 مُعتمد من وزارة التربية والتعليم' },
+    { type:'official', icon:'🟢', text:'الاجتماع الدوري للمعلمين: الأحد القادم الساعة 12:30 ظهراً' },
+    { type:'admin',    icon:'🟡', text:'تذكير: تسليم خطط الوحدة الثالثة قبل نهاية الأسبوع' },
+    { type:'ministry', icon:'🔵', text:'برنامج تطوير المعلم المهني — التسجيل مفتوح حتى نهاية الشهر' },
+    { type:'official', icon:'🟢', text:'اليوم الوطني لدولة الإمارات العربية المتحدة: 2 ديسمبر' },
+    { type:'admin',    icon:'🟡', text:'رصد درجات الفصل الثالث — آخر موعد للإدخال: الأسبوع 12' },
+  ];
+
+  const bar = document.createElement('div');
+  bar.id = 'edu-news-bar';
+  bar.style.cssText = `
+    position:fixed;bottom:0;left:0;right:0;z-index:87000;
+    height:36px;
+    background:linear-gradient(90deg,rgba(10,10,20,.97),rgba(15,15,35,.97));
+    border-top:1px solid rgba(99,102,241,.25);
+    display:flex;align-items:center;overflow:hidden;
+    font-family:'Tajawal',sans-serif;direction:rtl;
+  `;
+
+  const label = document.createElement('div');
+  label.style.cssText = `
+    flex-shrink:0;padding:0 14px;font-size:11px;font-weight:800;
+    color:#6366f1;letter-spacing:1px;border-left:1px solid rgba(99,102,241,.3);
+    height:100%;display:flex;align-items:center;gap:6px;white-space:nowrap;
+  `;
+  label.innerHTML = '📡 <span>أخبار EduOS</span>';
+
+  const track = document.createElement('div');
+  track.style.cssText = `
+    flex:1;overflow:hidden;display:flex;align-items:center;height:100%;
+  `;
+
+  const ticker = document.createElement('div');
+  ticker.style.cssText = `
+    display:flex;align-items:center;gap:48px;
+    white-space:nowrap;
+    animation:eduNewsTicker 45s linear infinite;
+  `;
+
+  const allNews = [...NEWS, ...NEWS]; // loop
+  ticker.innerHTML = allNews.map(n =>
+    `<span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:rgba(255,255,255,.85)">
+      <span>${n.icon}</span>
+      <span>${n.text}</span>
+      <span style="color:rgba(99,102,241,.4);margin:0 16px">◆</span>
+    </span>`
+  ).join('');
+
+  track.appendChild(ticker);
+  bar.appendChild(label);
+  bar.appendChild(track);
+  document.body.appendChild(bar);
+
+  // CSS animation
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes eduNewsTicker {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+  `;
+  document.head.appendChild(style);
+
+  window.EduMOTD = window.EduMOTD || {};
+  window.EduMOTD.addNews = function(item) {
+    const span = document.createElement('span');
+    span.style.cssText = 'display:inline-flex;align-items:center;gap:8px;font-size:13px;color:rgba(255,255,255,.85)';
+    span.innerHTML = `<span>${item.icon||'📌'}</span><span>${item.text}</span><span style="color:rgba(99,102,241,.4);margin:0 16px">◆</span>`;
+    ticker.appendChild(span);
+  };
+})();
+
+/* ── تذكير التنفس والحركة ────────────────────────────────── */
+(function initWellnessReminder() {
+  const WORK_LIMIT = 30 * 60 * 1000;   // 30 دقيقة
+  const CHECK_INT  = 60 * 1000;         // فحص كل دقيقة
+  const BREATHE_DURATION = 16;          // ثانية (4 دورات)
+
+  let lastActivity = Date.now();
+  let totalActive  = 0;
+  let lastCheck    = Date.now();
+  let breatheShown = false;
+
+  // تتبّع النشاط
+  ['mousemove','mousedown','keydown','touchstart','scroll'].forEach(ev => {
+    document.addEventListener(ev, () => { lastActivity = Date.now(); }, { passive:true });
+  });
+
+  // إنشاء نافذة التذكير
+  const reminderEl = document.createElement('div');
+  reminderEl.id = 'edu-wellness-reminder';
+  reminderEl.style.cssText = `
+    position:fixed;inset:0;z-index:95000;
+    display:none;align-items:center;justify-content:center;
+    background:rgba(0,0,0,0.6);backdrop-filter:blur(16px);
+    font-family:'Tajawal',sans-serif;direction:rtl;
+  `;
+  reminderEl.innerHTML = `
+    <div style="
+      background:linear-gradient(135deg,rgba(16,185,129,0.15),rgba(6,182,212,0.15));
+      border:1px solid rgba(16,185,129,0.4);
+      border-radius:28px;padding:44px 52px;max-width:480px;width:92%;
+      text-align:center;box-shadow:0 0 80px rgba(16,185,129,0.2),0 32px 64px rgba(0,0,0,.5);
+    ">
+      <div id="wellness-emoji" style="font-size:56px;margin-bottom:8px">🤸</div>
+      <div style="font-size:22px;font-weight:800;color:#fff;margin-bottom:8px">
+        وقتُ الراحة والتجدد 🌿
+      </div>
+      <div style="font-size:14px;color:rgba(255,255,255,.7);margin-bottom:28px;line-height:1.7">
+        مضى وقتٌ جيد على عملك — ذكاء جسدك يحتاج لحظة تجديد
+        <br>
+        <span style="font-size:12px;color:rgba(16,185,129,.8)">
+          « إنَّ لجسدِكَ عليكَ حقًّا » — رواه البخاري
+        </span>
+      </div>
+
+      <!-- دائرة التنفس -->
+      <div id="breathe-circle" style="
+        width:120px;height:120px;border-radius:50%;margin:0 auto 20px;
+        background:radial-gradient(circle,rgba(16,185,129,0.5),rgba(16,185,129,0.1));
+        border:2px solid rgba(16,185,129,0.6);
+        display:flex;align-items:center;justify-content:center;
+        font-size:15px;font-weight:700;color:#10b981;
+        transition:transform 4s ease-in-out, box-shadow 4s ease-in-out;
+      ">استنشق</div>
+      <div id="breathe-text" style="font-size:13px;color:rgba(255,255,255,.6);margin-bottom:24px;height:20px"></div>
+
+      <!-- أزرار الحركة -->
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:20px">
+        <button onclick="EduWellness.dismiss()" style="
+          background:linear-gradient(135deg,#10b981,#059669);
+          border:none;border-radius:12px;padding:10px 24px;
+          color:#fff;font-family:'Tajawal',sans-serif;font-size:14px;font-weight:700;cursor:pointer;
+        ">✅ شكراً — متجددة!</button>
+        <button onclick="EduWellness.snooze()" style="
+          background:rgba(255,255,255,.08);
+          border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:10px 20px;
+          color:rgba(255,255,255,.7);font-family:'Tajawal',sans-serif;font-size:13px;cursor:pointer;
+        ">⏰ بعد 10 دقائق</button>
+      </div>
+
+      <div style="font-size:11px;color:rgba(255,255,255,.3)">
+        تذكير ذكي يحسب نشاطك الفعلي — لجودة حياتك وطلابك 🤲
+      </div>
+    </div>
+  `;
+  document.body.appendChild(reminderEl);
+
+  // دورة التنفس (4-4-4-4)
+  const breathePhases = [
+    { text:'استنشق...', duration:4, scale:1.35, shadow:'0 0 40px rgba(16,185,129,0.6)' },
+    { text:'احبس...', duration:4, scale:1.35, shadow:'0 0 50px rgba(6,182,212,0.7)' },
+    { text:'أخرج...', duration:4, scale:0.85, shadow:'0 0 20px rgba(16,185,129,0.2)' },
+    { text:'راحة...', duration:4, scale:0.85, shadow:'0 0 15px rgba(16,185,129,0.1)' },
+  ];
+  let breatheInterval = null;
+  let breathePhaseIdx = 0;
+  let breatheCount = 0;
+
+  function startBreathing() {
+    const circle = document.getElementById('breathe-circle');
+    const text   = document.getElementById('breathe-text');
+    breathePhaseIdx = 0; breatheCount = 0;
+
+    function nextPhase() {
+      if (breatheCount >= BREATHE_DURATION) {
+        if (circle) circle.textContent = '✅';
+        if (text) text.textContent = 'أحسنت! تنفّست بشكل مثالي';
+        clearInterval(breatheInterval);
+        return;
+      }
+      const p = breathePhases[breathePhaseIdx % breathePhases.length];
+      if (circle) {
+        circle.textContent = p.text;
+        circle.style.transform = `scale(${p.scale})`;
+        circle.style.boxShadow = p.shadow;
+      }
+      breathePhaseIdx++;
+      breatheCount += p.duration;
+    }
+
+    nextPhase();
+    breatheInterval = setInterval(nextPhase, 4000);
   }
-}
+
+  function showReminder() {
+    breatheShown = true;
+    reminderEl.style.display = 'flex';
+    reminderEl.style.opacity = '0';
+    requestAnimationFrame(() => {
+      reminderEl.style.transition = 'opacity .5s ease';
+      reminderEl.style.opacity = '1';
+    });
+    startBreathing();
+  }
+
+  function hideReminder() {
+    reminderEl.style.opacity = '0';
+    setTimeout(() => { reminderEl.style.display = 'none'; }, 500);
+    if (breatheInterval) clearInterval(breatheInterval);
+    totalActive = 0;
+    breatheShown = false;
+    lastActivity = Date.now();
+  }
+
+  // فحص كل دقيقة
+  setInterval(() => {
+    const now = Date.now();
+    const idle = now - lastActivity;
+    // إذا المستخدم نشط (لم يتجاوز الخمول 2 دقيقة) → أضف للوقت الفعّال
+    if (idle < 120000) {
+      totalActive += now - lastCheck;
+    }
+    lastCheck = now;
+    if (!breatheShown && totalActive >= WORK_LIMIT) {
+      showReminder();
+    }
+  }, CHECK_INT);
+
+  window.EduWellness = {
+    dismiss: hideReminder,
+    snooze: () => { hideReminder(); totalActive = -10 * 60 * 1000; /* تأخير 10 دق */ },
+    getActiveTime: () => Math.round(totalActive / 60000) + ' دقيقة',
+  };
+})();
