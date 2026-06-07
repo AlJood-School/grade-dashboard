@@ -504,7 +504,9 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
 
   <!-- ══ TAB: GRADES ══ -->
   <div class="tab-panel" id="panel-grades">
-    <div class="section-title">📊 رصد الدرجات والأداء</div>
+    <div class="section-title">📊 رصد الدرجات والأداء
+  <span id="grades-live-stats" style="font-size:11px;font-weight:400;color:var(--text2);margin-right:12px"></span>
+</div>
 
     <div class="grades-filters">
       <select class="grade-select"><option>الصف 3ب</option><option>الصف 2أ</option><option>الصف 4أ</option><option>الصف 5ب</option><option>الصف 6أ</option></select>
@@ -815,7 +817,7 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
     <div class="section-title">💬 التواصل والرسائل</div>
 
     <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
-      <button class="compose-btn" onclick="showToast('جاري فتح محرر الرسالة...')">✍️ رسالة جديدة</button>
+      <button class="compose-btn" onclick="openComposeModal()">✍️ رسالة جديدة</button>
       <button class="qa-btn" onclick="showToast('جاري فتح محرر الملاحظة...')">📝 ملاحظة سلوكية</button>
       <button class="qa-btn" onclick="showToast('جاري فتح رسالة ولي الأمر...')">👪 تواصل مع ولي أمر</button>
     </div>
@@ -823,24 +825,12 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
     <div class="grid-2">
       <div>
         <div class="section-title" style="font-size:13px">📥 الوارد</div>
-        <div class="msg-list">
-          <div class="msg-item unread">
-            <div class="msg-header"><span class="msg-from">🏫 حليمة المعمري — المديرة</span><span class="msg-time">منذ ٣٠ دقيقة</span></div>
-            <div class="msg-body">بخصوص تقرير IEP المطلوب قبل يوم الثلاثاء — يرجى الإرسال على البريد الرسمي مع النسخة على النظام.</div>
-          </div>
-          <div class="msg-item unread">
-            <div class="msg-header"><span class="msg-from">♿ رهام عبدالخالق — تربية خاصة</span><span class="msg-time">منذ ساعة</span></div>
-            <div class="msg-body">يرجى مشاركة ملاحظات التعديل لـ الطالبة مريم في حصة G3 — بناءً على اجتماع فريق الدعم أمس.</div>
-          </div>
-          <div class="msg-item unread">
-            <div class="msg-header"><span class="msg-from">👪 ولي أمر — نورة أحمد 3ب</span><span class="msg-time">صباحاً</span></div>
-            <div class="msg-body">سؤال حول مشروع الروبوت — هل يحتاج مواد إضافية من البيت؟</div>
-          </div>
-          <div class="msg-item">
-            <div class="msg-header"><span class="msg-from">🔔 النظام التلقائي</span><span class="msg-time">أمس</span></div>
-            <div class="msg-body">تم حفظ نتائج VARK لـ 4 طالبات جدد في صف 4أ — اضغطي لعرض النتائج.</div>
+        <div id="inbox-dynamic">
+          <div style="text-align:center;padding:20px;color:var(--text2);font-size:13px">
+            🔄 اضغطي على "رسالة جديدة" لتحميل صندوق الوارد
           </div>
         </div>
+        <button onclick="loadInboxMessages()" style="background:var(--surface3);border:1px solid var(--border);border-radius:20px;padding:6px 16px;color:var(--text2);font-family:'Tajawal',sans-serif;font-size:12px;cursor:pointer;margin-top:8px;width:100%">🔄 تحديث الصندوق</button>
       </div>
       <div>
         <div class="section-title" style="font-size:13px">📤 الصادر الأخير</div>
@@ -1260,53 +1250,118 @@ function renderColChips(){
     </span>`).join('');
 }
 
-function buildGrades(){
+async function buildGrades(){
   renderColChips();
   const head=document.getElementById('gradesHead');
   const body=document.getElementById('gradesBody');
   if(!head||!body) return;
 
+  // رسالة التحميل
+  body.innerHTML = '<tr><td colspan="20" style="text-align:center;padding:30px;color:var(--text2)">⏳ جارٍ تحميل الدرجات من السجل...</td></tr>';
+  head.innerHTML = '';
+
+  // محاولة جلب من project_grades
+  let pgData = [];
+  try {
+    pgData = await sbFetch('project_grades', 'order=class_name.asc,student_name.asc&limit=500');
+    if (!Array.isArray(pgData)) pgData = [];
+  } catch(e) { pgData = []; }
+
+  // إذا فارغ — استخدم البيانات المحلية
+  if (!pgData.length) {
+    renderLocalGrades(head, body);
+    return;
+  }
+
+  // استخراج أعمدة التقييم الديناميكية
+  const skipCols = new Set(['id','student_name','class_name','grade','created_at','updated_at','teacher_id']);
+  const sampleRow = pgData[0] || {};
+  const dynamicCols = Object.keys(sampleRow).filter(k => !skipCols.has(k) && sampleRow[k] !== null);
+
   // رأس الجدول
-  head.innerHTML=`<tr>
-    <th>الطالبة</th>
+  head.innerHTML = `<tr>
+    <th>#</th>
+    <th>اسم الطالبة</th>
     <th>الصف</th>
+    ${dynamicCols.map(c => `<th style="min-width:80px">${c.replace(/_/g,' ')}</th>`).join('')}
+    <th>المجموع</th>
+    <th>التقدير</th>
+  </tr>`;
+
+  // صفوف
+  body.innerHTML = pgData.map((r, i) => {
+    const vals = dynamicCols.map(c => parseFloat(r[c]) || 0);
+    const total = vals.length ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length) : 0;
+    const {g,cls} = calcGrade(total);
+    const color = total>=85?'var(--emerald)':total>=70?'var(--gold)':'var(--rose)';
+    return `<tr>
+      <td style="color:var(--text3);font-size:11px">${i+1}</td>
+      <td><strong style="font-size:12px">${r.student_name||'—'}</strong></td>
+      <td><span style="background:rgba(99,102,241,0.15);color:var(--indigo2);border-radius:20px;padding:2px 8px;font-size:11px">${r.class_name||r.grade||'—'}</span></td>
+      ${dynamicCols.map(c => {
+        const v = r[c];
+        const n = parseFloat(v);
+        const cl = !isNaN(n) ? (n>=85?'color:#10b981':n>=70?'color:#f6c90e':'color:#f43f5e') : 'color:var(--text2)';
+        return `<td style="text-align:center;font-weight:700;font-size:13px;${cl}">${v??'—'}</td>`;
+      }).join('')}
+      <td><div style="display:flex;align-items:center;gap:6px">
+        <strong style="color:${color}">${total}%</strong>
+        <div style="background:rgba(255,255,255,0.08);border-radius:4px;height:6px;min-width:40px;overflow:hidden">
+          <div style="width:${total}%;height:100%;background:${color};border-radius:4px"></div>
+        </div>
+      </div></td>
+      <td><span class="grade-pill ${cls}">${g}</span></td>
+    </tr>`;
+  }).join('');
+
+  // إحصائيات سريعة
+  const stats = document.getElementById('grades-live-stats');
+  if (stats) {
+    const avgs = pgData.map(r => {
+      const vals = dynamicCols.map(c=>parseFloat(r[c])||0);
+      return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+    });
+    const avg = avgs.length ? (avgs.reduce((a,b)=>a+b,0)/avgs.length).toFixed(1) : 0;
+    stats.textContent = `${pgData.length} طالبة | متوسط الصف ${avg}%`;
+  }
+}
+
+// نسخة احتياطية بالبيانات المحلية
+function renderLocalGrades(head, body) {
+  renderColChips();
+  if(!head||!body) return;
+  head.innerHTML=`<tr>
+    <th>الطالبة</th><th>الصف</th>
     ${gradeColumns.map(c=>`<th style="min-width:90px">
       <div style="display:flex;flex-direction:column;gap:2px;align-items:center">
         <span>${typeIcons[c.type]||'📌'} ${c.name}</span>
         <span style="font-size:10px;font-weight:400;color:var(--text3)">من ${c.max}</span>
-      </div>
-    </th>`).join('')}
-    <th>المتوسط</th>
-    <th>التقدير</th>
+      </div></th>`).join('')}
+    <th>المتوسط</th><th>التقدير</th>
   </tr>`;
-
-  // صفوف الطالبات
   body.innerHTML=gradesStudents.map((s,i)=>{
     const avg=calcAvg(i);
     const {g,cls}=calcGrade(avg);
+    const color=avg>=85?'var(--emerald)':avg>=70?'var(--gold)':'var(--rose)';
     return `<tr>
       <td><strong style="font-size:12px">${s.name}</strong></td>
-      <td><span class="tag" style="background:rgba(99,102,241,0.15);color:var(--indigo2)">${s.cls}</span></td>
+      <td><span style="background:rgba(99,102,241,0.15);color:var(--indigo2);border-radius:20px;padding:2px 8px;font-size:11px">${s.cls}</span></td>
       ${gradeColumns.map(c=>`
-        <td>
-          <input class="grade-input" type="number" min="0" max="${c.max}"
-            value="${gradesMatrix[i][c.id]??''}"
-            placeholder="-"
+        <td><input class="grade-input" type="number" min="0" max="${c.max}"
+            value="${gradesMatrix[i][c.id]??''}" placeholder="-"
             oninput="setScore(${i},'${c.id}',this.value)"
-            style="width:64px;text-align:center" />
+            style="width:64px;text-align:center"/>
           <div style="font-size:9px;color:var(--text3);text-align:center;margin-top:2px">/ ${c.max}</div>
         </td>`).join('')}
       <td id="avg-${i}">
         <div style="display:flex;align-items:center;gap:6px">
-          <strong style="color:${avg>=85?'var(--emerald)':avg>=70?'var(--gold)':'var(--rose)'}">${avg}%</strong>
-          <div class="progress-bar-wrap" style="min-width:40px"><div class="progress-bar-fill" style="width:${avg}%;background:${avg>=85?'var(--emerald)':avg>=70?'var(--gold)':'var(--rose)'}"></div></div>
-        </div>
-      </td>
+          <strong style="color:${color}">\${avg}%</strong>
+          <div class="progress-bar-wrap" style="min-width:40px"><div class="progress-bar-fill" style="width:${avg}%;background:${color}"></div></div>
+        </div></td>
       <td id="gr-${i}"><span class="grade-pill ${cls}">${g}</span></td>
     </tr>`;
   }).join('');
 }
-
 function setScore(rowIdx,colId,val){
   if(!gradesMatrix[rowIdx]) gradesMatrix[rowIdx]={};
   gradesMatrix[rowIdx][colId]=parseFloat(val)||0;
@@ -1804,5 +1859,191 @@ function showToast(title, msg) {
 <script src="../platform-theme.js"></script>
 <script src="../../student-card.js"></script>
 <script src="../../staff-card.js"></script>
+<script>
+window.EDOOS_AUTOLOGOUT_CONFIG = {
+  idleMinutes: 15,
+  warnMinutes: 2,
+  loginUrl: '../edoos-login/',
+  userName: 'منيرة المري',
+  role: 'معلمة',
+  breathingMinutes: 45,
+  movementMinutes: 60,
+};
+</script>
+<script src="../platform-autologout.js"></script>
+
+<!-- ══ Compose Message Modal ══ -->
+<div id="compose-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;font-family:'Tajawal',sans-serif;direction:rtl">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:24px;padding:28px 24px;max-width:480px;width:92%;box-shadow:0 24px 64px rgba(0,0,0,0.5);animation:fadeUp .3s ease">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:16px;font-weight:900;color:var(--text)">✍️ رسالة جديدة</div>
+      <button onclick="document.getElementById('compose-modal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;line-height:1">×</button>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">👤 المستلم</label>
+      <select id="compose-to" style="width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-family:'Tajawal',sans-serif;font-size:13px">
+        <option value="">اختاري المستلم...</option>
+        <option value="principal">🏫 المديرة — حليمة المعمري</option>
+        <option value="vice">📋 الوكيلة — سارة الكعبي</option>
+        <option value="inclusion">♿ تربية خاصة — رهام عبدالخالق</option>
+        <option value="social">💛 الأخصائية — نوف الزعابي</option>
+        <option value="nurse">🏥 الممرضة — إسراء محمد</option>
+        <option value="all_teachers">👩‍🏫 جميع المعلمات</option>
+        <option value="parent_3b">👪 أولياء أمور 3ب</option>
+        <option value="parent_4a">👪 أولياء أمور 4أ</option>
+      </select>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">📌 نوع الرسالة</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="msg-type-btn active" data-type="info" onclick="selectMsgType(this,'info')">💬 إشعار</button>
+        <button class="msg-type-btn" data-type="reminder" onclick="selectMsgType(this,'reminder')">🔔 تذكير</button>
+        <button class="msg-type-btn" data-type="alert" onclick="selectMsgType(this,'alert')">⚠️ تنبيه</button>
+      </div>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">📝 العنوان</label>
+      <input id="compose-title" type="text" placeholder="موضوع الرسالة..." style="width:100%;box-sizing:border-box;background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-family:'Tajawal',sans-serif;font-size:13px"/>
+    </div>
+
+    <div style="margin-bottom:20px">
+      <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">✏️ نص الرسالة</label>
+      <textarea id="compose-body" rows="4" placeholder="اكتبي رسالتكِ هنا..." style="width:100%;box-sizing:border-box;background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-family:'Tajawal',sans-serif;font-size:13px;resize:vertical"></textarea>
+    </div>
+
+    <div style="display:flex;gap:10px">
+      <button onclick="sendInternalMessage()" style="flex:1;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:50px;padding:12px;font-family:'Tajawal',sans-serif;font-size:14px;font-weight:700;cursor:pointer">📤 إرسال</button>
+      <button onclick="document.getElementById('compose-modal').style.display='none'" style="background:var(--surface3);color:var(--text2);border:1px solid var(--border);border-radius:50px;padding:12px 20px;font-family:'Tajawal',sans-serif;font-size:13px;cursor:pointer">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.msg-type-btn{background:var(--surface3);border:1px solid var(--border);border-radius:20px;padding:6px 14px;color:var(--text2);font-family:'Tajawal',sans-serif;font-size:12px;cursor:pointer;transition:all .2s}
+.msg-type-btn.active{background:rgba(99,102,241,0.2);border-color:rgba(99,102,241,0.5);color:var(--indigo2)}
+</style>
+
+<script>
+let _composeMsgType = 'info';
+
+function openComposeModal() {
+  document.getElementById('compose-modal').style.display = 'flex';
+  loadInboxMessages();
+}
+
+function selectMsgType(btn, type) {
+  _composeMsgType = type;
+  document.querySelectorAll('.msg-type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+async function sendInternalMessage() {
+  const to    = document.getElementById('compose-to').value;
+  const title = document.getElementById('compose-title').value.trim();
+  const body  = document.getElementById('compose-body').value.trim();
+
+  if (!to)    { showToast('⚠️ اختاري المستلم'); return; }
+  if (!title) { showToast('⚠️ أدخلي عنوان الرسالة'); return; }
+  if (!body)  { showToast('⚠️ أدخلي نص الرسالة'); return; }
+
+  const recipientNames = {
+    principal:'حليمة المعمري', vice:'سارة الكعبي',
+    inclusion:'رهام عبدالخالق', social:'نوف الزعابي',
+    nurse:'إسراء محمد', all_teachers:'جميع المعلمات',
+    parent_3b:'أولياء أمور 3ب', parent_4a:'أولياء أمور 4أ',
+  };
+
+  const payload = {
+    recipient_id: to,
+    recipient_name: recipientNames[to] || to,
+    title: title,
+    body: body,
+    type: _composeMsgType,
+    priority: _composeMsgType === 'alert' ? 'urgent' : 'normal',
+    is_read: false,
+  };
+
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/staff_notifications`, {
+      method: 'POST',
+      headers: {
+        apikey: _K,
+        Authorization: 'Bearer ' + _K,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (r.ok || r.status === 201) {
+      showToast('✅ تم إرسال الرسالة بنجاح');
+      document.getElementById('compose-modal').style.display = 'none';
+      document.getElementById('compose-title').value = '';
+      document.getElementById('compose-body').value = '';
+      document.getElementById('compose-to').value = '';
+      loadInboxMessages(); // تحديث الصندوق
+    } else {
+      showToast('⚠️ تعذّر الإرسال — تحقق من الاتصال');
+    }
+  } catch(e) {
+    showToast('❌ خطأ في الاتصال: ' + e.message);
+  }
+}
+
+let _inboxLoaded = false;
+async function loadInboxMessages() {
+  const container = document.getElementById('inbox-dynamic');
+  if (!container) return;
+  container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text2)">⏳ جارٍ التحميل...</div>';
+  
+  try {
+    const data = await sbFetch('staff_notifications',
+      'order=created_at.desc&limit=20&recipient_id=eq.munira.almarri');
+    const rows = Array.isArray(data) ? data : [];
+    
+    if (!rows.length) {
+      container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text2);font-size:13px">📭 لا توجد رسائل واردة</div>';
+      return;
+    }
+
+    const typeIcon = { substitute:'🔄', swap:'🔀', reminder:'🔔', alert:'⚠️', info:'💬' };
+    container.innerHTML = rows.map(r => {
+      const dt = r.created_at ? new Date(r.created_at).toLocaleString('ar-AE',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+      const unread = !r.is_read;
+      return `<div class="msg-item ${unread?'unread':''}" style="cursor:pointer" onclick="markMsgRead(${r.id},this)">
+        <div class="msg-header">
+          <span class="msg-from">${typeIcon[r.type]||'💬'} ${r.title}</span>
+          <span class="msg-time">${dt}</span>
+        </div>
+        <div class="msg-body">${r.body}</div>
+        ${unread ? '<div style="font-size:10px;color:var(--indigo2);margin-top:4px">● غير مقروءة</div>' : ''}
+      </div>`;
+    }).join('');
+
+    // تحديث عداد الشارة في التبويب
+    const unreadCount = rows.filter(r=>!r.is_read).length;
+    const badge = document.querySelector('#panel-messages ~ .badge, .tab-btn .badge-rose');
+    if (unreadCount > 0) showToast(`📬 ${unreadCount} رسالة غير مقروءة`);
+    
+  } catch(e) {
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:#f87171;font-size:13px">❌ تعذّر تحميل الرسائل</div>';
+  }
+}
+
+async function markMsgRead(id, el) {
+  el.classList.remove('unread');
+  el.querySelector('[style*="غير مقروءة"]')?.remove();
+  try {
+    await fetch(`${SUPA_URL}/rest/v1/staff_notifications?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: { apikey: _K, Authorization: 'Bearer '+_K, 'Content-Type':'application/json' },
+      body: JSON.stringify({ is_read: true }),
+    });
+  } catch(e) {}
+}
+</script>
+
 </body>
 </html>
