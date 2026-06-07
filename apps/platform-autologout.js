@@ -285,20 +285,29 @@
 
     const btn = document.createElement('button');
     btn.id = 'eal-header-logout';
-    btn.title = 'تسجيل الخروج';
+    btn.title = 'تسجيل الخروج من EduOS';
     btn.onclick = () => {
       if (confirm('هل تريدين تسجيل الخروج من EduOS؟')) doLogout();
     };
     btn.style.cssText = [
-      'width:36px', 'height:36px', 'border-radius:50%',
-      'background:rgba(239,68,68,0.12)', 'border:1px solid rgba(239,68,68,0.3)',
-      'cursor:pointer', 'display:flex', 'align-items:center',
-      'justify-content:center', 'font-size:16px',
+      'display:inline-flex', 'align-items:center', 'gap:5px',
+      'padding:6px 14px', 'border-radius:20px',
+      'background:transparent',
+      'border:1px solid rgba(239,68,68,0.35)',
+      'cursor:pointer', 'font-size:12px', 'font-weight:600',
+      'font-family:Tajawal,sans-serif',
       'transition:all .2s', 'color:#f87171',
+      'white-space:nowrap',
     ].join(';');
-    btn.innerHTML = '🚪';
-    btn.addEventListener('mouseenter', () => btn.style.background = 'rgba(239,68,68,0.25)');
-    btn.addEventListener('mouseleave', () => btn.style.background = 'rgba(239,68,68,0.12)');
+    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>خروج';
+    btn.addEventListener('mouseenter', () => {
+      btn.style.background = 'rgba(239,68,68,0.12)';
+      btn.style.borderColor = 'rgba(239,68,68,0.6)';
+    });
+    btn.addEventListener('mouseleave', () => {
+      btn.style.background = 'transparent';
+      btn.style.borderColor = 'rgba(239,68,68,0.35)';
+    });
 
     // أدرج قبل الـ avatar أو في النهاية
     const avatar = headerUser.querySelector('.user-avatar');
