@@ -301,8 +301,8 @@ const EduMOTD = (() => {
 
     el.style.cssText = `
       position: fixed;
-      bottom: 28px;
-      left: 28px;
+      bottom: 52px;
+      right: 28px;
       z-index: 99999;
       max-width: 400px;
       min-width: 300px;
@@ -448,7 +448,7 @@ const EduMOTD = (() => {
       const dur = (n.duration || 8) * 1000;
       _tickerTimer = setTimeout(() => {
         tickerEl.style.opacity = '0';
-        tickerEl.style.transform = 'translateY(-8px)';
+        tickerEl.style.transform = 'translateY(8px)';
         setTimeout(() => {
           _tickerIndex++;
           showNext();
@@ -457,7 +457,7 @@ const EduMOTD = (() => {
     }
 
     tickerEl.style.opacity = '0';
-    tickerEl.style.transform = 'translateY(-8px)';
+    tickerEl.style.transform = 'translateY(8px)';
     tickerEl.style.transition = 'opacity .4s, transform .4s';
     showNext();
   }
@@ -470,18 +470,18 @@ const EduMOTD = (() => {
     ticker.id = 'edumotd-ticker';
     ticker.style.cssText = `
       position: fixed;
-      top: 0; left: 0; right: 0;
+      bottom: 0; left: 0; right: 0;
       z-index: 99998;
       padding: 7px 24px;
       display: flex;
       align-items: center;
       direction: rtl;
       font-family: 'Tajawal','Cairo',sans-serif;
-      min-height: 36px;
-      background: linear-gradient(90deg,#1e3a5f,#1e40af);
-      box-shadow: 0 2px 12px rgba(0,0,0,.3);
+      min-height: 42px;
+      background: linear-gradient(90deg,#0f172a,#1e3a5f);
+      box-shadow: 0 -2px 12px rgba(0,0,0,.35);
     `;
-    document.body.insertBefore(ticker, document.body.firstChild);
+    document.body.appendChild(ticker);
     _buildTicker();
   }
 
