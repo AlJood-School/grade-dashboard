@@ -346,8 +346,8 @@ const EduTheme = (function(){
   };
   THEMES.forEach(t => CATEGORIES[t.category]?.themes.push(t));
 
-  // ── نقوش الخلفية الفنية (opacity مضمَّن داخل SVG) ───────────
-  const PATTERNS = {
+  // ── [النقوش أُلغيت بناءً على طلب الإدارة] ───────────────────
+  const PATTERNS_DISABLED = {
 
     /* 🌌 بنفسجي — نجمة إسلامية ثمانية الرؤوس + نجوم صغيرة */
     default: { size:'140px', svg:
@@ -474,19 +474,6 @@ const EduTheme = (function(){
     remote:    null,
   };
 
-  function injectPattern(themeId){
-    let el = document.getElementById('edu-bg-pattern');
-    if(!el){
-      el = document.createElement('style');
-      el.id = 'edu-bg-pattern';
-      document.head.appendChild(el);
-    }
-    const p = PATTERNS[themeId];
-    if(!p){ el.textContent = ''; return; }
-    const uri = encodeURIComponent(p.svg.trim().replace(/\n\s+/g,' '));
-    el.textContent = `body{background-image:url("data:image/svg+xml,${uri}");background-size:${p.size};background-attachment:fixed}`;
-  }
-
   let currentTheme = 'default';
 
   // ── تطبيق الثيم ──────────────────────────────────────────────
@@ -516,8 +503,6 @@ const EduTheme = (function(){
       if(badge) badge.style.display = active ? 'block' : 'none';
     });
 
-    // تطبيق نقش الخلفية الفني
-    injectPattern(id);
   }
 
   // ── واجهة اختيار الثيم ───────────────────────────────────────
