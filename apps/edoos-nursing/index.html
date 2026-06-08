@@ -451,6 +451,15 @@ body{background:linear-gradient(135deg,#FCE4EC 0%,#E3F2FD 50%,#E8F8F0 100%);min-
 </div>
 
 <script>
+const SUPA_URL='https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUyNTE2ODIsImV4cCI6MjA2MDgyNzY4Mn0.1Wr2GQeNiSZmtBhZWmtCNT68PI';
+const API={
+  h:()=>({apikey:SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json',Prefer:'return=representation'}),
+  get:async(t,p='')=>{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${p}`,{headers:API.h()});return r.ok?r.json():[];},
+  post:async(t,d)=>{const r=await fetch(`${SUPA_URL}/rest/v1/${t}`,{method:'POST',headers:API.h(),body:JSON.stringify(d)});return r.ok?r.json():null;},
+  patch:async(t,f,d)=>{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${f}`,{method:'PATCH',headers:API.h(),body:JSON.stringify(d)});return r.ok;},
+  del:async(t,f)=>{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${f}`,{method:'DELETE',headers:API.h()});return r.ok;}
+};
 const OR_P1='sk-or-v1-61abae706c617ebe661a3945bf0e20be';
 const OR_P2='a345f7222e4b1adfb47f913d9ff6e9bf';
 const OR_KEY=OR_P1+OR_P2;
@@ -485,11 +494,69 @@ async function askAI(){
   } catch(e){box.textContent='خطأ';}
 }
 
-function saveVisit(){
-  const s=document.getElementById('visit-student').value;
+async function saveVisit(){
+  const s=document.getElementById('visit-student').value.trim();
+  const cls=document.getElementById('visit-class').value;
+  const complaint=document.getElementById('visit-complaint').value;
+  const symptoms=document.getElementById('visit-symptoms').value;
+  const action=document.getElementById('visit-action').value;
+  const outcome=document.getElementById('visit-outcome').value;
+  const parentNotified=document.getElementById('parent-notified').checked;
   if(!s){alert('أدخلي اسم الطالبة');return;}
-  document.getElementById('visits-today').textContent=parseInt(document.getElementById('visits-today').textContent)+1;
-  showToast('✅ تم حفظ زيارة: '+s);
+  try {
+    await API.post('nurse_visits',{
+      student_name:s, class_name:cls,
+      symptoms:complaint+(symptoms?' — '+symptoms:''),
+      action_taken:action, outcome:outcome.split(' ')[0],
+      notes:parentNotified?'تم إبلاغ ولي الأمر':'',
+      visit_time:new Date().toTimeString().substring(0,5)
+    });
+    // تحديث العداد
+    const counter=document.getElementById('visits-today');
+    counter.textContent=parseInt(counter.textContent)+1;
+    // أضف للحالات النشطة
+    if(!outcome.includes('عادت')){
+      const active=document.getElementById('active-visits');
+      const badge=outcome.includes('أُرسلت')?'badge-red':outcome.includes('ولي')?'badge-orange':'badge-blue';
+      const label=outcome.includes('أُرسلت')?'⚠️ أُرسلت للمنزل':outcome.includes('ولي')?'⚠️ تنتظر أهلها':'في المراقبة';
+      const div=document.createElement('div'); div.className='patient-card';
+      div.innerHTML=`<div><div style="font-size:15px;font-weight:700">${s} — ${cls}</div><div style="font-size:12px;color:var(--gray)">${complaint} • دخلت الآن</div></div><div style="display:flex;gap:8px;align-items:center"><span class="badge ${badge}">${label}</span><button class="btn btn-green" style="padding:8px 12px;font-size:12px" onclick="resolveCase(this)">✅</button></div>`;
+      active.appendChild(div);
+      document.getElementById('active-cases').textContent=parseInt(document.getElementById('active-cases').textContent)+1;
+    }
+    // مسح النموذج
+    document.getElementById('visit-student').value='';
+    document.getElementById('visit-symptoms').value='';
+    document.getElementById('visit-action').value='';
+    showToast('✅ تم حفظ الزيارة في قاعدة البيانات');
+  } catch(e){ showToast('⚠️ خطأ في الحفظ'); }
+}
+
+async function loadNursingStats(){
+  const today=new Date().toISOString().split('T')[0];
+  const rows=await API.get('nurse_visits','visit_date=eq.'+today);
+  if(rows && rows.length){
+    document.getElementById('visits-today').textContent=rows.length;
+    const active=rows.filter(r=>r.outcome!=='راحة' && r.outcome!=='عادت للفصل').length;
+    document.getElementById('active-cases').textContent=active;
+  }
+  // إحصائيات الشهر
+  const firstOfMonth=new Date(); firstOfMonth.setDate(1);
+  const monthRows=await API.get('nurse_visits','visit_date=gte.'+firstOfMonth.toISOString().split('T')[0]);
+  if(monthRows && monthRows.length){
+    const total=monthRows.length;
+    const sentHome=monthRows.filter(r=>r.outcome==='إرسال للمنزل'||r.outcome==='أُرسلت للمنزل').length;
+    const hospital=monthRows.filter(r=>r.outcome==='نقل للمستشفى').length;
+    const avg=(total/30).toFixed(1);
+    document.querySelectorAll('.health-metric').forEach(m=>{
+      const label=m.querySelector('span:first-child')?.textContent||'';
+      const val=m.querySelector('span:last-child');
+      if(label.includes('إجمالي الزيارات')&&val) val.textContent=total;
+      if(label.includes('أُرسلن للمنزل')&&val) val.textContent=sentHome;
+      if(label.includes('نُقلن للمستشفى')&&val) val.textContent=hospital;
+      if(label.includes('متوسط يومي')&&val) val.textContent=avg;
+    });
+  }
 }
 
 function resolveCase(btn){
@@ -569,6 +636,7 @@ function updateTime(){
   document.getElementById('current-time').textContent=now.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});
 }
 setInterval(updateTime,1000); updateTime();
+loadNursingStats();
 document.getElementById('visit-time').value=new Date().toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit',hour12:false});
 </script>
 </body>

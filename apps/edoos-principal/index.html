@@ -1497,6 +1497,8 @@ setTimeout(buildChart, 100);
 // ════════════════════════════════════════════════════
 // ─── ATTENDANCE SYSTEM ───
 // ════════════════════════════════════════════════════
+const SUPA_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUyNTE2ODIsImV4cCI6MjA2MDgyNzY4Mn0.1Wr2GQeNiSZmtBhZWmtCNT68PI';
 const OR_KEY_P1 = 'sk-or-v1-61abae706c617ebe661a3945';
 const OR_KEY_P2 = 'bf0e20bea345f7222e4b1adfb47f913d9ff6e9bf';
 
@@ -2120,6 +2122,91 @@ document.getElementById('toolModal').addEventListener('click', function(e) {
 
 })();
 </script>
+
+
+// ─── نظام إشعار النسخ الاحتياطية ─────────────────────────
+(function(){
+  const SBU='https://zuyizaiugpmhmeycqton.supabase.co';
+  const SBK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUyNTE2ODIsImV4cCI6MjA2MDgyNzY4Mn0.1Wr2GQeNiSZmtBhZWmtCNT68PI';
+  const H={apikey:SBK,'Authorization':'Bearer '+SBK,'Content-Type':'application/json'};
+  let lastSeenBackup=null;
+  let backupWarningShown=false;
+
+  // فحص اكتمال النسخة الاحتياطية
+  async function checkBackupCompletion(){
+    try {
+      const r=await fetch(`${SBU}/rest/v1/backups_log?order=created_at.desc&limit=1`,{headers:H});
+      if(!r.ok) return;
+      const rows=await r.json();
+      if(!rows||!rows.length) return;
+      const latest=rows[0];
+      if(!lastSeenBackup){ lastSeenBackup=latest.id; return; }
+      if(latest.id!==lastSeenBackup){
+        lastSeenBackup=latest.id;
+        showBackupCompleteNotif(latest);
+      }
+    } catch(e){}
+  }
+
+  function showBackupCompleteNotif(bk){
+    const n=document.createElement('div');
+    n.style.cssText='position:fixed;top:24px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#1b5e20,#2e7d32);color:#fff;padding:18px 28px;border-radius:20px;font-size:15px;font-weight:700;z-index:99999;box-shadow:0 8px 32px rgba(46,125,50,0.5);text-align:center;min-width:340px;cursor:pointer';
+    n.innerHTML='💾 تمت النسخة الاحتياطية بنجاح ✅<br><span style="font-size:12px;opacity:0.9">'+bk.title+' — '+new Date(bk.created_at).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})+'</span>';
+    n.onclick=()=>n.remove();
+    document.body.appendChild(n);
+    setTimeout(()=>n.remove(),15000);
+  }
+
+  // تحذير 5 دقائق قبل النسخ التلقائي
+  async function checkUpcomingBackup(){
+    if(backupWarningShown) return;
+    try {
+      const r=await fetch(`${SBU}/rest/v1/app_settings?key=eq.next_auto_backup&select=value`,{headers:H});
+      if(!r.ok) return;
+      const rows=await r.json();
+      if(!rows||!rows.length) return;
+      const nextTime=new Date(rows[0].value);
+      const diffMin=(nextTime-Date.now())/60000;
+      if(diffMin>0 && diffMin<=5 && !backupWarningShown){
+        backupWarningShown=true;
+        showBackupWarning(Math.ceil(diffMin));
+        setTimeout(()=>{ backupWarningShown=false; },600000);
+      }
+    } catch(e){}
+  }
+
+  function showBackupWarning(mins){
+    const overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99998;display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML=`<div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border:2px solid #f6c90e;border-radius:24px;padding:36px 44px;text-align:center;color:#fff;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,0.8)">
+      <div style="font-size:48px;margin-bottom:16px">⏳</div>
+      <h2 style="font-size:22px;font-weight:900;color:#f6c90e;margin-bottom:12px">نسخة احتياطية خلال ${mins} دقيقة</h2>
+      <p style="font-size:14px;opacity:0.8;line-height:1.8;margin-bottom:20px">سيبدأ النظام تلقائياً بأخذ نسخة احتياطية شاملة.<br>يُرجى إنهاء أي عملية غير محفوظة الآن.</p>
+      <div style="display:flex;gap:12px;justify-content:center">
+        <button onclick="this.closest('[style*=inset]').remove()" style="background:#f6c90e;color:#000;border:none;padding:12px 28px;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;font-family:'Tajawal',sans-serif">حسناً، فهمت</button>
+        <button onclick="this.closest('[style*=inset]').remove()" style="background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.3);padding:12px 28px;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;font-family:'Tajawal',sans-serif">تجاهل</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+  }
+
+  // افحص كل 30 ثانية لإشعار الإتمام، وكل دقيقة للتحذير
+  setInterval(checkBackupCompletion, 30000);
+  setInterval(checkUpcomingBackup, 60000);
+  setTimeout(()=>{ checkBackupCompletion(); checkUpcomingBackup(); }, 3000);
+
+  // عند إرسال طلب نسخة — احسب وقت التالية
+  const origRequest = window.requestManualBackup;
+  window.requestManualBackup = async function(){
+    if(origRequest) await origRequest();
+    // احفظ وقت النسخة القادمة (3 أيام)
+    const nextAuto = new Date(Date.now() + 3*24*60*60*1000).toISOString();
+    await fetch(`${SBU}/rest/v1/app_settings?key=eq.next_auto_backup`,{
+      method:'PATCH',headers:H,
+      body:JSON.stringify({value:nextAuto})
+    });
+  };
+})();
 
 <script src="../../platform-theme.js"></script>
 <script src="../../student-card.js"></script>

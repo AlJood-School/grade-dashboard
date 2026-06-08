@@ -253,6 +253,8 @@ body{background:linear-gradient(135deg,#FFFBEB,#FEF3C7,#FDE68A 100%);min-height:
 </div>
 
 <script>
+const SUPA_URL='https://zuyizaiugpmhmeycqton.supabase.co';const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUyNTE2ODIsImV4cCI6MjA2MDgyNzY4Mn0.1Wr2GQeNiSZmtBhZWmtCNT68PI';
+const API={h:()=>({apikey:SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json',Prefer:'return=representation'}),get:async(t,p='')=>{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${p}`,{headers:API.h()});return r.ok?r.json():[]},post:async(t,d)=>{const r=await fetch(`${SUPA_URL}/rest/v1/${t}`,{method:'POST',headers:API.h(),body:JSON.stringify(d)});return r.ok?r.json():null;}};
 const OR_P1='sk-or-v1-61abae706c617ebe661a3945bf0e20be';
 const OR_P2='a345f7222e4b1adfb47f913d9ff6e9bf';
 const OR_KEY=OR_P1+OR_P2;
@@ -288,6 +290,23 @@ async function generateFinancialReport(){
     document.getElementById('fin-report-content').textContent=d.choices?.[0]?.message?.content||'';
   } catch(e){document.getElementById('fin-report-content').textContent='خطأ';}
 }
+
+async function saveFinancialRecord(type,category,amount,description,payment_method){
+  const r=await API.post('financial_records',{type,category,amount:parseFloat(amount),description,payment_method});
+  if(r) showToast('✅ تم تسجيل '+(type==='إيراد'?'الإيراد':'المصروف')+' في قاعدة البيانات');
+}
+async function loadFinancialStats(){
+  const firstOfYear=new Date(new Date().getFullYear(),0,1).toISOString().split('T')[0];
+  const rows=await API.get('financial_records','date=gte.'+firstOfYear);
+  if(!rows||!rows.length) return;
+  const income=rows.filter(r=>r.type==='إيراد').reduce((s,r)=>s+parseFloat(r.amount||0),0);
+  const expense=rows.filter(r=>r.type==='مصروف').reduce((s,r)=>s+parseFloat(r.amount||0),0);
+  const balance=income-expense;
+  document.querySelectorAll('[id*="fin-income"],[id*="total-income"]').forEach(el=>el.textContent=income.toLocaleString('ar-SA')+' د.إ');
+  document.querySelectorAll('[id*="fin-expense"],[id*="total-expense"]').forEach(el=>el.textContent=expense.toLocaleString('ar-SA')+' د.إ');
+  document.querySelectorAll('[id*="fin-balance"],[id*="net-balance"]').forEach(el=>el.textContent=balance.toLocaleString('ar-SA')+' د.إ');
+}
+
 function showToast(msg){
   let t=document.getElementById('toast');
   if(!t){t=document.createElement('div');t.id='toast';t.style.cssText='position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#78350F;color:#fff;padding:12px 24px;border-radius:50px;font-size:13px;font-weight:700;z-index:9999;transition:opacity 0.3s';document.body.appendChild(t);}
@@ -295,6 +314,7 @@ function showToast(msg){
 }
 function updateTime(){document.getElementById('current-time').textContent=new Date().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});}
 setInterval(updateTime,1000);updateTime();
+loadFinancialStats();
 document.getElementById('income-date').value=new Date().toISOString().slice(0,10);
 </script>
 </body>

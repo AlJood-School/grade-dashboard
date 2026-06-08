@@ -523,6 +523,15 @@ body{background:linear-gradient(135deg,#1A252F 0%,#2C3E50 50%,#1A252F 100%);min-
 </div>
 
 <script>
+const SUPA_URL='https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUyNTE2ODIsImV4cCI6MjA2MDgyNzY4Mn0.1Wr2GQeNiSZmtBhZWmtCNT68PI';
+const API={
+  h:()=>({apikey:SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json',Prefer:'return=representation'}),
+  get:async(t,p='')=>{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${p}`,{headers:API.h()});return r.ok?r.json():[];},
+  post:async(t,d)=>{const r=await fetch(`${SUPA_URL}/rest/v1/${t}`,{method:'POST',headers:API.h(),body:JSON.stringify(d)});return r.ok?r.json():null;},
+  patch:async(t,f,d)=>{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${f}`,{method:'PATCH',headers:API.h(),body:JSON.stringify(d)});return r.ok;},
+  del:async(t,f)=>{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${f}`,{method:'DELETE',headers:API.h()});return r.ok;}
+};
 const OR_P1='sk-or-v1-61abae706c617ebe661a3945bf0e20be';
 const OR_P2='a345f7222e4b1adfb47f913d9ff6e9bf';
 const OR_KEY=OR_P1+OR_P2;
@@ -560,6 +569,7 @@ function registerVisitor() {
   const count = document.getElementById('visitors-count');
   count.textContent = parseInt(count.textContent)+1;
   showToast('✅ تم تسجيل الزائر: '+name);
+  registerVisitorDB(name,reason);
   addToLog('👤 تسجيل زيارة: '+name+' — '+reason);
 }
 
@@ -574,22 +584,60 @@ function checkoutVisitor(btn) {
   showToast('✅ تم تسجيل مغادرة الزائر');
 }
 
-function verifyAuthorization() {
-  const name = document.getElementById('auth-name').value;
-  const id = document.getElementById('auth-id').value;
-  const student = document.getElementById('auth-student').value;
+async function verifyAuthorization() {
+  const name = document.getElementById('auth-name').value.trim();
+  const id = document.getElementById('auth-id').value.trim();
+  const student = document.getElementById('auth-student').value.trim();
   if(!name||!id){alert('أدخل الاسم ورقم الهوية');return;}
   const result = document.getElementById('auth-result');
   result.style.display='block';
-  // Simulate verification
-  const authorized = Math.random() > 0.3;
-  if(authorized) {
-    result.innerHTML='<div class="alert-item alert-green">✅ <div><div style="font-weight:800">مصرح به — اسمح بالدخول</div><div style="font-size:12px;margin-top:3px">'+name+' — تفويض صحيح للطالبة: '+student+'</div></div></div>';
-    showToast('✅ التحقق: مصرح به');
-  } else {
-    result.innerHTML='<div class="alert-item alert-red">❌ <div><div style="font-weight:800">غير مصرح — لا تسمح بالدخول</div><div style="font-size:12px;margin-top:3px">'+name+' — لا يوجد تفويض لهذه الطالبة</div></div></div>';
-    showToast('❌ التحقق: غير مصرح');
+  result.innerHTML='<div style="text-align:center;padding:16px">⏳ جارٍ التحقق...</div>';
+  try {
+    // ابحث في قاعدة البيانات
+    const rows = await API.get('security_authorized_pickups',
+      'is_active=eq.true&id_number=eq.'+encodeURIComponent(id)
+    );
+    const match = rows && rows.find(r =>
+      r.authorized_name.includes(name.substring(0,3)) || name.includes(r.authorized_name.substring(0,3))
+    );
+    // إذا تم تحديد الطالبة، تحقق منها أيضاً
+    const studentMatch = !student || !match || !match.student_name || match.student_name.includes(student.substring(0,3));
+    if(match && studentMatch) {
+      result.innerHTML='<div class="alert-item alert-green">✅ <div><div style="font-weight:800">مصرح به — اسمح بالدخول</div><div style="font-size:12px;margin-top:3px">'+match.authorized_name+' — علاقة: '+match.relation+'</div></div></div>';
+      showToast('✅ التحقق: مصرح به');
+      // سجّل الدخول
+      await API.post('gate_entry_log',{person_name:name,person_type:'ولي أمر',id_number:id,purpose:'استلام طالبة'});
+    } else if(rows && rows.length === 0) {
+      result.innerHTML='<div class="alert-item alert-red">❌ <div><div style="font-weight:800">غير مسجّل — تحقق يدوياً</div><div style="font-size:12px;margin-top:3px">لا يوجد تسجيل مسبق لهذا الرقم</div></div></div>';
+      showToast('⚠️ غير مسجّل — تحقق يدوياً');
+    } else {
+      result.innerHTML='<div class="alert-item alert-red">❌ <div><div style="font-weight:800">غير مصرح — تحقق</div><div style="font-size:12px;margin-top:3px">'+name+' — لا يوجد تفويض لهذه الطالبة</div></div></div>';
+      showToast('❌ التحقق: غير مصرح');
+    }
+  } catch(e) {
+    result.innerHTML='<div class="alert-item alert-orange">⚠️ خطأ في الاتصال — تحقق يدوياً</div>';
   }
+}
+
+async function loadAuthorizedList() {
+  const rows = await API.get('security_authorized_pickups','is_active=eq.true&order=authorized_name');
+  if(!rows || !rows.length) return;
+  const list = document.getElementById('auth-list');
+  if(!list) return;
+  list.innerHTML = rows.slice(0,10).map(r=>`
+    <div class="auth-card">
+      <div class="auth-avatar">${r.relation==='الأم'?'👩':r.relation==='الأب'?'👨':'👤'}</div>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:700">${r.authorized_name}</div>
+        <div style="font-size:12px;color:var(--gray)">${r.relation} • ${r.student_name||'تفويض عام'}</div>
+      </div>
+      <span class="badge badge-inside">✅ معتمد</span>
+    </div>
+  `).join('') + (rows.length>10?`<div style="text-align:center;font-size:13px;color:var(--gray);margin-top:8px">+ ${rows.length-10} مسجّلاً آخر</div>`:'');
+}
+
+async function registerVisitorDB(name, reason) {
+  await API.post('gate_entry_log',{person_name:name,person_type:'زائر',purpose:reason});
 }
 
 function resolveAlert(btn) {
@@ -663,6 +711,7 @@ function updateTime() {
 }
 setInterval(updateTime,1000);
 updateTime();
+loadAuthorizedList();
 document.getElementById('log-date').value=new Date().toISOString().split('T')[0];
 </script>
 </body>

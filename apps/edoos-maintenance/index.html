@@ -321,6 +321,8 @@ body{background:linear-gradient(135deg,#FEF3C7,#FDE68A,#FCD34D 100%);min-height:
 </div>
 
 <script>
+const SUPA_URL='https://zuyizaiugpmhmeycqton.supabase.co';const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUyNTE2ODIsImV4cCI6MjA2MDgyNzY4Mn0.1Wr2GQeNiSZmtBhZWmtCNT68PI';
+const API={h:()=>({apikey:SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json',Prefer:'return=representation'}),get:async(t,p='')=>{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${p}`,{headers:API.h()});return r.ok?r.json():[]},post:async(t,d)=>{const r=await fetch(`${SUPA_URL}/rest/v1/${t}`,{method:'POST',headers:API.h(),body:JSON.stringify(d)});return r.ok?r.json():null;}};
 const OR_P1='sk-or-v1-61abae706c617ebe661a3945bf0e20be';
 const OR_P2='a345f7222e4b1adfb47f913d9ff6e9bf';
 const OR_KEY=OR_P1+OR_P2;
@@ -336,7 +338,7 @@ function submitTicket(){
 
 function assignTicket(btn,issue){
   const opts=['أحمد محمد','سالم عبدالله','محمد علي'];
-  const tech=opts[Math.floor(Math.random()*opts.length)];
+  const tech=opts[0];
   const card=btn.closest('.ticket-card');
   card.querySelector('.badge').className='badge badge-blue';
   card.querySelector('.badge').textContent='⚙️ '+tech+' — جاري';
@@ -365,9 +367,28 @@ async function generateMaintenanceReport(){
   }catch(e){document.getElementById('maintenance-report-content').textContent='خطأ';}
 }
 
+
+async function saveMaintenanceRequest(title,location,category,priority,desc,reported_by){
+  await API.post('maintenance_requests',{title,location,category,priority,description:desc,reported_by,status:'مفتوح'});
+}
+async function loadMaintenanceStats(){
+  const rows=await API.get('maintenance_requests','select=status');
+  if(!rows||!rows.length) return;
+  const open=rows.filter(r=>r.status==='مفتوح').length;
+  const inprog=rows.filter(r=>r.status==='قيد التنفيذ').length;
+  const done=rows.filter(r=>r.status==='مكتمل').length;
+  const total=rows.length;
+  const pct=total?Math.round(done/total*100):0;
+  // حدّث أي عناصر إحصائية موجودة
+  document.querySelectorAll('[id*="maint-open"],[id*="open-count"]').forEach(el=>el.textContent=open);
+  document.querySelectorAll('[id*="maint-done"],[id*="done-count"]').forEach(el=>el.textContent=done);
+  document.querySelectorAll('[id*="maint-pct"],[id*="completion-pct"]').forEach(el=>el.textContent=pct+'%');
+}
+
 function showToast(msg){let t=document.getElementById('toast');if(!t){t=document.createElement('div');t.id='toast';t.style.cssText='position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#1C1917;color:#FCD34D;padding:12px 24px;border-radius:50px;font-size:13px;font-weight:700;z-index:9999;transition:opacity 0.3s';document.body.appendChild(t);}t.textContent=msg;t.style.opacity='1';setTimeout(()=>t.style.opacity='0',3000);}
 function updateTime(){document.getElementById('current-time').textContent=new Date().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});}
 setInterval(updateTime,1000);updateTime();
+loadMaintenanceStats();
 </script>
 </body>
 </html>
