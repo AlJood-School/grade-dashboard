@@ -32,13 +32,11 @@
     }
     #spl-logo img {
       display: block;
-      width: 280px;
-      height: 280px;
+      width: 300px;
+      height: 300px;
       object-fit: contain;
       background: transparent !important;
-      /* mix-blend-mode: screen يجعل الخلفية الداكنة للـ PNG شفافة */
-      mix-blend-mode: screen;
-      /* توهج الأجنحة */
+      /* توهج الأجنحة الإلكترونية */
       filter:
         drop-shadow(0 0 0px rgba(246,201,14,0))
         drop-shadow(0 0 0px rgba(0,180,216,0));
@@ -141,7 +139,7 @@
   const logoWrap = document.createElement('div');
   logoWrap.id = 'spl-logo';
   const img = document.createElement('img');
-  img.src = '/apps/edoos-logo.png';
+  img.src = '/apps/edoos-logo-transparent.png';
   img.alt = 'EduOS';
   img.draggable = false;
   logoWrap.appendChild(img);
