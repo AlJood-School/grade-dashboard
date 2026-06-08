@@ -289,24 +289,25 @@
     btn.onclick = () => {
       if (confirm('هل تريدين تسجيل الخروج من EduOS؟')) doLogout();
     };
+    /* نفس أسلوب زر الثيم تماماً — دائري 36px */
     btn.style.cssText = [
-      'display:inline-flex', 'align-items:center', 'gap:5px',
-      'padding:6px 14px', 'border-radius:20px',
-      'background:transparent',
-      'border:1px solid rgba(239,68,68,0.35)',
-      'cursor:pointer', 'font-size:12px', 'font-weight:600',
-      'font-family:Tajawal,sans-serif',
-      'transition:all .2s', 'color:#f87171',
-      'white-space:nowrap',
+      'width:36px', 'height:36px', 'border-radius:50%',
+      'background:var(--surface2,rgba(255,255,255,0.06))',
+      'border:1px solid var(--border,rgba(255,255,255,0.12))',
+      'cursor:pointer', 'display:flex', 'align-items:center', 'justify-content:center',
+      'font-size:15px', 'transition:all .2s',
+      'color:var(--text2,#94a3b8)', 'flex-shrink:0',
     ].join(';');
-    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>خروج';
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>';
     btn.addEventListener('mouseenter', () => {
       btn.style.background = 'rgba(239,68,68,0.12)';
-      btn.style.borderColor = 'rgba(239,68,68,0.6)';
+      btn.style.borderColor = 'rgba(239,68,68,0.4)';
+      btn.style.color = '#f87171';
     });
     btn.addEventListener('mouseleave', () => {
-      btn.style.background = 'transparent';
-      btn.style.borderColor = 'rgba(239,68,68,0.35)';
+      btn.style.background = 'var(--surface2,rgba(255,255,255,0.06))';
+      btn.style.borderColor = 'var(--border,rgba(255,255,255,0.12))';
+      btn.style.color = 'var(--text2,#94a3b8)';
     });
 
     // أدرج قبل الـ avatar أو في النهاية
