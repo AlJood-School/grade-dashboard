@@ -1191,9 +1191,26 @@ async function loadGradeAssessments() {
 
 // ─── Load Grade Records (Pivot to student rows) ───────────────────
 async function loadGradeRecords() {
+  gradeData = {};
+
+  // ── 1. جلب أسماء الطلاب من project_grades (القائمة الرئيسية الموجودة) ──
+  const clsFilter = classFilterVal ? `&class_name=eq.${classFilterVal}` : '';
+  const pq = `select=student_name,class_name,grade_level&order=class_name.asc,student_name.asc&limit=2000${clsFilter}`;
+  const pData = await sbFetch('project_grades', pq);
+  if (Array.isArray(pData)) {
+    pData.forEach(r => {
+      const key = r.student_name + '||' + r.class_name;
+      if (!gradeData[key]) gradeData[key] = {
+        name: r.student_name,
+        cls: r.class_name,
+        grade_level: r.grade_level || (r.class_name && r.class_name.startsWith('4') ? 'G4' : 'G3')
+      };
+    });
+  }
+
+  // ── 2. تحميل الدرجات المحفوظة من grade_records وتطبيقها فوق القائمة ──
   const q = `semester=eq.${gradesSemester}&academic_year=eq.${gradesYear}&subject=eq.CCDI&order=class_name.asc,student_name.asc&limit=2000`;
   const data = await sbFetch('grade_records', q);
-  gradeData = {};
   if (Array.isArray(data)) {
     data.forEach(r => {
       const key = r.student_name + '||' + r.class_name;
@@ -1201,6 +1218,7 @@ async function loadGradeRecords() {
       if (r.assessment_id) gradeData[key][r.assessment_id] = r.score;
     });
   }
+
   renderGradesTable();
   updateGradesStats();
   runGradeGemini();
