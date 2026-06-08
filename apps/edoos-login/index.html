@@ -1179,6 +1179,26 @@ async function handleLogin(e) {
     sessionStorage.setItem('aljood_session_role', JSON.stringify(session));
     sessionStorage.setItem('aljood_user', JSON.stringify(session));
 
+    // Check onboarding (admin/principal only — once)
+    const adminRoles = ['admin','principal'];
+    if (adminRoles.includes(role)) {
+      try {
+        const anonKey = await getAnonKey();
+        const cfgRes = await fetch(`${SUPA_URL}/rest/v1/school_config?select=setup_complete&limit=1`, {
+          headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}` }
+        });
+        const cfgData = await cfgRes.json();
+        const isSetupDone = Array.isArray(cfgData) && cfgData.length > 0 && cfgData[0].setup_complete;
+        if (!isSetupDone) {
+          // First time — go to onboarding wizard
+          setTimeout(() => {
+            showRedirectOverlay({ icon:'🧙‍♀️', label:'إعداد المدرسة' }, displayName, '../edoos-onboarding/');
+          }, 900);
+          return;
+        }
+      } catch(e) { /* network error — proceed normally */ }
+    }
+
     // Show redirect overlay
     setTimeout(() => {
       showRedirectOverlay(roleInfo, displayName, roleInfo.redirect);
