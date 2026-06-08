@@ -867,80 +867,110 @@ body {
   </div>
 
   <!-- ══════════ TAB: ATTENDANCE ══════════ -->
+  <!-- ══════════ TAB: ATTENDANCE ══════════ -->
   <div class="tab-content" id="tab-attendance">
-    <div style="margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
-      <h2 style="font-size:18px;font-weight:800;">📊 تقرير الحضور اليومي</h2>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-sm btn-ghost">📤 تصدير</button>
-        <button class="btn btn-sm btn-gold">تقرير MOE</button>
+
+    <!-- Header Bar -->
+    <div style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div>
+        <h2 style="font-size:18px;font-weight:800;">📊 نظام الحضور الذكي</h2>
+        <div style="font-size:11px;color:var(--text2);margin-top:3px">آخر تحديث: <span id="attLastUpdate">--</span></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="../edoos-attendance-gate/" target="_blank"
+           style="padding:7px 14px;background:rgba(99,179,237,0.1);border:1px solid rgba(99,179,237,0.3);border-radius:8px;font-size:12px;color:var(--blue);text-decoration:none;display:flex;align-items:center;gap:5px">
+          🖥️ شاشة البوابة
+        </a>
+        <a href="../edoos-checkin/" target="_blank"
+           style="padding:7px 14px;background:rgba(16,217,160,0.1);border:1px solid rgba(16,217,160,0.3);border-radius:8px;font-size:12px;color:var(--emerald);text-decoration:none;display:flex;align-items:center;gap:5px">
+          📱 تسجيل الحضور
+        </a>
+        <button class="btn btn-sm btn-gold" onclick="runAIAnomalyAnalysis()">🤖 تحليل ذكي</button>
+        <button class="btn btn-sm btn-ghost" onclick="loadAttendanceData()">🔄</button>
       </div>
     </div>
-    <div class="section-grid">
-      <div class="card">
-        <div class="card-header"><div class="card-title">🎯 ملخص اليوم</div></div>
-        <div class="card-body">
-          <div class="ring-container">
-            <svg class="ring-svg" viewBox="0 0 90 90">
-              <circle cx="45" cy="45" r="35" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="10"/>
-              <circle cx="45" cy="45" r="35" fill="none" stroke="url(#ringGrad)" stroke-width="10"
-                stroke-dasharray="197" stroke-dashoffset="11" stroke-linecap="round"
-                transform="rotate(-90 45 45)"/>
-              <defs>
-                <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%">
-                  <stop offset="0%" stop-color="#10d9a0"/>
-                  <stop offset="100%" stop-color="#63b3ed"/>
-                </linearGradient>
-              </defs>
-              <text x="45" y="48" text-anchor="middle" font-size="14" font-weight="900" fill="#10d9a0" font-family="Tajawal">94%</text>
-            </svg>
-            <div class="ring-stats">
-              <div class="ring-stat"><div class="ring-dot" style="background:#10d9a0"></div><span>حاضر: <strong>796</strong></span></div>
-              <div class="ring-stat"><div class="ring-dot" style="background:#fc8181"></div><span>غائب: <strong>38</strong></span></div>
-              <div class="ring-stat"><div class="ring-dot" style="background:#f6ad55"></div><span>متأخر: <strong>12</strong></span></div>
-              <div class="ring-stat"><div class="ring-dot" style="background:#a78bfa"></div><span>إجازة رسمية: <strong>0</strong></span></div>
-            </div>
-          </div>
+
+    <!-- Level 1: Summary Cards (مرئي للجميع) -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px" id="attSummaryCards">
+      <div class="card" style="text-align:center;padding:16px">
+        <div style="font-size:30px;font-weight:900;color:var(--emerald)" id="attPresent">—</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:4px">🟢 حاضر</div>
+      </div>
+      <div class="card" style="text-align:center;padding:16px">
+        <div style="font-size:30px;font-weight:900;color:var(--gold)" id="attLate">—</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:4px">🟡 متأخر</div>
+      </div>
+      <div class="card" style="text-align:center;padding:16px">
+        <div style="font-size:30px;font-weight:900;color:var(--coral)" id="attAbsent">—</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:4px">🔴 لم يسجل بعد</div>
+      </div>
+      <div class="card" style="text-align:center;padding:16px">
+        <div style="font-size:30px;font-weight:900;color:var(--purple,#a78bfa)" id="attSuspicious">—</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:4px">⚠️ للمراجعة</div>
+      </div>
+    </div>
+
+    <!-- Level 1: Online/Offline Board (مرئي للجميع) -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+        <div class="card-title">👥 لوحة الحضور اليومية</div>
+        <div style="font-size:11px;color:var(--text2)">يُعرض للجميع — الحالة اليومية فقط</div>
+      </div>
+      <div class="card-body">
+        <div id="attendanceBoardGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">
+          <div style="text-align:center;padding:20px;color:var(--text2)">⏳ جاري التحميل...</div>
         </div>
       </div>
-      <div class="card">
-        <div class="card-header"><div class="card-title">📉 أقل الصفوف حضوراً</div></div>
-        <div class="card-body">
-          <div class="progress-row"><span class="progress-label">G7B</span><div class="progress-bar"><div class="progress-fill" style="width:68%;background:#fc8181"></div></div><span class="progress-pct">68%</span></div>
-          <div class="progress-row"><span class="progress-label">G6A</span><div class="progress-bar"><div class="progress-fill" style="width:79%;background:#f6ad55"></div></div><span class="progress-pct">79%</span></div>
-          <div class="progress-row"><span class="progress-label">G5C</span><div class="progress-bar"><div class="progress-fill" style="width:82%;background:#f6ad55"></div></div><span class="progress-pct">82%</span></div>
-          <div class="progress-row"><span class="progress-label">G4B</span><div class="progress-bar"><div class="progress-fill" style="width:88%;background:#10d9a0"></div></div><span class="progress-pct">88%</span></div>
-          <div class="progress-row"><span class="progress-label">G3A</span><div class="progress-bar"><div class="progress-fill" style="width:91%;background:#10d9a0"></div></div><span class="progress-pct">91%</span></div>
+    </div>
+
+    <!-- Level 2: Detailed Analysis (المدير فقط) -->
+    <div class="card" style="margin-bottom:16px;border-color:rgba(246,201,14,0.2)">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+        <div class="card-title">🔍 التحليل التفصيلي — المدير فقط</div>
+        <span style="font-size:10px;padding:3px 8px;background:rgba(246,201,14,0.1);border:1px solid rgba(246,201,14,0.3);border-radius:10px;color:var(--gold)">🔐 سري</span>
+      </div>
+      <div class="card-body" style="padding:0">
+        <div style="overflow-x:auto">
+          <table class="data-table" id="attDetailTable">
+            <thead>
+              <tr>
+                <th>الموظفة</th>
+                <th>وقت الحضور</th>
+                <th>EduOS دخلت</th>
+                <th>آخر نشاط</th>
+                <th>مدة الجلسة</th>
+                <th>الحالة</th>
+                <th>نقاط الشك</th>
+              </tr>
+            </thead>
+            <tbody id="attDetailBody">
+              <tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text2)">⏳ جاري التحميل...</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
-    <div class="card" style="margin-top:16px;">
-      <div class="card-header"><div class="card-title">📋 جدول الغياب التفصيلي</div></div>
-      <div class="card-body" style="padding:0;">
-        <table class="data-table">
-          <thead><tr><th>الصف</th><th>الشعبة</th><th>الحاضرون</th><th>الغائبون</th><th>النسبة</th><th>الحالة</th></tr></thead>
-          <tbody>
-            <tr><td>G9</td><td>A</td><td>28</td>
-              <td><span class="absent-count" data-names="سارة المنصوري,نورة الكعبي">2</span></td>
-              <td>93%</td><td><span class="pill pill-green">جيد</span></td></tr>
-            <tr><td>G8</td><td>B</td><td>25</td>
-              <td><span class="absent-count" data-names="فاطمة الظاهري,لطيفة الرميثي,مريم السويدي,شيخة العامري">4</span></td>
-              <td>86%</td><td><span class="pill pill-yellow">تنبيه</span></td></tr>
-            <tr><td>G7</td><td>B</td><td>19</td>
-              <td><span class="absent-count pill-red" data-names="عائشة المزروعي,هند البلوشي,موزة الحمادي,نجلاء الشامسي,ريم الكندي,أسماء النعيمي,بشرى العلي,وفاء الجابري,ميرة الدرمكي">9</span></td>
-              <td>68%</td><td><span class="pill pill-red">حرج</span></td></tr>
-            <tr><td>G6</td><td>A</td><td>24</td>
-              <td><span class="absent-count pill-yellow" data-names="نورة المطيري,حصة الغفلي,ليلى البريمي,سلمى الحمدي,دانة الزيدي,منى الفلاسي">6</span></td>
-              <td>79%</td><td><span class="pill pill-yellow">تنبيه</span></td></tr>
-            <tr><td>G5</td><td>A</td><td>29</td>
-              <td><span class="absent-count" data-names="نوف الخيلي">1</span></td>
-              <td>97%</td><td><span class="pill pill-green">ممتاز</span></td></tr>
-            <tr><td>KG2</td><td>A</td><td>22</td>
-              <td><span class="absent-count" data-names="شيخة المهيري,جواهر الحوسني,مياسة الحربي">3</span></td>
-              <td>88%</td><td><span class="pill pill-green">جيد</span></td></tr>
-          </tbody>
-        </table>
+
+    <!-- Level 2: Anomaly Alerts (المدير فقط) -->
+    <div class="card" id="anomalyCard" style="margin-bottom:16px;border-color:rgba(252,129,129,0.2);display:none">
+      <div class="card-header">
+        <div class="card-title">🚨 تنبيهات الذكاء الاصطناعي</div>
+      </div>
+      <div class="card-body" id="anomalyContent">
+        <!-- تُملأ تلقائياً -->
       </div>
     </div>
+
+    <!-- AI Analysis Box -->
+    <div class="card" id="aiAttBox" style="display:none">
+      <div class="card-header">
+        <div class="card-title">🤖 تحليل المساعد الذكي</div>
+      </div>
+      <div class="card-body">
+        <div id="aiAttResult" style="font-size:13px;line-height:1.8;color:var(--text2)"></div>
+      </div>
+    </div>
+
   </div>
 
   <!-- ══════════ TAB: HEALTH ══════════ -->
@@ -1435,6 +1465,9 @@ function switchTab(name) {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
   event.target.classList.add('active');
+  // تحميل بيانات حسب التبويب
+  if (name === 'attendance') loadAttendanceData();
+  if (name === 'backup') loadBackups();
 }
 
 // ─── CHART ───
@@ -1462,6 +1495,213 @@ function buildChart() {
   });
 }
 setTimeout(buildChart, 100);
+
+// ════════════════════════════════════════════════════
+// ─── ATTENDANCE SYSTEM ───
+// ════════════════════════════════════════════════════
+const OR_KEY_P1 = 'sk-or-v1-61abae706c617ebe661a3945';
+const OR_KEY_P2 = 'bf0e20bea345f7222e4b1adfb47f913d9ff6e9bf';
+
+async function loadAttendanceData() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('attLastUpdate').textContent =
+    new Date().toLocaleTimeString('ar-SA', { hour:'2-digit', minute:'2-digit' });
+
+  try {
+    // جلب سجل الحضور اليومي
+    const r = await fetch(
+      `${SUPA_URL}/rest/v1/staff_daily_attendance?date=eq.${today}&order=checkin_time.asc`,
+      { headers: { 'apikey': SUPA_ANON, 'Authorization': 'Bearer ' + SUPA_ANON } }
+    );
+    const rows = await r.json();
+
+    // جلب كل الموظفين
+    const sr = await fetch(
+      `${SUPA_URL}/rest/v1/staff_profiles?select=id,name,role&order=name`,
+      { headers: { 'apikey': SUPA_ANON, 'Authorization': 'Bearer ' + SUPA_ANON } }
+    );
+    const staffAll = await sr.json();
+
+    // بناء map: staff_id → attendance row
+    const attMap = {};
+    rows.forEach(r => { attMap[r.staff_id] = r; });
+
+    // إحصاءات
+    let present=0, late=0, absent=0, suspicious=0;
+    rows.forEach(r => {
+      if (r.status === 'present') present++;
+      else if (r.status === 'late') late++;
+      else if (r.status === 'suspicious') suspicious++;
+    });
+    absent = Math.max(0, staffAll.length - present - late - suspicious);
+
+    document.getElementById('attPresent').textContent   = present;
+    document.getElementById('attLate').textContent      = late;
+    document.getElementById('attAbsent').textContent    = absent;
+    document.getElementById('attSuspicious').textContent = suspicious;
+
+    // لوحة الحضور — Level 1
+    renderAttendanceBoard(staffAll, attMap);
+
+    // الجدول التفصيلي — Level 2
+    renderDetailTable(staffAll, attMap);
+
+    // تنبيهات الشذوذ
+    renderAnomalies(rows);
+
+  } catch(e) {
+    document.getElementById('attendanceBoardGrid').innerHTML =
+      '<div style="text-align:center;padding:20px;color:var(--coral)">⚠️ تعذّر تحميل البيانات</div>';
+  }
+}
+
+function renderAttendanceBoard(staff, attMap) {
+  const grid = document.getElementById('attendanceBoardGrid');
+  if (!staff.length) {
+    grid.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text2)">لا توجد بيانات موظفين</div>';
+    return;
+  }
+  grid.innerHTML = staff.map(s => {
+    const att = attMap[s.id];
+    let dot = '#64748b', label = 'لم يسجل', icon = '⚫';
+    if (att) {
+      if (att.status === 'present')    { dot='#10d9a0'; label='حاضر';      icon='🟢'; }
+      else if (att.status === 'late')  { dot='#f6ad55'; label='متأخر';     icon='🟡'; }
+      else if (att.status === 'absent'){ dot='#fc8181'; label='غائب';      icon='🔴'; }
+      else if (att.status === 'on_leave'){ dot='#a78bfa'; label='إجازة';  icon='🟣'; }
+      else if (att.status === 'suspicious'){ dot='#fc8181'; label='للمراجعة'; icon='⚠️'; }
+    }
+    const initials = s.name.split(' ').slice(0,2).map(w=>w[0]).join('');
+    const checkTime = att?.checkin_time
+      ? new Date(att.checkin_time).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit',hour12:false})
+      : '—';
+    return `<div style="background:var(--card2);border:1px solid rgba(${dot.includes('10d')?'16,217,160':'99,179,237'},0.12);
+              border-right:3px solid ${dot};border-radius:10px;padding:10px 12px;
+              display:flex;align-items:center;gap:10px">
+      <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--purple,#a78bfa));
+        display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0">
+        ${initials}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.name}</div>
+        <div style="font-size:10px;color:var(--text2)">${s.role||''}</div>
+        <div style="font-size:10px;margin-top:2px;color:${dot}">${icon} ${label} ${checkTime!=='—'?'· '+checkTime:''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderDetailTable(staff, attMap) {
+  const tbody = document.getElementById('attDetailBody');
+  if (!staff.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text2)">لا توجد بيانات</td></tr>';
+    return;
+  }
+  tbody.innerHTML = staff.map(s => {
+    const att = attMap[s.id];
+    const checkin   = att?.checkin_time   ? new Date(att.checkin_time).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit',hour12:false}) : '—';
+    const firstLogin = att?.edoos_first_login ? new Date(att.edoos_first_login).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit',hour12:false}) : '—';
+    const lastAct   = att?.last_activity   ? new Date(att.last_activity).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit',hour12:false}) : '—';
+    const duration  = att?.session_duration_minutes || 0;
+    const anomScore = att?.anomaly_score || 0;
+    const status    = att?.status || 'absent';
+    const statusColors = {present:'#10d9a0',late:'#f6ad55',absent:'#fc8181',suspicious:'#fc8181',on_leave:'#a78bfa'};
+    const statusLabels = {present:'حاضر',late:'متأخر',absent:'غائب',suspicious:'مشبوه',on_leave:'إجازة'};
+    const sc = statusColors[status] || '#64748b';
+    const sl = statusLabels[status] || status;
+    const anomColor = anomScore > 60 ? '#fc8181' : anomScore > 30 ? '#f6ad55' : '#10d9a0';
+    return `<tr>
+      <td style="font-weight:700">${s.name}</td>
+      <td style="color:var(--emerald)">${checkin}</td>
+      <td style="color:var(--blue)">${firstLogin}</td>
+      <td style="color:var(--text2)">${lastAct}</td>
+      <td>${duration > 0 ? duration+'د' : '—'}</td>
+      <td><span style="padding:3px 10px;background:${sc}22;border:1px solid ${sc}44;border-radius:20px;font-size:11px;color:${sc}">${sl}</span></td>
+      <td><span style="font-weight:800;color:${anomColor}">${anomScore}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderAnomalies(rows) {
+  const suspicious = rows.filter(r => r.anomaly_score > 30 || r.status === 'suspicious');
+  const card = document.getElementById('anomalyCard');
+  if (!suspicious.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  const content = document.getElementById('anomalyContent');
+  content.innerHTML = suspicious.map(r => {
+    const flags = r.anomaly_details || [];
+    const flagTexts = flags.map(f => {
+      if (f.type === 'expired_qr')       return `⏱️ QR مسح بعد ${f.delta_sec} ثانية من انتهاء صلاحيته`;
+      if (f.type === 'outside_geofence') return '📍 خارج نطاق المدرسة';
+      if (f.type === 'no_gps')           return '📡 لم يتحقق الموقع';
+      if (f.type === 'unknown_qr')       return '❓ QR غير معروف';
+      return f.type;
+    }).join(' · ');
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;
+      border-bottom:1px solid rgba(255,255,255,0.05)">
+      <div>
+        <div style="font-size:13px;font-weight:700">${r.staff_name || r.staff_id}</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:3px">${flagTexts}</div>
+      </div>
+      <span style="padding:4px 10px;background:rgba(252,129,129,0.1);border:1px solid rgba(252,129,129,0.3);
+        border-radius:20px;font-size:11px;color:#fc8181">نقاط: ${r.anomaly_score}</span>
+    </div>`;
+  }).join('');
+}
+
+async function runAIAnomalyAnalysis() {
+  const today = new Date().toISOString().split('T')[0];
+  const box = document.getElementById('aiAttBox');
+  const res = document.getElementById('aiAttResult');
+  box.style.display = 'block';
+  res.innerHTML = '⏳ المساعد الذكي يحلل بيانات الحضور...';
+
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/staff_checkin_log?date=eq.${today}&select=*`, {
+      headers: { 'apikey': SUPA_ANON, 'Authorization': 'Bearer ' + SUPA_ANON }
+    });
+    const data = await r.json();
+
+    const summary = data.map(d =>
+      `الموظفة: ${d.staff_name||d.staff_id} | الحالة: ${d.status} | وقت المسح: ${d.scanned_at} | فجوة الوقت: ${d.qr_time_delta_sec||0} ثانية | GPS: ${d.within_geofence?'داخل':'خارج'} | علامات: ${JSON.stringify(d.anomaly_flags)}`
+    ).join('\n');
+
+    const prompt = `أنت مساعد ذكاء اصطناعي لمدرسة الجود.
+البيانات التالية هي سجلات حضور الموظفات ليوم ${today}:
+
+${summary || 'لا توجد سجلات اليوم بعد'}
+
+حلّل هذه البيانات وأجب بالعربية:
+1. هل هناك أنماط مشبوهة؟ (QR منتهي الصلاحية، خارج النطاق، تكرار)
+2. ما الموظفات اللواتي يحتجن مراجعة؟
+3. توصياتك للمديرة
+
+كن دقيقاً ومختصراً. إذا كانت البيانات نظيفة قل ذلك.`;
+
+    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + OR_KEY_P1 + OR_KEY_P2,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://grade-dashboard-beta.vercel.app',
+        'X-Title': 'EduOS Principal'
+      },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-3.3-70b-instruct:free',
+        messages: [{ role:'user', content: prompt }],
+        max_tokens: 600
+      })
+    });
+    const json = await resp.json();
+    const text = json.choices?.[0]?.message?.content || 'لم يتمكن المساعد من التحليل';
+    res.innerHTML = text.replace(/\n/g, '<br>');
+  } catch(e) {
+    res.innerHTML = '⚠️ تعذّر الاتصال بالمساعد الذكي';
+  }
+}
+
+// تحميل بيانات الحضور عند فتح التبويب
+const _origSwitchTab = typeof switchTab === 'function' ? switchTab : null;
 
 // ─── TOAST ───
 function showToast(msg, type='info') {
