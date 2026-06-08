@@ -346,6 +346,147 @@ const EduTheme = (function(){
   };
   THEMES.forEach(t => CATEGORIES[t.category]?.themes.push(t));
 
+  // ── نقوش الخلفية الفنية (opacity مضمَّن داخل SVG) ───────────
+  const PATTERNS = {
+
+    /* 🌌 بنفسجي — نجمة إسلامية ثمانية الرؤوس + نجوم صغيرة */
+    default: { size:'140px', svg:
+      `<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140">
+        <g fill="white" fill-opacity="0.065">
+          <polygon points="70,20 78,51 105,35 89,62 120,70 89,78 105,105 78,89 70,120 62,89 35,105 51,78 20,70 51,62 35,35 62,51"/>
+          <circle cx="20" cy="20" r="2.5"/>
+          <circle cx="120" cy="20" r="2.5"/>
+          <circle cx="20" cy="120" r="2.5"/>
+          <circle cx="120" cy="120" r="2.5"/>
+          <circle cx="70" cy="70" r="3"/>
+        </g>
+      </svg>` },
+
+    /* 💚 زمردي — نقش هندسي إسلامي (مربعات متداخلة + دوائر) */
+    emerald: { size:'100px', svg:
+      `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+        <g fill="none" stroke="white" stroke-width="0.75" opacity="0.12">
+          <rect x="12" y="12" width="76" height="76"/>
+          <rect x="12" y="12" width="76" height="76" transform="rotate(45 50 50)"/>
+          <circle cx="50" cy="50" r="9"/>
+          <circle cx="50" cy="50" r="24"/>
+        </g>
+        <g fill="white" fill-opacity="0.08">
+          <circle cx="50" cy="50" r="3"/>
+        </g>
+      </svg>` },
+
+    /* 🌟 ذهبي — أرابيسك بتلات مع نقاط مزهرة */
+    gold: { size:'130px', svg:
+      `<svg xmlns="http://www.w3.org/2000/svg" width="130" height="130">
+        <g fill="white" fill-opacity="0.07">
+          <path d="M65,25 C82,36 84,56 65,65 C46,56 48,36 65,25 Z"/>
+          <path d="M65,105 C48,94 46,74 65,65 C84,74 82,94 65,105 Z"/>
+          <path d="M25,65 C36,48 56,46 65,65 C56,84 36,82 25,65 Z"/>
+          <path d="M105,65 C94,82 74,84 65,65 C74,46 94,48 105,65 Z"/>
+          <path d="M36,36 C46,25 59,33 53,44 C47,55 30,49 36,36 Z"/>
+          <path d="M94,36 C100,49 83,55 77,44 C71,33 84,25 94,36 Z"/>
+          <path d="M36,94 C30,81 47,75 53,86 C59,97 46,105 36,94 Z"/>
+          <path d="M94,94 C84,105 71,97 77,86 C83,75 100,81 94,94 Z"/>
+          <circle cx="65" cy="65" r="5"/>
+          <circle cx="65" cy="25" r="2.5"/>
+          <circle cx="65" cy="105" r="2.5"/>
+          <circle cx="25" cy="65" r="2.5"/>
+          <circle cx="105" cy="65" r="2.5"/>
+        </g>
+      </svg>` },
+
+    /* 🌹 وردي — وردة ست بتلات متكررة */
+    rose: { size:'110px', svg:
+      `<svg xmlns="http://www.w3.org/2000/svg" width="110" height="110">
+        <g fill="white" fill-opacity="0.07">
+          <ellipse cx="55" cy="30" rx="9" ry="20" transform="rotate(0 55 55)"/>
+          <ellipse cx="55" cy="30" rx="9" ry="20" transform="rotate(60 55 55)"/>
+          <ellipse cx="55" cy="30" rx="9" ry="20" transform="rotate(120 55 55)"/>
+          <ellipse cx="55" cy="30" rx="9" ry="20" transform="rotate(180 55 55)"/>
+          <ellipse cx="55" cy="30" rx="9" ry="20" transform="rotate(240 55 55)"/>
+          <ellipse cx="55" cy="30" rx="9" ry="20" transform="rotate(300 55 55)"/>
+          <circle cx="55" cy="55" r="7"/>
+          <circle cx="55" cy="55" r="3"/>
+        </g>
+      </svg>` },
+
+    /* 🌊 سماوي — أمواج بحرية متدفقة */
+    sky: { size:'200px 70px', svg:
+      `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="70">
+        <g fill="none" stroke="white" stroke-width="1.2" opacity="0.09">
+          <path d="M-10,15 C15,5 40,25 65,15 S115,5 140,15 S165,25 210,15"/>
+          <path d="M-10,35 C15,25 40,45 65,35 S115,25 140,35 S165,45 210,35"/>
+          <path d="M-10,55 C15,45 40,65 65,55 S115,45 140,55 S165,65 210,55"/>
+        </g>
+      </svg>` },
+
+    /* 👑 ملكي — ماسة مزدوجة الإطار مع نقاط */
+    royal: { size:'90px', svg:
+      `<svg xmlns="http://www.w3.org/2000/svg" width="90" height="90">
+        <g fill="none" stroke="white" stroke-width="0.8" opacity="0.12">
+          <polygon points="45,4 86,45 45,86 4,45"/>
+          <polygon points="45,18 72,45 45,72 18,45"/>
+          <circle cx="45" cy="45" r="6"/>
+        </g>
+        <g fill="white" fill-opacity="0.09">
+          <circle cx="45" cy="4"  r="2.5"/>
+          <circle cx="86" cy="45" r="2.5"/>
+          <circle cx="45" cy="86" r="2.5"/>
+          <circle cx="4"  cy="45" r="2.5"/>
+          <circle cx="45" cy="45" r="2.5"/>
+        </g>
+      </svg>` },
+
+    /* 🌙 رمضان — هلال كريم + نجوم متناثرة */
+    ramadan: { size:'170px', svg:
+      `<svg xmlns="http://www.w3.org/2000/svg" width="170" height="170">
+        <g fill="white" fill-opacity="0.07">
+          <path d="M85,22 C108,22 125,43 125,70 C125,97 108,118 85,118 C101,107 111,90 111,70 C111,50 101,33 85,22 Z"/>
+          <polygon points="132,26 134,34 142,34 136,39 138,47 132,42 126,47 128,39 122,34 130,34"/>
+          <polygon points="30,84 32,90 38,90 33,94 35,100 30,96 25,100 27,94 22,90 28,90"/>
+          <polygon points="142,97 143.5,102 149,102 144.5,105.5 146,111 142,108 138,111 139.5,105.5 135,102 140.5,102"/>
+          <circle cx="44" cy="28"  r="2.5"/>
+          <circle cx="150" cy="58" r="2"/>
+          <circle cx="58"  cy="138" r="1.8"/>
+          <circle cx="155" cy="130" r="1.5"/>
+        </g>
+      </svg>` },
+
+    /* 🇦🇪 وطني — نجمة خماسية خضراء خفيفة */
+    national: { size:'150px', svg:
+      `<svg xmlns="http://www.w3.org/2000/svg" width="150" height="150">
+        <g fill="#2e7d32" fill-opacity="0.08">
+          <polygon points="75,22 80,66 120,66 87,89 100,130 75,106 50,130 63,89 30,66 70,66"/>
+          <circle cx="20" cy="20"   r="3"/>
+          <circle cx="130" cy="130" r="3"/>
+          <circle cx="130" cy="20"  r="2.5"/>
+          <circle cx="20" cy="130"  r="2.5"/>
+          <circle cx="75" cy="75"   r="2"/>
+        </g>
+      </svg>` },
+
+    /* ☀️ فاتح — بلا نقش */
+    light:     null,
+    /* 🚨 طوارئ — له نقشه الخاص في CSS الصفحة */
+    emergency: null,
+    /* 🏠 تعلم عن بعد — خلفية فاتحة بلا نقش */
+    remote:    null,
+  };
+
+  function injectPattern(themeId){
+    let el = document.getElementById('edu-bg-pattern');
+    if(!el){
+      el = document.createElement('style');
+      el.id = 'edu-bg-pattern';
+      document.head.appendChild(el);
+    }
+    const p = PATTERNS[themeId];
+    if(!p){ el.textContent = ''; return; }
+    const uri = encodeURIComponent(p.svg.trim().replace(/\n\s+/g,' '));
+    el.textContent = `body{background-image:url("data:image/svg+xml,${uri}");background-size:${p.size};background-attachment:fixed}`;
+  }
+
   let currentTheme = 'default';
 
   // ── تطبيق الثيم ──────────────────────────────────────────────
@@ -374,6 +515,9 @@ const EduTheme = (function(){
       const badge = c.querySelector('.edu-theme-active');
       if(badge) badge.style.display = active ? 'block' : 'none';
     });
+
+    // تطبيق نقش الخلفية الفني
+    injectPattern(id);
   }
 
   // ── واجهة اختيار الثيم ───────────────────────────────────────
