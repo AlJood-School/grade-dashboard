@@ -1182,9 +1182,26 @@ let _editingAssId    = null;
 
 // ─── Load Assessments (Column Definitions) ────────────────────────
 async function loadGradeAssessments() {
-  const q = `semester=eq.${gradesSemester}&academic_year=eq.${gradesYear}&subject=eq.CCDI&order=sort_order.asc`;
-  const data = await sbFetch('grade_assessment_defs', q);
-  gradeAssessments = Array.isArray(data) ? data : [];
+  // التقييمات الافتراضية — تُستخدم دائماً إن لم تُعرَّف أخرى
+  const DEFAULTS = [
+    { id: `default-project-${gradesSemester}`, name: 'مشروع الوحدة', type: 'project', max_score: 100, weight: 60, sort_order: 1, _isDefault: true },
+    { id: `default-exam-${gradesSemester}`,    name: 'اختبار 1',      type: 'exam',    max_score: 100, weight: 40, sort_order: 2, _isDefault: true },
+    { id: `default-hw-${gradesSemester}`,      name: 'واجب',          type: 'hw',      max_score: 100, weight: 0,  sort_order: 3, _isDefault: true }
+  ];
+
+  try {
+    const q = `semester=eq.${gradesSemester}&academic_year=eq.${gradesYear}&subject=eq.CCDI&order=sort_order.asc`;
+    const data = await sbFetch('grade_assessment_defs', q);
+    if (Array.isArray(data) && data.length > 0) {
+      gradeAssessments = data;
+    } else {
+      // جدول غير موجود أو فارغ — استخدم الافتراضية
+      gradeAssessments = DEFAULTS;
+    }
+  } catch(e) {
+    gradeAssessments = DEFAULTS;
+  }
+
   renderColChips();
   populateClassFilter();
 }
@@ -1422,6 +1439,47 @@ async function saveAllGrades() {
 
 // ─── Add Assessment ───────────────────────────────────────────────
 function openAddCol() { document.getElementById('add-col-modal').style.display='block'; }
+
+// ─── Confirm Add New Assessment ───────────────────────────────────
+async function confirmAddCol() {
+  const nameEl  = document.getElementById('col-name-in');
+  const typeEl  = document.getElementById('col-type-in');
+  const scoreEl = document.getElementById('col-score-in');
+  const name  = (nameEl?.value || '').trim();
+  const type  = typeEl?.value  || 'exam';
+  const score = parseFloat(scoreEl?.value) || 100;
+  if (!name) { nameEl?.focus(); return; }
+
+  // إنشاء تقييم جديد في الذاكرة
+  const newId = 'local-' + Date.now();
+  const newAss = { id: newId, name, type, max_score: score, weight: 0, sort_order: gradeAssessments.length + 1, _isLocal: true };
+  gradeAssessments.push(newAss);
+
+  // محاولة الحفظ في Supabase إن كان الجدول موجوداً
+  try {
+    const SB_URL = window.SUPA_URL || 'https://zuyizaiugpmhmeycqton.supabase.co';
+    const SB_KEY = window.SUPA_KEY;
+    const r = await fetch(`${SB_URL}/rest/v1/grade_assessment_defs`, {
+      method: 'POST',
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY,
+        'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      body: JSON.stringify({ name, type, max_score: score, weight: 0,
+        semester: gradesSemester, academic_year: gradesYear, subject: 'CCDI', sort_order: newAss.sort_order })
+    });
+    if (r.ok) {
+      const saved = await r.json();
+      if (saved?.[0]?.id) { newAss.id = saved[0].id; delete newAss._isLocal; }
+    }
+  } catch(e) {}
+
+  // أغلق الـ modal وأعد التصيير
+  document.getElementById('add-col-modal').style.display = 'none';
+  if (nameEl)  nameEl.value  = '';
+  if (scoreEl) scoreEl.value = '100';
+  renderColChips();
+  renderGradesTable();
+  updateGradesStats();
+}
 async function confirmAddCol() {
   const name   = (document.getElementById('col-name-in').value||'').trim();
   const type   = document.getElementById('col-type-in').value;
@@ -1475,15 +1533,30 @@ async function confirmEditCol() {
   const type   = document.getElementById('edit-col-type').value;
   const max    = parseFloat(document.getElementById('edit-col-max').value)||100;
   const weight = parseFloat(document.getElementById('edit-col-weight').value)||100;
-  const SB_URL = window.SUPA_URL; const SB_KEY = window.SUPA_KEY;
-  await fetch(`${SB_URL}/rest/v1/grade_assessment_defs?id=eq.${_editingAssId}`, {
-    method:'PATCH',
-    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
-    body:JSON.stringify({name,type,max_score:max,weight})
-  });
+  if (!name) return;
+
+  // تحديث في الذاكرة أولاً — يعمل دائماً
+  const ass = gradeAssessments.find(a => a.id === _editingAssId);
+  if (ass) { ass.name = name; ass.type = type; ass.max_score = max; ass.weight = weight; }
+
+  // محاولة الحفظ في Supabase إن لم يكن افتراضياً أو محلياً
+  const isDefault = _editingAssId.startsWith('default-') || _editingAssId.startsWith('local-');
+  if (!isDefault) {
+    try {
+      const SB_URL = window.SUPA_URL; const SB_KEY = window.SUPA_KEY;
+      await fetch(`${SB_URL}/rest/v1/grade_assessment_defs?id=eq.${_editingAssId}`, {
+        method:'PATCH',
+        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+        body:JSON.stringify({name,type,max_score:max,weight})
+      });
+    } catch(e) {}
+  }
+
   _editingAssId = null;
   document.getElementById('edit-col-modal').style.display = 'none';
-  await buildGrades();
+  renderColChips();
+  renderGradesTable();
+  updateGradesStats();
 }
 
 // ─── History Modal ─────────────────────────────────────────────────
