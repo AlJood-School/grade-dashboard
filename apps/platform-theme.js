@@ -255,27 +255,27 @@ const EduTheme = (function(){
       icon: '🚨',
       category: 'contextual',
       vars: {
-        '--bg':           '#0d0000',        /* أسود-أحمر */
-        '--surface':      '#1a0000',
-        '--surface2':     '#250000',
-        '--surface3':     '#300500',
-        '--indigo':       '#ef4444',        /* أحمر طوارئ */
-        '--indigo2':      '#f87171',
-        '--emerald':      '#f59e0b',        /* أصفر تحذير */
-        '--emerald2':     '#fbbf24',
-        '--gold':         '#f59e0b',
-        '--rose':         '#ef4444',
-        '--sky':          '#ef4444',
-        '--violet':       '#f87171',
-        '--text':         '#ffffff',        /* أبيض نقي — أعلى تباين */
-        '--text2':        'rgba(255,255,255,0.8)',
-        '--text3':        'rgba(255,255,255,0.5)',
-        '--border':       'rgba(239,68,68,0.25)',
-        '--glow-indigo':  'rgba(239,68,68,0.3)',
-        '--glow-emerald': 'rgba(245,158,11,0.2)',
-        '--header-bg':    '#1a0000',
-        '--card-shadow':  '0 4px 20px rgba(239,68,68,0.2)',
-        '--input-bg':     '#250000',
+        '--bg':           '#fff8e1',        /* أصفر عنبري ساطع — يوجع العين */
+        '--surface':      '#ffecb3',        /* عنبر فاتح مقلق */
+        '--surface2':     '#ffe082',        /* عنبر أعمق */
+        '--surface3':     '#ffd54f',        /* عنبر صارخ */
+        '--indigo':       '#d50000',        /* أحمر صارخ جداً */
+        '--indigo2':      '#ff1744',        /* أحمر أكثر وضوحاً */
+        '--emerald':      '#e65100',        /* برتقالي تحذير حاد */
+        '--emerald2':     '#ff6d00',
+        '--gold':         '#e65100',
+        '--rose':         '#d50000',
+        '--sky':          '#b71c1c',
+        '--violet':       '#c62828',
+        '--text':         '#1a0000',        /* أسود-أحمر — تباين مؤلم */
+        '--text2':        'rgba(26,0,0,0.75)',
+        '--text3':        'rgba(26,0,0,0.5)',
+        '--border':       'rgba(213,0,0,0.4)',
+        '--glow-indigo':  'rgba(213,0,0,0.25)',
+        '--glow-emerald': 'rgba(230,81,0,0.2)',
+        '--header-bg':    '#d50000',        /* هيدر أحمر صارخ — لا يُنسى */
+        '--card-shadow':  '0 4px 20px rgba(213,0,0,0.3)',
+        '--input-bg':     '#ffe082',
       }
     },
     {
@@ -313,27 +313,27 @@ const EduTheme = (function(){
       icon: '🇦🇪',
       category: 'contextual',
       vars: {
-        '--bg':           '#0a1a0a',        /* أخضر داكن — لون الإمارات */
-        '--surface':      '#0f2210',
-        '--surface2':     '#162e18',
-        '--surface3':     '#1c3a1e',
-        '--indigo':       '#00c853',        /* أخضر الإمارات */
-        '--indigo2':      '#69f0ae',
-        '--emerald':      '#00c853',
-        '--emerald2':     '#69f0ae',
-        '--gold':         '#ffd600',
-        '--rose':         '#e53935',        /* أحمر الإمارات */
-        '--sky':          '#ffffff',
-        '--violet':       '#00c853',
-        '--text':         '#f1fff2',
-        '--text2':        'rgba(241,255,242,0.7)',
-        '--text3':        'rgba(241,255,242,0.4)',
-        '--border':       'rgba(0,200,83,0.15)',
-        '--glow-indigo':  'rgba(0,200,83,0.2)',
-        '--glow-emerald': 'rgba(0,200,83,0.15)',
-        '--header-bg':    'rgba(10,26,10,0.97)',
-        '--card-shadow':  '0 4px 20px rgba(0,200,83,0.12)',
-        '--input-bg':     '#162e18',
+        '--bg':           '#f5faf5',        /* أوف وايت مع لمسة خضراء ناعمة */
+        '--surface':      '#ffffff',        /* أبيض نقي */
+        '--surface2':     '#edf7ed',        /* أخضر فاتح جداً */
+        '--surface3':     '#e0f2e0',        /* أخضر فاتح */
+        '--indigo':       '#2e7d32',        /* أخضر الإمارات المحترم */
+        '--indigo2':      '#43a047',        /* أخضر أفتح */
+        '--emerald':      '#1b5e20',        /* أخضر داكن */
+        '--emerald2':     '#388e3c',
+        '--gold':         '#c62828',        /* أحمر علم الإمارات — للتوازن */
+        '--rose':         '#b71c1c',
+        '--sky':          '#1565c0',
+        '--violet':       '#2e7d32',
+        '--text':         '#1a2e1a',        /* أخضر-أسود — واضح جداً */
+        '--text2':        'rgba(26,46,26,0.68)',
+        '--text3':        'rgba(26,46,26,0.42)',
+        '--border':       'rgba(46,125,50,0.18)',
+        '--glow-indigo':  'rgba(46,125,50,0.1)',
+        '--glow-emerald': 'rgba(27,94,32,0.1)',
+        '--header-bg':    '#2e7d32',        /* هيدر أخضر فاتح واضح */
+        '--card-shadow':  '0 2px 12px rgba(46,125,50,0.12)',
+        '--input-bg':     '#edf7ed',
       }
     },
   ];
