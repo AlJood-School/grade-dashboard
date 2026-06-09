@@ -11,13 +11,13 @@
 | **GitHub repo** | `AlJood-School/grade-dashboard` / branch `main` |
 | **GitHub connection** | `conn_rn0ymr73xk9es2ppaqqs` |
 | **Vercel connection** | `conn_syp2dx808v4hy8a4me5h` |
-| **Vercel token** | `vcp_[REDACTED_IN_LOG]` |
+| **Vercel token** | `vcp_***REDACTED***` |
 | **الرابط الرسمي** | `https://grade-dashboard-ruby.vercel.app` |
 | **Supabase URL** | `https://zuyizaiugpmhmeycqton.supabase.co` |
 | **Supabase anon key** | في `edoos-principal/index.html` (مقسَّم `part1+part2`) |
-| **OpenRouter Key** | `sk-or-v1-[REDACTED_IN_LOG]` |
+| **OpenRouter Key** | `sk-or-v1-***REDACTED***` |
 | **Gemini Key** | Supabase → جدول `app_settings` → key=`gemini_api_key` |
-| **Firebase Project** | `aljood-school` / API: `AIzaSy[REDACTED_IN_LOG]` |
+| **Firebase Project** | `aljood-school` / API: `AIzaSy***REDACTED***-XSduhALpM` |
 | **تيليجرام** | `t.me/Schaljood` |
 | **حساب المدير** | `noor` / `AlJood@2026` |
 | **حساب المعلمة** | `munira.almarri` / `AJ@4243` |
@@ -200,15 +200,15 @@ nurse_visits + جداول الخدمات والاستبيانات والأمن
 | `edoos-student` | مُصلَحة | `5f7f40b` | يونيو 2026 |
 | `edoos-timetable` | مُصلَحة | `4211e6a` | يونيو 2026 |
 
-### 🔴 قيد التنفيذ الآن
-| المنظومة | الحالة |
-|----------|--------|
-| `edoos-inclusion` | جارٍ البناء |
-| `edoos-socialworker` | قيد الانتظار |
-| `edoos-calendar` | قيد الانتظار |
-| `edoos-nursing` | قيد الانتظار |
-| `duty-os-vision` | قيد الانتظار |
-| `edoos-kg` | قيد الانتظار |
+### ✅ المنظومات الـ6 المتوسطة — مكتملة يونيو 2026
+| المنظومة | السطور | commit | الثيم |
+|----------|--------|--------|-------|
+| `edoos-inclusion` | 1703 | `af5fe5e` | بنفسجي — دمج الاحتياجات الخاصة |
+| `edoos-socialworker` | 1187 | `422d33b` | أزرق رمادي — الحالات الاجتماعية |
+| `edoos-calendar` | ~900 | (مرفوع) | أزرق نيلي — التقويم الأكاديمي |
+| `edoos-nursing` | 1070 | `dc652cd` | زمردي أخضر — الرعاية الصحية |
+| `duty-os-vision` | 1025 | `15f2354` | عنبري ذهبي — الإشراف الميداني |
+| `edoos-kg` | 969 | `8aa3615` | وردي بنفسجي — رياض الأطفال |
 
 ---
 
