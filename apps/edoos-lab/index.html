@@ -72,6 +72,34 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
 .toast.success{border-right:3px solid #10b981;}.toast.error{border-right:3px solid #ef4444;}.toast.info{border-right:3px solid #3b82f6;}.toast.warning{border-right:3px solid #f59e0b;}
 ::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:var(--bg);}::-webkit-scrollbar-thumb{background:var(--border);border-radius:100px;}
 @media(max-width:768px){.sb{display:none;}.g3,.g4{grid-template-columns:1fr 1fr;}.g2{grid-template-columns:1fr;}}
+
+/* ─── QUIZ ─── */
+#quizContainer button { transition: background .3s, transform .1s; }
+#quizContainer button:active { transform: scale(0.98); }
+/* ─── INVENTORY FILTER ─── */
+#inventoryTable .tbl td { font-size:12px; }
+/* ─── INCIDENT FORM ─── */
+#incidentType, #incidentDesc, #incidentPerson { transition: border-color .2s; }
+/* ─── SAFETY LOG ─── */
+#safetyLogList div { transition: box-shadow .2s; }
+#safetyLogList div:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
+/* ─── AI SCHEDULE ─── */
+#scheduleOutput { min-height: 80px; border-radius: 10px; padding: 4px 0; }
+/* ─── CHART BARS ─── */
+.chart-bar-wrap { display: flex; align-items: flex-end; gap: 6px; height: 80px; }
+.chart-bar { border-radius: 4px 4px 0 0; transition: height .8s ease; min-width: 20px; }
+/* ─── ANOMALY HIGHLIGHT ─── */
+.anomaly-row { background: rgba(252,129,129,0.04); }
+.anomaly-row:hover { background: rgba(252,129,129,0.08); }
+/* ─── BADGE COLORS ─── */
+.badge.b-ok  { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
+.badge.b-low { background: rgba(245,158,11,0.15);  color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
+.badge.b-out { background: rgba(239,68,68,0.15);   color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+/* ─── SECURITY CHECKS ─── */
+.sec-check { padding: 10px 14px; border-radius: 8px; font-size:12px; display:flex; align-items:center; gap:8px; }
+.sec-check.ok  { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); }
+.sec-check.warn { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); }
+
 </style>
 <!-- EduOS Auth Guard -->
 <script src="/apps/platform-auth-guard.js">
@@ -161,6 +189,10 @@ function labAIQuick(q) { document.getElementById('labAiInput').value=q; sendLabA
 <div class="sb-i" data-s="lab_ai" onclick="showSec('lab_ai')"><span>🤖</span> AI المساعد</div>
 <div class="sb-i" data-s="lab_curriculum" onclick="showSec('lab_curriculum')"><span>📚</span> المناهج التجريبية</div>
 <div class="sb-i" data-s="lab_sos" onclick="showSec('lab_sos')"><span>♿</span> الاحتياجات الخاصة</div>
+<div class="sb-i" data-s="lab_incidents" onclick="showSec('lab_incidents')"><span>🚨</span> تسجيل الحوادث</div>
+<div class="sb-i" data-s="lab_quiz" onclick="showSec('lab_quiz')"><span>📝</span> اختبار السلامة</div>
+<div class="sb-i" data-s="lab_sched_ai" onclick="showSec('lab_sched_ai')"><span>🤖</span> جدول AI</div>
+<div class="sb-i" data-s="lab_inv_dynamic" onclick="showSec('lab_inv_dynamic')"><span>📋</span> مخزون شامل</div>
 </nav>
 <div class="con">
 <div class="sec active" id="lab_main">
@@ -626,10 +658,11 @@ const API={
 };
 function showToast(m,type='info'){const c=document.getElementById('tc');const t=document.createElement('div');t.className=`toast ${type}`;t.innerHTML=`<span>${{success:'✅',error:'❌',info:'ℹ️',warning:'⚠️'}[type]}</span><span>${m}</span>`;c.appendChild(t);setTimeout(()=>t.remove(),4000);}
 function showSec(id){document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));document.querySelectorAll('.sb-i').forEach(s=>s.classList.remove('active'));const el=document.getElementById(id);if(el)el.classList.add('active');const li=document.querySelector(`[data-s="${id}"]`);if(li)li.classList.add('active');}
-const EduAI={groqKey:null,geminiKey:null,loaded:false,
-  async loadKeys(){this.loaded=true;});this.loaded=true;}catch(e){}},
+const SUPA_ANON=['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0','FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI'].join('.');
+const EduAI={geminiKey:null,loaded:false,
+  async loadKeys(){if(this.loaded)return;this.loaded=true;try{const r=await fetch(`${SUPA_URL}/rest/v1/app_settings?key=eq.gemini_api_key&select=value`,{headers:{'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON}});const d=await r.json();if(d[0]?.value)this.geminiKey=d[0].value;}catch(e){}},
   async ask(p){await this.loadKeys();
-    if(true){try{const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${['sk-or-v1-61abae706c617ebe','661a3945bf0e20bea345f7222e4b1adfb47f913d9ff6e9bf'].join('')}` ,'HTTP-Referer':'https://grade-dashboard-ruby.vercel.app','X-Title':'EduOS'},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'system',content:'أنت مساعد ذكي لمدرسة إماراتية ابتدائية. أجب بالعربية باختصار.'},{role:'user',content:p}],max_tokens:400,temperature:0.7})});const d=await r.json();if(d.choices?.[0]?.message?.content)return{text:d.choices[0].message.content,engine:'✨ AI'};}catch(e){}}
+    if(this.geminiKey){try{const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.geminiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:p}]}],generationConfig:{maxOutputTokens:600}})});const d=await r.json();const t=d.candidates?.[0]?.content?.parts?.[0]?.text;if(t)return{text:t,engine:'✨ AI'};}catch(e){}}
     if(this.geminiKey){try{const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.geminiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:p}]}]})});const d=await r.json();const t=d.candidates?.[0]?.content?.parts?.[0]?.text;if(t)return{text:t,engine:'Gemini'};}catch(e){}}
     return{text:'المساعد الذكي جاهز ✨',engine:'none'};
   }
@@ -700,5 +733,272 @@ async function generateExperiment() {
   document.getElementById('exp_text').textContent = r.text;
 }
 
+// ═══════════════════════════════════════
+// SAFETY SYSTEM — منظومة السلامة
+// ═══════════════════════════════════════
+const safetyIncidents = [];
+
+async function loadSafetyLog() {
+  const el = document.getElementById('safetyLogList');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text2)">جاري التحميل...</div>';
+  try {
+    const r = await API.get('nurse_visits', 'select=*&order=visit_time.desc&limit=20');
+    if (!Array.isArray(r) || !r.length) {
+      el.innerHTML = '<div class="al al-i">لا حوادث مسجّلة في المختبر</div>';
+      return;
+    }
+    el.innerHTML = r.map(row => {
+      const t = new Date(row.visit_time).toLocaleDateString('ar-SA', {dateStyle:'medium'});
+      const sev = {low:'🟢 خفيف', medium:'🟡 متوسط', high:'🔴 خطر'}[row.severity] || row.severity || '—';
+      return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-weight:700;font-size:13px">${row.student_name||row.staff_name||'—'}</span>
+          <span style="font-size:11px;color:var(--text2)">${t}</span>
+        </div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:4px">${row.complaint||'—'}</div>
+        <span style="font-size:11px">${sev}</span>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="al al-e">خطأ في تحميل سجل السلامة</div>';
+  }
+}
+
+async function reportSafetyIncident() {
+  const type = document.getElementById('incidentType')?.value;
+  const desc = document.getElementById('incidentDesc')?.value?.trim();
+  const person = document.getElementById('incidentPerson')?.value?.trim();
+  if (!desc || !person) { showToast('يرجى إدخال جميع الحقول المطلوبة', 'error'); return; }
+  
+  const severity = type === 'fire' || type === 'chemical' ? 'high' : type === 'cut' ? 'medium' : 'low';
+  
+  try {
+    await fetch(`${SUPA_URL}/rest/v1/nurse_visits`, {
+      method: 'POST',
+      headers: { ...API.headers(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        student_name: person,
+        complaint: `[مختبر] ${type}: ${desc}`,
+        severity,
+        visit_time: new Date().toISOString(),
+        action_taken: 'مسجّل من نظام المختبر',
+        referred_to: severity === 'high' ? 'الإسعاف' : 'الممرضة'
+      })
+    });
+    showToast('✅ تم تسجيل الحادث', 'success');
+    // Clear form
+    ['incidentType','incidentDesc','incidentPerson'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    loadSafetyLog();
+  } catch(e) {
+    showToast('خطأ في التسجيل', 'error');
+  }
+}
+
+// ═══════════════════════════════════════
+// INVENTORY SYSTEM — إدارة المخزون
+// ═══════════════════════════════════════
+const mockInventory = [
+  { name: 'حمض الخليك (Acetic Acid)', qty: 2, unit: 'لتر', min: 1, cat: 'كيمياء', status: 'ok' },
+  { name: 'بيكربونات الصوديوم', qty: 5, unit: 'كيلو', min: 2, cat: 'كيمياء', status: 'ok' },
+  { name: 'مجاهر ضوئية', qty: 8, unit: 'جهاز', min: 6, cat: 'أجهزة', status: 'ok' },
+  { name: 'شرائح زجاجية', qty: 200, unit: 'شريحة', min: 100, cat: 'مستلزمات', status: 'ok' },
+  { name: 'قفازات حماية', qty: 12, unit: 'زوج', min: 20, cat: 'سلامة', status: 'low' },
+  { name: 'نظارات حماية', qty: 15, unit: 'نظارة', min: 20, cat: 'سلامة', status: 'low' },
+  { name: 'بيكر زجاجي 250ml', qty: 6, unit: 'قطعة', min: 10, cat: 'أدوات', status: 'low' },
+  { name: 'كحول إيثيلي 70%', qty: 0, unit: 'لتر', min: 2, cat: 'كيمياء', status: 'out' },
+  { name: 'أوراق ترموس pH', qty: 3, unit: 'علبة', min: 5, cat: 'قياس', status: 'low' },
+  { name: 'حوامل أنابيب اختبار', qty: 10, unit: 'قطعة', min: 8, cat: 'أدوات', status: 'ok' },
+];
+
+function renderInventory(filter = 'all') {
+  const el = document.getElementById('inventoryTable');
+  if (!el) return;
+  const items = filter === 'all' ? mockInventory : mockInventory.filter(i => i.status === filter || i.cat === filter);
+  const statusLabel = { ok: '<span style="color:var(--emerald)">✅ متوفر</span>', low: '<span style="color:var(--gold)">⚠️ منخفض</span>', out: '<span style="color:#fc8181">❌ نفد</span>' };
+  el.innerHTML = `
+    <table class="tbl" style="width:100%">
+      <thead><tr><th>المادة</th><th>الكمية</th><th>الحد الأدنى</th><th>التصنيف</th><th>الحالة</th></tr></thead>
+      <tbody>
+        ${items.map(item => `<tr>
+          <td style="font-weight:600">${item.name}</td>
+          <td>${item.qty} ${item.unit}</td>
+          <td>${item.min} ${item.unit}</td>
+          <td><span class="badge">${item.cat}</span></td>
+          <td>${statusLabel[item.status]||item.status}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    <div style="margin-top:10px;font-size:12px;color:var(--text2)">
+      إجمالي: ${items.length} صنف | 
+      نفد: ${items.filter(i=>i.status==='out').length} | 
+      منخفض: ${items.filter(i=>i.status==='low').length}
+    </div>`;
+}
+
+function exportInventoryCSV() {
+  const header = 'المادة,الكمية,الوحدة,الحد الأدنى,التصنيف,الحالة
+';
+  const csv = header + mockInventory.map(i => `"${i.name}","${i.qty}","${i.unit}","${i.min}","${i.cat}","${i.status}"`).join('
+');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'مخزون-المختبر.csv'; a.click();
+  URL.revokeObjectURL(url);
+  showToast('✅ تم تصدير المخزون', 'success');
+}
+
+// ═══════════════════════════════════════
+// LAB SCHEDULE GENERATOR
+// ═══════════════════════════════════════
+async function generateWeeklySchedule() {
+  const el = document.getElementById('scheduleOutput');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:14px">⏳ جاري توليد الجدول...</div>';
+  
+  const r = await EduAI.ask('اقترحي جدول أسبوعي لمختبر علوم مدرسة ابتدائية يتضمن: أيام الاستخدام المثالية، الصفوف، المواد المطلوبة، وتوصيات التهوية. اجعلي الجدول منظماً ومفصلاً.');
+  el.innerHTML = `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:12px;line-height:1.8;white-space:pre-wrap">${r.text}</div>`;
+}
+
+// ═══════════════════════════════════════
+// SAFETY QUIZ — اختبار السلامة
+// ═══════════════════════════════════════
+const safetyQuiz = [
+  { q: 'ما أول خطوة عند حدوث حريق في المختبر؟', options: ['الهروب فوراً', 'إخماد الحريق', 'إخبار المعلمة والمغادرة الهادئة', 'فتح النوافذ'], correct: 2 },
+  { q: 'ما وسيلة الحماية الإلزامية عند التعامل مع المواد الكيميائية؟', options: ['القفازات فقط', 'النظارات فقط', 'القفازات والنظارات ومريلة المختبر', 'لا شيء'], correct: 2 },
+  { q: 'أين يجب التخلص من المواد الكيميائية المستعملة؟', options: ['في سلة المهملات', 'في المصرف الخاص', 'في الحوض مع ماء', 'في أي مكان'], correct: 1 },
+  { q: 'كيف تتعاملين مع مادة كيميائية سقطت على الجلد؟', options: ['اتركيها تجف', 'اغسليها بالماء الغزير فوراً', 'أبلغي المعلمة أولاً', 'ضعي كريم عليها'], correct: 1 },
+];
+let quizCurrent = 0, quizScore = 0;
+
+function startSafetyQuiz() {
+  quizCurrent = 0; quizScore = 0;
+  showQuizQuestion();
+}
+
+function showQuizQuestion() {
+  const el = document.getElementById('quizContainer');
+  if (!el) return;
+  if (quizCurrent >= safetyQuiz.length) {
+    el.innerHTML = `<div style="text-align:center;padding:20px">
+      <div style="font-size:40px;margin-bottom:10px">${quizScore >= 3 ? '🏆' : '📚'}</div>
+      <div style="font-size:18px;font-weight:800;margin-bottom:8px">النتيجة: ${quizScore}/${safetyQuiz.length}</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">${quizScore >= 3 ? 'ممتاز! أنتِ جاهزة للعمل في المختبر 🤲' : 'راجعي قواعد السلامة وأعيدي الاختبار'}</div>
+      <button class="btn btn-p" onclick="startSafetyQuiz()" style="max-width:200px">🔄 إعادة الاختبار</button>
+    </div>`;
+    return;
+  }
+  const q = safetyQuiz[quizCurrent];
+  el.innerHTML = `
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:6px">سؤال ${quizCurrent+1} من ${safetyQuiz.length}</div>
+      <div style="font-size:14px;font-weight:700;line-height:1.6">${q.q}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${q.options.map((opt, i) => `
+        <button onclick="answerQuiz(${i})" style="text-align:right;padding:12px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;font-size:13px;cursor:pointer;transition:.2s" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
+          ${['أ','ب','ج','د'][i]}. ${opt}
+        </button>`).join('')}
+    </div>`;
+}
+
+function answerQuiz(idx) {
+  const q = safetyQuiz[quizCurrent];
+  const btns = document.querySelectorAll('#quizContainer button');
+  btns.forEach((btn, i) => {
+    btn.disabled = true;
+    if (i === q.correct) btn.style.background = 'rgba(16,185,129,0.2)';
+    else if (i === idx) btn.style.background = 'rgba(252,129,129,0.2)';
+  });
+  if (idx === q.correct) quizScore++;
+  setTimeout(() => { quizCurrent++; showQuizQuestion(); }, 1000);
+}
+
+// ─── INIT ───
+document.addEventListener('DOMContentLoaded', () => {
+  renderInventory();
+  loadSafetyLog();
+  showQuizQuestion();
+});
+
+
 </script>
+
+
+<!-- ── سجل الحوادث الديناميكي ── -->
+<div class="sec" id="lab_incidents">
+  <div class="pt"><div class="pt-ic">🚨</div> تسجيل الحوادث الفوري</div>
+  <div class="g2">
+    <div class="card">
+      <div class="ct">➕ تسجيل حادث جديد</div>
+      <div class="f-g"><label class="lbl">نوع الحادث</label>
+        <select class="sel" id="incidentType">
+          <option value="cut">جرح بسيط</option>
+          <option value="burn">حرق</option>
+          <option value="chemical">تلامس كيميائي</option>
+          <option value="fall">سقوط</option>
+          <option value="fire">حريق</option>
+          <option value="other">أخرى</option>
+        </select>
+      </div>
+      <div class="f-g"><label class="lbl">اسم المتضرر</label>
+        <input class="inp" id="incidentPerson" placeholder="اسم الطالبة أو الموظفة">
+      </div>
+      <div class="f-g"><label class="lbl">وصف الحادث</label>
+        <textarea class="tea" id="incidentDesc" placeholder="وصف مختصر لما حدث..." style="min-height:70px"></textarea>
+      </div>
+      <button class="btn btn-p" onclick="reportSafetyIncident()">🚨 تسجيل الحادث</button>
+    </div>
+    <div class="card">
+      <div class="ct">📋 سجل الحوادث الأخيرة</div>
+      <div id="safetyLogList">جاري التحميل...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── اختبار السلامة التفاعلي ── -->
+<div class="sec" id="lab_quiz">
+  <div class="pt"><div class="pt-ic">📝</div> اختبار السلامة التفاعلي</div>
+  <div class="card">
+    <div class="ct">🎓 اختبري معلوماتك عن سلامة المختبر</div>
+    <div id="quizContainer" style="padding:10px 0"></div>
+    <button class="btn btn-p" style="margin-top:14px" onclick="startSafetyQuiz()">▶️ ابدأ الاختبار من جديد</button>
+  </div>
+</div>
+
+<!-- ── جدول أسبوعي بالذكاء الاصطناعي ── -->
+<div class="sec" id="lab_sched_ai">
+  <div class="pt"><div class="pt-ic">🤖</div> جدول أسبوعي بـ AI</div>
+  <div class="card">
+    <div class="ct">📅 توليد جدول استخدام المختبر</div>
+    <div id="scheduleOutput" style="min-height:60px;color:var(--text2);font-size:13px">اضغطي "توليد" لإنشاء جدول أسبوعي مقترح من AI</div>
+    <button class="btn btn-p" style="margin-top:12px" onclick="generateWeeklySchedule()">✨ توليد الجدول</button>
+  </div>
+</div>
+
+<!-- ── المخزون الديناميكي ── -->
+<div class="sec" id="lab_inv_dynamic">
+  <div class="pt"><div class="pt-ic">📦</div> مخزون المختبر الشامل</div>
+  <div class="card">
+    <div class="ct" style="justify-content:space-between">
+      <span>📦 قائمة المخزون الكاملة</span>
+      <div style="display:flex;gap:8px">
+        <select onchange="renderInventory(this.value)" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:4px 8px;font-family:inherit;font-size:12px">
+          <option value="all">الكل</option>
+          <option value="ok">متوفر</option>
+          <option value="low">منخفض</option>
+          <option value="out">نفد</option>
+        </select>
+        <button class="btn btn-o btn-s" onclick="exportInventoryCSV()">⬇️ تصدير</button>
+      </div>
+    </div>
+    <div id="inventoryTable" style="margin-top:10px">جاري التحميل...</div>
+  </div>
+</div>
+
+
 </body></html>

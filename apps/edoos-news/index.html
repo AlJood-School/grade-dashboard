@@ -785,6 +785,194 @@ document.querySelectorAll('.sb-item').forEach(item => {
     if (id) history.replaceState(null,'','#'+id.replace('tab-',''));
   });
 });
+
+// ═══════════════════════════════════════
+// ENHANCED FEATURES FOR EDOOS-NEWS
+// ═══════════════════════════════════════
+
+// ─── Search & Filter ───
+function filterNews(query) {
+  const cards = document.querySelectorAll('.news-card, [data-news-id]');
+  const q = query.toLowerCase().trim();
+  let shown = 0;
+  cards.forEach(card => {
+    const text = card.textContent.toLowerCase();
+    if (!q || text.includes(q)) {
+      card.style.display = '';
+      shown++;
+    } else {
+      card.style.display = 'none';
+    }
+  });
+  const noResults = document.getElementById('noSearchResults');
+  if (noResults) noResults.style.display = shown === 0 ? 'block' : 'none';
+}
+
+// ─── Category Filter ───
+let activeCategory = 'all';
+function filterByCategory(cat) {
+  activeCategory = cat;
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('cat-active'));
+  const btn = document.querySelector(`[data-cat="${cat}"]`);
+  if (btn) btn.classList.add('cat-active');
+  // reload news with filter
+  if (typeof loadNews === 'function') loadNews(cat);
+}
+
+// ─── Like / Reaction ───
+async function reactToNews(id, emoji) {
+  // Store in sessionStorage (ephemeral — no localStorage)
+  const reacted = JSON.parse(sessionStorage.getItem('news_reactions') || '{}');
+  if (reacted[id]) { showNewsToast('لقد تفاعلتِ بالفعل مع هذا الخبر'); return; }
+  reacted[id] = emoji;
+  sessionStorage.setItem('news_reactions', JSON.stringify(reacted));
+  
+  const btn = document.querySelector(`[data-react="${id}"]`);
+  if (btn) {
+    btn.textContent = emoji + ' ✓';
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+  }
+  showNewsToast(`تفاعلتِ بـ ${emoji} ✓`);
+}
+
+// ─── Share News ───
+function shareNews(title, url) {
+  if (navigator.share) {
+    navigator.share({ title, url: url || window.location.href });
+  } else {
+    navigator.clipboard?.writeText(url || window.location.href)
+      .then(() => showNewsToast('✅ تم نسخ الرابط'))
+      .catch(() => showNewsToast('رابط الخبر: ' + (url || window.location.href)));
+  }
+}
+
+// ─── Reading Time Estimate ───
+function estimateReadTime(text) {
+  const words = text.trim().split(/\s+/).length;
+  const mins = Math.ceil(words / 200);
+  return mins + (mins === 1 ? ' دقيقة' : ' دقائق');
+}
+
+// ─── News Statistics Dashboard ───
+async function loadNewsDashboard() {
+  const el = document.getElementById('newsDashboard');
+  if (!el) return;
+  try {
+    const SUPA_URL_N = 'https://zuyizaiugpmhmeycqton.supabase.co';
+    const SUPA_KEY_N = ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0','FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI'].join('.');
+    const r = await fetch(`${SUPA_URL_N}/rest/v1/school_events?select=id,title,event_type,start_date&order=created_at.desc&limit=20`, {
+      headers: { 'apikey': SUPA_KEY_N, 'Authorization': 'Bearer ' + SUPA_KEY_N }
+    });
+    const rows = await r.json();
+    if (!Array.isArray(rows) || !rows.length) {
+      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text2)">لا أحداث مسجّلة</div>';
+      return;
+    }
+    const types = {};
+    rows.forEach(r => { types[r.event_type||'عام'] = (types[r.event_type||'عام']||0)+1; });
+    const upcoming = rows.filter(r => new Date(r.start_date) >= new Date()).length;
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+        <div style="background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:22px;font-weight:900;color:#818cf8">${rows.length}</div>
+          <div style="font-size:10px;color:var(--text2)">إجمالي الأخبار</div>
+        </div>
+        <div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:22px;font-weight:900;color:#34d399">${upcoming}</div>
+          <div style="font-size:10px;color:var(--text2)">أحداث قادمة</div>
+        </div>
+        <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:22px;font-weight:900;color:#fbbf24">${Object.keys(types).length}</div>
+          <div style="font-size:10px;color:var(--text2)">تصنيفات</div>
+        </div>
+      </div>
+      <div style="font-size:12px;font-weight:700;margin-bottom:8px">📊 حسب التصنيف:</div>
+      ${Object.entries(types).map(([type, count]) => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+          <span style="font-size:12px">${type}</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="background:var(--bg3,rgba(99,102,241,0.2));border-radius:4px;height:6px;width:${Math.round(count/rows.length*100)}px;min-width:20px"></div>
+            <span style="font-size:11px;color:var(--text2)">${count}</span>
+          </div>
+        </div>
+      `).join('')}`;
+  } catch(e) {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text2)">— إحصائيات غير متاحة —</div>';
+  }
+}
+
+// ─── Archive Month Selector ───
+function loadArchive(yearMonth) {
+  const [year, month] = yearMonth.split('-');
+  const display = document.getElementById('archiveDisplay');
+  if (!display) return;
+  display.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text2)">عرض أرشيف ${month}/${year}...</div>`;
+  // Load from Supabase
+  const SUPA_URL_N = 'https://zuyizaiugpmhmeycqton.supabase.co';
+  const SUPA_KEY_N = ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0','FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI'].join('.');
+  fetch(`${SUPA_URL_N}/rest/v1/school_events?start_date=gte.${yearMonth}-01&start_date=lt.${year}-${String(parseInt(month)+1).padStart(2,'0')}-01&select=*&order=start_date.asc`, {
+    headers: { 'apikey': SUPA_KEY_N, 'Authorization': 'Bearer ' + SUPA_KEY_N }
+  }).then(r => r.json()).then(rows => {
+    if (!Array.isArray(rows) || !rows.length) {
+      display.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text2)">لا أخبار في هذا الشهر</div>';
+      return;
+    }
+    display.innerHTML = rows.map(row => {
+      const d = new Date(row.start_date).toLocaleDateString('ar-SA', {dateStyle:'medium'});
+      return `<div style="background:var(--bg2,rgba(255,255,255,0.04));border:1px solid var(--border,rgba(255,255,255,0.1));border-radius:10px;padding:12px;margin-bottom:8px">
+        <div style="font-weight:700;font-size:13px">${row.title||'—'}</div>
+        <div style="font-size:11px;color:var(--text2,#94a3b8);margin-top:4px">${d} · ${row.event_type||'عام'}</div>
+      </div>`;
+    }).join('');
+  }).catch(() => {
+    display.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text2)">خطأ في تحميل الأرشيف</div>';
+  });
+}
+
+// ─── Notification Bell ───
+function showNewsToast(msg, type='info') {
+  const existing = document.querySelector('.news-toast');
+  if (existing) existing.remove();
+  const t = document.createElement('div');
+  t.className = 'news-toast';
+  t.style.cssText = `position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e293b;border:1px solid rgba(255,255,255,0.1);padding:10px 20px;border-radius:10px;font-size:13px;color:#e2e8f0;z-index:9999;animation:fadeIn .3s ease;white-space:nowrap;font-family:'Tajawal',sans-serif`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+// ─── MOTD Integration ───
+document.addEventListener('DOMContentLoaded', () => {
+  // Inject category filter bar if container exists
+  const catContainer = document.getElementById('categoryBar');
+  if (catContainer) {
+    const cats = [
+      { key:'all', label:'🌐 الكل' },
+      { key:'academic', label:'📚 أكاديمي' },
+      { key:'event', label:'🎉 فعاليات' },
+      { key:'announcement', label:'📢 إعلانات' },
+      { key:'achievement', label:'🏆 إنجازات' },
+      { key:'health', label:'💊 صحة' },
+    ];
+    catContainer.innerHTML = `<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px">` +
+      cats.map(c => `<button class="cat-btn${c.key==='all'?' cat-active':''}" data-cat="${c.key}" onclick="filterByCategory('${c.key}')" style="white-space:nowrap;padding:6px 14px;border-radius:20px;border:1px solid rgba(99,102,241,0.3);background:${c.key==='all'?'rgba(99,102,241,0.2)':'transparent'};color:${c.key==='all'?'#c4b5fd':'var(--text2,#94a3b8)'};font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">${c.label}</button>`
+      ).join('') + `</div>`;
+  }
+  // Load news dashboard stats
+  loadNewsDashboard();
+  
+  // Inject search if not exists
+  const searchWrap = document.getElementById('newsSearchWrap');
+  if (searchWrap) {
+    searchWrap.innerHTML = `<div style="position:relative;margin-bottom:14px">
+      <input type="text" id="newsSearchInput" placeholder="🔍 بحث في الأخبار..." oninput="filterNews(this.value)"
+        style="width:100%;padding:10px 40px 10px 14px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:#e2e8f0;font-family:'Tajawal',sans-serif;font-size:13px;outline:none">
+      <div id="noSearchResults" style="display:none;text-align:center;padding:20px;color:#94a3b8">لا نتائج مطابقة</div>
+    </div>`;
+  }
+});
+
 </script>
 </body>
 </html>
