@@ -1010,6 +1010,46 @@ async function handleLogin(e) {
       }
     );
 
+    // ✅ استخدام نتيجة login_check أولاً
+    if (res.ok) {
+      try {
+        const rpcData = await res.json();
+        if (rpcData && rpcData.success) {
+          // نجاح الـ RPC — استخدمها مباشرة
+          const rpcUser = {
+            username: rpcData.username || username,
+            name_ar: rpcData.full_name || username,
+            loginRole: rpcData.role || 'teacher',
+            role: rpcData.role || 'teacher',
+            staff_id: rpcData.staff_id,
+            user_id: rpcData.user_id
+          };
+          btn.classList.remove('loading');
+          const role2 = rpcUser.loginRole;
+          const roleInfo2 = ROLE_MAP[role2] || ROLE_MAP.teacher;
+          const displayName2 = rpcUser.name_ar || username;
+          document.getElementById('rdIcon').textContent = roleInfo2.icon;
+          document.getElementById('rdRole').textContent = roleInfo2.label;
+          document.getElementById('rdName').textContent = `مرحباً، ${displayName2} 👋`;
+          document.getElementById('roleDetected').classList.add('visible');
+          const session2 = {
+            username: rpcUser.username,
+            name: displayName2,
+            role: role2,
+            loginRole: role2,
+            staff_id: rpcUser.staff_id,
+            loginTime: new Date().toISOString(),
+            schoolId: 'aljood'
+          };
+          sessionStorage.setItem('edoos_user', JSON.stringify(session2));
+          sessionStorage.setItem('aljood_session_role', JSON.stringify(session2));
+          sessionStorage.setItem('aljood_user', JSON.stringify(session2));
+          setTimeout(() => { showRedirectOverlay(roleInfo2, displayName2, roleInfo2.redirect); }, 900);
+          return;
+        }
+      } catch(e2) { /* fallback below */ }
+    }
+
     // Fallback: direct users table query
     const userRes = await fetch(
       `${SUPA_URL}/rest/v1/staff?or=(username.eq.${encodeURIComponent(username)},email.eq.${encodeURIComponent(username)})&select=*&limit=1`,
@@ -1068,6 +1108,7 @@ async function handleLogin(e) {
       loginTime: new Date().toISOString(),
       schoolId: user.school_id || 'aljood'
     };
+    sessionStorage.setItem('edoos_user', JSON.stringify(session));
     sessionStorage.setItem('aljood_session_role', JSON.stringify(session));
     sessionStorage.setItem('aljood_user', JSON.stringify(session));
 
@@ -1160,6 +1201,7 @@ function handleDemoLogin(user, username) {
     loginTime: new Date().toISOString(),
     schoolId: 'aljood'
   };
+  sessionStorage.setItem('edoos_user', JSON.stringify(session));
   sessionStorage.setItem('aljood_session_role', JSON.stringify(session));
   sessionStorage.setItem('aljood_user', JSON.stringify(session));
 
