@@ -1029,16 +1029,16 @@ async function handleLogin(e) {
       const users = await userRes.json();
       if (users && users.length > 0) {
         const u = users[0];
-        // Simple password check (in production use proper hashing)
-        if (u.password === password || u.pass === password) {
+        // مقارنة كلمة المرور (يُفضَّل دوماً Supabase Auth في الإنتاج)
+        if (u.password_hash && u.password_hash === await hashPasswordSync(password)) {
           user = u;
         }
       }
     }
 
-    // Demo mode: check against known credentials
+    // Demo mode: check against hashed credentials
     if (!user) {
-      user = getDemoUser(username, password);
+      user = await getDemoUser(username, password);
     }
 
     btn.classList.remove('loading');
@@ -1103,7 +1103,7 @@ async function handleLogin(e) {
     btnText.textContent = '🚀 دخول ذكي';
 
     // Demo fallback on error
-    const demoUser = getDemoUser(username, password);
+    const demoUser = await getDemoUser(username, password);
     if (demoUser) {
       handleDemoLogin(demoUser, username);
     } else {
@@ -1116,19 +1116,31 @@ async function handleLogin(e) {
 }
 
 // ═══ DEMO USERS (fallback) ═══
-function getDemoUser(username, password) {
+async function hashPassword(pwd) {
+  const enc = new TextEncoder().encode(pwd);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function getDemoUser(username, password) {
+  // كلمات المرور مخزّنة كـ SHA-256 — لا plain text في الكود
   const demoUsers = {
-    'noor':           { username:'noor', name_ar:'منيرة المري', loginRole:'admin',      password:'AlJood@2026' },
-    'halima':         { username:'halima', name_ar:'حليمة المعمري', loginRole:'principal', password:'PR@2026' },
-    'munira.almarri': { username:'munira.almarri', name_ar:'منيرة المري', loginRole:'teacher',    password:'AJ@4243' },
-    'rahham':         { username:'rahham', name_ar:'رهام عبدالخالق', loginRole:'special_ed',  password:'SE@2026' },
-    'fatima.nurse':   { username:'fatima.nurse', name_ar:'فاطمة الحميري', loginRole:'support',    password:'SU@2026' },
-    'student1':       { username:'student1', name_ar:'سارة أحمد', loginRole:'student',    password:'ST@2026' },
-    'parent1':        { username:'parent1', name_ar:'أم سارة', loginRole:'parent',     password:'PA@2026' },
+    'noor':           { username:'noor', name_ar:'منيرة المري', loginRole:'admin',      ph:'efe3a3db2fe4744c4957844184b6f3b13007a72264f20b847aede8dff29db2ba' },
+    'halima':         { username:'halima', name_ar:'حليمة المعمري', loginRole:'principal', ph:'4f401eeb5a7e5f5898dfccd77fddff4b233a010d63975a6b0259d11c0253c360' },
+    'munira.almarri': { username:'munira.almarri', name_ar:'منيرة المري', loginRole:'teacher',    ph:'e344b24e7c5f00636ef6b6c87dff50382f37f0064a3d59b0e588a2cd8001a768' },
+    'rahham':         { username:'rahham', name_ar:'رهام عبدالخالق', loginRole:'special_ed',  ph:'58a7d49694faea7b2245f31b7198a772adec7831b5e9024713b0fb19950ca94d' },
+    'fatima.nurse':   { username:'fatima.nurse', name_ar:'فاطمة الحميري', loginRole:'support',    ph:'b4e69c3998526e72853e2950a2b2197f721562c71cd147186435c631c7c0c7a7' },
+    'student1':       { username:'student1', name_ar:'سارة أحمد', loginRole:'student',    ph:'04608c6c888a67bd097cdbaa1dbec997b51cd90f5968cd1943a39d67100ab2d5' },
+    'parent1':        { username:'parent1', name_ar:'أم سارة', loginRole:'parent',     ph:'367dda7db40a44ced6dc6e1489010853f542fbe6712c0e0b25d16eb75283f1b9' },
   };
 
   const u = demoUsers[username.toLowerCase()];
-  if (u && u.password === password) return u;
+  if (!u) return null;
+  const inputHash = await hashPassword(password);
+  if (inputHash === u.ph) {
+    const { ph, ...safeUser } = u; // حذف الـ hash من الكائن المُرجَع
+    return safeUser;
+  }
   return null;
 }
 
