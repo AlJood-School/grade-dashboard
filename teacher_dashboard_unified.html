@@ -3283,28 +3283,32 @@ function renderUnified() {
     // حساب المجموع من 100 بالأوزان المعتمدة
     const projNum = _projectGrades[pk];
     let total = 0;
+    let maxPossible = 0;
     let hasAny = false;
 
     // G3 أو G4: 40 نقطة
     const gScore = r.g3 ?? r.g4 ?? null;
-    if (gScore !== null) { total += (gScore / 100) * 40; hasAny = true; }
+    if (gScore !== null) { total += (gScore / 100) * 40; maxPossible += 40; hasAny = true; }
 
     // الأسابيع: 20 نقطة — متوسط الأسابيع المتاحة
     const weekVals = _unifiedWeeks.map(w => r.weeks[w]).filter(v => v != null);
     if (weekVals.length > 0) {
       const avg = weekVals.reduce((a,b) => a+b, 0) / weekVals.length;
       total += (avg / 10) * 20;
+      maxPossible += 20;
       hasAny = true;
     }
 
-    // ورقة العمل: 10 نقاط
-    if (r.worksheet !== null) { total += (r.worksheet / 10) * 10; hasAny = true; }
+    // ورقة العمل: 10 نقاط — إذا غائبة لا تُحتسب من المجموع الكلي
+    if (r.worksheet !== null) { total += (r.worksheet / 10) * 10; maxPossible += 10; hasAny = true; }
 
     // المشروع: 30 نقطة
-    if (projNum != null) { total += (projNum / (_projectMaxGrade||30)) * 30; hasAny = true; }
+    if (projNum != null) { total += (projNum / (_projectMaxGrade||30)) * 30; maxPossible += 30; hasAny = true; }
 
-    total = Math.round(total * 10) / 10;
-    const totalC = `<td style="font-weight:800;color:#1D4ED8;font-size:1rem;background:#EFF6FF">${hasAny ? total + ' / 100' : '—'}</td>`;
+    // تطبيع المجموع من 100 بناءً على المكونات المتاحة
+    const normalized = maxPossible > 0 ? Math.round((total / maxPossible) * 1000) / 10 : 0;
+    const totalColor = normalized >= 85 ? '#10B981' : normalized >= 65 ? '#F59E0B' : '#EF4444';
+    const totalC = `<td style="font-weight:800;color:${totalColor};font-size:1rem;background:#EFF6FF">${hasAny ? normalized + ' / 100' : '—'}</td>`;
 
     return `<tr>
       <td style="color:var(--g400);font-size:.82rem">${i+1}</td>
@@ -3332,14 +3336,14 @@ function exportUnifiedCSV() {
   const rows = _unifiedData.map((r, i) => {
     const pk = projKey(r.name, r.section);
     const pv = _projectGrades[pk];
-    let total = 0;
+    let total = 0, maxP = 0;
     const gScore = r.g3 ?? r.g4 ?? null;
-    if (gScore !== null) total += (gScore / 100) * 40;
+    if (gScore !== null) { total += (gScore / 100) * 40; maxP += 40; }
     const wkVals = _unifiedWeeks.map(w => r.weeks[w]).filter(v => v != null);
-    if (wkVals.length > 0) total += (wkVals.reduce((a,b)=>a+b,0)/wkVals.length/10)*20;
-    if (r.worksheet !== null) total += (r.worksheet / 10) * 10;
-    if (pv != null) total += (pv / (_projectMaxGrade||30)) * 30;
-    total = Math.round(total * 10) / 10;
+    if (wkVals.length > 0) { total += (wkVals.reduce((a,b)=>a+b,0)/wkVals.length/10)*20; maxP += 20; }
+    if (r.worksheet !== null) { total += (r.worksheet / 10) * 10; maxP += 10; }
+    if (pv != null) { total += (pv / (_projectMaxGrade||30)) * 30; maxP += 30; }
+    total = maxP > 0 ? Math.round((total / maxP) * 1000) / 10 : 0;
     return [i+1, r.name, r.section, r.g3??'ناقص', r.g4??'ناقص',
       ..._unifiedWeeks.map(w => r.weeks[w]??'ناقص'),
       r.worksheet??'ناقص', pv??'—', total].join(',');
