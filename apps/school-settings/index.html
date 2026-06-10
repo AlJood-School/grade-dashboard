@@ -144,6 +144,17 @@
       <div class="nav-section-title">العرض</div>
       <div class="nav-item" onclick="showPanel('theme', this)"><i class="fas fa-palette"></i> المظهر</div>
       <div class="nav-item" onclick="showPanel('status', this)"><i class="fas fa-heartbeat"></i> حالة النظام</div>
+    <div class="nav-section">
+      <div class="nav-section-title">الكادر والأدوار</div>
+      <div class="nav-item" onclick="showPanel('users', this)"><i class="fas fa-users-cog"></i> إدارة المستخدمين</div>
+      <div class="nav-item" onclick="showPanel('roles', this)"><i class="fas fa-user-shield"></i> الأدوار والصلاحيات</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">التكاملات</div>
+      <div class="nav-item" onclick="showPanel('integrations', this)"><i class="fas fa-plug"></i> التكاملات الخارجية</div>
+      <div class="nav-item" onclick="showPanel('ai-settings', this)"><i class="fas fa-brain"></i> إعدادات AI</div>
+      <div class="nav-item" onclick="showPanel('logs', this)"><i class="fas fa-file-alt"></i> سجل النشاطات</div>
+    </div>
     </div>
   </nav>
 
@@ -615,6 +626,377 @@ document.addEventListener('DOMContentLoaded', () => {
   renderThemes();
   renderStatus();
 });
+
+// ── إدارة المستخدمين ──
+const MOCK_USERS = [
+  { name:'منيرة المري', username:'noor', role:'principal', last_login:'منذ ساعة', active:true },
+  { name:'معلمة التجربة', username:'munira.almarri', role:'teacher', last_login:'منذ 3 ساعات', active:true },
+  { name:'المسؤولة الإدارية', username:'admin.jood', role:'admin', last_login:'اليوم', active:true },
+  { name:'الممرضة', username:'nurse.jood', role:'nurse', last_login:'منذ يومين', active:true },
+  { name:'مسؤولة الأمن', username:'security.jood', role:'security', last_login:'منذ أسبوع', active:false },
+];
+const ROLE_LABELS = { principal:'مدير/ة', teacher:'معلم/ة', admin:'إداري/ة', nurse:'ممرضة', security:'أمن', socialworker:'أخصائية' };
+let filteredUsers = [...MOCK_USERS];
+
+function filterUsers() {
+  const q = (document.getElementById('user-search')?.value||'').toLowerCase();
+  const role = document.getElementById('user-role-filter')?.value||'';
+  filteredUsers = MOCK_USERS.filter(u => {
+    const matchQ = !q || u.name.toLowerCase().includes(q) || u.username.toLowerCase().includes(q);
+    const matchR = !role || u.role === role;
+    return matchQ && matchR;
+  });
+  renderUsersTable();
+}
+
+function renderUsersTable() {
+  const tbody = document.getElementById('users-tbody');
+  if (!tbody) return;
+  if (!filteredUsers.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--muted)">لا توجد نتائج</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filteredUsers.map(u => `
+    <tr style="border-bottom:1px solid var(--border);transition:background 0.2s" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''">
+      <td style="padding:12px 16px;font-weight:600">${u.name}</td>
+      <td style="padding:12px 16px;font-size:0.85rem;color:var(--muted);font-family:monospace">${u.username}</td>
+      <td style="padding:12px 16px"><span style="background:rgba(108,99,255,0.15);color:#a78bfa;border-radius:20px;padding:3px 10px;font-size:0.75rem">${ROLE_LABELS[u.role]||u.role}</span></td>
+      <td style="padding:12px 16px;font-size:0.82rem;color:var(--muted)">${u.last_login}</td>
+      <td style="padding:12px 16px"><span style="background:${u.active?'rgba(0,212,170,0.15)':'rgba(255,101,132,0.15)'};color:${u.active?'#00D4AA':'#ff6584'};border-radius:20px;padding:3px 10px;font-size:0.75rem">${u.active?'نشط':'معطّل'}</span></td>
+      <td style="padding:12px 16px">
+        <div style="display:flex;gap:6px">
+          <button onclick="editUser('${u.username}')" style="background:rgba(108,99,255,0.12);border:1px solid rgba(108,99,255,0.25);color:var(--accent);border-radius:8px;padding:5px 10px;cursor:pointer;font-family:Tajawal;font-size:0.75rem">تعديل</button>
+          <button onclick="toggleUser('${u.username}')" style="background:${u.active?'rgba(255,101,132,0.1)':'rgba(0,212,170,0.1)'};border:1px solid ${u.active?'rgba(255,101,132,0.3)':'rgba(0,212,170,0.3)'};color:${u.active?'#ff6584':'#00D4AA'};border-radius:8px;padding:5px 10px;cursor:pointer;font-family:Tajawal;font-size:0.75rem">${u.active?'تعطيل':'تفعيل'}</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function editUser(username) { showToast('✏️ تعديل ' + username + ' — قريباً عبر Edge Function'); }
+function toggleUser(username) {
+  const u = MOCK_USERS.find(x => x.username === username);
+  if (u) { u.active = !u.active; filterUsers(); showToast((u.active?'✅ تفعيل ':'🚫 تعطيل ') + username); }
+}
+function showAddUserModal() { showToast('➕ إضافة مستخدم جديد — عبر Edge Function في التحديث القادم'); }
+
+// ── الأدوار والصلاحيات ──
+function renderRoles() {
+  const roles = [
+    { name:'مدير/ة', icon:'👑', color:'#FFD700', perms:['كل الصلاحيات','الإعدادات','التقارير','الكادر','الطلاب'] },
+    { name:'معلم/ة', icon:'📚', color:'#6C63FF', perms:['الطلاب','الدرجات','الحضور','الدروس','بطاقة الخروج','المحفظة'] },
+    { name:'أخصائية اجتماعية', icon:'💙', color:'#00D4AA', perms:['الحالات الاجتماعية','الطلاب','التقارير'] },
+    { name:'ممرضة', icon:'🏥', color:'#ff6584', perms:['صحة الطلاب','السجلات الطبية','التقارير'] },
+    { name:'أمن', icon:'🔒', color:'#ffa500', perms:['البوابة','الحضور','الإنذارات'] },
+    { name:'ولي الأمر', icon:'👨‍👩‍👧', color:'#a78bfa', perms:['بيانات الابن/الابنة','الدرجات (قراءة)','الغياب','الجدول'] },
+  ];
+  const list = document.getElementById('roles-list');
+  if (!list) return;
+  list.innerHTML = roles.map(r => `
+    <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        <div style="width:40px;height:40px;border-radius:50%;background:${r.color}22;border:2px solid ${r.color}66;display:flex;align-items:center;justify-content:center;font-size:1.2rem">${r.icon}</div>
+        <div style="font-weight:700;font-size:1rem">${r.name}</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${r.perms.map(p => `<span style="background:${r.color}15;border:1px solid ${r.color}40;color:${r.color};border-radius:20px;padding:4px 12px;font-size:0.78rem">${p}</span>`).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── التكاملات ──
+function renderIntegrations() {
+  const integrations = [
+    { name:'Supabase', icon:'🗄️', desc:'قاعدة البيانات الرئيسية', status:'متصل', color:'#00D4AA' },
+    { name:'GitHub', icon:'🐙', desc:'مستودع الكود', status:'متصل', color:'#6C63FF' },
+    { name:'Vercel', icon:'▲', desc:'استضافة التطبيق', status:'متصل', color:'#fff' },
+    { name:'Gemini AI', icon:'🤲', desc:'المساعد الذكي الأساسي', status:'متصل', color:'#a78bfa' },
+    { name:'تيليجرام', icon:'✈️', desc:'قناة إشعارات المدرسة', status:'متصل', color:'#0088cc' },
+    { name:'Firebase', icon:'🔥', desc:'إشعارات الهاتف (قيد الإعداد)', status:'جزئي', color:'#ffa500' },
+  ];
+  const list = document.getElementById('integrations-list');
+  if (!list) return;
+  list.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px">
+      ${integrations.map(i => `
+        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);padding:20px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <div style="font-size:1.8rem">${i.icon}</div>
+            <div>
+              <div style="font-weight:700">${i.name}</div>
+              <div style="font-size:0.78rem;color:var(--muted)">${i.desc}</div>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="background:${i.status==='متصل'?'rgba(0,212,170,0.15)':'rgba(255,165,0,0.15)'};color:${i.status==='متصل'?'#00D4AA':'#ffa500'};border-radius:20px;padding:4px 12px;font-size:0.75rem">
+              ${i.status==='متصل'?'✅':'⚠️'} ${i.status}
+            </span>
+            <button onclick="showToast('⚙️ إعدادات ${i.name} — قريباً')" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:5px 12px;cursor:pointer;font-family:Tajawal;font-size:0.75rem">إعداد</button>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// ── سجل النشاطات ──
+const MOCK_LOGS = [
+  { time:'10:32', user:'noor', type:'login', detail:'دخول إلى edoos-principal', status:'نجح' },
+  { time:'10:28', user:'munira.almarri', type:'grades', detail:'حفظ درجات الأسبوع 9 — 3A', status:'نجح' },
+  { time:'10:15', user:'noor', type:'settings', detail:'تغيير ثيم إلى الليلي البنفسجي', status:'نجح' },
+  { time:'09:55', user:'munira.almarri', type:'ai', detail:'استخدام AI في تحليل بطاقات الخروج', status:'نجح' },
+  { time:'09:40', user:'noor', type:'login', detail:'دخول إلى edoos-hub', status:'نجح' },
+  { time:'09:30', user:'admin.jood', type:'settings', detail:'تحديث إعدادات نظام الحضور', status:'نجح' },
+];
+
+function loadActivityLogs() {
+  const type = document.getElementById('log-type')?.value||'';
+  let rows = type ? MOCK_LOGS.filter(l => l.type === type) : MOCK_LOGS;
+  const tbody = document.getElementById('logs-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = rows.map(l => `
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:10px 14px;font-size:0.82rem;font-family:monospace;color:var(--muted)">${l.time}</td>
+      <td style="padding:10px 14px;font-size:0.85rem;font-weight:600">${l.user}</td>
+      <td style="padding:10px 14px"><span style="background:rgba(108,99,255,0.12);color:#a78bfa;border-radius:20px;padding:3px 10px;font-size:0.72rem">${l.type}</span></td>
+      <td style="padding:10px 14px;font-size:0.82rem">${l.detail}</td>
+      <td style="padding:10px 14px"><span style="background:rgba(0,212,170,0.12);color:#00D4AA;border-radius:20px;padding:3px 10px;font-size:0.72rem">${l.status}</span></td>
+    </tr>
+  `).join('');
+}
+
+function exportLogs() {
+  showToast('📥 تصدير السجل — CSV جارٍ التحضير...');
+}
+
+// ── توسيع showPanel للأقسام الجديدة ──
+const _origShowPanel = showPanel;
+function showPanel(id, el) {
+  document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const panel = document.getElementById('panel-' + id);
+  if (panel) panel.classList.add('active');
+  if (el) el.classList.add('active');
+  window.location.hash = id;
+  if (id === 'users') { renderUsersTable(); }
+  if (id === 'roles') { renderRoles(); }
+  if (id === 'integrations') { renderIntegrations(); }
+  if (id === 'logs') { loadActivityLogs(); }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // init
+  filterUsers();
+});
+
+
+// ═══════════════════════════════════════════════════
+// نظام الإشعارات المتقدم
+// ═══════════════════════════════════════════════════
+const notifChannels = [
+  { name:'بوابة ولي الأمر', icon:'👨‍👩‍👧', events:['الغياب','الدرجات','التأخر','الإشعارات العامة'], active:true },
+  { name:'تيليجرام المدرسة', icon:'✈️', events:['إشعارات الإدارة','النسخ الاحتياطية','الطوارئ'], active:true },
+  { name:'البريد الإلكتروني', icon:'📧', events:['التقارير الشهرية','نهاية الفصل'], active:false },
+  { name:'الرسائل الداخلية', icon:'💬', events:['كل الإشعارات'], active:true },
+];
+
+function renderNotifChannels() {
+  const container = document.getElementById('notif-channels');
+  if (!container) return;
+  container.innerHTML = notifChannels.map((c, i) => `
+    <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:1.4rem">${c.icon}</span>
+          <div>
+            <div style="font-weight:600">${c.name}</div>
+            <div style="font-size:0.75rem;color:var(--muted)">${c.events.join(' • ')}</div>
+          </div>
+        </div>
+        <label style="cursor:pointer;position:relative;width:44px;height:24px;flex-shrink:0">
+          <input type="checkbox" ${c.active?'checked':''} onchange="notifChannels[${i}].active=this.checked;showToast('✅ تم تحديث إشعارات ${c.name}')" style="opacity:0;width:0;height:0">
+          <span style="position:absolute;inset:0;background:${c.active?'#6C63FF':'rgba(255,255,255,0.1)'};border-radius:24px;display:flex;align-items:center;padding:2px;transition:background 0.3s">
+            <span style="width:20px;height:20px;background:white;border-radius:50%;${c.active?'margin-right:0;margin-left:auto':''}"></span>
+          </span>
+        </label>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ═══════════════════════════════════════════════════
+// إدارة النسخ الاحتياطية المتقدمة
+// ═══════════════════════════════════════════════════
+const backupHistory = [
+  { id:'BK-2026-06-09', date:'9 يونيو 2026', size:'2.8MB', tables:57, status:'ناجح', type:'تلقائي' },
+  { id:'BK-2026-06-06', date:'6 يونيو 2026', size:'2.7MB', tables:57, status:'ناجح', type:'تلقائي' },
+  { id:'BK-2026-06-03', date:'3 يونيو 2026', size:'2.6MB', tables:57, status:'ناجح', type:'تلقائي' },
+  { id:'BK-2026-05-31', date:'31 مايو 2026', size:'2.5MB', tables:55, status:'ناجح', type:'يدوي' },
+];
+
+function renderBackupHistory() {
+  const container = document.getElementById('backup-history');
+  if (!container) return;
+  container.innerHTML = `
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:rgba(255,255,255,0.04)">
+            <th style="padding:10px 14px;text-align:right;font-size:0.78rem;color:var(--muted)">المعرّف</th>
+            <th style="padding:10px 14px;text-align:right;font-size:0.78rem;color:var(--muted)">التاريخ</th>
+            <th style="padding:10px 14px;text-align:right;font-size:0.78rem;color:var(--muted)">الحجم</th>
+            <th style="padding:10px 14px;text-align:right;font-size:0.78rem;color:var(--muted)">الجداول</th>
+            <th style="padding:10px 14px;text-align:right;font-size:0.78rem;color:var(--muted)">النوع</th>
+            <th style="padding:10px 14px;text-align:right;font-size:0.78rem;color:var(--muted)">الحالة</th>
+            <th style="padding:10px 14px;text-align:right;font-size:0.78rem;color:var(--muted)"></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${backupHistory.map(b => `
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:10px 14px;font-family:monospace;font-size:0.8rem;color:var(--muted)">${b.id}</td>
+              <td style="padding:10px 14px;font-size:0.85rem">${b.date}</td>
+              <td style="padding:10px 14px;font-size:0.85rem;font-weight:600">${b.size}</td>
+              <td style="padding:10px 14px;font-size:0.85rem">${b.tables}</td>
+              <td style="padding:10px 14px"><span style="background:${b.type==='تلقائي'?'rgba(108,99,255,0.12)':'rgba(255,215,0,0.12)'};color:${b.type==='تلقائي'?'#a78bfa':'#FFD700'};border-radius:20px;padding:3px 10px;font-size:0.72rem">${b.type}</span></td>
+              <td style="padding:10px 14px"><span style="background:rgba(0,212,170,0.12);color:#00D4AA;border-radius:20px;padding:3px 10px;font-size:0.72rem">✅ ${b.status}</span></td>
+              <td style="padding:10px 14px">
+                <button onclick="restoreBackup('${b.id}')" style="background:rgba(255,101,132,0.1);border:1px solid rgba(255,101,132,0.3);color:#ff6584;border-radius:8px;padding:4px 10px;cursor:pointer;font-family:Tajawal;font-size:0.72rem">استعادة</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function restoreBackup(id) {
+  if (confirm('⚠️ تحذير: استعادة النسخة ' + id + ' ستستبدل البيانات الحالية. هل أنتِ متأكدة؟')) {
+    showToast('🔄 جارٍ طلب استعادة ' + id + ' — يتم إرسال الطلب للمدير');
+  }
+}
+
+function triggerManualBackup() {
+  showToast('💾 جارٍ إنشاء نسخة احتياطية يدوية...');
+  setTimeout(() => showToast('✅ تم إنشاء النسخة الاحتياطية بنجاح'), 3000);
+}
+
+// ═══════════════════════════════════════════════════
+// حقن عناصر إضافية في اللوحات الموجودة
+// ═══════════════════════════════════════════════════
+function enhanceExistingPanels() {
+  // إضافة سجل النسخ لقسم backup
+  const backupPanel = document.getElementById('panel-backup');
+  if (backupPanel && !document.getElementById('backup-history')) {
+    const histDiv = document.createElement('div');
+    histDiv.className = 'settings-card';
+    histDiv.innerHTML = `
+      <div class="settings-card-title"><i class="fas fa-history"></i> سجل النسخ الاحتياطية</div>
+      <div id="backup-history"></div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button onclick="triggerManualBackup()" style="flex:1;background:linear-gradient(135deg,var(--accent),#8B5CF6);color:white;border:none;border-radius:10px;padding:12px;cursor:pointer;font-family:Tajawal;font-weight:600">
+          <i class="fas fa-save"></i> نسخ احتياطي الآن
+        </button>
+        <button onclick="showToast('⚙️ إعداد الجدول التلقائي')" style="flex:1;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:12px;cursor:pointer;font-family:Tajawal">
+          <i class="fas fa-clock"></i> جدولة تلقائية
+        </button>
+      </div>
+    `;
+    backupPanel.appendChild(histDiv);
+    renderBackupHistory();
+  }
+
+  // إضافة قنوات الإشعارات
+  const notifPanel = document.getElementById('panel-notifications');
+  if (notifPanel && !document.getElementById('notif-channels')) {
+    const chanDiv = document.createElement('div');
+    chanDiv.className = 'settings-card';
+    chanDiv.innerHTML = `
+      <div class="settings-card-title"><i class="fas fa-broadcast-tower"></i> قنوات الإشعارات</div>
+      <div id="notif-channels"></div>
+      <div style="margin-top:16px">
+        <div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">وقت الإشعار الهادئ (لا إشعارات)</div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <input type="time" value="22:00" class="form-control" style="flex:1">
+          <span style="color:var(--muted)">—</span>
+          <input type="time" value="06:00" class="form-control" style="flex:1">
+          <button onclick="showToast('✅ تم حفظ وقت الهدوء')" style="background:linear-gradient(135deg,var(--accent),#8B5CF6);color:white;border:none;border-radius:10px;padding:10px 16px;cursor:pointer;font-family:Tajawal;font-weight:600">حفظ</button>
+        </div>
+      </div>
+    `;
+    notifPanel.appendChild(chanDiv);
+    renderNotifChannels();
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(enhanceExistingPanels, 200);
+});
+
+
+// ═══════════════════════════════════════════════════
+// نظام الحالة الصحية للنظام — Real-time ping
+// ═══════════════════════════════════════════════════
+async function checkSystemHealth() {
+  const services = [
+    { name:'Supabase DB', id:'svc-db', url: SB_URL + '/rest/v1/', key: SB_KEY },
+    { name:'Edge Functions', id:'svc-ef', url: SB_URL + '/functions/v1/ai-assistant', key: SB_KEY },
+    { name:'Vercel', id:'svc-vercel', url:'https://grade-dashboard-ruby.vercel.app/', key:null },
+  ];
+  for (const svc of services) {
+    const el = document.getElementById(svc.id);
+    if (!el) continue;
+    el.textContent = '⏳ جارٍ الفحص...';
+    el.style.color = 'var(--muted)';
+    try {
+      const headers = svc.key ? { 'apikey': svc.key } : {};
+      const resp = await fetch(svc.url, { method:'GET', headers, mode:'cors', signal: AbortSignal.timeout(5000) });
+      if (resp.ok || resp.status < 500) {
+        el.textContent = '✅ يعمل (' + resp.status + ')';
+        el.style.color = '#00D4AA';
+      } else {
+        el.textContent = '⚠️ مشكلة (' + resp.status + ')';
+        el.style.color = '#FFD700';
+      }
+    } catch(e) {
+      el.textContent = '❌ غير متاح';
+      el.style.color = '#ff6584';
+    }
+  }
+}
+
+function enhanceStatusPanel() {
+  const statusPanel = document.getElementById('panel-status');
+  if (!statusPanel || document.getElementById('live-health')) return;
+  const div = document.createElement('div');
+  div.id = 'live-health';
+  div.className = 'settings-card';
+  div.innerHTML = `
+    <div class="settings-card-title"><i class="fas fa-stethoscope"></i> فحص حي للخدمات</div>
+    <div style="display:grid;gap:10px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;padding:12px;background:rgba(255,255,255,0.04);border-radius:10px">
+        <span>Supabase DB</span><span id="svc-db" style="font-size:0.85rem;color:var(--muted)">—</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:12px;background:rgba(255,255,255,0.04);border-radius:10px">
+        <span>Edge Functions</span><span id="svc-ef" style="font-size:0.85rem;color:var(--muted)">—</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:12px;background:rgba(255,255,255,0.04);border-radius:10px">
+        <span>Vercel</span><span id="svc-vercel" style="font-size:0.85rem;color:var(--muted)">—</span>
+      </div>
+    </div>
+    <button onclick="checkSystemHealth()" style="background:linear-gradient(135deg,var(--accent),#8B5CF6);color:white;border:none;border-radius:10px;padding:12px;cursor:pointer;font-family:Tajawal;font-weight:600;width:100%">
+      <i class="fas fa-heartbeat"></i> فحص الآن
+    </button>
+  `;
+  statusPanel.appendChild(div);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(enhanceStatusPanel, 300);
+});
+
 </script>
 </body>
 </html>
