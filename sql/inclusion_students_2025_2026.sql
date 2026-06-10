@@ -9,6 +9,9 @@ ALTER TABLE inclusion_plans ADD COLUMN IF NOT EXISTS section TEXT;
 ALTER TABLE inclusion_plans ADD COLUMN IF NOT EXISTS special_ed_teacher TEXT;
 ALTER TABLE inclusion_plans ADD COLUMN IF NOT EXISTS plan_type TEXT;
 ALTER TABLE inclusion_plans ADD COLUMN IF NOT EXISTS academic_year TEXT DEFAULT '2025-2026';
+ALTER TABLE inclusion_plans ADD COLUMN IF NOT EXISTS created_by TEXT;
+ALTER TABLE inclusion_plans ADD COLUMN IF NOT EXISTS goals TEXT;
+ALTER TABLE inclusion_plans ADD COLUMN IF NOT EXISTS review_date DATE;
 
 -- الخطوة 2: حذف البيانات القديمة إن وجدت (لتجنب التكرار)
 DELETE FROM inclusion_plans WHERE academic_year = '2025-2026';
