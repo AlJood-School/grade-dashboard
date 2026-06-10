@@ -230,6 +230,7 @@ body{background:var(--bg);min-height:100vh;color:var(--text)}
     <button class="tab" onclick="switchTab('analytics',this)">📈 تحليل الاستخدام</button>
     <button class="tab" onclick="switchTab('manage',this)">⚙️ إدارة المرافق</button>
     <button class="tab" onclick="switchTab('ai',this)">🤖 AI الذكي</button>
+    <button class="tab" onclick="switchTab('reports',this)">📋 التقارير</button>
   </div>
 
   <!-- ══════════════════════════════ -->
@@ -912,8 +913,89 @@ document.getElementById('bk-date').value = new Date().toISOString().slice(0,10);
   }
 })();
 
+// ── قائمة انتظار الحجوزات ──
+const bookingQueue = [];
+function addToQueue(facility, date, period, teacher) {
+  bookingQueue.push({ facility, date, period, teacher, status:'معلّق', id: Date.now() });
+  renderQueue();
+}
+
+function renderQueue() {
+  const container = document.getElementById('booking-queue');
+  if (!container) return;
+  if (!bookingQueue.length) {
+    container.innerHTML = '<div style="color:rgba(255,255,255,0.4);text-align:center;padding:16px;font-size:0.85rem">لا توجد طلبات معلّقة</div>';
+    return;
+  }
+  container.innerHTML = bookingQueue.map((b, i) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-bottom:8px">
+      <div>
+        <div style="font-weight:600;font-size:0.88rem">${b.facility}</div>
+        <div style="font-size:0.75rem;color:rgba(255,255,255,0.4)">${b.date} — الفترة ${b.period} — ${b.teacher}</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span style="background:rgba(255,215,0,0.15);color:#FFD700;border-radius:20px;padding:2px 10px;font-size:0.72rem">${b.status}</span>
+        <button onclick="approveBooking(${i})" style="background:rgba(0,212,170,0.12);border:1px solid rgba(0,212,170,0.3);color:#00D4AA;border-radius:8px;padding:4px 10px;cursor:pointer;font-family:Tajawal;font-size:0.72rem">موافقة</button>
+        <button onclick="rejectBooking(${i})" style="background:rgba(255,101,132,0.1);border:1px solid rgba(255,101,132,0.3);color:#ff6584;border-radius:8px;padding:4px 10px;cursor:pointer;font-family:Tajawal;font-size:0.72rem">رفض</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function approveBooking(i) {
+  bookingQueue[i].status = 'موافَق عليه';
+  renderQueue();
+}
+function rejectBooking(i) {
+  bookingQueue.splice(i, 1);
+  renderQueue();
+}
+
+// ── إشعار الحجز ──
+function notifyBookingConfirmed(facility, date) {
+  const msg = `✅ تم تأكيد حجز ${facility} بتاريخ ${date}`;
+  const n = document.createElement('div');
+  n.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);background:rgba(0,212,170,0.9);color:white;padding:12px 24px;border-radius:12px;font-family:Tajawal;font-weight:600;z-index:9999;font-size:0.9rem';
+  n.textContent = msg;
+  document.body.appendChild(n);
+  setTimeout(() => n.remove(), 3000);
+}
+
 // INIT
 loadSpaceData();
+// init queue
+document.addEventListener('DOMContentLoaded', () => { setTimeout(renderQueue, 500); });
+// Auto-refresh every 5 min
+setInterval(() => { if(document.getElementById('panel-dashboard')?.classList.contains('active')) loadSpaceData(); }, 300000);
+
+// Reports init
+function loadSpaceReports() {
+  const chart = document.getElementById('space-usage-chart');
+  if (!chart) return;
+  const vals = [45, 78, 62, 89, 55];
+  const colors = ['#6C63FF','#00D4AA','#FFD700','#ff6584','#a78bfa'];
+  chart.innerHTML = vals.map((v,i) => `
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+      <div style="font-size:0.7rem;color:rgba(255,255,255,0.5)">${v}%</div>
+      <div style="width:100%;background:${colors[i]};border-radius:6px 6px 0 0;height:${v}px;transition:height 0.8s ease"></div>
+    </div>
+  `).join('');
+  const el = document.getElementById('rpt-total-bookings');
+  if(el) el.textContent = '47';
+  const m = document.getElementById('rpt-most-used');
+  if(m) m.textContent = 'الملعب';
+  const p = document.getElementById('rpt-peak');
+  if(p) p.textContent = 'الفترة 3';
+}
+function exportSpaceReport(type) {
+  const labels = {weekly:'أسبوعي',monthly:'شهري',conflicts:'التعارضات'};
+  alert('📥 تصدير تقرير ' + labels[type] + ' — سيتم التحميل كـ PDF');
+}
+const _spaceSwitch = switchTab;
+function switchTab(name, btn) {
+  _spaceSwitch(name, btn);
+  if (name === 'reports') loadSpaceReports();
+}
 </script>
 </body>
 </html>
