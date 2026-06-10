@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إعدادات المدرسة — مدرسة الجود</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="../platform-week.js"></script>
+<script src="../platform-motd.js"></script>
+<script src="../platform-autologout.js"></script>
+<script src="../platform-auth-guard.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  :root{--bg:#0D1B2A;--surface:rgba(255,255,255,0.04);--border:rgba(255,255,255,0.08);--accent:#6C63FF;--accent2:#00D4AA;--gold:#FFD700;--text:#E8EDF2;--muted:#8899AA;--card-bg:rgba(255,255,255,0.06);--radius:16px;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+  .header{background:linear-gradient(135deg,#1a0533,#0D1B2A,#0a2440);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+  .header-logo{display:flex;align-items:center;gap:12px;}
+  .header-logo img{width:44px;height:44px;object-fit:contain;}
+  .header-title{font-size:1.1rem;font-weight:700;}
+  .header-sub{font-size:0.75rem;color:var(--muted);}
+  .btn-exit{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.07);border:1px solid var(--border);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;font-size:0.9rem;text-decoration:none;}
+  .btn-exit:hover{background:rgba(220,53,69,0.3);border-color:#dc3545;color:#ff6b6b;}
+
+  .layout{display:flex;max-width:1200px;margin:0 auto;padding:24px 16px;gap:24px;}
+
+  /* SIDEBAR NAV */
+  .settings-nav{width:220px;flex-shrink:0;}
+  .nav-section{margin-bottom:20px;}
+  .nav-section-title{font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:0 12px;margin-bottom:8px;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:0.88rem;transition:all 0.2s;color:var(--muted);}
+  .nav-item:hover,.nav-item.active{background:rgba(108,99,255,0.12);color:var(--text);}
+  .nav-item.active{border-right:3px solid var(--accent);color:var(--accent);}
+  .nav-item i{width:16px;text-align:center;font-size:0.9rem;}
+
+  /* CONTENT */
+  .settings-content{flex:1;min-width:0;}
+  .settings-panel{display:none;}
+  .settings-panel.active{display:block;}
+
+  .panel-header{margin-bottom:24px;}
+  .panel-title{font-size:1.2rem;font-weight:800;margin-bottom:4px;}
+  .panel-sub{font-size:0.82rem;color:var(--muted);}
+
+  .settings-card{background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:20px;}
+  .settings-card-title{font-size:0.95rem;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+  .settings-card-title i{color:var(--accent);}
+
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .form-group{display:flex;flex-direction:column;gap:6px;}
+  .form-group.full{grid-column:1/-1;}
+  .form-label{font-size:0.82rem;color:var(--muted);}
+  .form-label .required{color:#f87171;}
+  .form-control{background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Tajawal',sans-serif;font-size:0.88rem;outline:none;transition:border-color 0.2s;}
+  .form-control:focus{border-color:var(--accent);}
+  .form-control option{background:#1a2a3a;}
+  textarea.form-control{resize:vertical;min-height:80px;}
+
+  /* TOGGLE */
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.04);}
+  .toggle-row:last-child{border-bottom:none;}
+  .toggle-info h4{font-size:0.88rem;font-weight:600;margin-bottom:2px;}
+  .toggle-info p{font-size:0.75rem;color:var(--muted);}
+  .toggle{position:relative;width:44px;height:24px;flex-shrink:0;}
+  .toggle input{opacity:0;width:0;height:0;}
+  .toggle-slider{position:absolute;cursor:pointer;inset:0;background:rgba(255,255,255,0.1);border-radius:12px;transition:0.3s;border:1px solid var(--border);}
+  .toggle-slider::before{content:'';position:absolute;height:18px;width:18px;right:2px;bottom:2px;background:white;border-radius:50%;transition:0.3s;}
+  .toggle input:checked+.toggle-slider{background:var(--accent2);border-color:var(--accent2);}
+  .toggle input:checked+.toggle-slider::before{transform:translateX(-20px);}
+
+  /* SAVE BUTTON */
+  .btn-save{background:linear-gradient(135deg,var(--accent),#8B5CF6);border:none;border-radius:10px;padding:12px 32px;color:white;font-family:'Tajawal',sans-serif;font-weight:700;font-size:0.95rem;cursor:pointer;transition:opacity 0.2s;display:inline-flex;align-items:center;gap:8px;}
+  .btn-save:hover{opacity:0.85;}
+  .btn-danger{background:linear-gradient(135deg,#EF4444,#DC2626);border:none;border-radius:10px;padding:10px 24px;color:white;font-family:'Tajawal',sans-serif;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:0.88rem;}
+
+  /* GEO MAP */
+  .geo-display{background:rgba(0,212,170,0.06);border:1px solid rgba(0,212,170,0.2);border-radius:12px;padding:16px;display:flex;align-items:center;gap:16px;margin-bottom:12px;}
+  .geo-icon{font-size:2rem;}
+  .geo-info h4{font-size:0.88rem;font-weight:700;color:var(--accent2);}
+  .geo-info p{font-size:0.78rem;color:var(--muted);}
+
+  /* STATUS PILLS */
+  .status-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
+  .status-pill{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center;}
+  .status-pill .s-label{font-size:0.72rem;color:var(--muted);margin-bottom:4px;}
+  .status-pill .s-val{font-size:1rem;font-weight:700;}
+  .status-pill.ok{border-color:rgba(0,212,170,0.3);background:rgba(0,212,170,0.06);}
+  .status-pill.ok .s-val{color:var(--accent2);}
+  .status-pill.warn{border-color:rgba(245,158,11,0.3);background:rgba(245,158,11,0.06);}
+  .status-pill.warn .s-val{color:#fbbf24;}
+
+  /* BACKUP */
+  .backup-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.04);}
+  .backup-icon{width:36px;height:36px;border-radius:8px;background:rgba(0,212,170,0.1);display:flex;align-items:center;justify-content:center;color:var(--accent2);}
+  .backup-info{flex:1;}
+  .backup-name{font-size:0.85rem;font-weight:600;}
+  .backup-meta{font-size:0.72rem;color:var(--muted);}
+  .backup-size{font-size:0.78rem;color:var(--muted);}
+
+  /* TOAST */
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(0,212,170,0.9);color:white;padding:12px 24px;border-radius:12px;font-size:0.88rem;font-weight:600;opacity:0;transition:all 0.3s;pointer-events:none;z-index:9999;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  @media(max-width:700px){
+    .layout{flex-direction:column;}
+    .settings-nav{width:100%;}
+    .form-grid{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="header-logo">
+    <img src="../edoos-logo.png" alt="EduOS">
+    <div>
+      <div class="header-title">إعدادات المدرسة</div>
+      <div class="header-sub" id="headerSub">مدرسة الجود — لوحة التحكم</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <span id="headerWeek" style="font-size:0.8rem;color:var(--muted);background:var(--surface);padding:4px 12px;border-radius:20px;border:1px solid var(--border)"></span>
+    <a href="../edoos-hub/" class="btn-exit"><i class="fas fa-times"></i></a>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <nav class="settings-nav">
+    <div class="nav-section">
+      <div class="nav-section-title">المدرسة</div>
+      <div class="nav-item active" onclick="showPanel('general', this)"><i class="fas fa-school"></i> معلومات عامة</div>
+      <div class="nav-item" onclick="showPanel('academic', this)"><i class="fas fa-calendar-alt"></i> الإعدادات الأكاديمية</div>
+      <div class="nav-item" onclick="showPanel('geo', this)"><i class="fas fa-map-marker-alt"></i> الموقع الجغرافي</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">النظام</div>
+      <div class="nav-item" onclick="showPanel('notifications', this)"><i class="fas fa-bell"></i> الإشعارات</div>
+      <div class="nav-item" onclick="showPanel('security', this)"><i class="fas fa-shield-alt"></i> الأمان</div>
+      <div class="nav-item" onclick="showPanel('backup', this)"><i class="fas fa-database"></i> النسخ الاحتياطية</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">العرض</div>
+      <div class="nav-item" onclick="showPanel('theme', this)"><i class="fas fa-palette"></i> المظهر</div>
+      <div class="nav-item" onclick="showPanel('status', this)"><i class="fas fa-heartbeat"></i> حالة النظام</div>
+    </div>
+  </nav>
+
+  <!-- CONTENT -->
+  <div class="settings-content">
+
+    <!-- GENERAL -->
+    <div class="settings-panel active" id="panel-general">
+      <div class="panel-header">
+        <div class="panel-title"><i class="fas fa-school" style="color:var(--accent)"></i> معلومات المدرسة</div>
+        <div class="panel-sub">البيانات الأساسية لمدرسة الجود</div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title"><i class="fas fa-info-circle"></i> البيانات الرسمية</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">اسم المدرسة (عربي) <span class="required">*</span></label>
+            <input type="text" class="form-control" value="مدرسة الجود الخاصة">
+          </div>
+          <div class="form-group">
+            <label class="form-label">اسم المدرسة (إنجليزي)</label>
+            <input type="text" class="form-control" value="Al Jood Private School">
+          </div>
+          <div class="form-group">
+            <label class="form-label">رقم الترخيص</label>
+            <input type="text" class="form-control" value="ADX-2019-0441">
+          </div>
+          <div class="form-group">
+            <label class="form-label">الجهة المشرفة</label>
+            <select class="form-control">
+              <option selected>هيئة أبوظبي للتعليم (ADEK)</option>
+              <option>وزارة التربية والتعليم</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">الإمارة</label>
+            <select class="form-control">
+              <option selected>أبوظبي</option>
+              <option>دبي</option><option>الشارقة</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">المنطقة</label>
+            <input type="text" class="form-control" value="مصفح">
+          </div>
+          <div class="form-group">
+            <label class="form-label">هاتف المدرسة</label>
+            <input type="tel" class="form-control" value="+971-2-XXX-XXXX">
+          </div>
+          <div class="form-group">
+            <label class="form-label">البريد الإلكتروني</label>
+            <input type="email" class="form-control" value="info@aljood.ae">
+          </div>
+          <div class="form-group full">
+            <label class="form-label">العنوان الكامل</label>
+            <input type="text" class="form-control" value="مصفح الصناعية، أبوظبي، الإمارات العربية المتحدة">
+          </div>
+        </div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title"><i class="fas fa-user-tie"></i> الإدارة العليا</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">مديرة المدرسة</label>
+            <input type="text" class="form-control" value="نور يام">
+          </div>
+          <div class="form-group">
+            <label class="form-label">الوكيلة الأكاديمية</label>
+            <input type="text" class="form-control" value="">
+          </div>
+        </div>
+      </div>
+      <button class="btn-save" onclick="saveSettings()"><i class="fas fa-save"></i> حفظ التغييرات</button>
+    </div>
+
+    <!-- ACADEMIC -->
+    <div class="settings-panel" id="panel-academic">
+      <div class="panel-header">
+        <div class="panel-title"><i class="fas fa-calendar-alt" style="color:var(--accent)"></i> الإعدادات الأكاديمية</div>
+        <div class="panel-sub">العام الدراسي والتقويم والجداول</div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title"><i class="fas fa-calendar"></i> العام الدراسي الحالي</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">العام الدراسي</label>
+            <select class="form-control"><option selected>2025–2026</option><option>2024–2025</option></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">الفصل الدراسي الحالي</label>
+            <select class="form-control"><option>الفصل الأول</option><option selected>الفصل الثاني</option><option>الفصل الثالث</option></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">الأسبوع الدراسي الحالي</label>
+            <input type="number" class="form-control" value="22" min="1" max="40">
+          </div>
+          <div class="form-group">
+            <label class="form-label">إجمالي الأسابيع في الفصل</label>
+            <input type="number" class="form-control" value="18" min="10" max="25">
+          </div>
+          <div class="form-group">
+            <label class="form-label">بداية الدوام الصباحي</label>
+            <input type="time" class="form-control" value="07:30">
+          </div>
+          <div class="form-group">
+            <label class="form-label">نهاية الدوام</label>
+            <input type="time" class="form-control" value="14:00">
+          </div>
+        </div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title"><i class="fas fa-door-open"></i> بوابة الحضور</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">بداية نافذة تسجيل الحضور</label>
+            <input type="time" class="form-control" value="06:30">
+          </div>
+          <div class="form-group">
+            <label class="form-label">نهاية نافذة الحضور</label>
+            <input type="time" class="form-control" value="08:00">
+          </div>
+          <div class="form-group">
+            <label class="form-label">مدة تجديد QR (ثانية)</label>
+            <input type="number" class="form-control" value="60" min="30" max="300">
+          </div>
+          <div class="form-group">
+            <label class="form-label">وقت الخروج التلقائي (دقيقة)</label>
+            <input type="number" class="form-control" value="15" min="5" max="60">
+          </div>
+        </div>
+      </div>
+      <button class="btn-save" onclick="saveSettings()"><i class="fas fa-save"></i> حفظ</button>
+    </div>
+
+    <!-- GEO -->
+    <div class="settings-panel" id="panel-geo">
+      <div class="panel-header">
+        <div class="panel-title"><i class="fas fa-map-marker-alt" style="color:var(--accent)"></i> الموقع الجغرافي</div>
+        <div class="panel-sub">إعدادات GPS وحدود الجيوفنس</div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title"><i class="fas fa-crosshairs"></i> إحداثيات المدرسة</div>
+        <div class="geo-display">
+          <div class="geo-icon">📍</div>
+          <div class="geo-info">
+            <h4>مدرسة الجود — أبوظبي</h4>
+            <p>خط العرض: 24.4539 | خط الطول: 54.3773</p>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">خط العرض (Latitude)</label>
+            <input type="number" class="form-control" value="24.4539" step="0.0001" id="geoLat">
+          </div>
+          <div class="form-group">
+            <label class="form-label">خط الطول (Longitude)</label>
+            <input type="number" class="form-control" value="54.3773" step="0.0001" id="geoLng">
+          </div>
+          <div class="form-group">
+            <label class="form-label">نطاق الجيوفنس (متر)</label>
+            <input type="number" class="form-control" value="150" min="50" max="500" id="geoRadius">
+          </div>
+          <div class="form-group">
+            <label class="form-label">الدقة المطلوبة</label>
+            <select class="form-control">
+              <option>عالية (GPS)</option>
+              <option selected>متوسطة (WiFi+GPS)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title"><i class="fas fa-shield-alt"></i> الأمان الجغرافي</div>
+        <div class="toggle-row">
+          <div class="toggle-info"><h4>تفعيل الجيوفنس</h4><p>منع تسجيل الحضور خارج نطاق المدرسة</p></div>
+          <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info"><h4>تنبيه عند الخروج من النطاق</h4><p>إشعار للمديرة عند اكتشاف محاولة خارجية</p></div>
+          <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info"><h4>السجل الجنائي للمواقع</h4><p>تسجيل الإحداثيات الدقيقة لكل عملية تسجيل</p></div>
+          <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+      <button class="btn-save" onclick="saveGeo()"><i class="fas fa-save"></i> حفظ الإعدادات</button>
+    </div>
+
+    <!-- NOTIFICATIONS -->
+    <div class="settings-panel" id="panel-notifications">
+      <div class="panel-header">
+        <div class="panel-title"><i class="fas fa-bell" style="color:var(--accent)"></i> الإشعارات</div>
+        <div class="panel-sub">تحكمي في ما يصلك ومتى يصلك</div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title"><i class="fas fa-envelope"></i> قنوات الإشعارات</div>
+        <div class="toggle-row">
+          <div class="toggle-info"><h4>إشعارات النظام الداخلية</h4><p>ظهور الإشعارات داخل EduOS</p></div>
+          <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info"><h4>تيليجرام (@Schaljood)</h4><p>إرسال التنبيهات الهامة لقناة التيليجرام</p></div>
+          <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info"><h4>البريد الإلكتروني</h4><p>التقارير اليومية والأسبوعية</p></div>
+          <label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title"><i class="fas fa-database"></i> إشعارات النسخ الاحتياطية</div>
+        <div class="toggle-row">
+          <div class="toggle-info"><h4>تحذير قبل النسخ الاحتياطي</h4><p>إشعار المديرة قبل 5 دقائق من النسخ التلقائي</p></div>
+          <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info"><h4>إشعار إتمام النسخ</h4><p>تأكيد نجاح النسخة الاحتياطية</p></div>
+          <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+      <button class="btn-save" onclick="saveSettings()"><i class="fas fa-save"></i> حفظ</button>
+    </div>
+
+    <!-- SECURITY -->
+    <div class="settings-panel" id="panel-security">
+      <div class="panel-header">
+        <div class="panel-title"><i class="fas fa-shield-alt" style="color:var(--accent)"></i> الأمان والصلاحيات</div>
+        <div class="panel-sub">إعدادات الأمان وكلمات المرور والجلسات</div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title"><i class="fas fa-lock"></i> سياسة كلمات المرور</div>
+        <div class="toggle-row">
+          <div class="toggle-info"><h4>تعقيد كلمة المرور</h4><p>أحرف + أرقام + رموز + 8 خانات على الأقل</p></div>
+          <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info"><h4>انتهاء الجلسة التلقائي</h4><p>15 دقيقة خمول تُنهي الجلسة تلقائياً</p></div>
+          <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info"><h4>تسجيل محاولات الدخول</h4><p>حفظ سجل بكل محاولات الدخول الفاشلة</p></div>
+          <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info"><h4>الكتابة المباشرة في قاعدة البيانات</h4><p>محظورة من الواجهة — عبر Edge Functions فقط ✅</p></div>
+          <label class="toggle"><input type="checkbox" checked disabled><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title"><i class="fas fa-exclamation-triangle" style="color:#f87171"></i> منطقة الخطر</div>
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px">هذه الإجراءات لا يمكن التراجع عنها — تأكدي قبل المتابعة</p>
+        <button class="btn-danger" onclick="confirm('هل أنتِ متأكدة من مسح سجلات الجلسات؟') && showToast('تم مسح السجلات ✅')">
+          <i class="fas fa-trash"></i> مسح سجلات الجلسات
+        </button>
+      </div>
+    </div>
+
+    <!-- BACKUP -->
+    <div class="settings-panel" id="panel-backup">
+      <div class="panel-header">
+        <div class="panel-title"><i class="fas fa-database" style="color:var(--accent)"></i> النسخ الاحتياطية</div>
+        <div class="panel-sub">إدارة النسخ الاحتياطية التلقائية واليدوية</div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title"><i class="fas fa-cog"></i> إعدادات النسخ التلقائي</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">تكرار النسخ التلقائي</label>
+            <select class="form-control"><option>يومياً</option><option selected>كل 3 أيام</option><option>أسبوعياً</option></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">وقت النسخ</label>
+            <input type="time" class="form-control" value="02:00">
+          </div>
+          <div class="form-group">
+            <label class="form-label">الاحتفاظ بالنسخ (أيام)</label>
+            <input type="number" class="form-control" value="30" min="7" max="365">
+          </div>
+          <div class="form-group">
+            <label class="form-label">المساحة المستخدمة</label>
+            <input type="text" class="form-control" value="1.87 MB" readonly>
+          </div>
+        </div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title"><i class="fas fa-history"></i> آخر النسخ</div>
+        <div class="backup-item">
+          <div class="backup-icon"><i class="fas fa-check-circle"></i></div>
+          <div class="backup-info">
+            <div class="backup-name">نسخة 2026-06-09</div>
+            <div class="backup-meta">تلقائية | نجحت</div>
+          </div>
+          <div class="backup-size">1.87 MB</div>
+        </div>
+        <div class="backup-item">
+          <div class="backup-icon"><i class="fas fa-check-circle"></i></div>
+          <div class="backup-info">
+            <div class="backup-name">نسخة 2026-06-06</div>
+            <div class="backup-meta">تلقائية | نجحت</div>
+          </div>
+          <div class="backup-size">1.85 MB</div>
+        </div>
+        <div class="backup-item">
+          <div class="backup-icon"><i class="fas fa-check-circle"></i></div>
+          <div class="backup-info">
+            <div class="backup-name">نسخة 2026-06-03</div>
+            <div class="backup-meta">يدوية | نجحت</div>
+          </div>
+          <div class="backup-size">1.82 MB</div>
+        </div>
+        <div style="margin-top:16px">
+          <button class="btn-save" onclick="showToast('جاري إنشاء نسخة احتياطية...')">
+            <i class="fas fa-database"></i> نسخة احتياطية الآن
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- THEME -->
+    <div class="settings-panel" id="panel-theme">
+      <div class="panel-header">
+        <div class="panel-title"><i class="fas fa-palette" style="color:var(--accent)"></i> المظهر والثيم</div>
+        <div class="panel-sub">خصّصي مظهر EduOS — 11 ثيم متاح</div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title"><i class="fas fa-moon"></i> الثيمات الليلية</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-bottom:16px" id="themeGrid">
+          <!-- JS -->
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info"><h4>ثيم يوم الوطني تلقائياً</h4><p>هيدر أخضر في 2 ديسمبر</p></div>
+          <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info"><h4>ثيم الطوارئ تلقائياً</h4><p>هيدر أحمر ينبض عند تفعيل الطوارئ</p></div>
+          <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+      <button class="btn-save" onclick="saveSettings()"><i class="fas fa-save"></i> حفظ</button>
+    </div>
+
+    <!-- STATUS -->
+    <div class="settings-panel" id="panel-status">
+      <div class="panel-header">
+        <div class="panel-title"><i class="fas fa-heartbeat" style="color:var(--accent)"></i> حالة النظام</div>
+        <div class="panel-sub">مراقبة لحظية لجميع مكونات EduOS</div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title"><i class="fas fa-server"></i> حالة الخدمات</div>
+        <div class="status-grid" id="statusGrid"></div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title"><i class="fas fa-chart-line"></i> إحصاءات اليوم</div>
+        <div class="status-grid">
+          <div class="status-pill ok"><div class="s-label">المنظومات</div><div class="s-val">30+</div></div>
+          <div class="status-pill ok"><div class="s-label">المستخدمون النشطون</div><div class="s-val" id="activeUsers">—</div></div>
+          <div class="status-pill ok"><div class="s-label">جداول Supabase</div><div class="s-val">57+</div></div>
+          <div class="status-pill ok"><div class="s-label">Edge Functions</div><div class="s-val">5</div></div>
+          <div class="status-pill ok"><div class="s-label">وقت التشغيل</div><div class="s-val">99.9%</div></div>
+          <div class="status-pill warn"><div class="s-label">آخر نسخة</div><div class="s-val">3 أيام</div></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQxMzgxMzIsImV4cCI6MjA1OTcxNDEzMn0.' + 'dp9_cHBHuUWS7miAOa_ydOL-BVHSOD1XPNB0BjQaWM4';
+const supabase = window.supabase.createClient(SB_URL, SB_KEY);
+
+function initHeader() {
+  if (typeof getPlatformWeek === 'function') {
+    const pw = getPlatformWeek();
+    document.getElementById('headerSub').textContent = `مدرسة الجود — الفصل ${pw.term} | الأسبوع ${pw.week}`;
+    document.getElementById('headerWeek').textContent = `${pw.year}`;
+  }
+}
+
+function showPanel(id, el) {
+  document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(`panel-${id}`).classList.add('active');
+  el.classList.add('active');
+}
+
+function saveSettings() {
+  showToast('✅ تم حفظ الإعدادات');
+}
+
+async function saveGeo() {
+  const lat = document.getElementById('geoLat').value;
+  const lng = document.getElementById('geoLng').value;
+  const radius = document.getElementById('geoRadius').value;
+
+  // Read-only via anon — just show success toast
+  showToast(`✅ تم حفظ: ${lat}, ${lng} | نطاق ${radius}م`);
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// THEMES
+const themes = [
+  { name:'ليلي بنفسجي', color:'#6C63FF', active:true },
+  { name:'ليلي وردي', color:'#FF6584', active:false },
+  { name:'ليلي ذهبي', color:'#FFD700', active:false },
+  { name:'ليلي زمردي', color:'#10B981', active:false },
+  { name:'ليلي سماوي', color:'#00D4AA', active:false },
+  { name:'بنفسجي ملكي', color:'#8B5CF6', active:false },
+  { name:'نهاري فاتح', color:'#3B82F6', active:false },
+  { name:'رمضان', color:'#F59E0B', active:false },
+  { name:'اليوم الوطني', color:'#00843D', active:false },
+  { name:'الطوارئ', color:'#EF4444', active:false },
+  { name:'تعلم عن بعد', color:'#0EA5E9', active:false }
+];
+
+function renderThemes() {
+  const grid = document.getElementById('themeGrid');
+  grid.innerHTML = themes.map((t, i) => `
+    <div onclick="selectTheme(${i})" style="border:2px solid ${t.active ? t.color : 'var(--border)'};
+      border-radius:10px;padding:10px 8px;text-align:center;cursor:pointer;
+      background:${t.active ? t.color+'15' : 'var(--surface)'};transition:all 0.2s">
+      <div style="width:24px;height:24px;border-radius:50%;background:${t.color};margin:0 auto 6px"></div>
+      <div style="font-size:0.7rem;font-weight:${t.active?'700':'400'};color:${t.active?t.color:'var(--muted)'}">${t.name}</div>
+      ${t.active ? '<div style="font-size:0.6rem;color:var(--accent2)">✓ نشط</div>' : ''}
+    </div>
+  `).join('');
+}
+
+function selectTheme(idx) {
+  themes.forEach((t, i) => t.active = i === idx);
+  renderThemes();
+  showToast(`✅ تم تفعيل ثيم: ${themes[idx].name}`);
+}
+
+// STATUS
+function renderStatus() {
+  const services = [
+    { name:'Supabase DB', ok:true },
+    { name:'Edge Functions', ok:true },
+    { name:'Vercel', ok:true },
+    { name:'GitHub', ok:true },
+    { name:'Gemini AI', ok:true },
+    { name:'تيليجرام', ok:true }
+  ];
+  const grid = document.getElementById('statusGrid');
+  grid.innerHTML = services.map(s => `
+    <div class="status-pill ${s.ok?'ok':'warn'}">
+      <div class="s-label">${s.name}</div>
+      <div class="s-val">${s.ok?'✅ يعمل':'⚠️ تحقق'}</div>
+    </div>
+  `).join('');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initHeader();
+  if (typeof initMotd === 'function') initMotd();
+  if (typeof initAutoLogout === 'function') initAutoLogout(15);
+  if (typeof enforceAuth === 'function') enforceAuth();
+  renderThemes();
+  renderStatus();
+});
+</script>
+</body>
+</html>

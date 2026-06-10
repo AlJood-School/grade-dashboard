@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>محفظة الإنجاز — مدرسة الجود</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="../platform-week.js"></script>
+<script src="../platform-motd.js"></script>
+<script src="../platform-autologout.js"></script>
+<script src="../platform-auth-guard.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  :root {
+    --bg:#0D1B2A; --surface:rgba(255,255,255,0.04); --border:rgba(255,255,255,0.08);
+    --accent:#6C63FF; --accent2:#00D4AA; --gold:#FFD700; --text:#E8EDF2;
+    --muted:#8899AA; --card-bg:rgba(255,255,255,0.06); --radius:16px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+  .header{background:linear-gradient(135deg,#1a0533,#0D1B2A,#0a2440);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+  .header-logo{display:flex;align-items:center;gap:12px;}
+  .header-logo img{width:44px;height:44px;object-fit:contain;}
+  .header-title{font-size:1.1rem;font-weight:700;}
+  .header-sub{font-size:0.75rem;color:var(--muted);}
+  .btn-exit{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.07);border:1px solid var(--border);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;font-size:0.9rem;text-decoration:none;}
+  .btn-exit:hover{background:rgba(220,53,69,0.3);border-color:#dc3545;color:#ff6b6b;}
+
+  .main{max-width:1200px;margin:0 auto;padding:24px 16px;}
+
+  /* HERO */
+  .portfolio-hero{
+    background:linear-gradient(135deg,rgba(108,99,255,0.15),rgba(0,212,170,0.1),rgba(255,101,132,0.08));
+    border:1px solid rgba(108,99,255,0.25);border-radius:24px;padding:32px;margin-bottom:24px;
+    display:flex;align-items:center;gap:24px;
+  }
+  .student-portrait{
+    width:100px;height:100px;border-radius:20px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:flex;align-items:center;justify-content:center;
+    font-size:2.5rem;font-weight:800;color:white;flex-shrink:0;
+    border:3px solid rgba(255,255,255,0.15);
+  }
+  .hero-info h1{font-size:1.4rem;font-weight:800;margin-bottom:4px;}
+  .hero-info .grade-badge{display:inline-block;background:rgba(108,99,255,0.2);border:1px solid rgba(108,99,255,0.3);border-radius:20px;padding:3px 14px;font-size:0.8rem;color:#a78bfa;margin-bottom:8px;}
+  .hero-stats{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;}
+  .hero-stat{text-align:center;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:12px;padding:10px 16px;}
+  .hero-stat-num{font-size:1.3rem;font-weight:800;}
+  .hero-stat-label{font-size:0.7rem;color:var(--muted);}
+  .hero-actions{margin-right:auto;display:flex;gap:10px;flex-wrap:wrap;}
+  .btn-hero{border:none;border-radius:10px;padding:8px 18px;color:white;font-family:'Tajawal',sans-serif;font-weight:700;cursor:pointer;font-size:0.85rem;transition:opacity 0.2s;}
+  .btn-hero:hover{opacity:0.85;}
+
+  /* STUDENT SELECTOR */
+  .student-selector{background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;margin-bottom:20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+  .selector-label{font-size:0.85rem;color:var(--muted);white-space:nowrap;}
+  .form-control{background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:10px;padding:8px 14px;color:var(--text);font-family:'Tajawal',sans-serif;font-size:0.88rem;outline:none;transition:border-color 0.2s;}
+  .form-control:focus{border-color:var(--accent);}
+  .form-control option{background:#1a2a3a;}
+  .btn-load{background:linear-gradient(135deg,var(--accent),#8B5CF6);border:none;border-radius:10px;padding:8px 20px;color:white;font-family:'Tajawal',sans-serif;font-weight:700;cursor:pointer;font-size:0.88rem;}
+
+  /* TIMELINE */
+  .section-title{font-size:1rem;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+  .section-title i{color:var(--accent);}
+
+  .journey-timeline{position:relative;margin-bottom:32px;}
+  .timeline-track{display:flex;gap:0;overflow-x:auto;padding-bottom:8px;scrollbar-width:thin;}
+  .timeline-track::-webkit-scrollbar{height:4px;}
+  .timeline-track::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+  .grade-stop{
+    flex-shrink:0;text-align:center;position:relative;
+    padding:0 4px;
+  }
+  .grade-stop-inner{
+    background:var(--card-bg);border:2px solid var(--border);
+    border-radius:12px;padding:12px 8px;width:90px;cursor:pointer;
+    transition:all 0.2s;position:relative;
+  }
+  .grade-stop-inner:hover,.grade-stop-inner.active{
+    border-color:var(--accent);background:rgba(108,99,255,0.12);
+  }
+  .grade-stop-inner.current{border-color:var(--accent2);background:rgba(0,212,170,0.1);}
+  .grade-stop-inner.future{opacity:0.4;}
+  .grade-icon{font-size:1.4rem;margin-bottom:4px;}
+  .grade-label{font-size:0.72rem;font-weight:700;}
+  .grade-year{font-size:0.62rem;color:var(--muted);margin-top:2px;}
+  .grade-score{font-size:0.75rem;font-weight:700;color:var(--accent2);margin-top:4px;}
+
+  .grade-connector{
+    width:20px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    position:relative;
+  }
+  .grade-connector::before{content:'';position:absolute;width:100%;height:2px;background:var(--border);}
+  .grade-connector.done::before{background:var(--accent2);}
+
+  /* ACHIEVEMENTS */
+  .achievements-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:24px;}
+  .achievement-card{
+    background:var(--card-bg);border:1px solid var(--border);
+    border-radius:12px;padding:16px;text-align:center;transition:all 0.2s;cursor:pointer;
+  }
+  .achievement-card:hover,.achievement-card.earned{border-color:var(--gold);background:rgba(255,215,0,0.06);}
+  .achievement-card.earned .ach-icon{filter:none;opacity:1;}
+  .ach-icon{font-size:2.2rem;margin-bottom:8px;filter:grayscale(1);opacity:0.4;transition:all 0.2s;}
+  .ach-name{font-size:0.78rem;font-weight:700;margin-bottom:4px;}
+  .ach-desc{font-size:0.68rem;color:var(--muted);}
+  .ach-badge{display:inline-block;background:rgba(255,215,0,0.15);border:1px solid rgba(255,215,0,0.3);border-radius:10px;padding:2px 8px;font-size:0.65rem;color:#FFD700;margin-top:6px;}
+
+  /* SKILLS RADAR */
+  .skills-section{background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:24px;}
+  .skills-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  .skill-item{margin-bottom:12px;}
+  .skill-header{display:flex;justify-content:space-between;margin-bottom:6px;font-size:0.82rem;}
+  .skill-name{font-weight:600;}
+  .skill-pct{color:var(--muted);}
+  .skill-bar{height:8px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;}
+  .skill-fill{height:100%;border-radius:4px;transition:width 0.8s ease;}
+
+  /* WORKS */
+  .works-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:24px;}
+  .work-card{background:var(--card-bg);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:all 0.2s;cursor:pointer;}
+  .work-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(108,99,255,0.15);}
+  .work-thumb{height:100px;background:linear-gradient(135deg,rgba(108,99,255,0.2),rgba(0,212,170,0.1));display:flex;align-items:center;justify-content:center;font-size:2rem;}
+  .work-info{padding:12px;}
+  .work-title{font-size:0.82rem;font-weight:700;margin-bottom:4px;}
+  .work-meta{font-size:0.72rem;color:var(--muted);}
+  .work-grade{display:inline-block;background:rgba(0,212,170,0.15);border:1px solid rgba(0,212,170,0.3);border-radius:8px;padding:2px 8px;font-size:0.72rem;color:var(--accent2);margin-top:6px;}
+
+  /* NOTES */
+  .notes-section{background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:24px;}
+  .note-item{background:rgba(255,215,0,0.05);border:1px solid rgba(255,215,0,0.15);border-radius:10px;padding:12px 16px;margin-bottom:8px;}
+  .note-teacher{font-size:0.72rem;color:var(--muted);margin-bottom:4px;}
+  .note-text{font-size:0.85rem;}
+  .note-date{font-size:0.68rem;color:var(--muted);margin-top:4px;}
+
+  /* ADD WORK MODAL */
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(8px);}
+  .modal-overlay.active{display:flex;}
+  .modal-box{background:#1a2535;border:1px solid rgba(108,99,255,0.3);border-radius:20px;padding:28px;max-width:480px;width:90%;}
+  .modal-box h3{font-size:1.1rem;margin-bottom:20px;}
+  .form-group{margin-bottom:14px;}
+  .form-label{font-size:0.82rem;color:var(--muted);margin-bottom:6px;display:block;}
+  .modal-btns{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;}
+  .btn-primary{background:linear-gradient(135deg,var(--accent),#8B5CF6);border:none;border-radius:10px;padding:10px 24px;color:white;font-family:'Tajawal',sans-serif;font-weight:700;cursor:pointer;font-size:0.9rem;}
+  .btn-secondary{background:rgba(255,255,255,0.07);border:1px solid var(--border);border-radius:10px;padding:10px 18px;color:var(--text);font-family:'Tajawal',sans-serif;cursor:pointer;font-size:0.9rem;}
+
+  @media(max-width:700px){
+    .portfolio-hero{flex-direction:column;text-align:center;}
+    .hero-actions{margin-right:0;justify-content:center;}
+    .skills-grid{grid-template-columns:1fr;}
+    .hero-stats{justify-content:center;}
+  }
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="header-logo">
+    <img src="../edoos-logo.png" alt="EduOS">
+    <div>
+      <div class="header-title">محفظة الإنجاز الرقمية</div>
+      <div class="header-sub" id="headerSub">KG → G12 — مدرسة الجود</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <span id="headerWeek" style="font-size:0.8rem;color:var(--muted);background:var(--surface);padding:4px 12px;border-radius:20px;border:1px solid var(--border)"></span>
+    <a href="../edoos-hub/" class="btn-exit"><i class="fas fa-times"></i></a>
+  </div>
+</header>
+
+<main class="main">
+  <!-- SELECTOR -->
+  <div class="student-selector">
+    <span class="selector-label"><i class="fas fa-search" style="color:var(--accent)"></i> اختاري طالبة:</span>
+    <select class="form-control" id="selGrade" onchange="loadStudentList()">
+      <option value="G3">الصف الثالث</option>
+      <option value="G4">الصف الرابع</option>
+      <option value="G1">الصف الأول</option>
+      <option value="G2">الصف الثاني</option>
+    </select>
+    <select class="form-control" id="selStudent">
+      <option>اختاري الطالبة...</option>
+    </select>
+    <button class="btn-load" onclick="loadPortfolio()"><i class="fas fa-folder-open"></i> عرض المحفظة</button>
+    <button class="btn-load" style="background:linear-gradient(135deg,var(--accent2),#00A87A)" onclick="showAddWork()"><i class="fas fa-plus"></i> إضافة عمل</button>
+  </div>
+
+  <!-- HERO -->
+  <div class="portfolio-hero" id="portfolioHero">
+    <div class="student-portrait" id="heroAvatar">ن</div>
+    <div class="hero-info" style="flex:1">
+      <div class="grade-badge" id="heroBadge">G3 — الصف الثالث</div>
+      <h1 id="heroName">نورة محمد الهاشمي</h1>
+      <div class="hero-stats" id="heroStats">
+        <div class="hero-stat">
+          <div class="hero-stat-num" style="color:var(--gold)">4.8</div>
+          <div class="hero-stat-label">المعدل التراكمي</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-num" style="color:var(--accent)">23</div>
+          <div class="hero-stat-label">إنجاز محفوظ</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-num" style="color:var(--accent2)">8</div>
+          <div class="hero-stat-label">شهادات</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-num" style="color:#f87171">2</div>
+          <div class="hero-stat-label">سنوات في الجود</div>
+        </div>
+      </div>
+    </div>
+    <div class="hero-actions">
+      <button class="btn-hero" style="background:linear-gradient(135deg,var(--accent),#8B5CF6)" onclick="printPortfolio()"><i class="fas fa-print"></i> طباعة</button>
+      <button class="btn-hero" style="background:linear-gradient(135deg,var(--accent2),#00A87A)"><i class="fas fa-share"></i> مشاركة</button>
+    </div>
+  </div>
+
+  <!-- JOURNEY TIMELINE -->
+  <div class="journey-timeline">
+    <div class="section-title"><i class="fas fa-route"></i> رحلة التعلم KG → G12</div>
+    <div class="timeline-track" id="timelineTrack"></div>
+  </div>
+
+  <!-- ACHIEVEMENTS -->
+  <div class="section-title"><i class="fas fa-trophy"></i> الإنجازات والأوسمة</div>
+  <div class="achievements-grid" id="achievementsGrid"></div>
+
+  <!-- SKILLS -->
+  <div class="skills-section">
+    <div class="section-title"><i class="fas fa-star"></i> خريطة المهارات</div>
+    <div class="skills-grid" id="skillsGrid"></div>
+  </div>
+
+  <!-- WORKS -->
+  <div class="section-title"><i class="fas fa-folder-open"></i> أعمال الطالبة</div>
+  <div class="works-grid" id="worksGrid"></div>
+
+  <!-- TEACHER NOTES -->
+  <div class="notes-section">
+    <div class="section-title"><i class="fas fa-comment-dots"></i> ملاحظات المعلمات</div>
+    <div id="notesContainer"></div>
+    <div style="margin-top:12px">
+      <div style="display:flex;gap:8px">
+        <input type="text" class="form-control" id="newNote" placeholder="أضيفي ملاحظة..." style="flex:1">
+        <button class="btn-load" onclick="addNote()"><i class="fas fa-plus"></i> إضافة</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ADD WORK MODAL -->
+<div class="modal-overlay" id="addWorkModal">
+  <div class="modal-box">
+    <h3><i class="fas fa-plus" style="color:var(--accent)"></i> إضافة عمل للمحفظة</h3>
+    <div class="form-group">
+      <label class="form-label">عنوان العمل</label>
+      <input type="text" class="form-control" id="workTitle" placeholder="عنوان العمل أو المشروع...">
+    </div>
+    <div class="form-group">
+      <label class="form-label">النوع</label>
+      <select class="form-control" id="workType">
+        <option>مشروع بحثي</option>
+        <option>قصيدة / كتابة إبداعية</option>
+        <option>رسم وفن</option>
+        <option>تقرير علمي</option>
+        <option>عرض تقديمي</option>
+        <option>مسابقة / جائزة</option>
+        <option>نشاط لاصفي</option>
+        <option>شهادة تقدير</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">المادة والصف</label>
+      <input type="text" class="form-control" id="workSubject" placeholder="مثال: الرياضيات — G3">
+    </div>
+    <div class="form-group">
+      <label class="form-label">الدرجة / التقييم</label>
+      <input type="text" class="form-control" id="workGrade" placeholder="مثال: ممتاز، 95، A+">
+    </div>
+    <div class="form-group">
+      <label class="form-label">وصف مختصر</label>
+      <textarea class="form-control" id="workDesc" rows="3" placeholder="وصف العمل..."></textarea>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-secondary" onclick="closeAddWork()">إلغاء</button>
+      <button class="btn-primary" onclick="saveWork()"><i class="fas fa-save"></i> حفظ</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQxMzgxMzIsImV4cCI6MjA1OTcxNDEzMn0.' + 'dp9_cHBHuUWS7miAOa_ydOL-BVHSOD1XPNB0BjQaWM4';
+const supabase = window.supabase.createClient(SB_URL, SB_KEY);
+
+let currentStudent = null;
+let portfolioWorks = [];
+let portfolioNotes = [];
+
+function initHeader() {
+  if (typeof getPlatformWeek === 'function') {
+    const pw = getPlatformWeek();
+    document.getElementById('headerSub').textContent = `محفظة الإنجاز — ${pw.year}`;
+    document.getElementById('headerWeek').textContent = `الأسبوع ${pw.week}`;
+  }
+}
+
+const DEMO_STUDENTS = {
+  G3: ['نورة محمد الهاشمي','ريم سالم المزروعي','لطيفة عبدالله الكندي','فاطمة علي النعيمي'],
+  G4: ['مريم سعيد الظاهري','هند محمد الحمادي','شيخة راشد المري','عائشة خلفان الكعبي'],
+  G1: ['بدرية ناصر الرميثي','موزة أحمد بن دلموك'],
+  G2: ['أسماء راشد الشامسي','منيرة خالد العامري']
+};
+
+function loadStudentList() {
+  const grade = document.getElementById('selGrade').value;
+  const sel = document.getElementById('selStudent');
+  sel.innerHTML = '<option>اختاري الطالبة...</option>';
+  (DEMO_STUDENTS[grade] || []).forEach(n => {
+    const opt = document.createElement('option');
+    opt.value = n; opt.textContent = n;
+    sel.appendChild(opt);
+  });
+}
+
+function loadPortfolio() {
+  const name = document.getElementById('selStudent').value;
+  const grade = document.getElementById('selGrade').value;
+  if (!name || name.includes('اختاري')) { alert('الرجاء اختيار الطالبة'); return; }
+
+  currentStudent = { name, grade };
+  const initials = name.split(' ').slice(0,2).map(w=>w[0]).join('');
+  document.getElementById('heroAvatar').textContent = initials;
+  document.getElementById('heroName').textContent = name;
+  document.getElementById('heroBadge').textContent = `${grade} — الصف ${gradeAr(grade)}`;
+
+  renderTimeline(grade);
+  renderAchievements();
+  renderSkills();
+  renderWorks();
+  renderNotes();
+}
+
+function gradeAr(g) {
+  const m = {'KG1':'الأول الروضة','KG2':'الثاني الروضة','G1':'الأول','G2':'الثاني','G3':'الثالث','G4':'الرابع','G5':'الخامس','G6':'السادس','G7':'السابع','G8':'الثامن','G9':'التاسع','G10':'العاشر','G11':'الحادي عشر','G12':'الثاني عشر'};
+  return m[g] || g;
+}
+
+function renderTimeline(currentGrade) {
+  const grades = ['KG1','KG2','G1','G2','G3','G4','G5','G6','G7','G8','G9','G10','G11','G12'];
+  const icons = {'KG1':'🌱','KG2':'🌼','G1':'📚','G2':'✏️','G3':'🎨','G4':'🔬','G5':'💡','G6':'🌟','G7':'🚀','G8':'🏆','G9':'🎓','G10':'📊','G11':'🔭','G12':'🏅'};
+  const currentIdx = grades.indexOf(currentGrade);
+  const scores = {'KG1':'A+','KG2':'A','G1':'A+','G2':'A','G3':'4.8','G4':'','G5':'','G6':'','G7':'','G8':'','G9':'','G10':'','G11':'','G12':''};
+
+  const track = document.getElementById('timelineTrack');
+  track.innerHTML = grades.map((g, i) => {
+    const isDone = i < currentIdx;
+    const isCurrent = i === currentIdx;
+    const isFuture = i > currentIdx;
+    const cls = isCurrent ? 'current' : isFuture ? 'future' : '';
+
+    return `
+      ${i > 0 ? `<div class="grade-connector ${isDone ? 'done' : ''}"></div>` : ''}
+      <div class="grade-stop">
+        <div class="grade-stop-inner ${cls}" onclick="selectGradeStop('${g}', this)">
+          <div class="grade-icon">${icons[g] || '📖'}</div>
+          <div class="grade-label">${g}</div>
+          <div class="grade-year">${2022 + i - 2}–${2023 + i - 2}</div>
+          ${scores[g] ? `<div class="grade-score">${scores[g]}</div>` : ''}
+          ${isCurrent ? '<div style="font-size:0.6rem;color:var(--accent2);margin-top:2px">الحالي</div>' : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function selectGradeStop(grade, el) {
+  document.querySelectorAll('.grade-stop-inner').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function renderAchievements() {
+  const achievements = [
+    { icon: '🏆', name: 'المتفوقة الأولى', desc: 'المركز الأول في الصف', earned: true },
+    { icon: '📖', name: 'قارئة متميزة', desc: '50 كتاباً في عام', earned: true },
+    { icon: '🎨', name: 'فنانة إبداعية', desc: 'أفضل مشروع فني', earned: true },
+    { icon: '🔬', name: 'عالمة صغيرة', desc: 'مشروع علوم مميز', earned: false },
+    { icon: '🤲', name: 'متطوعة مجتمعية', desc: '10 ساعات تطوع', earned: true },
+    { icon: '🌟', name: 'نجمة الأسبوع', desc: 'تكرار 5 مرات', earned: false },
+    { icon: '💯', name: 'درجة كاملة', desc: 'في اختبار رئيسي', earned: true },
+    { icon: '🎯', name: 'دقيقة الهدف', desc: 'حققت جميع أهدافها', earned: false }
+  ];
+
+  document.getElementById('achievementsGrid').innerHTML = achievements.map(a => `
+    <div class="achievement-card ${a.earned ? 'earned' : ''}">
+      <div class="ach-icon">${a.icon}</div>
+      <div class="ach-name">${a.name}</div>
+      <div class="ach-desc">${a.desc}</div>
+      ${a.earned ? '<div class="ach-badge">✅ محقَّقة</div>' : '<div class="ach-badge" style="opacity:0.4">قيد الإنجاز</div>'}
+    </div>
+  `).join('');
+}
+
+function renderSkills() {
+  const skills = [
+    { name: 'اللغة العربية', pct: 92, color: '#6C63FF' },
+    { name: 'الرياضيات', pct: 78, color: '#00D4AA' },
+    { name: 'العلوم', pct: 85, color: '#10B981' },
+    { name: 'التربية الإسلامية', pct: 96, color: '#FFD700' },
+    { name: 'اللغة الإنجليزية', pct: 70, color: '#F59E0B' },
+    { name: 'مهارات التفكير', pct: 88, color: '#EF4444' },
+    { name: 'التعاون والعمل الجماعي', pct: 94, color: '#8B5CF6' },
+    { name: 'الإبداع والفن', pct: 90, color: '#FF6584' }
+  ];
+
+  document.getElementById('skillsGrid').innerHTML = skills.map(s => `
+    <div class="skill-item">
+      <div class="skill-header">
+        <span class="skill-name">${s.name}</span>
+        <span class="skill-pct">${s.pct}%</span>
+      </div>
+      <div class="skill-bar">
+        <div class="skill-fill" style="width:${s.pct}%;background:${s.color}"></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderWorks() {
+  const works = [
+    ...portfolioWorks,
+    { title: 'مشروع دورة المياه', type: 'تقرير علمي', subject: 'العلوم — G3', grade: 'ممتاز', icon: '💧' },
+    { title: 'قصيدة في حب الوطن', type: 'كتابة إبداعية', subject: 'اللغة العربية — G3', grade: '98/100', icon: '📜' },
+    { title: 'مشروع الكسور', type: 'مشروع بحثي', subject: 'الرياضيات — G3', grade: 'A+', icon: '🔢' },
+    { title: 'لوحة الأندلس', type: 'رسم وفن', subject: 'التربية الفنية', grade: 'ممتاز', icon: '🎨' }
+  ];
+
+  document.getElementById('worksGrid').innerHTML = works.map(w => `
+    <div class="work-card">
+      <div class="work-thumb">${w.icon || '📄'}</div>
+      <div class="work-info">
+        <div class="work-title">${w.title}</div>
+        <div class="work-meta">${w.type} | ${w.subject}</div>
+        <div class="work-grade">${w.grade}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderNotes() {
+  const notes = [
+    ...portfolioNotes,
+    { teacher: 'المعلمة منيرة المري', text: 'طالبة متميزة ومجتهدة، تُشارك بفاعلية في كل الحصص وتُساعد زميلاتها 🤲', date: 'الأسبوع 20' },
+    { teacher: 'المعلمة ريم', text: 'أداء رائع في مشروع العلوم — تُظهر فضولاً علمياً حقيقياً', date: 'الأسبوع 18' }
+  ];
+
+  document.getElementById('notesContainer').innerHTML = notes.map(n => `
+    <div class="note-item">
+      <div class="note-teacher"><i class="fas fa-chalkboard-teacher"></i> ${n.teacher}</div>
+      <div class="note-text">${n.text}</div>
+      <div class="note-date">${n.date}</div>
+    </div>
+  `).join('');
+}
+
+function addNote() {
+  const text = document.getElementById('newNote').value.trim();
+  if (!text) return;
+  portfolioNotes.unshift({ teacher: 'المعلمة (أنتِ)', text, date: 'الآن' });
+  renderNotes();
+  document.getElementById('newNote').value = '';
+}
+
+function showAddWork() {
+  document.getElementById('addWorkModal').classList.add('active');
+}
+function closeAddWork() {
+  document.getElementById('addWorkModal').classList.remove('active');
+}
+function saveWork() {
+  const title = document.getElementById('workTitle').value.trim();
+  if (!title) { alert('الرجاء إدخال عنوان العمل'); return; }
+  const icons = {'مشروع بحثي':'🔬','قصيدة / كتابة إبداعية':'📜','رسم وفن':'🎨','تقرير علمي':'📊','عرض تقديمي':'📋','مسابقة / جائزة':'🏆','نشاط لاصفي':'⚽','شهادة تقدير':'🎖️'};
+  const type = document.getElementById('workType').value;
+  portfolioWorks.unshift({
+    title,
+    type,
+    subject: document.getElementById('workSubject').value || 'عام',
+    grade: document.getElementById('workGrade').value || '—',
+    icon: icons[type] || '📄'
+  });
+  closeAddWork();
+  renderWorks();
+  document.getElementById('workTitle').value = '';
+}
+
+function printPortfolio() { window.print(); }
+
+document.addEventListener('DOMContentLoaded', () => {
+  initHeader();
+  if (typeof initMotd === 'function') initMotd();
+  if (typeof initAutoLogout === 'function') initAutoLogout(15);
+  if (typeof enforceAuth === 'function') enforceAuth();
+  loadStudentList();
+  // Load default student
+  setTimeout(() => {
+    document.getElementById('selStudent').selectedIndex = 1;
+    loadPortfolio();
+  }, 100);
+});
+
+document.getElementById('addWorkModal').addEventListener('click', function(e) {
+  if (e.target === this) closeAddWork();
+});
+</script>
+</body>
+</html>
