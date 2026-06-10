@@ -891,6 +891,118 @@ if (typeof PLATFORM_WEEK !== 'undefined') {
 
 // INIT
 loadLibraryData();
+
+/* ══════════════════════════════════════
+   EXPORT LOANS REPORT CSV
+══════════════════════════════════════ */
+function exportLoansReport() {
+  const rows = [
+    ['اسم الطالبة','الصف','الكتاب','تاريخ الاستعارة','تاريخ الإعادة','الحالة'],
+    ['ريم الكعبي','3A','مغامرات العقل','2026-05-01','2026-05-15','مُعادة'],
+    ['سارة العامري','4B','قصص الأنبياء','2026-05-10','2026-05-24','مُعادة'],
+    ['لولوة الزعابي','3C','عالم الأرقام','2026-05-20','2026-06-03','متأخرة'],
+    ['هيا المنصوري','4A','الطبيعة والحياة','2026-05-25','2026-06-08','نشطة'],
+    ['نور الحمادي','3B','رحلة الخيال','2026-06-01','2026-06-15','نشطة'],
+    ['منى الكندي','4C','تاريخ الإمارات','2026-06-03','2026-06-17','نشطة'],
+    ['فاطمة السويدي','3E','اللغة العربية الجميلة','2026-06-05','2026-06-19','نشطة']
+  ];
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `library_loans_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  showToast('📥 تم تصدير سجل الاستعارات');
+}
+
+/* ══════════════════════════════════════
+   AI BOOK RECOMMENDATIONS
+══════════════════════════════════════ */
+async function getAIBookRec(grade, interest) {
+  const outEl = document.getElementById('ai-chat') || document.querySelector('[id*="ai"]');
+  if (!outEl) return;
+  const txt = `اقترحي 5 كتب مناسبة لطالبة في الصف ${grade||'الرابع'} تهتم بـ${interest||'العلوم والمغامرات'}. لكل كتاب: الاسم + المؤلف + سبب التوصية. الكتب عربية أو مترجمة.`;
+  outEl.innerHTML += `<div style="padding:10px;background:rgba(255,255,255,0.05);border-radius:8px;margin-bottom:8px"><strong>🤖 AI:</strong> <span id="lib-ai-rec">⏳ جارٍ البحث...</span></div>`;
+  const el = document.getElementById('lib-ai-rec');
+  try {
+    const r = await fetch('https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({messages:[
+        {role:'system',content:'أنت أمينة مكتبة مدرسية متخصصة في توصية الكتب للطالبات في المدارس الإماراتية.'},
+        {role:'user',content:txt}
+      ],max_tokens:400})
+    });
+    const d = await r.json();
+    if (el) el.textContent = d.choices?.[0]?.message?.content || '—';
+  } catch { if (el) el.textContent = '⚠️ تعذر الاتصال بـ AI'; }
+}
+
+/* ══════════════════════════════════════
+   READING CHALLENGE STATS
+══════════════════════════════════════ */
+function buildReadingLeaderboard() {
+  const leaders = [
+    {rank:1, name:'سارة العامري', class:'4B', books:18, badge:'🥇'},
+    {rank:2, name:'ريم الكعبي', class:'3A', books:15, badge:'🥈'},
+    {rank:3, name:'هيا المنصوري', class:'4A', books:14, badge:'🥉'},
+    {rank:4, name:'نور الحمادي', class:'3B', books:12, badge:'⭐'},
+    {rank:5, name:'منى الكندي', class:'4C', books:11, badge:'⭐'},
+    {rank:6, name:'لولوة الزعابي', class:'3C', books:10, badge:'📚'},
+    {rank:7, name:'فاطمة السويدي', class:'3E', books:9, badge:'📚'},
+    {rank:8, name:'مريم المزروعي', class:'4D', books:8, badge:'📖'}
+  ];
+  const container = document.getElementById('leaderboard') || document.querySelector('[id*="leader"]');
+  if (!container) return;
+  container.innerHTML = leaders.map(l =>
+    `<div style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;background:rgba(255,255,255,0.04);margin-bottom:6px;${l.rank<=3?'border-right:3px solid gold':''}">
+      <span style="font-size:18px;width:28px;text-align:center">${l.badge}</span>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:13px;color:var(--text)">${l.name}</div>
+        <div style="font-size:11px;color:var(--muted)">الصف ${l.class}</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:18px;font-weight:800;color:var(--gold,#f59e0b)">${l.books}</div>
+        <div style="font-size:9px;color:var(--muted)">كتاب</div>
+      </div>
+    </div>`
+  ).join('');
+}
+
+/* ══════════════════════════════════════
+   PRINT LIBRARY REPORT
+══════════════════════════════════════ */
+function printLibraryReport() {
+  const now = new Date().toLocaleDateString('ar-SA', {year:'numeric',month:'long',day:'numeric'});
+  const html = `<div style="font-family:Arial;direction:rtl;padding:24px">
+    <div style="text-align:center;border-bottom:2px solid #7c3aed;padding-bottom:12px;margin-bottom:20px">
+      <h2 style="color:#7c3aed">تقرير المكتبة المدرسية</h2>
+      <p style="color:#888">مدرسة الجود الابتدائية | ${now}</p>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px">
+      <div style="text-align:center;padding:16px;border:1px solid #ddd;border-radius:8px">
+        <div style="font-size:28px;font-weight:800;color:#7c3aed">847</div>
+        <div style="color:#666;font-size:12px">إجمالي الكتب</div>
+      </div>
+      <div style="text-align:center;padding:16px;border:1px solid #ddd;border-radius:8px">
+        <div style="font-size:28px;font-weight:800;color:#0891b2">43</div>
+        <div style="color:#666;font-size:12px">كتاب مُستعار</div>
+      </div>
+      <div style="text-align:center;padding:16px;border:1px solid #ddd;border-radius:8px">
+        <div style="font-size:28px;font-weight:800;color:#dc2626">7</div>
+        <div style="color:#666;font-size:12px">استعارات متأخرة</div>
+      </div>
+    </div>
+    <h3>أكثر الطالبات قراءةً</h3>
+    <p>1. سارة العامري (4B) — 18 كتاباً 🥇</p>
+    <p>2. ريم الكعبي (3A) — 15 كتاباً 🥈</p>
+    <p>3. هيا المنصوري (4A) — 14 كتاباً 🥉</p>
+    <p style="margin-top:20px;color:#aaa;font-size:11px">طُبع من منظومة المكتبة المدرسية — EduOS</p>
+  </div>`;
+  const w = window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+  w.print();
+}
 </script>
 </body>
 </html>

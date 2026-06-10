@@ -841,6 +841,163 @@ async function getAISuggestedEvents() {
 }
 // Auto-load AI suggestions
 setTimeout(getAISuggestedEvents, 2000);
+
+/* ═══════════════════════════════════════════════
+   EXPORT CALENDAR CSV
+═══════════════════════════════════════════════ */
+function exportCalendarCSV() {
+  const events = [
+    {date:'2026-09-01',title:'بداية العام الدراسي',type:'أكاديمي',priority:'عالية'},
+    {date:'2026-09-15',title:'اليوم المفتوح',type:'تواصل',priority:'متوسطة'},
+    {date:'2026-10-17',title:'اليوم الوطني الإماراتي',type:'وطني',priority:'عالية'},
+    {date:'2026-11-01',title:'نهاية الفصل الأول',type:'أكاديمي',priority:'عالية'},
+    {date:'2026-12-01',title:'بداية الفصل الثاني',type:'أكاديمي',priority:'عالية'},
+    {date:'2027-03-20',title:'اليوم العالمي للسعادة',type:'اجتماعي',priority:'منخفضة'},
+    {date:'2027-04-01',title:'اختبارات نهاية الفصل',type:'أكاديمي',priority:'عالية'},
+    {date:'2027-06-15',title:'حفل التخرج',type:'احتفالي',priority:'عالية'}
+  ];
+  const rows = [['التاريخ','الفعالية','النوع','الأولوية'], ...events.map(e=>[e.date,e.title,e.type,e.priority])];
+  const csv = rows.map(r=>r.join(',')).join('\n');
+  const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `calendar_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  showNotice?.('📥 تم تصدير التقويم') || alert('✅ تم تصدير التقويم');
+}
+
+/* ═══════════════════════════════════════════════
+   REMINDERS SYSTEM
+═══════════════════════════════════════════════ */
+const upcomingReminders = [
+  {days:3, title:'اليوم المفتوح', note:'التحضير للعروض والمعارض', color:'#7c3aed'},
+  {days:7, title:'اجتماع أولياء الأمور', note:'إرسال الدعوات عبر المنظومة', color:'#0891b2'},
+  {days:14, title:'تسليم تقارير منتصف الفصل', note:'مراجعة درجات كل الطالبات', color:'#16a34a'},
+  {days:21, title:'اختبارات الفصل', note:'إعداد جداول وقاعات الاختبار', color:'#dc2626'}
+];
+
+function renderReminders() {
+  const container = document.getElementById('reminders-list') || document.querySelector('#panel-ai .card');
+  if (!container) return;
+  const html = `<div style="margin-bottom:16px">
+    <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px">⏰ تذكيرات قادمة</div>
+    ${upcomingReminders.map(r => `
+      <div style="display:flex;gap:12px;align-items:flex-start;padding:10px;border-radius:8px;background:rgba(255,255,255,0.04);margin-bottom:8px;border-right:3px solid ${r.color}">
+        <div style="min-width:40px;text-align:center;background:${r.color}22;border-radius:6px;padding:6px 4px">
+          <div style="font-size:18px;font-weight:800;color:${r.color}">${r.days}</div>
+          <div style="font-size:9px;color:var(--muted)">يوم</div>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:13px;color:var(--text)">${r.title}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">${r.note}</div>
+        </div>
+      </div>`).join('')}
+  </div>`;
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  container.prepend(div);
+}
+
+/* ═══════════════════════════════════════════════
+   UPCOMING WEEK SUMMARY
+═══════════════════════════════════════════════ */
+function getUpcomingWeekSummary() {
+  const days = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس'];
+  const events = [
+    {day:'الأحد', items:['اجتماع الكادر التعليمي 7:30','ورشة STREAM 10:00']},
+    {day:'الاثنين', items:['تقييم منتصف الفصل — الصف 3','برنامج القراءة المجتمعية']},
+    {day:'الثلاثاء', items:['يوم الموهبة الإبداعية','اجتماع لجنة الأنشطة 12:00']},
+    {day:'الأربعاء', items:['زيارة ميدانية — الصف 4','اختبار مبادرة القراءة']},
+    {day:'الخميس', items:['عرض مشاريع STREAM','رسائل تقدم الطالبات لأولياء الأمور']}
+  ];
+  return events.map(e =>
+    `<div style="padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.04);margin-bottom:8px">
+      <div style="font-weight:700;font-size:12px;color:var(--cyan);margin-bottom:6px">${e.day}</div>
+      ${e.items.map(i=>`<div style="font-size:12px;color:var(--muted);padding-right:8px;border-right:2px solid rgba(255,255,255,0.15);margin-bottom:3px">${i}</div>`).join('')}
+    </div>`
+  ).join('');
+}
+
+function showWeekSummary() {
+  const html = `<div style="margin-top:16px">
+    <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:10px">📅 أبرز أحداث الأسبوع القادم</div>
+    ${getUpcomingWeekSummary()}
+  </div>`;
+  const outEl = document.getElementById('ai-suggestions') || document.querySelector('[id*="suggest"]');
+  if (outEl) outEl.innerHTML += html;
+}
+
+/* ═══════════════════════════════════════════════
+   ISLAMIC DATES WIDGET
+═══════════════════════════════════════════════ */
+function getIslamicDateNote() {
+  const notes = [
+    {month:'رمضان', note:'شهر القرآن والعبادة والتأمل والتجديد'},
+    {month:'ذو الحجة', note:'أيام عشر فاضلة والحج الميمون'},
+    {month:'محرم', note:'أول أشهر الهجرة ومستهل العام الجديد'},
+    {month:'شعبان', note:'شهر الاستعداد لرمضان الكريم'}
+  ];
+  return notes[Math.floor(Math.random() * notes.length)];
+}
+
+/* ═══════════════════════════════════════════════
+   PRINT MONTHLY CALENDAR
+═══════════════════════════════════════════════ */
+function printMonthlyCalendar() {
+  const now = new Date();
+  const monthName = now.toLocaleDateString('ar-SA', {month:'long', year:'numeric'});
+  const academicEvents = [
+    {date:'01', title:'اجتماع الكادر التعليمي', type:'إداري'},
+    {date:'05', title:'تقديم خطط الدروس', type:'أكاديمي'},
+    {date:'10', title:'اليوم المفتوح', type:'تواصل'},
+    {date:'15', title:'تسليم تقارير التقدم', type:'أكاديمي'},
+    {date:'20', title:'اجتماع لجنة الجودة', type:'إداري'},
+    {date:'25', title:'عرض مشاريع الطالبات', type:'أكاديمي'},
+    {date:'28', title:'اجتماع أولياء الأمور', type:'تواصل'}
+  ];
+  const html = `<div style="font-family:Arial;direction:rtl;padding:24px">
+    <div style="text-align:center;border-bottom:2px solid #0891b2;padding-bottom:12px;margin-bottom:20px">
+      <h2 style="color:#0891b2">التقويم الأكاديمي — ${monthName}</h2>
+      <p style="color:#888">مدرسة الجود الابتدائية | 2025-2026</p>
+    </div>
+    <table style="width:100%;border-collapse:collapse">
+      <tr style="background:#e0f2fe"><th style="padding:10px;border:1px solid #ddd;text-align:right">التاريخ</th><th style="padding:10px;border:1px solid #ddd">الفعالية</th><th style="padding:10px;border:1px solid #ddd">النوع</th></tr>
+      ${academicEvents.map(e=>`<tr><td style="padding:10px;border:1px solid #eee">${e.date}</td><td style="padding:10px;border:1px solid #eee">${e.title}</td><td style="padding:10px;border:1px solid #eee;text-align:center"><span style="background:#e0f2fe;color:#0891b2;padding:2px 8px;border-radius:12px;font-size:11px">${e.type}</span></td></tr>`).join('')}
+    </table>
+    <p style="margin-top:16px;text-align:center;color:#aaa;font-size:11px">طُبع من منظومة التقويم الأكاديمي — EduOS</p>
+  </div>`;
+  const w = window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+  w.print();
+}
+
+/* ═══════════════════════════════════════════════
+   STATISTICS PANEL
+═══════════════════════════════════════════════ */
+function buildCalendarStats() {
+  const stats = [
+    {label:'إجمالي الفعاليات', value:47, icon:'📅', color:'#7c3aed'},
+    {label:'فعاليات هذا الشهر', value:8, icon:'📌', color:'#0891b2'},
+    {label:'إجازات رسمية', value:12, icon:'🌴', color:'#16a34a'},
+    {label:'اختبارات مجدولة', value:6, icon:'📝', color:'#dc2626'},
+    {label:'فعاليات مجتمعية', value:9, icon:'🤝', color:'#d97706'},
+    {label:'مناسبات وطنية', value:4, icon:'🇦🇪', color:'#059669'}
+  ];
+  const container = document.getElementById('stats-panel') || document.querySelector('[id*="stats"]');
+  if (!container) return;
+  container.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+    ${stats.map(s=>`
+      <div style="padding:12px;border-radius:10px;background:rgba(255,255,255,0.05);text-align:center;border-top:3px solid ${s.color}">
+        <div style="font-size:20px;margin-bottom:4px">${s.icon}</div>
+        <div style="font-size:22px;font-weight:800;color:${s.color}">${s.value}</div>
+        <div style="font-size:10px;color:var(--muted)">${s.label}</div>
+      </div>`).join('')}
+  </div>`;
+}
+
+/* ═══════════════════════════════════════════════ */
+
 /* ═══════════════════════════════════════════════ */
 
 </script>

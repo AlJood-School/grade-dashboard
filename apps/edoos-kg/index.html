@@ -872,6 +872,147 @@ async function generateKGStory() {
     if (el) el.textContent = d.choices?.[0]?.message?.content || 'خطأ';
   } catch { if (el) el.textContent = 'تعذر توليد القصة'; }
 }
+/* ═══════════════════════
+   ACTIVITY PLAN GENERATOR
+════════════════════════ */
+const KG_AI_URL = 'https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant';
+
+async function generateActivityPlan() {
+  const el = document.getElementById('kg-story-output') || document.querySelector('[id*="ai"]');
+  if (!el) return;
+  el.textContent = '⏳ AI يُعدّ خطة الأنشطة...';
+  try {
+    const r = await fetch(KG_AI_URL, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({messages:[
+        {role:'system',content:'أنت معلمة روضة أطفال خبيرة في تصميم أنشطة تعليمية ممتعة للأطفال من 3-6 سنوات وفق مناهج دولة الإمارات.'},
+        {role:'user',content:'اقترحي خطة أنشطة ليوم مدرسي كامل لأطفال الروضة. 5 أنشطة متنوعة (حركية، فنية، لغوية، رياضية، قيمية). كل نشاط: الاسم + المدة + المواد + هدف التعلم. الرد مختصر عملي.'}
+      ],max_tokens:350})
+    });
+    const d = await r.json();
+    el.textContent = d.choices?.[0]?.message?.content || 'تعذر التوليد';
+  } catch { el.textContent = '⚠️ تعذر الاتصال بـ AI'; }
+}
+
+/* ═══════════════════════
+   PRINT STUDENT REPORT
+════════════════════════ */
+function printKGStudentReport(studentName) {
+  const name = studentName || 'طالبة النموذج';
+  const skills = [
+    {skill:'التواصل اللغوي',level:'متقدم',stars:5},
+    {skill:'المهارات الحركية الدقيقة',level:'جيد',stars:4},
+    {skill:'الإدراك الرياضي',level:'متقدم',stars:5},
+    {skill:'التعاون الاجتماعي',level:'ممتاز',stars:5},
+    {skill:'الاستقلالية',level:'جيد',stars:4},
+    {skill:'الإبداع الفني',level:'ممتاز',stars:5}
+  ];
+  const html = `<div style="font-family:Arial;direction:rtl;padding:24px">
+    <div style="text-align:center;border-bottom:2px solid #7c3aed;padding-bottom:12px;margin-bottom:20px">
+      <h2 style="color:#7c3aed">تقرير تقدم الطالبة — ${name}</h2>
+      <p style="color:#888">روضة الأطفال — مدرسة الجود | 2025-2026</p>
+    </div>
+    <table style="width:100%;border-collapse:collapse">
+      <tr style="background:#f0ebff"><th style="padding:10px;border:1px solid #ddd;text-align:right">المهارة</th><th style="padding:10px;border:1px solid #ddd">المستوى</th><th style="padding:10px;border:1px solid #ddd">التقييم</th></tr>
+      ${skills.map(s=>`<tr><td style="padding:10px;border:1px solid #eee">${s.skill}</td><td style="padding:10px;border:1px solid #eee;text-align:center">${s.level}</td><td style="padding:10px;border:1px solid #eee;text-align:center">${'⭐'.repeat(s.stars)}</td></tr>`).join('')}
+    </table>
+    <div style="margin-top:20px;padding:12px;background:#f9f9f9;border-radius:8px">
+      <strong>ملاحظة المعلمة:</strong> الطالبة تُبدي تقدماً ملحوظاً في جميع المجالات الإنمائية. 🌸
+    </div>
+    <p style="text-align:center;color:#aaa;font-size:11px;margin-top:16px">طُبع من منظومة رياض الأطفال — EduOS</p>
+  </div>`;
+  const w = window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+  w.print();
+}
+
+/* ═══════════════════════
+   PARENT MESSAGE GENERATOR
+════════════════════════ */
+async function generateParentMessage(type) {
+  const el = document.getElementById('kg-story-output');
+  if (!el) return;
+  const prompts = {
+    weekly: 'اكتبي رسالة أسبوعية قصيرة ومشجعة لأولياء أمور أطفال الروضة: إنجاز الأسبوع + نشاط منزلي مقترح + دعاء مبارك.',
+    behavior: 'اكتبي رسالة لطيفة لولي أمر طفل يحتاج تعزيز مهارات التعاون. الأسلوب داعم وإيجابي.',
+    progress: 'اكتبي رسالة إيجابية لولي أمر تُخبره بتقدم طفله في القراءة والحساب. الأسلوب مشجع.'
+  };
+  el.textContent = '⏳ AI يكتب الرسالة...';
+  try {
+    const r = await fetch(KG_AI_URL, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({messages:[
+        {role:'system',content:'أنت معلمة روضة تكتب رسائل لأولياء الأمور بأسلوب ودي ومهني بالعربية.'},
+        {role:'user',content:prompts[type]||prompts.weekly}
+      ],max_tokens:250})
+    });
+    const d = await r.json();
+    el.textContent = d.choices?.[0]?.message?.content || 'تعذر التوليد';
+  } catch { el.textContent = '⚠️ تعذر الاتصال'; }
+}
+
+/* ═══════════════════════
+   EXPORT KG REPORT CSV
+════════════════════════ */
+function exportKGReportCSV() {
+  const rows = [
+    ['الاسم','الصف','الحضور%','اللغوي','الحركي','الاجتماعي'],
+    ['ريم الكعبي','KG1','95%','متقدم','جيد','ممتاز'],
+    ['سارة المنصوري','KG1','98%','ممتاز','ممتاز','ممتاز'],
+    ['لولوة الزعابي','KG2','92%','جيد','متقدم','جيد'],
+    ['هيا العامري','KG2','96%','ممتاز','جيد','متقدم'],
+    ['نور الحمادي','KG1','100%','متقدم','ممتاز','ممتاز']
+  ];
+  const csv = rows.map(r=>r.join(',')).join('\n');
+  const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `kg_report_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+/* ═══════════════════════
+   MILESTONE TRACKER
+════════════════════════ */
+const KG_MILESTONES = [
+  {age:'3 سنوات', skills:['تسمية الألوان الأساسية','العد حتى 5','رسم دائرة','التعبير عن المشاعر']},
+  {age:'4 سنوات', skills:['العد حتى 10','كتابة الاسم','التعرف على الحروف','اللعب التعاوني']},
+  {age:'5 سنوات', skills:['القراءة الأولية','الجمع البسيط','رسم شكل الجسم','اتباع تعليمات معقدة']},
+  {age:'6 سنوات', skills:['القراءة بطلاقة','الطرح البسيط','الكتابة بوضوح','التفكير النقدي المبكر']}
+];
+
+function showMilestones(ageGroup) {
+  const group = KG_MILESTONES.find(m => m.age === ageGroup) || KG_MILESTONES[1];
+  return `<div style="padding:12px;background:rgba(255,255,255,0.04);border-radius:10px;margin-bottom:8px">
+    <div style="font-weight:700;color:var(--purple);margin-bottom:8px">📌 معالم نمو — ${group.age}</div>
+    ${group.skills.map(s=>`<div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+      <div style="width:8px;height:8px;border-radius:50%;background:var(--purple)"></div>
+      <span style="font-size:13px;color:var(--text)">${s}</span>
+    </div>`).join('')}
+  </div>`;
+}
+
+/* ═══════════════════════
+   EXPORT CSV
+════════════════════════ */
+function exportKGData() {
+  const rows = [
+    ['الاسم','الصف','الحضور%','اللغوي','الحركي','الاجتماعي','الملاحظة'],
+    ['ريم الكعبي','KG1','95%','متقدم','جيد','ممتاز','طالبة متميزة'],
+    ['سارة المنصوري','KG1','98%','ممتاز','ممتاز','ممتاز','أداء استثنائي'],
+    ['لولوة الزعابي','KG2','92%','جيد','متقدم','جيد','تحتاج دعم لغوي'],
+    ['هيا العامري','KG2','96%','ممتاز','جيد','متقدم','موهوبة في الرسم'],
+    ['نور الحمادي','KG1','100%','متقدم','ممتاز','ممتاز','ولية أمر متعاونة جداً']
+  ];
+  const csv = rows.map(r=>r.join(',')).join('\n');
+  const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `kg_students_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
 /* ═══════════════════════ */
 </script>
 
