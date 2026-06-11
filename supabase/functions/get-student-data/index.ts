@@ -1,26 +1,39 @@
 // ============================================================
-// EduOS Edge Function: get-student-data
+// EduOS Edge Function: get-student-data v2
 // الهدف: قراءة بيانات الطالب بأمان — كل مستخدم يرى ما يخصه فقط
 // المسار: /functions/v1/get-student-data
+// تحديث: npm: بدلاً من esm.sh | CORS متعدد الدومينات
 // ============================================================
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "https://grade-dashboard-ruby.vercel.app",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-};
+const ALLOWED_ORIGINS = [
+  "https://eduos.ae",
+  "https://aljood.eduos.ae",
+  "https://grade-dashboard-ruby.vercel.app",
+];
+
+function getCors(origin: string) {
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  };
+}
 
 Deno.serve(async (req) => {
+  const origin = req.headers.get("origin") || "";
+  const cors = getCors(origin);
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: cors });
   }
 
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
@@ -33,7 +46,7 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
@@ -43,30 +56,28 @@ Deno.serve(async (req) => {
     );
 
     const userRole = user.user_metadata?.role || user.app_metadata?.role;
-    const { student_id, grade, section } = await req.json();
+    const { student_id } = await req.json();
 
-    // التحقق من الصلاحية
-    // ولي الأمر: يرى أبناءه فقط
+    // ولي الأمر: أبناءه فقط
     if (userRole === "parent") {
       const allowedStudents = user.user_metadata?.children || [];
       if (!allowedStudents.includes(student_id)) {
         return new Response(JSON.stringify({ error: "Access denied to this student" }), {
-          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 403, headers: { ...cors, "Content-Type": "application/json" },
         });
       }
     }
 
-    // الطالب: يرى نفسه فقط
+    // الطالب: نفسه فقط
     if (userRole === "student") {
       const myId = user.user_metadata?.student_id;
       if (myId !== student_id) {
         return new Response(JSON.stringify({ error: "Access denied" }), {
-          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 403, headers: { ...cors, "Content-Type": "application/json" },
         });
       }
     }
 
-    // جلب البيانات
     const [gradesRes, weeklyRes, summaryRes] = await Promise.all([
       serviceClient.from("student_grades").select("*").eq("student_id", student_id),
       serviceClient.from("weekly_results").select("*").eq("student_id", student_id).order("week_number"),
@@ -74,17 +85,16 @@ Deno.serve(async (req) => {
     ]);
 
     return new Response(JSON.stringify({
-      success: true,
-      student_id,
+      success: true, student_id,
       grades: gradesRes.data || [],
       weekly: weeklyRes.data || [],
       summary: summaryRes.data || [],
-    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }), { headers: { ...cors, "Content-Type": "application/json" } });
 
   } catch (err) {
     console.error("get-student-data error:", err);
     return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...getCors(""), "Content-Type": "application/json" },
     });
   }
 });
