@@ -1,3 +1,13 @@
+// استيراد خط Tajawal الموحَّد
+(function(){
+  if(!document.querySelector('link[href*="Tajawal"]')){
+    const l=document.createElement('link');
+    l.rel='stylesheet';
+    l.href='https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap';
+    document.head.appendChild(l);
+  }
+})();
+
 /**
  * platform-tour.js — EduOS Guided Tour Engine v1.0
  * محرك الجولة التعريفية التلقائية لجميع منظومات EduOS
@@ -74,7 +84,7 @@
       borderRadius: '24px',
       padding:      '9px 18px',
       fontSize:     '13px',
-      fontFamily:   '"Cairo",sans-serif',
+      fontFamily:   '"Tajawal",sans-serif',
       fontWeight:   '600',
       cursor:       'pointer',
       boxShadow:    '0 4px 20px rgba(99,102,241,.45)',
@@ -228,7 +238,7 @@
       padding:      '20px',
       boxShadow:    '0 24px 64px rgba(0,0,0,.65),0 0 0 1px rgba(99,102,241,.15)',
       direction:    'rtl',
-      fontFamily:   '"Cairo",sans-serif',
+      fontFamily:   '"Tajawal",sans-serif',
       color:        '#e2e8f0',
       pointerEvents:'all',
       opacity:      '0',
@@ -295,14 +305,14 @@
         ${i > 0
           ? `<button onclick="window._edoosTourPrev()"
                style="flex:1;padding:9px 6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
-                      border-radius:10px;color:#94a3b8;cursor:pointer;font-size:12px;font-family:Cairo,sans-serif;transition:all .15s"
+                      border-radius:10px;color:#94a3b8;cursor:pointer;font-size:12px;font-family:Tajawal,sans-serif;transition:all .15s"
                onmouseenter="this.style.background='rgba(255,255,255,.1)'"
                onmouseleave="this.style.background='rgba(255,255,255,.05)'">${LABELS.prev}</button>`
           : '<div style="flex:1"></div>'}
         <button onclick="${isLast ? 'window._edoosTourEnd()' : 'window._edoosTourNext()'}"
           style="flex:1.4;padding:9px 6px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;
                  border-radius:10px;color:#fff;cursor:pointer;font-size:13px;font-weight:700;
-                 font-family:Cairo,sans-serif;transition:all .15s;box-shadow:0 4px 14px rgba(99,102,241,.4)"
+                 font-family:Tajawal,sans-serif;transition:all .15s;box-shadow:0 4px 14px rgba(99,102,241,.4)"
           onmouseenter="this.style.transform='scale(1.03)'"
           onmouseleave="this.style.transform='scale(1)'">
           ${isLast ? LABELS.finish : LABELS.next}
@@ -394,7 +404,7 @@
       color:        '#e2e8f0',
       padding:      '10px 22px',
       borderRadius: '14px',
-      fontFamily:   '"Cairo",sans-serif',
+      fontFamily:   '"Tajawal",sans-serif',
       fontSize:     '13px',
       zIndex:       '99999',
       border:       '1px solid rgba(99,102,241,.3)',
