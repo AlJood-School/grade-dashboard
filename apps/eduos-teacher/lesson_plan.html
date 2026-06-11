@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>منشئ الحصة الذكية — EduOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --primary:#6C3DD6;--pl:#8B5CF6;--pd:#4C1D95;
+  --accent:#F59E0B;--green:#10B981;--red:#EF4444;--blue:#3B82F6;--pink:#EC4899;
+  --bg:#0F0A1E;--surf:#1A1030;--card:#1E1435;--card2:#251840;--bord:#3D2E6B;
+  --txt:#F1EEF9;--muted:#9D8EC5;
+  --v:#F59E0B;--a:#10B981;--r:#3B82F6;--k:#EC4899;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Cairo',sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;direction:rtl}
+
+/* Layout */
+.main-wrap{max-width:960px;margin:0 auto;padding:20px 16px 80px}
+.page-header{text-align:center;padding:28px 0 20px}
+.page-title{font-size:1.7rem;font-weight:900;background:linear-gradient(135deg,#A78BFA,#F59E0B);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.page-sub{color:var(--muted);font-size:.9rem;margin-top:6px}
+
+/* Tabs */
+.tab-bar{display:flex;gap:8px;background:var(--surf);border-radius:14px;padding:6px;margin-bottom:24px;border:1px solid var(--bord)}
+.tab-btn{flex:1;padding:10px;border:none;border-radius:10px;background:transparent;color:var(--muted);font-family:'Cairo',sans-serif;font-size:.88rem;font-weight:600;cursor:pointer;transition:all .2s}
+.tab-btn.active{background:var(--primary);color:#fff;box-shadow:0 2px 12px rgba(108,61,214,.4)}
+
+/* Card */
+.card{background:var(--card);border:1px solid var(--bord);border-radius:18px;padding:24px;margin-bottom:16px}
+.card-h{font-size:1rem;font-weight:800;margin-bottom:18px;display:flex;align-items:center;gap:8px}
+.card-h .ico{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:rgba(108,61,214,.25);font-size:1rem}
+
+/* Form fields */
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.fg.g3{grid-template-columns:1fr 1fr 1fr}
+.fg.g1{grid-template-columns:1fr}
+.f{display:flex;flex-direction:column;gap:5px}
+.f label{font-size:.8rem;font-weight:600;color:var(--muted)}
+.f label .rq{color:var(--red)}
+select,input[type=text],input[type=number],textarea{width:100%;background:var(--surf);border:1.5px solid var(--bord);border-radius:11px;padding:11px 13px;color:var(--txt);font-family:'Cairo',sans-serif;font-size:.88rem;outline:none;transition:border-color .2s;resize:vertical}
+select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239D8EC5' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:left 12px center}
+select:focus,input:focus,textarea:focus{border-color:var(--pl)}
+textarea{min-height:72px}
+
+/* Radio / Check groups */
+.rg,.cg{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.ro,.co{display:flex;align-items:center;gap:7px;background:var(--surf);border:1.5px solid var(--bord);border-radius:9px;padding:8px 12px;cursor:pointer;font-size:.82rem;user-select:none;transition:all .2s}
+.ro:hover,.co:hover{border-color:var(--pl)}
+.ro.sel,.co.sel{border-color:var(--pl);background:rgba(108,61,214,.2);font-weight:700;color:#fff}
+.ro input,.co input{display:none}
+
+/* Toggle */
+.tog{position:relative;display:inline-block;width:44px;height:24px}
+.tog input{opacity:0;width:0;height:0}
+.ts{position:absolute;inset:0;background:#3D2E6B;border-radius:12px;cursor:pointer;transition:.3s}
+.ts:before{content:'';position:absolute;height:16px;width:16px;right:4px;top:4px;background:#fff;border-radius:50%;transition:.3s}
+.tog input:checked+.ts{background:var(--pl)}
+.tog input:checked+.ts:before{transform:translateX(-20px)}
+
+/* VARK badges */
+.vb{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:.72rem;font-weight:700}
+.vb-V{background:rgba(245,158,11,.2);color:#F59E0B;border:1px solid rgba(245,158,11,.3)}
+.vb-A{background:rgba(16,185,129,.2);color:#10B981;border:1px solid rgba(16,185,129,.3)}
+.vb-R{background:rgba(59,130,246,.2);color:#60A5FA;border:1px solid rgba(59,130,246,.3)}
+.vb-K{background:rgba(236,72,153,.2);color:#EC4899;border:1px solid rgba(236,72,153,.3)}
+
+/* Generate button */
+.btn-gen{width:100%;padding:16px;background:linear-gradient(135deg,var(--primary),var(--pl));color:#fff;border:none;border-radius:13px;font-family:'Cairo',sans-serif;font-weight:800;font-size:1.05rem;cursor:pointer;box-shadow:0 4px 20px rgba(108,61,214,.4);transition:all .3s;position:relative;overflow:hidden}
+.btn-gen:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 25px rgba(108,61,214,.5)}
+.btn-gen:disabled{opacity:.6;cursor:not-allowed}
+.btn-gen .shimmer{position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.15) 50%,transparent 100%);transform:translateX(100%);animation:shimmer 1.5s infinite}
+@keyframes shimmer{from{transform:translateX(100%)} to{transform:translateX(-100%)}}
+
+/* Result panel */
+#result-panel{display:none}
+.result-header{background:linear-gradient(135deg,rgba(108,61,214,.3),rgba(139,92,246,.1));border:1px solid var(--bord);border-radius:18px;padding:24px;margin-bottom:16px;position:relative}
+.lesson-title-display{font-size:1.4rem;font-weight:900;margin-bottom:8px}
+.lesson-meta{display:flex;flex-wrap:wrap;gap:8px}
+.meta-chip{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border-radius:8px;padding:6px 12px;font-size:.8rem}
+
+/* Objectives */
+.obj-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.obj-item{background:var(--surf);border-right:3px solid var(--pl);border-radius:10px;padding:10px 12px;font-size:.85rem}
+.obj-item.outcome{border-color:var(--green)}
+
+/* Motivation card */
+.motiv-card{background:linear-gradient(135deg,rgba(245,158,11,.15),rgba(236,72,153,.08));border:1px solid rgba(245,158,11,.3);border-radius:14px;padding:18px;margin-bottom:16px}
+.motiv-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,.2);border:1px solid rgba(245,158,11,.4);border-radius:8px;padding:4px 12px;font-size:.78rem;font-weight:700;color:#F59E0B;margin-bottom:10px}
+.motiv-text{font-size:.9rem;line-height:1.7}
+
+/* Phase cards */
+.phases-wrap{display:flex;flex-direction:column;gap:12px}
+.phase-card{background:var(--card2);border:1px solid var(--bord);border-radius:16px;overflow:hidden}
+.phase-header{display:flex;align-items:center;gap:12px;padding:14px 18px;cursor:pointer;background:rgba(255,255,255,.03);transition:background .2s}
+.phase-header:hover{background:rgba(255,255,255,.06)}
+.phase-num{width:32px;height:32px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.85rem;flex-shrink:0}
+.phase-name{flex:1;font-weight:700;font-size:.92rem}
+.phase-dur{font-size:.78rem;color:var(--accent);font-weight:700}
+.phase-body{display:none;padding:16px 18px;border-top:1px solid var(--bord)}
+.phase-body.open{display:block}
+.phase-section{margin-bottom:12px}
+.phase-section-label{font-size:.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.phase-section-content{font-size:.86rem;line-height:1.7;color:var(--txt)}
+.phase-vark{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+
+/* Timer */
+.phase-timer{display:flex;align-items:center;gap:8px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);border-radius:10px;padding:8px 14px;margin-top:10px}
+.timer-display{font-size:1.1rem;font-weight:900;color:var(--accent);min-width:48px;text-align:center}
+.timer-btn{background:rgba(245,158,11,.2);border:1px solid rgba(245,158,11,.3);color:var(--accent);border-radius:7px;padding:5px 10px;cursor:pointer;font-size:.8rem;font-weight:700;font-family:'Cairo',sans-serif;transition:background .2s}
+.timer-btn:hover{background:rgba(245,158,11,.35)}
+.timer-progress{flex:1;height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden}
+.timer-bar{height:100%;background:var(--accent);border-radius:3px;transition:width .5s linear}
+
+/* Groups */
+.groups-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.group-card{border-radius:12px;padding:14px}
+.gc-V{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25)}
+.gc-A{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25)}
+.gc-R{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25)}
+.gc-K{background:rgba(236,72,153,.1);border:1px solid rgba(236,72,153,.25)}
+.group-name{font-weight:800;font-size:.88rem;margin-bottom:6px}
+.group-act{font-size:.8rem;line-height:1.6;color:var(--muted)}
+
+/* Assessment */
+.assess-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.assess-chip{background:var(--surf);border:1px solid var(--bord);border-radius:10px;padding:10px;text-align:center;font-size:.8rem}
+.assess-chip .aic{font-size:1.3rem;margin-bottom:4px}
+
+/* Differentiation */
+.diff-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.diff-card{border-radius:12px;padding:14px}
+.dc-adv{background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.25)}
+.dc-onlv{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25)}
+.dc-supp{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25)}
+.dc-sped{background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.25)}
+.diff-label{font-size:.75rem;font-weight:700;margin-bottom:6px}
+.diff-content{font-size:.82rem;line-height:1.6;color:var(--muted)}
+
+/* Exit ticket */
+.exit-card{background:linear-gradient(135deg,rgba(236,72,153,.15),rgba(139,92,246,.1));border:1px solid rgba(236,72,153,.3);border-radius:14px;padding:18px}
+
+/* Action buttons */
+.action-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+.btn-act{display:flex;align-items:center;gap:7px;padding:12px 20px;border-radius:11px;border:none;font-family:'Cairo',sans-serif;font-weight:700;font-size:.88rem;cursor:pointer;transition:all .2s}
+.btn-save{background:linear-gradient(135deg,#10B981,#059669);color:#fff;box-shadow:0 3px 12px rgba(16,185,129,.35)}
+.btn-live{background:linear-gradient(135deg,#6C3DD6,#8B5CF6);color:#fff;box-shadow:0 3px 12px rgba(108,61,214,.35)}
+.btn-print{background:var(--surf);color:var(--txt);border:1px solid var(--bord)}
+.btn-new{background:var(--surf);color:var(--muted);border:1px solid var(--bord)}
+
+/* Loading overlay */
+.gen-overlay{display:none;position:fixed;inset:0;background:rgba(15,10,30,.88);z-index:9998;flex-direction:column;align-items:center;justify-content:center;gap:20px}
+.gen-overlay.show{display:flex}
+.gen-spinner{width:56px;height:56px;border:3px solid var(--bord);border-top-color:var(--pl);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.gen-status{color:var(--muted);font-size:.95rem;max-width:300px;text-align:center;line-height:1.6}
+.gen-progress{width:260px;height:4px;background:var(--bord);border-radius:2px;overflow:hidden}
+.gen-bar{height:100%;background:linear-gradient(90deg,var(--primary),var(--pl));border-radius:2px;animation:progress 3s ease-in-out infinite}
+@keyframes progress{0%{width:0%} 60%{width:80%} 100%{width:95%}}
+
+/* Toast */
+#toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(100px);background:var(--card2);border:1px solid var(--bord);border-radius:13px;padding:12px 22px;font-size:.88rem;font-weight:700;box-shadow:0 6px 28px rgba(0,0,0,.5);transition:transform .4s;z-index:9999;min-width:240px;text-align:center}
+#toast.show{transform:translateX(-50%) translateY(0)}
+#toast.ok{border-color:var(--green);color:var(--green)}
+#toast.err{border-color:var(--red);color:var(--red)}
+#toast.info{border-color:var(--pl);color:#C084FC}
+
+/* Saved lessons list */
+.saved-list{display:flex;flex-direction:column;gap:10px}
+.saved-item{background:var(--card);border:1px solid var(--bord);border-radius:14px;padding:14px 18px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:border-color .2s}
+.saved-item:hover{border-color:var(--pl)}
+.saved-icon{font-size:1.5rem}
+.saved-info{flex:1}
+.saved-title{font-weight:700;font-size:.9rem}
+.saved-meta{font-size:.75rem;color:var(--muted);margin-top:3px}
+.saved-arrow{color:var(--muted);font-size:1.1rem}
+
+/* Section divider */
+.sec-div{display:flex;align-items:center;gap:12px;margin:20px 0 14px;font-size:.82rem;font-weight:700;color:var(--muted)}
+.sec-div::after{content:'';flex:1;height:1px;background:var(--bord)}
+
+@media(max-width:640px){.fg{grid-template-columns:1fr}.fg.g3{grid-template-columns:1fr 1fr}.obj-grid,.groups-grid,.diff-grid{grid-template-columns:1fr}.assess-grid{grid-template-columns:1fr 1fr}}
+
+@media print{
+  .tab-bar,.btn-gen,#form-panel .card:last-child,.action-row,#toast,.gen-overlay,.page-header{display:none!important}
+  body{background:#fff;color:#000}
+  .card,.result-header,.phase-card,.motiv-card,.exit-card{background:#fff;border:1px solid #ddd;page-break-inside:avoid}
+  .phase-body{display:block!important}
+}
+</style>
+<link rel="stylesheet" href="../../platform-theme.css">
+</head>
+<body>
+<div id="toast"></div>
+<div class="gen-overlay" id="genOverlay">
+  <div class="gen-spinner"></div>
+  <div class="gen-status" id="genStatus">🤖 Gemini يحلل المنهج ويصمم خطة حصتك…</div>
+  <div class="gen-progress"><div class="gen-bar"></div></div>
+</div>
+
+<div class="main-wrap">
+  <div class="page-header">
+    <div class="page-title">📖 منشئ الحصة الذكية</div>
+    <div class="page-sub">صمِّمي حصةً استثنائية بمساعدة الذكاء الاصطناعي — مبنية على UbD × 5E × بلوم الرقمي × VARK</div>
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('new')">✨ حصة جديدة</button>
+    <button class="tab-btn" onclick="switchTab('saved')">📂 حصصي المحفوظة</button>
+  </div>
+
+  <!-- ===== NEW LESSON PANEL ===== -->
+  <div id="new-panel">
+    <div id="form-panel">
+      <!-- Basic info -->
+      <div class="card">
+        <div class="card-h"><div class="ico">📋</div> معلومات الحصة</div>
+
+        <div class="fg g3">
+          <div class="f">
+            <label><span class="rq">*</span> الصف الدراسي</label>
+            <select id="f_grade" onchange="onGradeChange()">
+              <option value="">— اختر الصف —</option>
+              <optgroup label="رياض الأطفال">
+                <option value="KG1">KG1 — روضة أولى</option>
+                <option value="KG2">KG2 — روضة ثانية</option>
+              </optgroup>
+              <optgroup label="الحلقة الأولى (1–4)">
+                <option value="1">Grade 1 — الصف الأول</option>
+                <option value="2">Grade 2 — الصف الثاني</option>
+                <option value="3">Grade 3 — الصف الثالث</option>
+                <option value="4">Grade 4 — الصف الرابع</option>
+              </optgroup>
+              <optgroup label="الحلقة الثانية (5–9)">
+                <option value="5">Grade 5 — الصف الخامس</option>
+                <option value="6">Grade 6 — الصف السادس</option>
+                <option value="7">Grade 7 — الصف السابع</option>
+                <option value="8">Grade 8 — الصف الثامن</option>
+                <option value="9">Grade 9 — الصف التاسع</option>
+              </optgroup>
+              <optgroup label="الحلقة الثالثة (10–12)">
+                <option value="10">Grade 10 — الصف العاشر</option>
+                <option value="11">Grade 11 — الصف الحادي عشر</option>
+                <option value="12">Grade 12 — الصف الثاني عشر</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="f">
+            <label><span class="rq">*</span> المادة الدراسية</label>
+            <select id="f_subject">
+              <option value="">— اختر المادة —</option>
+              <optgroup label="مواد إلزامية إماراتية">
+                <option>اللغة العربية</option>
+                <option>التربية الإسلامية</option>
+                <option>الدراسات الاجتماعية الإماراتية</option>
+                <option>التربية الأخلاقية والمواطنة</option>
+                <option>اللغة الإنجليزية</option>
+              </optgroup>
+              <optgroup label="العلوم والرياضيات">
+                <option>الرياضيات</option>
+                <option>العلوم العامة</option>
+                <option>الفيزياء</option>
+                <option>الكيمياء</option>
+                <option>الأحياء</option>
+                <option>علم الأرض والفضاء</option>
+              </optgroup>
+              <optgroup label="العلوم الاجتماعية والإنسانية">
+                <option>التاريخ</option>
+                <option>الجغرافيا</option>
+                <option>التربية الوطنية</option>
+              </optgroup>
+              <optgroup label="الفنون والتقنية">
+                <option>التربية الفنية</option>
+                <option>الموسيقى</option>
+                <option>التربية البدنية</option>
+                <option>تقنية المعلومات والاتصالات</option>
+                <option>الذكاء الاصطناعي والبرمجة</option>
+              </optgroup>
+              <optgroup label="مواد أصحاب الهمم ♿">
+                <option>علاج النطق واللغة</option>
+                <option>العلاج الوظيفي</option>
+                <option>تحليل السلوك التطبيقي (ABA)</option>
+                <option>التكامل الحسي</option>
+                <option>التربية الحركية</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="f">
+            <label><span class="rq">*</span> مدة الحصة</label>
+            <select id="f_duration">
+              <option value="40">40 دقيقة</option>
+              <option value="45" selected>45 دقيقة</option>
+              <option value="50">50 دقيقة</option>
+              <option value="55">55 دقيقة</option>
+              <option value="60">60 دقيقة</option>
+              <option value="80">80 دقيقة (حصة مزدوجة)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="fg">
+          <div class="f">
+            <label><span class="rq">*</span> موضوع الحصة / الدرس</label>
+            <input type="text" id="f_topic" placeholder="مثال: الكسور العشرية — جمع وطرح">
+          </div>
+          <div class="f">
+            <label>الوحدة الدراسية <span style="font-size:.72rem;color:var(--muted)">(اختياري)</span></label>
+            <input type="text" id="f_unit" placeholder="مثال: الوحدة الثالثة — الأعداد">
+          </div>
+        </div>
+
+        <div class="fg g3">
+          <div class="f">
+            <label>عدد الطلاب في الفصل</label>
+            <input type="number" id="f_students" value="25" min="1" max="50">
+          </div>
+          <div class="f">
+            <label>الفصل / الشعبة <span style="font-size:.72rem;color:var(--muted)" id="sectionCountHint"></span></label>
+            <select id="f_section" onchange="autoFillStudents()">
+              <option value="">— اختر الشعبة —</option>
+            </select>
+          </div>
+          <div class="f">
+            <label>النموذج التربوي</label>
+            <select id="f_model">
+              <option value="5E+UbD">نموذج 5E + التصميم العكسي UbD</option>
+              <option value="5E">نموذج 5E فقط</option>
+              <option value="UbD">التصميم العكسي UbD فقط</option>
+              <option value="Bloom">بلوم الرقمي</option>
+              <option value="Inquiry">التعلم الاستقصائي</option>
+              <option value="PBL">التعلم القائم على المشاريع (PBL)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- VARK Stats Panel — يظهر تلقائياً عند اختيار الصف والشعبة -->
+      <div id="varkStatsPanel" style="display:none" class="card">
+        <div class="card-h"><div class="ico">🧠</div> توزيع أنماط VARK في الفصل <span id="varkClassLabel" style="font-size:.8rem;color:var(--muted);margin-right:6px"></span></div>
+        <div id="varkBarsContainer" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
+        <div id="varkGroupPreview" style="font-size:.82rem;color:var(--muted);line-height:1.7"></div>
+      </div>
+
+            <!-- Motivation -->
+      <div class="card">
+        <div class="card-h"><div class="ico">🔥</div> نوع التهيئة الحافزة</div>
+        <div class="rg" id="rg_motiv">
+          <label class="ro sel"><input type="radio" name="motiv" value="سؤال إثارة"> ❓ سؤال إثارة — يُشعل الفضول</label>
+          <label class="ro"><input type="radio" name="motiv" value="قصة حقيقية"> 📖 قصة حقيقية — تربط بالواقع</label>
+          <label class="ro"><input type="radio" name="motiv" value="تحدي أو لغز"> 🧩 تحدي أو لغز — يُشغّل التفكير</label>
+          <label class="ro"><input type="radio" name="motiv" value="مقطع فيديو"> 🎬 مقطع فيديو مُحفِّز</label>
+          <label class="ro"><input type="radio" name="motiv" value="ظاهرة مفاجئة"> 🌟 ظاهرة مفاجئة أو تجربة</label>
+        </div>
+      </div>
+
+      <!-- Groups & Differentiation -->
+      <div class="card">
+        <div class="card-h"><div class="ico">👥</div> توزيع المجموعات والتمايز</div>
+        <div class="fg">
+          <div class="f">
+            <label>طريقة توزيع المجموعات</label>
+            <div class="rg" id="rg_groups">
+              <label class="ro sel"><input type="radio" name="grp" value="VARK"> 🎯 حسب أنماط VARK</label>
+              <label class="ro"><input type="radio" name="grp" value="مستوى أكاديمي"> 📊 حسب المستوى الأكاديمي</label>
+              <label class="ro"><input type="radio" name="grp" value="عشوائي"> 🎲 عشوائي</label>
+              <label class="ro"><input type="radio" name="grp" value="يدوي"> ✍️ يدوي (المعلمة تختار)</label>
+            </div>
+          </div>
+          <div class="f">
+            <label>مستويات التمايز المطلوبة</label>
+            <div class="cg" id="cg_diff">
+              <label class="co sel"><input type="checkbox" value="متقدم" checked> ⭐ متقدم</label>
+              <label class="co sel"><input type="checkbox" value="مستوى الصف" checked> ✅ مستوى الصف</label>
+              <label class="co sel"><input type="checkbox" value="يحتاج دعم" checked> 🤝 يحتاج دعم</label>
+              <label class="co"><input type="checkbox" value="أصحاب الهمم"> ♿ أصحاب الهمم</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Assessment -->
+      <div class="card">
+        <div class="card-h"><div class="ico">📊</div> أنواع التقييم</div>
+        <div class="cg" id="cg_assess">
+          <label class="co sel"><input type="checkbox" value="تقييم ذاتي" checked> 🪞 ذاتي</label>
+          <label class="co sel"><input type="checkbox" value="تقييم الأقران" checked> 🤝 أقران</label>
+          <label class="co"><input type="checkbox" value="تقييم جماعي"> 👥 جماعي</label>
+          <label class="co"><input type="checkbox" value="تقييم ملاحظ"> 👁️ ملاحظة مباشرة</label>
+          <label class="co sel"><input type="checkbox" value="تقييم المعلمة" checked> 👩‍🏫 تقييم المعلمة</label>
+          <label class="co"><input type="checkbox" value="اختبار قصير"> 📝 اختبار قصير (Quiz)</label>
+          <label class="co"><input type="checkbox" value="تذكرة الخروج"> 🎫 تذكرة الخروج</label>
+        </div>
+        <div style="margin-top:14px;display:flex;align-items:center;gap:10px">
+          <label class="tog"><input type="checkbox" id="tog_sped_adapt" checked><div class="ts"></div></label>
+          <span style="font-size:.82rem">♿ تضمين تعديلات لطلبة أصحاب الهمم في كل مرحلة</span>
+        </div>
+      </div>
+
+      <!-- Additional notes -->
+      <div class="card">
+        <div class="card-h"><div class="ico">💡</div> ملاحظات وسياق إضافي للذكاء الاصطناعي <span style="font-size:.75rem;color:var(--muted);font-weight:400">(اختياري)</span></div>
+        <textarea id="f_notes" placeholder="مثال: الطلاب سبق لهم دراسة الكسور الاعتيادية، يوجد طالبة من أصحاب الهمم (صعوبات تعلم)، نريد ربط الموضوع بحياتهم اليومية…"></textarea>
+      </div>
+
+      <button class="btn-gen" onclick="generateLesson()" id="genBtn">
+        <span id="genBtnText">✨ توليد الحصة الذكية بالذكاء الاصطناعي</span>
+      </button>
+    </div>
+
+    <!-- ===== RESULT PANEL ===== -->
+    <div id="result-panel">
+      <div class="result-header">
+        <div class="lesson-title-display" id="res_title">—</div>
+        <div class="lesson-meta" id="res_meta"></div>
+      </div>
+
+      <!-- Objectives -->
+      <div class="card">
+        <div class="card-h"><div class="ico">🎯</div> أهداف ومخرجات التعلم</div>
+        <div class="sec-div">أهداف SMART للمعلمة</div>
+        <div class="obj-grid" id="res_objectives"></div>
+        <div class="sec-div">مخرجات التعلم بلغة الطالب</div>
+        <div class="obj-grid" id="res_outcomes"></div>
+      </div>
+
+      <!-- Motivation -->
+      <div class="motiv-card">
+        <div class="motiv-badge" id="res_motiv_type">🔥 نوع التهيئة</div>
+        <div class="motiv-text" id="res_motiv_content"></div>
+        <div style="margin-top:8px;font-size:.78rem;color:var(--accent)">⏱️ المدة المقترحة: <span id="res_motiv_dur"></span></div>
+      </div>
+
+      <!-- Phases -->
+      <div class="card">
+        <div class="card-h"><div class="ico">📐</div> مراحل الحصة — <span style="color:var(--accent)" id="total_phases_label">7 مراحل</span></div>
+        <div class="phases-wrap" id="res_phases"></div>
+      </div>
+
+      <!-- Groups -->
+      <div class="card" id="groups_section">
+        <div class="card-h"><div class="ico">👥</div> توزيع المجموعات</div>
+        <div class="groups-grid" id="res_groups"></div>
+      </div>
+
+      <!-- Assessment -->
+      <div class="card">
+        <div class="card-h"><div class="ico">📊</div> التقييم والقياس</div>
+        <div class="assess-grid" id="res_assess"></div>
+        <div class="sec-div">تذكرة الخروج</div>
+        <div class="exit-card">
+          <div style="font-size:.8rem;color:#F9A8D4;font-weight:700;margin-bottom:8px">🎫 سؤال تذكرة الخروج</div>
+          <div id="res_exit" style="font-size:.9rem;line-height:1.7"></div>
+        </div>
+      </div>
+
+      <!-- Differentiation -->
+      <div class="card">
+        <div class="card-h"><div class="ico">🌈</div> التمايز وفرق العمل</div>
+        <div class="diff-grid" id="res_diff"></div>
+      </div>
+
+      <!-- Homework -->
+      <div class="card" id="hw_section" style="display:none">
+        <div class="card-h"><div class="ico">🏠</div> الواجب المنزلي</div>
+        <div id="res_hw" style="font-size:.88rem;line-height:1.7"></div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="action-row">
+        <button class="btn-act btn-save" onclick="saveLessonPlan()">💾 حفظ الحصة في السجل</button>
+        <button class="btn-act btn-live" onclick="startLiveSession()">🚀 بدء الحصة الحية</button>
+        <button class="btn-act btn-print" onclick="window.print()">🖨️ طباعة</button>
+        <button class="btn-act btn-new" onclick="newLesson()">✨ حصة جديدة</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SAVED PANEL ===== -->
+  <div id="saved-panel" style="display:none">
+    <div class="card">
+      <div class="card-h"><div class="ico">📂</div> الحصص المحفوظة</div>
+      <div id="saved-list-wrap">
+        <div style="text-align:center;padding:40px;color:var(--muted);font-size:.9rem">⏳ جارٍ تحميل الحصص…</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end main-wrap -->
+<script>
+
+// ===== AI Assistant — Gemini (EduOS) =====
+const AI_FN='https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant';
+async function askAI(prompt,systemPrompt=''){
+  try{
+    const resp=await fetch(AI_FN,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({prompt,context:systemPrompt,module:'teacher'})});
+    const data=await resp.json();
+    return data.success?data.text:'لم أتمكن من الحصول على رد.';
+  }catch(e){return 'خطأ في المساعد الذكي: '+e.message;}
+}
+// ==========================================
+
+
+
+// ===== GRADE/SECTION/STUDENTS SMART LOGIC =====
+let _studentsData = null;
+
+// Sections available per grade (based on students.json)
+const GRADE_SECTIONS = {
+  'KG1': ['A','B','C'],
+  'KG2': ['A','B','C'],
+  '1':   ['A','B','C','D','E','F'],
+  '2':   ['A','B','C','D','E','F'],
+  '3':   ['A','B','C','D','E'],
+  '4':   ['A','B','C','D','E','F'],
+  '5':   ['A','B','C','D'],
+  '6':   ['A','B','C'],
+  '7':   ['A','B','C'],
+  '8':   ['A','B','C'],
+  '9':   ['A','B','C'],
+  '10':  ['A','B','C'],
+  '11':  ['A','B','C'],
+  '12':  ['A','B','C'],
+};
+
+async function fetchStudentsData() {
+  if (_studentsData) return _studentsData;
+  try {
+    const res = await fetch('/data/students.json');
+    if (!res.ok) throw new Error();
+    _studentsData = await res.json();
+  } catch {
+    try {
+      const r2 = await fetch('https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/students.json');
+      _studentsData = await r2.json();
+    } catch { _studentsData = {}; }
+  }
+  return _studentsData;
+}
+
+
+// ============================================================
+// VARK — جلب بيانات حقيقية من Supabase
+// ============================================================
+async function fetchVARKStats(grade, section) {
+  const panel = document.getElementById('varkStatsPanel');
+  const barsEl = document.getElementById('varkBarsContainer');
+  const previewEl = document.getElementById('varkGroupPreview');
+  
+  panel.style.display = 'none';
+  varkClassData = null;
+  
+  if (!sb || !grade || !section) return;
+  
+  try {
+    const { data, error } = await sb
+      .from('vark_results')
+      .select('student_name, dominant_style, v_score, a_score, r_score, k_score')
+      .eq('grade', String(grade))
+      .eq('section', String(section))
+      .eq('is_latest', true)
+      .eq('school_id', 'aljood');
+    
+    if (error || !data || data.length === 0) {
+      barsEl.innerHTML = '<div style="font-size:.8rem;color:var(--muted)">⚠️ لا توجد بيانات VARK لهذا الصف بعد — سيستخدم Gemini توزيعاً متوازناً</div>';
+      panel.style.display = 'block';
+      return;
+    }
+    
+    // تجميع البيانات
+    const groups = { V: [], A: [], R: [], K: [], MULTI: [] };
+    data.forEach(s => {
+      const style = s.dominant_style || 'V';
+      if (groups[style]) groups[style].push(s.student_name);
+      else groups['MULTI'].push(s.student_name);
+    });
+    
+    const total = data.length;
+    const labels = { V:'👁️ بصري', A:'👂 سمعي', R:'📖 قرائي', K:'✋ حركي', MULTI:'🌈 متعدد' };
+    const colors = { V:'#F59E0B', A:'#10B981', R:'#3B82F6', K:'#EC4899', MULTI:'#8B5CF6' };
+    
+    // عرض الأشرطة
+    barsEl.innerHTML = Object.entries(groups)
+      .filter(([,v]) => v.length > 0)
+      .map(([k,v]) => {
+        const pct = Math.round((v.length/total)*100);
+        return `<div>
+          <div style="display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:3px;">
+            <span style="font-weight:700;color:${colors[k]}">${labels[k]}</span>
+            <span style="color:var(--muted)">${v.length} طالبة (${pct}%)</span>
+          </div>
+          <div style="background:var(--border);border-radius:99px;height:8px;overflow:hidden;">
+            <div style="width:${pct}%;height:100%;background:${colors[k]};border-radius:99px;transition:width .5s;"></div>
+          </div>
+        </div>`;
+      }).join('');
+    
+    // معاينة المجموعات
+    const covered = Object.entries(groups).filter(([,v]) => v.length > 0);
+    previewEl.innerHTML = '<div style="font-weight:700;color:var(--txt);margin-bottom:4px;">👥 المجموعات عند اختيار VARK:</div>' +
+      covered.map(([k,v]) => 
+        `<span style="color:${colors[k]};font-weight:600">${labels[k]}: </span>${v.slice(0,3).join('، ')}${v.length>3?` وآخرون (+${v.length-3})`:''}  `
+      ).join('<br>');
+    
+    panel.style.display = 'block';
+    
+    // حفظ البيانات للاستخدام في Gemini
+    varkClassData = { groups, total, labels, colors, rawData: data };
+    
+  } catch(e) {
+    console.warn('VARK fetch error:', e);
+  }
+}
+
+function onGradeChange() {
+  const grade = document.getElementById('f_grade').value;
+  const secSel = document.getElementById('f_section');
+  secSel.innerHTML = '<option value="">— اختر الشعبة —</option>';
+  document.getElementById('sectionCountHint').textContent = '';
+  document.getElementById('f_students').value = '';
+
+  if (!grade) return;
+  const sections = GRADE_SECTIONS[grade] || ['A','B','C'];
+  sections.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s;
+    opt.textContent = `${grade}${s}`;
+    secSel.appendChild(opt);
+  });
+  // auto-select if only one
+  if (sections.length === 1) { secSel.value = sections[0]; autoFillStudents(); }
+}
+
+async function autoFillStudents() {
+  const grade = document.getElementById('f_grade').value;
+  const section = document.getElementById('f_section').value;
+  if (!grade || !section) return;
+
+  const key = grade + section; // e.g. "3B", "KG1A"
+  const data = await fetchStudentsData();
+  const hint = document.getElementById('sectionCountHint');
+
+  if (data[key] && Array.isArray(data[key])) {
+    const count = data[key].length;
+    document.getElementById('f_students').value = count;
+    hint.textContent = `(${count} طالبة)`;
+    hint.style.color = 'var(--pl)';
+  } else {
+    hint.textContent = '(بيانات غير متوفرة)';
+    hint.style.color = 'var(--muted)';
+  }
+  // جلب بيانات VARK الحقيقية
+  fetchVARKStats(grade, section);
+}
+
+// ============================================================
+// CONFIG
+// ============================================================
+const SUPA_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+let sb;
+let currentPlan = null;
+let varkClassData = null; // بيانات VARK الحقيقية للصف المختار
+
+let activeTimers = {};
+
+// Init Supabase
+try { sb = supabase.createClient(SUPA_URL, SUPA_KEY); } catch(e) { console.error('Supabase init failed', e); }
+
+// ============================================================
+// RADIO / CHECK CLICK HANDLERS
+// ============================================================
+document.querySelectorAll('.ro').forEach(el => {
+  el.addEventListener('click', () => {
+    const inp = el.querySelector('input');
+    if (!inp || inp.type !== 'radio') return;
+    document.querySelectorAll(`input[name="${inp.name}"]`).forEach(r => r.closest('.ro').classList.remove('sel'));
+    el.classList.add('sel');
+  });
+});
+document.querySelectorAll('.co').forEach(el => {
+  el.addEventListener('click', () => el.classList.toggle('sel'));
+});
+
+// ============================================================
+// TABS
+// ============================================================
+function switchTab(t) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', (i===0&&t==='new')||(i===1&&t==='saved')));
+  document.getElementById('new-panel').style.display = t==='new' ? 'block' : 'none';
+  document.getElementById('saved-panel').style.display = t==='saved' ? 'block' : 'none';
+  if (t==='saved') loadSavedLessons();
+}
+
+// ============================================================
+// GENERATE LESSON
+// ============================================================
+async function generateLesson() {
+  const grade = document.getElementById('f_grade').value;
+  const subject = document.getElementById('f_subject').value;
+  const topic = document.getElementById('f_topic').value.trim();
+  if (!grade) { showToast('اختر الصف أولاً','err'); return; }
+  if (!subject) { showToast('اختر المادة أولاً','err'); return; }
+  if (!topic) { showToast('أدخل موضوع الحصة','err'); return; }
+
+  const duration = document.getElementById('f_duration').value;
+  const students = document.getElementById('f_students').value;
+  const section = document.getElementById('f_section').value;
+  const model = document.getElementById('f_model').value;
+  const unit = document.getElementById('f_unit').value;
+  const motiv = document.querySelector('input[name="motiv"]:checked')?.value || 'سؤال إثارة';
+  const grpMethod = document.querySelector('input[name="grp"]:checked')?.value || 'VARK';
+  const diffLevels = [...document.querySelectorAll('#cg_diff input:checked')].map(i=>i.value);
+  const assessTypes = [...document.querySelectorAll('#cg_assess input:checked')].map(i=>i.value);
+  const spedAdapt = document.getElementById('tog_sped_adapt').checked;
+  const notes = document.getElementById('f_notes').value.trim();
+
+  // Show overlay
+  const overlay = document.getElementById('genOverlay');
+  overlay.classList.add('show');
+  const statuses = [
+    '🤖 Gemini يحلل المنهج الإماراتي…',
+    '🎯 يصمم الأهداف وفق مستويات بلوم…',
+    '📐 يبني مراحل الحصة بنموذج '+model+'…',
+    '🌈 يُعِد أنشطة التمايز الأربعة…',
+    '♿ يُضيف تعديلات أصحاب الهمم…',
+    '📊 يُصمم أدوات التقييم المتنوعة…',
+    '✨ اللمسات الأخيرة على خطتك…'
+  ];
+  let si = 0;
+  const statusInterval = setInterval(() => {
+    document.getElementById('genStatus').textContent = statuses[si % statuses.length];
+    si++;
+  }, 1400);
+
+  try {
+    // Get Gemini API key from Supabase
+    let apiKey = '';
+    if (sb) {
+      const { data } = await sb.from('app_settings').select('value').eq('key','gemini_api_key').single();
+      if (data) apiKey = data.value;
+    }
+    if (!apiKey) throw new Error('مفتاح Gemini غير موجود في إعدادات النظام');
+
+    // تجهيز ملخص VARK الحقيقي
+    let varkSummary = 'لا توجد بيانات — استخدم توزيعاً متوازناً';
+    if (varkClassData && varkClassData.groups) {
+      const g = varkClassData.groups;
+      const parts = [];
+      if (g.V?.length) parts.push(`بصري: ${g.V.length} طالبة (${g.V.join('، ')})`);
+      if (g.A?.length) parts.push(`سمعي: ${g.A.length} طالبة (${g.A.join('، ')})`);
+      if (g.R?.length) parts.push(`قرائي: ${g.R.length} طالبة (${g.R.join('، ')})`);
+      if (g.K?.length) parts.push(`حركي: ${g.K.length} طالبة (${g.K.join('، ')})`);
+      if (g.MULTI?.length) parts.push(`متعدد: ${g.MULTI.length} طالبة (${g.MULTI.join('، ')})`);
+      varkSummary = parts.join(' | ');
+    }
+    const prompt = buildGeminiPrompt({grade,subject,topic,duration,students,section,model,unit,motiv,grpMethod,diffLevels,assessTypes,spedAdapt,notes,varkSummary});
+
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        contents: [{parts:[{text: prompt}]}],
+        generationConfig: {temperature:0.7, maxOutputTokens:8192}
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error?.message || 'خطأ في Gemini API');
+    }
+
+    const data = await res.json();
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    // Extract JSON from response
+    const jsonMatch = rawText.match(/```json\n?([\s\S]*?)\n?```/) || rawText.match(/(\{[\s\S]*\})/);
+    if (!jsonMatch) throw new Error('تعذّر استخراج بيانات الحصة من الاستجابة');
+
+    const plan = JSON.parse(jsonMatch[1]);
+    plan._meta = { grade, subject, topic, duration, students, section, model, grpMethod, assessTypes, created: new Date().toISOString() };
+    currentPlan = plan;
+    renderPlan(plan);
+
+    clearInterval(statusInterval);
+    overlay.classList.remove('show');
+    document.getElementById('form-panel').style.display = 'none';
+    document.getElementById('result-panel').style.display = 'block';
+    window.scrollTo({top:0,behavior:'smooth'});
+    showToast('✅ تم توليد الحصة بنجاح!','ok');
+
+  } catch(e) {
+    clearInterval(statusInterval);
+    overlay.classList.remove('show');
+    showToast('خطأ: '+e.message,'err');
+    console.error(e);
+  }
+}
+
+// ============================================================
+// BUILD GEMINI PROMPT
+// ============================================================
+function buildGeminiPrompt(p) {
+  return `أنت خبير تربوي متخصص في تصميم الحصص الدراسية وفق أحدث المعايير التربوية الإماراتية والعالمية.
+
+المطلوب: صمِّم خطة حصة دراسية متكاملة واحترافية بتنسيق JSON صارم.
+
+**معلومات الحصة:**
+- الصف: ${p.grade} | الشعبة: ${p.section}
+- المادة: ${p.subject}
+- الموضوع: ${p.topic}
+- الوحدة: ${p.unit || 'غير محددة'}
+- المدة: ${p.duration} دقيقة
+- عدد الطلاب: ${p.students}
+- النموذج التربوي: ${p.model}
+- نوع التهيئة: ${p.motiv}
+- توزيع المجموعات: ${p.grpMethod}
+- بيانات VARK الحقيقية للصف: ${p.varkSummary}
+- مستويات التمايز: ${p.diffLevels.join(', ')}
+- أنواع التقييم: ${p.assessTypes.join(', ')}
+- تعديلات أصحاب الهمم: ${p.spedAdapt ? 'نعم، مطلوبة في كل مرحلة' : 'لا'}
+- ملاحظات إضافية: ${p.notes || 'لا يوجد'}
+
+**المنطلقات التربوية المعتمدة:**
+- التصميم العكسي UbD: ابدأ من المخرجات ثم صمم التقييم ثم التعلم
+- نموذج 5E: Engage → Explore → Explain → Elaborate → Evaluate
+- بلوم الرقمي: تذكُّر → فهم → تطبيق → تحليل → تقييم → إبداع
+- VARK: بصري / سمعي / قرائي / حركي — في كل نشاط
+- المنهج الإماراتي MOE 2025-2026
+
+أعد خطة الحصة بتنسيق JSON التالي **بدون أي نص خارج الـ JSON**:
+
+\`\`\`json
+{
+  "title": "عنوان جذاب للحصة",
+  "objectives": [
+    "الطالب سيكون قادراً على... (هدف SMART 1)",
+    "الطالب سيكون قادراً على... (هدف SMART 2)",
+    "الطالب سيكون قادراً على... (هدف SMART 3)"
+  ],
+  "learning_outcomes": [
+    "في نهاية الحصة سأكون قادراً على... (بلغة الطالب)",
+    "سأستطيع...",
+    "سأفهم..."
+  ],
+  "motivation": {
+    "type": "${p.motiv}",
+    "content": "نص تفصيلي للتهيئة الحافزة (3-4 جمل مشوقة)",
+    "teacher_prompt": "ما تقوله المعلمة بالضبط",
+    "duration": 5
+  },
+  "phases": [
+    {
+      "number": 1,
+      "name": "الاستكشاف والاستثارة",
+      "5e_step": "Engage",
+      "duration": ${Math.round(parseInt(p.duration)*0.12)},
+      "description": "وصف موجز للمرحلة",
+      "teacher_activity": "ما تفعله المعلمة بالتفصيل",
+      "student_activity": "ما يفعله الطلاب بالتفصيل",
+      "vark_focus": ["V","A"],
+      "bloom_level": "تذكُّر / فهم",
+      "resources": ["أداة أو مورد 1","أداة أو مورد 2"],
+      "guiding_questions": ["سؤال تفكير 1","سؤال تفكير 2"],
+      "sped_adaptation": "تعديل خاص لطلبة أصحاب الهمم في هذه المرحلة"
+    },
+    {
+      "number": 2, "name": "البناء المعرفي", "5e_step": "Explore",
+      "duration": ${Math.round(parseInt(p.duration)*0.18)},
+      "description": "وصف", "teacher_activity": "نشاط المعلمة", "student_activity": "نشاط الطلاب",
+      "vark_focus": ["V","R"], "bloom_level": "فهم / تطبيق",
+      "resources": ["مورد"], "guiding_questions": ["سؤال"],
+      "sped_adaptation": "تعديل لأصحاب الهمم"
+    },
+    {
+      "number": 3, "name": "الشرح والتفسير", "5e_step": "Explain",
+      "duration": ${Math.round(parseInt(p.duration)*0.2)},
+      "description": "وصف", "teacher_activity": "نشاط المعلمة", "student_activity": "نشاط الطلاب",
+      "vark_focus": ["A","R"], "bloom_level": "فهم / تحليل",
+      "resources": ["مورد"], "guiding_questions": ["سؤال"],
+      "sped_adaptation": "تعديل"
+    },
+    {
+      "number": 4, "name": "التطبيق والتعمق", "5e_step": "Elaborate",
+      "duration": ${Math.round(parseInt(p.duration)*0.22)},
+      "description": "وصف", "teacher_activity": "نشاط المعلمة", "student_activity": "نشاط الطلاب",
+      "vark_focus": ["K","R"], "bloom_level": "تطبيق / تحليل",
+      "resources": ["مورد"], "guiding_questions": ["سؤال"],
+      "sped_adaptation": "تعديل"
+    },
+    {
+      "number": 5, "name": "التمايز والعمل الجماعي", "5e_step": "Elaborate+",
+      "duration": ${Math.round(parseInt(p.duration)*0.16)},
+      "description": "وصف", "teacher_activity": "نشاط المعلمة", "student_activity": "نشاط الطلاب",
+      "vark_focus": ["V","A","R","K"], "bloom_level": "تطبيق / تقييم",
+      "resources": ["مورد"], "guiding_questions": ["سؤال"],
+      "sped_adaptation": "تعديل"
+    },
+    {
+      "number": 6, "name": "التقييم والقياس", "5e_step": "Evaluate",
+      "duration": ${Math.round(parseInt(p.duration)*0.07)},
+      "description": "وصف", "teacher_activity": "نشاط المعلمة", "student_activity": "نشاط الطلاب",
+      "vark_focus": ["R","K"], "bloom_level": "تقييم / إبداع",
+      "resources": ["مورد"], "guiding_questions": ["سؤال"],
+      "sped_adaptation": "تعديل"
+    },
+    {
+      "number": 7, "name": "الخلاصة والتأمل", "5e_step": "Reflect",
+      "duration": ${Math.round(parseInt(p.duration)*0.05)},
+      "description": "وصف", "teacher_activity": "نشاط المعلمة", "student_activity": "نشاط الطلاب",
+      "vark_focus": ["A","R"], "bloom_level": "تقييم / إبداع",
+      "resources": ["مورد"], "guiding_questions": ["سؤال"],
+      "sped_adaptation": "تعديل"
+    }
+  ],
+  "groups": {
+    "method": "${p.grpMethod}",
+    "description": "شرح آلية التوزيع بناءً على البيانات الفعلية",
+    "vark_data_used": "${p.varkSummary}",
+    "groups": [
+      {"name": "مجموعة البصريين", "vark_type": "V", "color": "#F59E0B", "activities": "أنشطة بصرية مفصلة ومناسبة لعدد الطلاب الفعلي"},
+      {"name": "مجموعة السمعيين", "vark_type": "A", "color": "#10B981", "activities": "أنشطة سمعية مفصلة ومناسبة لعدد الطلاب الفعلي"},
+      {"name": "مجموعة القراء والكتّاب", "vark_type": "R", "color": "#3B82F6", "activities": "أنشطة قرائية مفصلة ومناسبة لعدد الطلاب الفعلي"},
+      {"name": "مجموعة الحركيين", "vark_type": "K", "color": "#EC4899", "activities": "أنشطة حركية مفصلة ومناسبة لعدد الطلاب الفعلي"}
+    ]
+  },
+  "assessment": {
+    "types": ${JSON.stringify(p.assessTypes)},
+    "tools": [
+      {"type": "أداة تقييم 1", "description": "وصف الأداة وكيفية استخدامها"},
+      {"type": "أداة تقييم 2", "description": "وصف"}
+    ],
+    "exit_ticket": "سؤال تذكرة الخروج — يجب أن يقيس مخرجات التعلم بشكل دقيق"
+  },
+  "differentiation": {
+    "advanced": "أنشطة تحدي للطلاب المتقدمين — مستوى بلوم: تقييم وإبداع",
+    "on_level": "أنشطة مستوى الصف — مستوى بلوم: تطبيق وتحليل",
+    "support_needed": "أنشطة داعمة مع تبسيط — مستوى بلوم: تذكر وفهم",
+    "special_ed": "تعديلات IEP — أدوات مساعدة — وقت إضافي — تعديل المحتوى"
+  },
+  "homework": "واجب منزلي يُعزز التعلم ويربطه بالحياة اليومية (أو فارغ إن لم يكن مطلوباً)"
+}
+\`\`\`
+
+مهم جداً:
+1. اجعل الأنشطة واقعية ومناسبة للسياق الإماراتي
+2. كل نشاط يجب أن يشير إلى مؤشر VARK ومستوى بلوم
+3. أسماء المجموعات والأنشطة باللغة العربية الفصيحة
+4. تأكد أن مجموع مدد المراحل = ${p.duration} دقيقة
+5. لا تُخرج أي نص خارج كتلة JSON`;
+}
+
+// ============================================================
+// RENDER PLAN
+// ============================================================
+function renderPlan(plan) {
+  const m = plan._meta || {};
+  document.getElementById('res_title').textContent = plan.title || m.topic;
+
+  // Meta chips
+  const metaHtml = [
+    `<div class="meta-chip">📚 ${m.grade} — ${m.section}</div>`,
+    `<div class="meta-chip">📖 ${m.subject}</div>`,
+    `<div class="meta-chip">⏱️ ${m.duration} دقيقة</div>`,
+    `<div class="meta-chip">👥 ${m.students} طالب/ة</div>`,
+    `<div class="meta-chip">🧭 ${m.model}</div>`,
+    `<div class="meta-chip">🗓️ ${new Date().toLocaleDateString('ar-AE')}</div>`
+  ].join('');
+  document.getElementById('res_meta').innerHTML = metaHtml;
+
+  // Objectives
+  const objs = document.getElementById('res_objectives');
+  objs.innerHTML = (plan.objectives||[]).map(o=>`<div class="obj-item">${o}</div>`).join('');
+  const outs = document.getElementById('res_outcomes');
+  outs.innerHTML = (plan.learning_outcomes||[]).map(o=>`<div class="obj-item outcome">✅ ${o}</div>`).join('');
+
+  // Motivation
+  if (plan.motivation) {
+    document.getElementById('res_motiv_type').innerHTML = `🔥 ${plan.motivation.type}`;
+    document.getElementById('res_motiv_content').textContent = plan.motivation.content || '';
+    document.getElementById('res_motiv_dur').textContent = `${plan.motivation.duration} دقائق`;
+  }
+
+  // Phases
+  const phases = plan.phases || [];
+  document.getElementById('total_phases_label').textContent = `${phases.length} مراحل`;
+  const phasesWrap = document.getElementById('res_phases');
+  phasesWrap.innerHTML = phases.map((ph,i) => {
+    const varkBadges = (ph.vark_focus||[]).map(v=>`<span class="vb vb-${v}">${v==='V'?'👁️ بصري':v==='A'?'👂 سمعي':v==='R'?'📖 قرائي':'✋ حركي'}</span>`).join('');
+    return `
+    <div class="phase-card">
+      <div class="phase-header" onclick="togglePhase(${i})">
+        <div class="phase-num">${ph.number||i+1}</div>
+        <div class="phase-name">${ph.name}</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="phase-dur">⏱️ ${ph.duration} د</span>
+          <span style="font-size:.72rem;color:var(--muted);background:rgba(255,255,255,.06);padding:2px 8px;border-radius:6px">${ph['5e_step']||''}</span>
+        </div>
+      </div>
+      <div class="phase-body" id="pb-${i}">
+        <div class="phase-section">
+          <div class="phase-section-label">👩‍🏫 نشاط المعلمة</div>
+          <div class="phase-section-content">${ph.teacher_activity||''}</div>
+        </div>
+        <div class="phase-section">
+          <div class="phase-section-label">🎓 نشاط الطلاب</div>
+          <div class="phase-section-content">${ph.student_activity||''}</div>
+        </div>
+        ${ph.guiding_questions?.length ? `
+        <div class="phase-section">
+          <div class="phase-section-label">💬 أسئلة توجيهية</div>
+          <div class="phase-section-content">${ph.guiding_questions.map(q=>`• ${q}`).join('<br>')}</div>
+        </div>` : ''}
+        ${ph.sped_adaptation ? `
+        <div class="phase-section" style="background:rgba(168,85,247,.08);border-radius:8px;padding:10px;border-right:3px solid #A855F7">
+          <div class="phase-section-label">♿ تعديل أصحاب الهمم</div>
+          <div class="phase-section-content" style="color:#D8B4FE">${ph.sped_adaptation}</div>
+        </div>` : ''}
+        <div class="phase-vark">${varkBadges}</div>
+        ${ph.bloom_level ? `<div style="margin-top:8px;font-size:.75rem;color:var(--muted)">🧠 بلوم: ${ph.bloom_level}</div>` : ''}
+        <div class="phase-timer">
+          <button class="timer-btn" onclick="toggleTimer(${i},${ph.duration})">▶</button>
+          <div class="timer-progress"><div class="timer-bar" id="tbar-${i}" style="width:100%"></div></div>
+          <div class="timer-display" id="tdis-${i}">${String(ph.duration).padStart(2,'0')}:00</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Open first phase by default
+  if (phases.length > 0) {
+    document.getElementById('pb-0').classList.add('open');
+  }
+
+  // Groups
+  const groups = plan.groups?.groups || [];
+  const gcMap = {V:'gc-V',A:'gc-A',R:'gc-R',K:'gc-K'};
+  document.getElementById('res_groups').innerHTML = groups.map(g=>
+    `<div class="group-card ${gcMap[g.vark_type]||''}">
+      <div class="group-name"><span class="vb vb-${g.vark_type}">${g.vark_type}</span> ${g.name}</div>
+      <div class="group-act">${g.activities}</div>
+    </div>`
+  ).join('');
+
+  // Assessment
+  const aTools = plan.assessment?.tools || [];
+  const aIcons = {'تقييم ذاتي':'🪞','تقييم الأقران':'🤝','تقييم جماعي':'👥','تقييم المعلمة':'👩‍🏫','اختبار قصير':'📝','تذكرة الخروج':'🎫','تقييم ملاحظ':'👁️'};
+  document.getElementById('res_assess').innerHTML = aTools.map(t=>
+    `<div class="assess-chip"><div class="aic">${aIcons[t.type]||'📊'}</div><div style="font-weight:700;margin-bottom:4px">${t.type}</div><div style="color:var(--muted);font-size:.75rem">${t.description}</div></div>`
+  ).join('');
+  document.getElementById('res_exit').textContent = plan.assessment?.exit_ticket || '';
+
+  // Differentiation
+  const diff = plan.differentiation || {};
+  document.getElementById('res_diff').innerHTML = [
+    {key:'advanced',label:'⭐ متقدم',cls:'dc-adv',c:diff.advanced},
+    {key:'on_level',label:'✅ مستوى الصف',cls:'dc-onlv',c:diff.on_level},
+    {key:'support_needed',label:'🤝 يحتاج دعم',cls:'dc-supp',c:diff.support_needed},
+    {key:'special_ed',label:'♿ أصحاب الهمم',cls:'dc-sped',c:diff.special_ed}
+  ].map(d=>`<div class="diff-card ${d.cls}"><div class="diff-label">${d.label}</div><div class="diff-content">${d.c||'—'}</div></div>`).join('');
+
+  // Homework
+  if (plan.homework) {
+    document.getElementById('hw_section').style.display='block';
+    document.getElementById('res_hw').textContent = plan.homework;
+  }
+}
+
+function togglePhase(i) {
+  const body = document.getElementById('pb-'+i);
+  body.classList.toggle('open');
+}
+
+// ============================================================
+// TIMERS
+// ============================================================
+function toggleTimer(i, durationMin) {
+  if (activeTimers[i]) {
+    clearInterval(activeTimers[i].interval);
+    delete activeTimers[i];
+    document.querySelector(`.phase-card:nth-child(${i+1}) .timer-btn`).textContent = '▶';
+    return;
+  }
+  const totalSec = durationMin * 60;
+  let remaining = totalSec;
+  const btn = document.querySelectorAll('.phase-card')[i]?.querySelector('.timer-btn');
+  const display = document.getElementById('tdis-'+i);
+  const bar = document.getElementById('tbar-'+i);
+  if (btn) btn.textContent = '⏸';
+
+  activeTimers[i] = {
+    interval: setInterval(() => {
+      remaining--;
+      if (remaining <= 0) {
+        clearInterval(activeTimers[i].interval);
+        delete activeTimers[i];
+        if (display) display.textContent = '00:00';
+        if (bar) bar.style.width = '0%';
+        if (btn) btn.textContent = '▶';
+        showToast(`انتهت المرحلة ${i+1}! ⏰`,'info');
+        return;
+      }
+      const m = Math.floor(remaining/60);
+      const s = remaining%60;
+      if (display) display.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      if (bar) bar.style.width = `${(remaining/totalSec)*100}%`;
+    }, 1000)
+  };
+}
+
+// ============================================================
+// SAVE TO SUPABASE
+// ============================================================
+async function saveLessonPlan() {
+  if (!currentPlan) { showToast('لا توجد خطة للحفظ','err'); return; }
+  if (!sb) { showToast('خطأ في الاتصال بالنظام','err'); return; }
+  try {
+    const m = currentPlan._meta || {};
+    const record = {
+      grade: m.grade,
+      section_label: m.section,
+      subject: m.subject,
+      topic: m.topic,
+      duration_minutes: parseInt(m.duration),
+      student_count: parseInt(m.students),
+      model: m.model,
+      plan_json: currentPlan,
+      created_by: 'teacher',
+      status: 'draft'
+    };
+    const { error } = await sb.from('lesson_plans').insert([record]);
+    if (error) throw error;
+    showToast('✅ تم حفظ الحصة في السجل','ok');
+  } catch(e) {
+    showToast('خطأ في الحفظ: '+e.message,'err');
+    console.error(e);
+  }
+}
+
+// ============================================================
+// LOAD SAVED LESSONS
+// ============================================================
+async function loadSavedLessons() {
+  if (!sb) return;
+  const wrap = document.getElementById('saved-list-wrap');
+  wrap.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">⏳ جارٍ التحميل…</div>';
+  try {
+    const { data, error } = await sb.from('lesson_plans').select('*').order('created_at',{ascending:false}).limit(20);
+    if (error) throw error;
+    if (!data?.length) {
+      wrap.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">📭 لا توجد حصص محفوظة بعد</div>';
+      return;
+    }
+    wrap.innerHTML = data.map(l=>`
+      <div class="saved-item" onclick="loadSavedLesson(${l.id})">
+        <div class="saved-icon">📖</div>
+        <div class="saved-info">
+          <div class="saved-title">${l.topic || 'بدون عنوان'}</div>
+          <div class="saved-meta">${l.grade || ''} • ${l.subject || ''} • ${l.duration_minutes||0} د • ${new Date(l.created_at).toLocaleDateString('ar-AE')}</div>
+        </div>
+        <div class="saved-arrow">←</div>
+      </div>
+    `).join('');
+  } catch(e) {
+    wrap.innerHTML = `<div style="text-align:center;padding:40px;color:var(--red)">❌ ${e.message}</div>`;
+  }
+}
+
+async function loadSavedLesson(id) {
+  if (!sb) return;
+  try {
+    const { data, error } = await sb.from('lesson_plans').select('*').eq('id',id).single();
+    if (error) throw error;
+    currentPlan = data.plan_json;
+    renderPlan(currentPlan);
+    switchTab('new');
+    document.getElementById('form-panel').style.display = 'none';
+    document.getElementById('result-panel').style.display = 'block';
+    window.scrollTo({top:0,behavior:'smooth'});
+    showToast('تم تحميل الحصة المحفوظة','info');
+  } catch(e) {
+    showToast('خطأ: '+e.message,'err');
+  }
+}
+
+function startLiveSession() {
+  if (!currentPlan) { showToast('ولِّدي الحصة أولاً','err'); return; }
+  window.open('live_session.html', '_blank');
+}
+
+function newLesson() {
+  currentPlan = null;
+  Object.values(activeTimers).forEach(t=>clearInterval(t.interval));
+  activeTimers = {};
+  document.getElementById('form-panel').style.display = 'block';
+  document.getElementById('result-panel').style.display = 'none';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+function showToast(msg,type='ok') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show '+(type||'ok');
+  clearTimeout(t._to);
+  t._to = setTimeout(()=>t.className='',3500);
+}
+</script>
+<script src="../../platform-theme.js"></script>
+<script src="../../student-card.js"></script>
+<script src="../../staff-card.js"></script>
+</body>
+</html>

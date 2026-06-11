@@ -1,0 +1,2019 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎯 غرفة الحصة الحية — EduOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#0f1729;--surf:#1a2744;--surf2:#243461;--surf3:#2d3e6b;
+  --gold:#c9a84c;--gold2:#f0c96b;--emerald:#10b981;--emerald2:#34d399;
+  --rose:#f43f5e;--sky:#0ea5e9;--violet:#8b5cf6;--amber:#f59e0b;
+  --teal:#00d4aa;--text:#e8eaf6;--text2:#94a3b8;--bord:rgba(255,255,255,0.08);
+  --radius:14px;--font:'Cairo',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--text);overflow:hidden;}
+
+/* ── SETUP SCREEN ── */
+#setupScreen{
+  position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:24px;gap:20px;overflow-y:auto;
+  background:linear-gradient(135deg,#0f1729 0%,#1a2744 100%);
+}
+.setup-logo{font-size:3rem;text-align:center;}
+.setup-title{font-size:1.6rem;font-weight:900;color:var(--gold2);text-align:center;}
+.setup-sub{font-size:.9rem;color:var(--text2);text-align:center;}
+.setup-card{
+  background:var(--surf);border:1px solid var(--bord);border-radius:20px;
+  padding:24px;width:100%;max-width:580px;display:flex;flex-direction:column;gap:16px;
+}
+.setup-field label{font-size:.82rem;font-weight:700;color:var(--text2);margin-bottom:6px;display:block;}
+.setup-field select,.setup-field input{
+  width:100%;background:var(--surf2);border:1.5px solid var(--bord);border-radius:10px;
+  padding:11px 14px;color:var(--text);font-family:var(--font);font-size:.9rem;outline:none;transition:border-color .2s;
+}
+.setup-field select:focus,.setup-field input:focus{border-color:var(--gold);}
+.setup-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.btn-launch{
+  background:linear-gradient(135deg,var(--gold),var(--amber));color:#0f1729;
+  border:none;border-radius:12px;padding:14px 24px;font-size:1rem;font-weight:800;
+  font-family:var(--font);cursor:pointer;transition:all .2s;width:100%;
+}
+.btn-launch:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(201,168,76,.4);}
+.btn-launch:disabled{opacity:.5;transform:none;cursor:not-allowed;}
+
+/* ── LIVE SCREEN ── */
+#liveScreen{display:none;height:100%;flex-direction:column;}
+
+/* Header */
+.live-header{
+  background:var(--surf);border-bottom:1px solid var(--bord);
+  padding:10px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0;
+}
+.live-badge{background:linear-gradient(135deg,var(--rose),#dc2626);color:white;border-radius:99px;padding:4px 12px;font-size:.75rem;font-weight:800;animation:blink 1.5s infinite;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.5;}}
+.live-class{font-size:1.1rem;font-weight:800;color:var(--gold2);}
+.live-timer{background:var(--surf2);border:1.5px solid var(--bord);border-radius:99px;padding:6px 16px;font-size:1rem;font-weight:700;color:var(--gold2);font-variant-numeric:tabular-nums;}
+.live-stats-bar{display:flex;gap:8px;margin-right:auto;}
+.stat-pill{background:var(--surf2);border:1px solid var(--bord);border-radius:99px;padding:5px 14px;font-size:.78rem;font-weight:700;display:flex;align-items:center;gap:5px;}
+.stat-pill.green{border-color:var(--emerald);color:var(--emerald2);}
+.stat-pill.red{border-color:var(--rose);color:var(--rose);}
+.stat-pill.blue{border-color:var(--sky);color:var(--sky);}
+/* Sprint F: evidence counter */
+.evidence-pill{background:rgba(0,212,170,.1);border:1px solid var(--teal);border-radius:99px;padding:5px 14px;font-size:.78rem;font-weight:700;color:var(--teal);cursor:pointer;transition:all .2s;}
+.evidence-pill:hover{background:rgba(0,212,170,.2);}
+.btn-end{background:linear-gradient(135deg,#ef4444,#dc2626);color:white;border:none;border-radius:10px;padding:8px 16px;font-size:.82rem;font-weight:700;font-family:var(--font);cursor:pointer;}
+
+/* Main Layout */
+.live-body{flex:1;min-height:0;display:grid;grid-template-columns:280px 1fr 260px;gap:0;}
+
+/* Left Panel */
+.left-panel{background:var(--surf);border-left:1px solid var(--bord);padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;}
+.panel-title{font-size:.75rem;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;}
+.phase-control{border:1.5px solid var(--bord);border-radius:12px;padding:12px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:10px;}
+.phase-control:hover{border-color:var(--gold);background:rgba(201,168,76,.06);}
+.phase-control.active-phase{border-color:var(--emerald);background:rgba(16,185,129,.1);}
+.phase-control.broadcasting{border-color:var(--sky);background:rgba(14,165,233,.1);animation:pulse-border .8s infinite;}
+@keyframes pulse-border{0%,100%{border-color:var(--sky);}50%{border-color:var(--sky)66;}}
+.phase-ico{font-size:1.3rem;flex-shrink:0;}
+.phase-info{flex:1;}
+.phase-name{font-size:.82rem;font-weight:700;}
+.phase-status{font-size:.7rem;color:var(--text2);}
+.btn-broadcast{background:linear-gradient(135deg,var(--sky),#2563eb);color:white;border:none;border-radius:10px;padding:10px;font-size:.82rem;font-weight:700;font-family:var(--font);cursor:pointer;text-align:center;transition:all .2s;}
+.btn-broadcast:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(14,165,233,.4);}
+
+/* Center — Student Grid */
+.center-panel{overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;}
+.section-head{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.student-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;}
+.student-tile{
+  background:var(--surf);border:1.5px solid var(--bord);border-radius:12px;
+  padding:12px 10px;display:flex;flex-direction:column;align-items:center;gap:6px;
+  transition:all .2s;cursor:pointer;text-align:center;position:relative;
+}
+.student-tile:hover{border-color:var(--gold);transform:translateY(-2px);}
+.student-tile.active{border-color:var(--emerald);}
+.student-tile.help{border-color:var(--amber);animation:pulse-amber .8s infinite;}
+@keyframes pulse-amber{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.4);}50%{box-shadow:0 0 0 6px rgba(245,158,11,0);}}
+.student-tile.offline{opacity:.45;border-color:var(--bord);}
+.student-tile.flagged{border-color:var(--teal);background:rgba(0,212,170,.05);}
+.stu-avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:800;border:2px solid;}
+.stu-name{font-size:.72rem;font-weight:700;line-height:1.3;}
+.stu-phase-badge{font-size:.6rem;background:var(--surf2);border-radius:99px;padding:2px 8px;color:var(--text2);white-space:nowrap;}
+.stu-phase-badge.done{background:rgba(16,185,129,.15);color:var(--emerald2);}
+.stu-phase-badge.active{background:rgba(14,165,233,.15);color:var(--sky);}
+.help-flag{position:absolute;top:6px;left:6px;font-size:.85rem;}
+.obs-flag{position:absolute;top:6px;right:6px;font-size:.75rem;}
+.vark-tag{font-size:.58rem;font-weight:700;padding:1px 6px;border-radius:99px;}
+.vark-V{background:rgba(139,92,246,.2);color:#c4b5fd;}
+.vark-A{background:rgba(16,185,129,.2);color:#34d399;}
+.vark-R{background:rgba(14,165,233,.2);color:#7dd3fc;}
+.vark-K{background:rgba(245,158,11,.2);color:#fcd34d;}
+
+/* Right Panel */
+.right-panel{background:var(--surf);border-right:1px solid var(--bord);padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;}
+.tool-card{background:var(--surf2);border:1px solid var(--bord);border-radius:12px;padding:14px;}
+.tool-card-title{font-size:.75rem;font-weight:800;color:var(--text2);text-transform:uppercase;margin-bottom:10px;}
+.tool-btn{width:100%;background:var(--surf3);border:1px solid var(--bord);border-radius:10px;padding:9px 12px;font-size:.8rem;font-weight:700;font-family:var(--font);color:var(--text);cursor:pointer;transition:all .2s;text-align:right;margin-bottom:6px;display:flex;align-items:center;gap:8px;}
+.tool-btn:last-child{margin-bottom:0;}
+.tool-btn:hover{background:var(--surf);border-color:var(--gold);}
+.tool-btn.active-tool{background:rgba(201,168,76,.1);border-color:var(--gold);color:var(--gold2);}
+.tool-btn.teal-btn{border-color:var(--teal);color:var(--teal);background:rgba(0,212,170,.06);}
+.tool-btn.teal-btn:hover{background:rgba(0,212,170,.12);}
+.quick-msg-input{width:100%;background:var(--surf3);border:1px solid var(--bord);border-radius:10px;padding:9px 12px;font-size:.82rem;color:var(--text);font-family:var(--font);outline:none;resize:none;margin-bottom:6px;}
+.quick-msg-input:focus{border-color:var(--gold);}
+.btn-send-msg{width:100%;background:linear-gradient(135deg,var(--emerald),#059669);color:white;border:none;border-radius:10px;padding:9px;font-size:.82rem;font-weight:700;font-family:var(--font);cursor:pointer;}
+
+/* Poll overlay */
+#pollOverlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:none;align-items:center;justify-content:center;}
+#pollBox{background:var(--surf);border:1px solid var(--bord);border-radius:20px;padding:28px;width:90%;max-width:500px;}
+.poll-title{font-size:1.1rem;font-weight:800;color:var(--gold2);margin-bottom:16px;}
+.poll-input{width:100%;background:var(--surf2);border:1.5px solid var(--bord);border-radius:10px;padding:10px 14px;color:var(--text);font-family:var(--font);font-size:.9rem;outline:none;margin-bottom:10px;}
+.poll-input:focus{border-color:var(--gold);}
+.poll-opts{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
+.poll-opt{display:flex;align-items:center;gap:8px;}
+.poll-opt input{flex:1;background:var(--surf2);border:1px solid var(--bord);border-radius:8px;padding:8px 12px;color:var(--text);font-family:var(--font);font-size:.85rem;outline:none;}
+.poll-actions{display:flex;gap:10px;}
+.btn-cancel{flex:1;background:var(--surf2);color:var(--text2);border:1px solid var(--bord);border-radius:10px;padding:10px;font-size:.85rem;font-weight:700;font-family:var(--font);cursor:pointer;}
+.btn-launch-poll{flex:2;background:linear-gradient(135deg,var(--violet),#6d28d9);color:white;border:none;border-radius:10px;padding:10px;font-size:.85rem;font-weight:700;font-family:var(--font);cursor:pointer;}
+
+/* Group overlay */
+#groupOverlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:none;align-items:center;justify-content:center;}
+#groupBox{background:var(--surf);border:1px solid var(--bord);border-radius:20px;padding:28px;width:90%;max-width:600px;max-height:80vh;overflow-y:auto;}
+.group-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;}
+.group-card{background:var(--surf2);border:1px solid var(--bord);border-radius:12px;padding:14px;}
+.group-card-title{font-size:.78rem;font-weight:800;color:var(--gold2);margin-bottom:8px;}
+.group-member{font-size:.78rem;padding:4px 0;border-bottom:1px solid var(--bord);color:var(--text2);}
+.group-member:last-child{border-bottom:none;}
+
+/* Poll result bars */
+.poll-result-bar{margin-bottom:8px;}
+.poll-result-label{font-size:.75rem;color:var(--text2);margin-bottom:3px;display:flex;justify-content:space-between;}
+.poll-result-track{background:var(--surf3);border-radius:99px;height:8px;overflow:hidden;}
+.poll-result-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--violet),var(--sky));transition:width .6s ease;}
+
+/* ═══════════════════════════════════════
+   SPRINT F — NEW OVERLAYS CSS
+   ═══════════════════════════════════════ */
+
+/* ── BRIEFING OVERLAY ── */
+#briefingOverlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2000;
+  display:none;align-items:center;justify-content:center;
+}
+#briefingBox{
+  background:var(--surf);border:1.5px solid rgba(0,212,170,.4);border-radius:22px;
+  padding:28px;width:90%;max-width:560px;max-height:80vh;overflow-y:auto;
+}
+.briefing-header{text-align:center;margin-bottom:20px;}
+.briefing-icon{font-size:2.5rem;margin-bottom:8px;}
+.briefing-title{font-size:1.1rem;font-weight:900;color:var(--teal);}
+.briefing-sub{font-size:.78rem;color:var(--text2);margin-top:4px;}
+.attention-card{
+  background:var(--surf2);border:1px solid rgba(245,158,11,.3);border-radius:12px;
+  padding:14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start;
+}
+.attention-card:last-of-type{margin-bottom:0;}
+.attention-avatar{
+  width:40px;height:40px;border-radius:50%;background:rgba(245,158,11,.15);
+  border:2px solid var(--amber);display:flex;align-items:center;justify-content:center;
+  font-size:1.1rem;font-weight:800;color:var(--amber);flex-shrink:0;
+}
+.attention-name{font-size:.88rem;font-weight:800;color:var(--text);}
+.attention-reason{font-size:.75rem;color:var(--text2);margin-top:3px;line-height:1.5;}
+.attention-tip{font-size:.72rem;color:var(--teal);margin-top:5px;display:flex;align-items:center;gap:4px;}
+.briefing-empty{text-align:center;padding:20px;color:var(--text2);font-size:.85rem;}
+.btn-briefing-start{
+  width:100%;margin-top:16px;
+  background:linear-gradient(135deg,var(--teal),var(--emerald));color:white;
+  border:none;border-radius:12px;padding:13px;font-size:.95rem;font-weight:800;
+  font-family:var(--font);cursor:pointer;transition:all .2s;
+}
+.btn-briefing-start:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(0,212,170,.3);}
+
+/* ── OBSERVATION MODAL ── */
+#obsOverlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:1500;
+  display:none;align-items:center;justify-content:center;
+}
+#obsBox{
+  background:var(--surf);border:1px solid var(--bord);border-radius:20px;
+  padding:24px;width:90%;max-width:480px;max-height:85vh;overflow-y:auto;
+}
+.obs-student-header{
+  display:flex;align-items:center;gap:12px;
+  background:var(--surf2);border-radius:12px;padding:14px;margin-bottom:16px;
+}
+.obs-avatar{
+  width:48px;height:48px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:1.2rem;font-weight:800;border:2px solid;flex-shrink:0;
+}
+.obs-student-name{font-size:1rem;font-weight:800;color:var(--gold2);}
+.obs-student-meta{font-size:.72rem;color:var(--text2);margin-top:2px;}
+.obs-section-title{font-size:.75rem;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;}
+.obs-types{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;}
+.obs-type-btn{
+  background:var(--surf2);border:1.5px solid var(--bord);border-radius:10px;
+  padding:10px 6px;font-size:.72rem;font-weight:700;cursor:pointer;
+  text-align:center;transition:all .2s;line-height:1.4;color:var(--text);
+  font-family:var(--font);
+}
+.obs-type-btn:hover,.obs-type-btn.selected{border-color:var(--sky);background:rgba(14,165,233,.1);color:var(--sky);}
+.obs-type-btn.selected.positive{border-color:var(--emerald);background:rgba(16,185,129,.1);color:var(--emerald2);}
+.obs-type-btn.selected.warning{border-color:var(--amber);background:rgba(245,158,11,.1);color:var(--amber);}
+.obs-textarea{
+  width:100%;background:var(--surf2);border:1.5px solid var(--bord);border-radius:10px;
+  padding:10px 14px;color:var(--text);font-family:var(--font);font-size:.85rem;
+  outline:none;resize:none;margin-bottom:12px;
+}
+.obs-textarea:focus{border-color:var(--sky);}
+.vark-override-section{
+  background:var(--surf2);border:1px solid rgba(139,92,246,.3);border-radius:12px;
+  padding:14px;margin-bottom:14px;
+}
+.vark-override-title{font-size:.75rem;font-weight:800;color:var(--violet);margin-bottom:8px;}
+.vark-override-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.vark-chip{
+  padding:5px 12px;border-radius:99px;font-size:.75rem;font-weight:700;cursor:pointer;
+  border:1.5px solid transparent;transition:all .2s;
+}
+.vark-chip.current{border-color:var(--amber);background:rgba(245,158,11,.15);color:var(--amber);}
+.vark-chip.new-vark:hover,.vark-chip.new-vark.selected{border-color:var(--violet);background:rgba(139,92,246,.15);color:#c4b5fd;}
+.vark-reason-select{
+  width:100%;margin-top:8px;background:var(--surf3);border:1px solid var(--bord);
+  border-radius:8px;padding:8px 12px;color:var(--text);font-family:var(--font);
+  font-size:.8rem;outline:none;
+}
+.obs-actions{display:flex;gap:10px;margin-top:4px;}
+.btn-obs-save{
+  flex:2;background:linear-gradient(135deg,var(--sky),#2563eb);color:white;
+  border:none;border-radius:10px;padding:11px;font-size:.88rem;font-weight:800;
+  font-family:var(--font);cursor:pointer;
+}
+.btn-obs-cancel{
+  flex:1;background:var(--surf2);color:var(--text2);border:1px solid var(--bord);
+  border-radius:10px;padding:11px;font-size:.88rem;font-weight:700;
+  font-family:var(--font);cursor:pointer;
+}
+
+/* ── ACTIVITY CHANGE MODAL ── */
+#activityOverlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:1500;
+  display:none;align-items:center;justify-content:center;
+}
+#activityBox{
+  background:var(--surf);border:1px solid var(--bord);border-radius:20px;
+  padding:24px;width:90%;max-width:480px;
+}
+.act-phase-info{
+  background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.2);
+  border-radius:10px;padding:12px;margin-bottom:16px;font-size:.82rem;
+  color:var(--gold2);text-align:center;font-weight:700;
+}
+.reason-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
+.reason-chip{
+  background:var(--surf2);border:1.5px solid var(--bord);border-radius:99px;
+  padding:7px 14px;font-size:.75rem;font-weight:700;cursor:pointer;
+  color:var(--text2);transition:all .2s;font-family:var(--font);
+}
+.reason-chip:hover,.reason-chip.selected{
+  border-color:var(--amber);background:rgba(245,158,11,.1);color:var(--amber);
+}
+.narrative-preview{
+  background:var(--surf2);border-radius:10px;padding:12px;
+  font-size:.78rem;color:var(--text2);line-height:1.7;margin-bottom:14px;
+  min-height:60px;border-right:3px solid var(--teal);
+}
+.act-actions{display:flex;gap:10px;}
+.btn-act-save{
+  flex:2;background:linear-gradient(135deg,var(--amber),#d97706);color:white;
+  border:none;border-radius:10px;padding:11px;font-size:.88rem;font-weight:800;
+  font-family:var(--font);cursor:pointer;
+}
+.btn-act-cancel{
+  flex:1;background:var(--surf2);color:var(--text2);border:1px solid var(--bord);
+  border-radius:10px;padding:11px;font-size:.88rem;font-weight:700;
+  font-family:var(--font);cursor:pointer;
+}
+
+/* ── SESSION SUMMARY MODAL ── */
+#summaryOverlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2000;
+  display:none;align-items:center;justify-content:center;
+}
+#summaryBox{
+  background:var(--surf);border:1px solid var(--bord);border-radius:22px;
+  padding:28px;width:90%;max-width:560px;max-height:85vh;overflow-y:auto;
+}
+.summary-header{text-align:center;margin-bottom:20px;}
+.summary-stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px;}
+.summary-stat{
+  background:var(--surf2);border-radius:12px;padding:14px;text-align:center;
+}
+.summary-stat-value{font-size:1.4rem;font-weight:900;color:var(--teal);}
+.summary-stat-label{font-size:.72rem;color:var(--text2);margin-top:4px;}
+.summary-narrative-box{
+  background:var(--surf2);border-radius:12px;padding:16px;
+  font-size:.82rem;line-height:1.9;color:var(--text);margin-bottom:16px;
+  border-right:3px solid var(--teal);
+}
+.ai-disclaimer{
+  background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);
+  border-radius:8px;padding:10px;font-size:.72rem;color:var(--amber);
+  line-height:1.6;margin-bottom:14px;
+}
+.summary-actions{display:flex;gap:10px;}
+.btn-confirm-end{
+  flex:2;background:linear-gradient(135deg,var(--teal),var(--emerald));color:white;
+  border:none;border-radius:10px;padding:12px;font-size:.9rem;font-weight:800;
+  font-family:var(--font);cursor:pointer;
+}
+.btn-go-back{
+  flex:1;background:var(--surf2);color:var(--text);border:1px solid var(--bord);
+  border-radius:10px;padding:12px;font-size:.9rem;font-weight:700;
+  font-family:var(--font);cursor:pointer;
+}
+
+/* Toast */
+#toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--surf2);border:1px solid var(--bord);border-radius:12px;
+  padding:10px 20px;font-size:.85rem;font-weight:600;opacity:0;
+  transition:all .3s;z-index:3000;white-space:nowrap;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+@media(max-width:900px){
+  .live-body{grid-template-columns:1fr;}
+  .left-panel,.right-panel{display:none;}
+}
+
+/* ═══════════════════════════════════════
+   SPRINT G — نبض الفصل + كشف النية
+   ═══════════════════════════════════════ */
+
+/* نبض الفصل */
+.pulse-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bord);}
+.pulse-row:last-of-type{border-bottom:none;}
+.pulse-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
+.pulse-dot.green{background:var(--emerald);box-shadow:0 0 8px rgba(16,185,129,.6);}
+.pulse-dot.yellow{background:var(--amber);box-shadow:0 0 8px rgba(245,158,11,.5);}
+.pulse-dot.red{background:var(--rose);box-shadow:0 0 8px rgba(244,63,94,.5);animation:blink 1s infinite;}
+.pulse-count{font-size:1.05rem;font-weight:900;min-width:26px;}
+.pulse-label{font-size:.72rem;color:var(--text2);flex:1;}
+
+/* Alert Banner */
+#alertBanner{
+  position:fixed;top:64px;left:50%;transform:translateX(-50%) translateY(-120px);
+  background:var(--surf);border:2px solid var(--rose);border-radius:14px;
+  padding:12px 18px;z-index:4000;display:flex;align-items:center;gap:12px;
+  box-shadow:0 8px 32px rgba(244,63,94,.35);
+  transition:transform .4s cubic-bezier(.34,1.56,.64,1);
+  min-width:300px;max-width:480px;
+}
+#alertBanner.show{transform:translateX(-50%) translateY(0);}
+.alert-icon{font-size:1.5rem;flex-shrink:0;}
+.alert-text{flex:1;}
+.alert-name{font-size:.88rem;font-weight:800;color:var(--text);}
+.alert-detail{font-size:.72rem;color:var(--text2);margin-top:2px;}
+.alert-action-btn{background:var(--rose);color:white;border:none;border-radius:8px;
+  padding:7px 11px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;}
+.alert-dismiss-x{background:var(--surf2);color:var(--text2);border:1px solid var(--bord);
+  border-radius:8px;padding:7px 9px;font-size:.72rem;cursor:pointer;font-family:var(--font);}
+
+/* Brain floating button */
+#brainBtn{
+  position:fixed;bottom:80px;left:20px;width:52px;height:52px;
+  background:linear-gradient(135deg,var(--violet),#6d28d9);border:none;
+  border-radius:50%;font-size:1.4rem;cursor:pointer;z-index:3500;
+  box-shadow:0 4px 20px rgba(139,92,246,.45);transition:all .2s;
+  display:none;align-items:center;justify-content:center;
+}
+#brainBtn:hover{transform:scale(1.1);}
+#brainBadge{position:absolute;top:-4px;right:-4px;background:var(--rose);color:white;
+  border-radius:50%;width:18px;height:18px;font-size:.62rem;font-weight:800;
+  display:flex;align-items:center;justify-content:center;border:2px solid var(--bg);}
+
+/* Exit dot on student tile */
+.exit-dot{position:absolute;top:-3px;left:-3px;width:11px;height:11px;
+  background:var(--rose);border-radius:50%;border:2px solid var(--bg);animation:blink 1s infinite;}
+
+/* Intent warning on tile */
+.intent-warn{position:absolute;bottom:3px;left:3px;font-size:.6rem;line-height:1;}
+
+/* Intent overlay */
+#intentOverlay{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:2500;
+  display:none;align-items:center;justify-content:center;}
+#intentBox{background:var(--surf);border:1.5px solid rgba(245,158,11,.3);border-radius:20px;
+  padding:24px;width:90%;max-width:520px;max-height:80vh;overflow-y:auto;}
+.intent-stu-row{display:flex;align-items:center;gap:10px;background:var(--surf2);
+  border-radius:10px;padding:10px 14px;margin-bottom:8px;cursor:pointer;
+  transition:all .2s;border:1.5px solid transparent;}
+.intent-stu-row:hover{border-color:var(--amber);}
+.intent-score-bar{height:5px;border-radius:99px;overflow:hidden;background:var(--surf3);margin-top:4px;}
+.intent-score-fill{height:100%;border-radius:99px;transition:width .3s;}
+.confirm-flag-btn{background:rgba(244,63,94,.12);color:var(--rose);border:1px solid rgba(244,63,94,.3);
+  border-radius:7px;padding:4px 9px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:var(--font);}
+.dismiss-flag-btn{background:var(--surf3);color:var(--text2);border:1px solid var(--bord);
+  border-radius:7px;padding:4px 9px;font-size:.7rem;cursor:pointer;font-family:var(--font);}
+</style>
+</head>
+<body>
+
+<!-- ══ SETUP SCREEN ══ -->
+<div id="setupScreen">
+  <div class="setup-logo">🎯</div>
+  <div class="setup-title">غرفة الحصة الحية</div>
+  <div class="setup-sub">ابدئي حصةً حيةً تفاعلية — تتابع كل طالبة في الوقت الفعلي</div>
+
+  <div class="setup-card">
+    <div class="setup-row">
+      <div class="setup-field">
+        <label>الصف الدراسي</label>
+        <select id="setupGrade" onchange="onSetupGradeChange()">
+          <option value="">— اختر الصف —</option>
+          <optgroup label="رياض الأطفال">
+            <option value="KG1">KG1 — روضة أولى</option>
+            <option value="KG2">KG2 — روضة ثانية</option>
+          </optgroup>
+          <optgroup label="الحلقة الأولى (1–4)">
+            <option value="1">Grade 1</option><option value="2">Grade 2</option>
+            <option value="3">Grade 3</option><option value="4">Grade 4</option>
+          </optgroup>
+          <optgroup label="الحلقة الثانية (5–9)">
+            <option value="5">Grade 5</option><option value="6">Grade 6</option>
+            <option value="7">Grade 7</option><option value="8">Grade 8</option>
+            <option value="9">Grade 9</option>
+          </optgroup>
+          <optgroup label="الحلقة الثالثة (10–12)">
+            <option value="10">Grade 10</option><option value="11">Grade 11</option>
+            <option value="12">Grade 12</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="setup-field">
+        <label>الشعبة</label>
+        <select id="setupSection">
+          <option value="">— اختر الشعبة —</option>
+        </select>
+      </div>
+    </div>
+    <div class="setup-field">
+      <label>المادة والموضوع</label>
+      <input id="setupTopic" type="text" placeholder="مثال: العلوم — دورة الماء في الطبيعة">
+    </div>
+    <div class="setup-row">
+      <div class="setup-field">
+        <label>مدة الحصة (دقيقة)</label>
+        <select id="setupDuration">
+          <option value="40">40 دقيقة</option>
+          <option value="45" selected>45 دقيقة</option>
+          <option value="50">50 دقيقة</option>
+          <option value="60">60 دقيقة</option>
+          <option value="80">80 دقيقة — مزدوجة</option>
+        </select>
+      </div>
+      <div class="setup-field">
+        <label>توزيع المجموعات</label>
+        <select id="setupGrouping">
+          <option value="VARK">حسب VARK</option>
+          <option value="random">عشوائي</option>
+          <option value="manual">يدوي</option>
+          <option value="none">بدون مجموعات</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn-launch" id="btnLaunch" onclick="prepareLaunch()">
+      🚀 إطلاق الحصة الحية
+    </button>
+  </div>
+</div>
+
+<!-- ══ LIVE SCREEN ══ -->
+<div id="liveScreen">
+
+  <!-- Header -->
+  <div class="live-header">
+    <span class="live-badge">🔴 مباشر</span>
+    <span class="live-class" id="liveClassLabel">—</span>
+    <span class="live-timer" id="liveTimer">45:00</span>
+    <div class="live-stats-bar">
+      <span class="stat-pill green">✅ <span id="statActive">0</span> نشطة</span>
+      <span class="stat-pill blue">🙋 <span id="statHelp">0</span> تطلب مساعدة</span>
+      <span class="stat-pill red">💤 <span id="statIdle">0</span> خاملة</span>
+      <!-- Sprint F: evidence counter -->
+      <span class="evidence-pill" title="عرض بورتفوليو الأدلة" onclick="openPortfolio()">
+        📂 <span id="evidenceCounter">0</span> دليل
+      </span>
+    </div>
+    <button class="btn-end" onclick="askEndSession()">⏹ إنهاء الحصة</button>
+  </div>
+
+  <div class="live-body">
+
+    <!-- Left Panel: Phase Controls -->
+    <div class="left-panel">
+      <div class="panel-title">📡 بث المراحل</div>
+      <div class="phase-control active-phase" id="pc0" onclick="broadcastPhase(0)">
+        <span class="phase-ico">🔥</span>
+        <div class="phase-info"><div class="phase-name">التهيئة الحافزة</div><div class="phase-status" id="ps0">جاهزة</div></div>
+      </div>
+      <div class="phase-control" id="pc1" onclick="broadcastPhase(1)">
+        <span class="phase-ico">🎯</span>
+        <div class="phase-info"><div class="phase-name">الاستكشاف</div><div class="phase-status" id="ps1">في الانتظار</div></div>
+      </div>
+      <div class="phase-control" id="pc2" onclick="broadcastPhase(2)">
+        <span class="phase-ico">💡</span>
+        <div class="phase-info"><div class="phase-name">التفسير</div><div class="phase-status" id="ps2">في الانتظار</div></div>
+      </div>
+      <div class="phase-control" id="pc3" onclick="broadcastPhase(3)">
+        <span class="phase-ico">🔬</span>
+        <div class="phase-info"><div class="phase-name">التطبيق</div><div class="phase-status" id="ps3">في الانتظار</div></div>
+      </div>
+      <div class="phase-control" id="pc4" onclick="broadcastPhase(4)">
+        <span class="phase-ico">🌟</span>
+        <div class="phase-info"><div class="phase-name">التقييم الختامي</div><div class="phase-status" id="ps4">في الانتظار</div></div>
+      </div>
+      <button class="btn-broadcast" onclick="broadcastPhase(currentPhase)">📡 بث المرحلة الحالية</button>
+      <div style="margin-top:4px;">
+        <div class="panel-title">📊 تقدم الصف</div>
+        <div id="phaseProgressBars" style="display:flex;flex-direction:column;gap:6px;margin-top:6px;"></div>
+      </div>
+    </div>
+
+    <!-- Center: Student Grid -->
+    <div class="center-panel">
+      <div class="section-head">
+        <div style="font-size:.82rem;font-weight:700;color:var(--text2);">👩‍🎓 شبكة الطالبات — <span id="totalCount">0</span> طالبة</div>
+        <div style="display:flex;gap:8px;">
+          <button class="tool-btn" style="width:auto;padding:6px 12px;font-size:.75rem;" onclick="openGroupOverlay()">👥 توزيع المجموعات</button>
+          <button class="tool-btn" style="width:auto;padding:6px 12px;font-size:.75rem;" onclick="refreshStudents()">🔄</button>
+        </div>
+      </div>
+      <div class="student-grid" id="studentGrid"></div>
+    </div>
+
+    <!-- Right Panel: Tools -->
+    <div class="right-panel">
+
+      <!-- Quick Tools -->
+      <div class="tool-card">
+        <div class="tool-card-title">⚡ أدوات سريعة</div>
+        <button class="tool-btn" onclick="openPollOverlay()">📊 إطلاق استطلاع سريع</button>
+        <button class="tool-btn" onclick="sendBroadcastMsg('attention')">🔔 اطلبي الانتباه!</button>
+        <button class="tool-btn" onclick="sendBroadcastMsg('pause')">⏸ توقفي لحظة</button>
+        <button class="tool-btn" onclick="sendBroadcastMsg('check')">✅ تحققي من عملك</button>
+        <button class="tool-btn" onclick="sendBroadcastMsg('celebrate')">🎉 ممتاز! استمري</button>
+      </div>
+
+      <!-- Quick Message -->
+      <div class="tool-card">
+        <div class="tool-card-title">💬 رسالة سريعة</div>
+        <textarea id="quickMsgInput" class="quick-msg-input" rows="3" placeholder="اكتبي رسالة لكل الطالبات..."></textarea>
+        <button class="btn-send-msg" onclick="sendQuickMessage()">📤 إرسال للجميع</button>
+      </div>
+
+      <!-- Live Poll Results -->
+      <div class="tool-card" id="pollResultsCard" style="display:none;">
+        <div class="tool-card-title">📊 نتائج الاستطلاع</div>
+        <div id="pollQuestion" style="font-size:.82rem;font-weight:700;margin-bottom:10px;color:var(--gold2);"></div>
+        <div id="pollBars"></div>
+        <div style="font-size:.72rem;color:var(--text2);margin-top:8px;" id="pollResponseCount"></div>
+      </div>
+
+      <!-- Assessment -->
+      <div class="tool-card">
+        <div class="tool-card-title">📝 التقييم</div>
+        <button class="tool-btn" onclick="launchAssessment('self')">🪞 تقييم ذاتي</button>
+        <button class="tool-btn" onclick="launchAssessment('peer')">👭 تقييم أقران</button>
+        <button class="tool-btn" onclick="launchAssessment('group')">👥 تقييم جماعي</button>
+        <button class="tool-btn" onclick="launchAssessment('exit')">🎫 بطاقة الخروج</button>
+      </div>
+
+      <!-- SPRINT G: نبض الفصل اللحظي -->
+      <div class="tool-card" style="border-color:rgba(244,63,94,.25);">
+        <div class="tool-card-title" style="color:#f87171;">🫀 نبض الفصل اللحظي</div>
+        <div class="pulse-row">
+          <div class="pulse-dot green"></div>
+          <div class="pulse-count" id="pulseGreen" style="color:var(--emerald2);">0</div>
+          <div class="pulse-label">منخرطون — ممتاز 🟢</div>
+        </div>
+        <div class="pulse-row">
+          <div class="pulse-dot yellow"></div>
+          <div class="pulse-count" id="pulseYellow" style="color:var(--amber);">0</div>
+          <div class="pulse-label">بطيئون — تحتاج متابعة</div>
+        </div>
+        <div class="pulse-row">
+          <div class="pulse-dot red"></div>
+          <div class="pulse-count" id="pulseRed" style="color:var(--rose);">0</div>
+          <div class="pulse-label">⚠️ يحتاجون تدخلاً الآن</div>
+        </div>
+        <button class="tool-btn" style="margin-top:8px;border-color:rgba(139,92,246,.4);color:#c4b5fd;background:rgba(139,92,246,.08);" onclick="openIntentOverlay()">🧠 تحليل النوايا</button>
+      </div>
+
+      <!-- Sprint F: التوثيق الصامت -->
+      <div class="tool-card" style="border-color:rgba(0,212,170,.25);">
+        <div class="tool-card-title" style="color:var(--teal);">🤫 التوثيق الصامت</div>
+        <button class="tool-btn teal-btn" onclick="openActivityChange()">🔄 غيّرت النشاط</button>
+        <button class="tool-btn teal-btn" onclick="openQuickMemo()">🎤 ملاحظة سريعة</button>
+        <button class="tool-btn teal-btn" onclick="openPortfolio()">📂 عرض الأدلة</button>
+        <div style="font-size:.68rem;color:var(--text2);margin-top:6px;text-align:center;line-height:1.5;padding-top:6px;border-top:1px solid var(--bord);">
+          ⚖️ AI يرى بعيوني<br>أنا أحكم بعقلي
+        </div>
+      </div>
+
+      <!-- Session info -->
+      <div class="tool-card">
+        <div class="tool-card-title">ℹ️ الجلسة</div>
+        <div style="font-size:.75rem;color:var(--text2);line-height:1.8;">
+          🆔 <span id="sessionIdLabel" style="font-family:monospace;color:var(--text);">—</span><br>
+          🔗 رابط الطالبة: <span id="studentLink" style="color:var(--sky);word-break:break-all;font-size:.68rem;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ POLL OVERLAY ══ -->
+<div id="pollOverlay" onclick="if(event.target===this)closePollOverlay()">
+  <div id="pollBox">
+    <div class="poll-title">📊 استطلاع سريع</div>
+    <textarea id="pollQ" class="poll-input" rows="2" placeholder="السؤال..."></textarea>
+    <div class="poll-opts">
+      <div class="poll-opt">🔵 <input id="opt1" placeholder="الخيار الأول"></div>
+      <div class="poll-opt">🟢 <input id="opt2" placeholder="الخيار الثاني"></div>
+      <div class="poll-opt">🟡 <input id="opt3" placeholder="الخيار الثالث (اختياري)"></div>
+      <div class="poll-opt">🔴 <input id="opt4" placeholder="الخيار الرابع (اختياري)"></div>
+    </div>
+    <div class="poll-actions">
+      <button class="btn-cancel" onclick="closePollOverlay()">إلغاء</button>
+      <button class="btn-launch-poll" onclick="launchPoll()">🚀 إطلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ GROUP OVERLAY ══ -->
+<div id="groupOverlay">
+  <div id="groupBox">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <div class="poll-title" style="margin:0;">👥 توزيع المجموعات</div>
+      <button class="btn-cancel" style="width:auto;padding:6px 14px;" onclick="closeGroupOverlay()">✕</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button class="tool-btn active-tool" id="gbVark" style="flex:1;justify-content:center;" onclick="doGroup('VARK')">🎯 VARK</button>
+      <button class="tool-btn" id="gbRand" style="flex:1;justify-content:center;" onclick="doGroup('random')">🎲 عشوائي</button>
+      <button class="tool-btn" id="gbLevel" style="flex:1;justify-content:center;" onclick="doGroup('level')">📊 مستوى</button>
+    </div>
+    <div class="group-grid" id="groupGrid"></div>
+  </div>
+</div>
+
+<!-- ══ SPRINT F: BRIEFING OVERLAY ══ -->
+<div id="briefingOverlay">
+  <div id="briefingBox">
+    <div class="briefing-header">
+      <div class="briefing-icon">🧠</div>
+      <div class="briefing-title">الإحاطة الذكية قبل الحصة</div>
+      <div class="briefing-sub">بناءً على جلسات سابقة — هؤلاء الطلاب يحتاجون انتباهاً اليوم</div>
+    </div>
+    <div id="briefingContent"></div>
+    <button class="btn-briefing-start" onclick="dismissBriefing()">
+      ✅ فهمت — ابدأي الحصة
+    </button>
+  </div>
+</div>
+
+<!-- ══ SPRINT F: OBSERVATION MODAL ══ -->
+<div id="obsOverlay" onclick="if(event.target===this)closeObservation()">
+  <div id="obsBox">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:1rem;font-weight:800;color:var(--sky);">👁️ ملاحظة على طالب</div>
+      <button onclick="closeObservation()" style="background:var(--surf2);border:1px solid var(--bord);color:var(--text2);border-radius:8px;padding:5px 10px;cursor:pointer;font-family:var(--font);">✕</button>
+    </div>
+
+    <div class="obs-student-header">
+      <div class="obs-avatar" id="obsAvatar">؟</div>
+      <div>
+        <div class="obs-student-name" id="obsStudentName">—</div>
+        <div class="obs-student-meta" id="obsStudentMeta">—</div>
+      </div>
+    </div>
+
+    <div class="obs-section-title">نوع الملاحظة</div>
+    <div class="obs-types" id="obsTypes">
+      <button class="obs-type-btn positive" onclick="selectObsType('مشاركة ممتازة',this)">⭐<br>مشاركة ممتازة</button>
+      <button class="obs-type-btn positive" onclick="selectObsType('تحسّن ملحوظ',this)">📈<br>تحسّن ملحوظ</button>
+      <button class="obs-type-btn positive" onclick="selectObsType('سلوك إيجابي',this)">🌟<br>سلوك إيجابي</button>
+      <button class="obs-type-btn warning" onclick="selectObsType('يحتاج دعم',this)">🤝<br>يحتاج دعم</button>
+      <button class="obs-type-btn warning" onclick="selectObsType('غائب عقلياً',this)">💤<br>غائب عقلياً</button>
+      <button class="obs-type-btn" onclick="selectObsType('ملاحظة حرة',this)">📝<br>ملاحظة حرة</button>
+    </div>
+
+    <textarea id="obsNote" class="obs-textarea" rows="3" placeholder="تفاصيل إضافية (اختياري)..."></textarea>
+
+    <!-- VARK Override -->
+    <div class="vark-override-section">
+      <div class="vark-override-title">🧠 تغيير تصنيف VARK (اختياري)</div>
+      <div style="font-size:.72rem;color:var(--text2);margin-bottom:8px;">التصنيف الحالي: <span id="obsCurrentVark" style="color:var(--amber);font-weight:700;">—</span></div>
+      <div class="vark-override-row" id="varkChips">
+        <span class="vark-chip new-vark" data-vark="V" onclick="selectVark('V',this)">V — بصري</span>
+        <span class="vark-chip new-vark" data-vark="A" onclick="selectVark('A',this)">A — سمعي</span>
+        <span class="vark-chip new-vark" data-vark="R" onclick="selectVark('R',this)">R — قرائي</span>
+        <span class="vark-chip new-vark" data-vark="K" onclick="selectVark('K',this)">K — حركي</span>
+      </div>
+      <select id="varkReason" class="vark-reason-select" style="display:none;">
+        <option value="">— سبب التغيير —</option>
+        <option value="استجابة مختلفة في النشاط">استجابة مختلفة في النشاط</option>
+        <option value="مشاهدة مباشرة متكررة">مشاهدة مباشرة متكررة</option>
+        <option value="ضعف استجابة للنمط السابق">ضعف استجابة للنمط السابق</option>
+        <option value="تفضيل الطالب الصريح">تفضيل الطالب الصريح</option>
+        <option value="حكم مهني بعد ملاحظات متعددة">حكم مهني بعد ملاحظات متعددة</option>
+      </select>
+    </div>
+
+    <div class="obs-actions">
+      <button class="btn-obs-cancel" onclick="closeObservation()">إلغاء</button>
+      <button class="btn-obs-save" onclick="saveObservation()">💾 حفظ الملاحظة</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SPRINT F: ACTIVITY CHANGE MODAL ══ -->
+<div id="activityOverlay" onclick="if(event.target===this)closeActivityChange()">
+  <div id="activityBox">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div style="font-size:1rem;font-weight:800;color:var(--amber);">🔄 توثيق تغيير النشاط</div>
+      <button onclick="closeActivityChange()" style="background:var(--surf2);border:1px solid var(--bord);color:var(--text2);border-radius:8px;padding:5px 10px;cursor:pointer;font-family:var(--font);">✕</button>
+    </div>
+
+    <div class="act-phase-info" id="actPhaseInfo">المرحلة الحالية: —</div>
+
+    <div style="font-size:.78rem;font-weight:700;color:var(--text2);margin-bottom:8px;">غيّرتُ إلى:</div>
+    <select id="actChangedTo" class="setup-field" style="width:100%;margin-bottom:14px;"
+      onchange="updateNarrativePreview()">
+      <option value="">— اختري النشاط الجديد —</option>
+      <option value="نقاش جماعي">💬 نقاش جماعي</option>
+      <option value="نشاط حركي">🏃 نشاط حركي / Brain Break</option>
+      <option value="عمل فردي صامت">✏️ عمل فردي صامت</option>
+      <option value="استطلاع سريع">📊 استطلاع سريع</option>
+      <option value="مشاهدة فيديو قصير">🎥 مشاهدة فيديو قصير</option>
+      <option value="رسم وتخطيط">🎨 رسم وتخطيط</option>
+      <option value="لعبة تعليمية">🎮 لعبة تعليمية</option>
+      <option value="أخرى">📌 أخرى</option>
+    </select>
+
+    <div style="font-size:.78rem;font-weight:700;color:var(--text2);margin-bottom:8px;">السبب:</div>
+    <div class="reason-chips" id="reasonChips">
+      <button class="reason-chip" onclick="selectReason('الصف كان متعباً',this)">😴 الصف كان متعباً</button>
+      <button class="reason-chip" onclick="selectReason('الوقت لم يكفِ',this)">⏱️ الوقت لم يكفِ</button>
+      <button class="reason-chip" onclick="selectReason('فهم مختلف عن المتوقع',this)">💡 فهم مختلف عن المتوقع</button>
+      <button class="reason-chip" onclick="selectReason('استجابة ممتازة تستحق المزيد',this)">🚀 استجابة ممتازة</button>
+      <button class="reason-chip" onclick="selectReason('حدث طارئ في الفصل',this)">⚠️ حدث طارئ</button>
+    </div>
+
+    <div style="font-size:.72rem;color:var(--text2);margin-bottom:6px;">🤖 السرد التلقائي:</div>
+    <div class="narrative-preview" id="narrativePreview">
+      اختاري النشاط الجديد والسبب لرؤية السرد التلقائي...
+    </div>
+
+    <div class="act-actions">
+      <button class="btn-act-cancel" onclick="closeActivityChange()">إلغاء</button>
+      <button class="btn-act-save" onclick="saveActivityChange()">💾 توثيق التغيير</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SPRINT F: SESSION SUMMARY MODAL ══ -->
+<div id="summaryOverlay">
+  <div id="summaryBox">
+    <div class="summary-header">
+      <div style="font-size:2.5rem;margin-bottom:8px;">📊</div>
+      <div style="font-size:1.15rem;font-weight:900;color:var(--gold2);">ملخص الحصة</div>
+      <div style="font-size:.8rem;color:var(--text2);margin-top:4px;">مخطَّط مقابل منفَّذ — قبل الحفظ النهائي</div>
+    </div>
+
+    <div class="summary-stats-grid">
+      <div class="summary-stat">
+        <div class="summary-stat-value" id="sumPhases">—</div>
+        <div class="summary-stat-label">مراحل مكتملة من 5</div>
+      </div>
+      <div class="summary-stat">
+        <div class="summary-stat-value" id="sumTime">—</div>
+        <div class="summary-stat-label">الوقت المستغرق</div>
+      </div>
+      <div class="summary-stat">
+        <div class="summary-stat-value" id="sumEvidence">—</div>
+        <div class="summary-stat-label">دليل موثَّق تلقائياً</div>
+      </div>
+      <div class="summary-stat">
+        <div class="summary-stat-value" id="sumObs">—</div>
+        <div class="summary-stat-label">ملاحظات على طلاب</div>
+      </div>
+    </div>
+
+    <div style="font-size:.75rem;font-weight:700;color:var(--text2);margin-bottom:8px;">🤖 السرد التلقائي للحصة:</div>
+    <div class="summary-narrative-box" id="summaryNarrative">جاري الإنشاء...</div>
+
+    <div class="ai-disclaimer">
+      ⚖️ تذكير: هذا السرد مساعد — AI يرى بعيوني، أنا أحكم بعقلي.
+      راجعي هذا الملخص قبل اعتماده رسمياً.
+    </div>
+
+    <div class="summary-actions">
+      <button class="btn-go-back" onclick="closeSummary()">← العودة للحصة</button>
+      <button class="btn-confirm-end" onclick="confirmAndEndSession()">✅ تأكيد وحفظ الحصة</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SPRINT G: BRAIN BUTTON ══ -->
+<button id="brainBtn" onclick="openIntentOverlay()" title="تحليل نوايا الطلاب — AI يرى بعيوني">
+  🧠
+  <span id="brainBadge" style="display:none;"></span>
+</button>
+
+<!-- ══ SPRINT G: ALERT BANNER ══ -->
+<div id="alertBanner">
+  <span class="alert-icon" id="alertIcon">🔴</span>
+  <div class="alert-text">
+    <div class="alert-name" id="alertName">—</div>
+    <div class="alert-detail" id="alertDetail">—</div>
+  </div>
+  <button class="alert-action-btn" id="alertActionBtn">👁️ انظري إليه الآن</button>
+  <button class="alert-dismiss-x" onclick="dismissAlertBanner()">✕</button>
+</div>
+
+<!-- ══ SPRINT G: INTENT OVERLAY ══ -->
+<div id="intentOverlay" onclick="if(event.target===this)closeIntentOverlay()">
+  <div id="intentBox">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:1rem;font-weight:800;color:var(--amber);">🧠 تحليل النوايا اللحظي</div>
+      <button onclick="closeIntentOverlay()" style="background:var(--surf2);border:1px solid var(--bord);color:var(--text2);border-radius:8px;padding:5px 10px;cursor:pointer;font-family:var(--font);">✕</button>
+    </div>
+    <div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:10px;font-size:.72rem;color:var(--amber);margin-bottom:14px;line-height:1.7;">
+      ⚖️ هذا التحليل مساعد فقط — AI يرفع العلم 🚩 — أنتِ تحكمين<br>
+      نسبة خطأ AI تصل إلى 35% — تأكيدكِ هو الذي يُعتمد رسمياً
+    </div>
+    <div id="intentStudentList"></div>
+    <div style="margin-top:14px;text-align:left;">
+      <button onclick="closeIntentOverlay()" style="background:var(--surf2);color:var(--text);border:1px solid var(--bord);border-radius:10px;padding:9px 20px;font-size:.85rem;font-weight:700;font-family:var(--font);cursor:pointer;">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+
+// ===== AI Assistant — Gemini (EduOS) =====
+const AI_FN='https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant';
+async function askAI(prompt,systemPrompt=''){
+  try{
+    const resp=await fetch(AI_FN,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({prompt,context:systemPrompt,module:'teacher'})});
+    const data=await resp.json();
+    return data.success?data.text:'لم أتمكن من الحصول على رد.';
+  }catch(e){return 'خطأ في المساعد الذكي: '+e.message;}
+}
+// ==========================================
+
+
+
+const SUPA_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+// ── Core State ──
+let sessionId = null;
+let currentClass = '';
+let currentGrade = '';
+let currentSection = '';
+let currentTopic = '';
+let currentPhase = 0;
+let sessionDuration = 45;
+let sessionTimer = null;
+let timerSec = 0;
+let students = [];
+let studentProgress = {};
+let groupingMode = 'VARK';
+let liveChannel = null;
+let pollActive = false;
+let pollData = null;
+let pollResponses = {};
+const TEACHER_ID = 'munira.almarri';
+
+// ── Sprint F State ──
+const sprintF = {
+  evidenceCount: 0,
+  activityChanges: 0,
+  observations: [],
+  currentObsStudent: null,
+  selectedObsType: null,
+  selectedNewVark: null,
+  selectedReason: null,
+  sessionStartTimestamp: null,
+};
+
+const GRADE_SECTIONS = {
+  KG1:['A','B','C'],KG2:['A','B','C'],
+  '1':['A','B','C','D','E','F'],'2':['A','B','C','D','E','F'],
+  '3':['A','B','C','D','E'],'4':['A','B','C','D','E','F'],
+  '5':['A','B','C','D'],'6':['A','B','C'],'7':['A','B','C'],
+  '8':['A','B','C'],'9':['A','B','C'],'10':['A','B','C'],
+  '11':['A','B','C'],'12':['A','B','C'],
+};
+
+const avatarColors=['#6366f1','#10b981','#f43f5e','#0ea5e9','#8b5cf6','#f59e0b','#ec4899','#14b8a6'];
+const phases=['التهيئة','الاستكشاف','التفسير','التطبيق','التقييم'];
+
+// ─────────────────────────────────────────────
+// SETUP
+// ─────────────────────────────────────────────
+function onSetupGradeChange(){
+  const grade=document.getElementById('setupGrade').value;
+  const secSel=document.getElementById('setupSection');
+  secSel.innerHTML='<option value="">— اختر الشعبة —</option>';
+  if(!grade) return;
+  (GRADE_SECTIONS[grade]||['A','B','C']).forEach(s=>{
+    const o=document.createElement('option');
+    o.value=s; o.textContent=grade+s;
+    secSel.appendChild(o);
+  });
+}
+
+async function prepareLaunch(){
+  const grade=document.getElementById('setupGrade').value;
+  const section=document.getElementById('setupSection').value;
+  const topic=document.getElementById('setupTopic').value.trim();
+  const dur=parseInt(document.getElementById('setupDuration').value)||45;
+  groupingMode=document.getElementById('setupGrouping').value;
+
+  if(!grade||!section){showToast('⚠️ اختاري الصف والشعبة أولاً');return;}
+  if(!topic){showToast('⚠️ أدخلي موضوع الحصة');return;}
+
+  currentGrade=grade; currentSection=section;
+  currentClass=grade+section; currentTopic=topic; sessionDuration=dur;
+
+  const btn=document.getElementById('btnLaunch');
+  btn.disabled=true; btn.textContent='⏳ جاري التجهيز...';
+
+  await loadStudents();
+
+  // Sprint F: Load briefing data before launching
+  const briefingData = await loadBriefingData(currentClass);
+  btn.disabled=false; btn.textContent='🚀 إطلاق الحصة الحية';
+
+  if(briefingData && briefingData.length > 0){
+    showBriefing(briefingData);
+  } else {
+    launchSession();
+  }
+}
+
+// ─────────────────────────────────────────────
+// SPRINT F: BRIEFING
+// ─────────────────────────────────────────────
+async function loadBriefingData(classKey){
+  try {
+    // Check exit log for students with 3+ exits
+    const { data: exitData } = await sb.from('lesson_exit_log')
+      .select('student_name, total_exits, session_id')
+      .eq('class_key', classKey)
+      .gte('total_exits', 3)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    // Check observations for "يحتاج دعم"
+    const { data: obsData } = await sb.from('staff_evidence')
+      .select('action_data, created_at')
+      .eq('class_key', classKey)
+      .eq('evidence_type', 'student_observation')
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    const attentionStudents = [];
+
+    // Process exit data
+    if(exitData) {
+      exitData.forEach(e => {
+        if(!attentionStudents.find(a => a.name === e.student_name)){
+          attentionStudents.push({
+            name: e.student_name,
+            reason: `خرجت من الحصة ${e.total_exits} مرات في الجلسة الأخيرة`,
+            tip: 'اجعليها في المجموعة الأمامية اليوم 💡',
+            type: 'exit'
+          });
+        }
+      });
+    }
+
+    // Process observation data for "يحتاج دعم"
+    if(obsData) {
+      obsData.forEach(o => {
+        const d = o.action_data || {};
+        if(d.obs_type === 'يحتاج دعم' && d.student_name){
+          if(!attentionStudents.find(a => a.name === d.student_name)){
+            attentionStudents.push({
+              name: d.student_name,
+              reason: 'سُجِّلت ملاحظة "يحتاج دعم" في حصة سابقة',
+              tip: 'شريك نشاط مع طالب متحفز 🤝',
+              type: 'obs'
+            });
+          }
+        }
+      });
+    }
+
+    return attentionStudents;
+  } catch(e){
+    console.warn('Briefing data load error:', e);
+    return [];
+  }
+}
+
+function showBriefing(data){
+  const container = document.getElementById('briefingContent');
+  if(!data.length){
+    container.innerHTML = '<div class="briefing-empty">✅ لا ملاحظات من الجلسات السابقة — حصة ممتازة في الانتظار!</div>';
+  } else {
+    container.innerHTML = data.slice(0,5).map(s => `
+    <div class="attention-card">
+      <div class="attention-avatar">${s.name.charAt(0)}</div>
+      <div>
+        <div class="attention-name">${s.name}</div>
+        <div class="attention-reason">${s.reason}</div>
+        <div class="attention-tip">💡 ${s.tip}</div>
+      </div>
+    </div>`).join('');
+  }
+  document.getElementById('briefingOverlay').style.display = 'flex';
+}
+
+function dismissBriefing(){
+  document.getElementById('briefingOverlay').style.display = 'none';
+  launchSession();
+}
+
+// ─────────────────────────────────────────────
+// LAUNCH SESSION
+// ─────────────────────────────────────────────
+async function launchSession(){
+  sessionId='SES-'+Date.now();
+  sprintF.sessionStartTimestamp = Date.now();
+
+  try{
+    await sb.from('lesson_sessions').insert({
+      id:sessionId, class_key:currentClass, topic:currentTopic,
+      status:'active', phase:0, teacher_id:TEACHER_ID,
+      started_at:new Date().toISOString()
+    });
+  }catch(e){ console.warn('lesson_sessions insert:',e); }
+
+  // Log truth event: session start
+  logTruthEvent('session_start', {
+    class_key: currentClass,
+    topic: currentTopic,
+    duration_planned: sessionDuration,
+    grouping: groupingMode
+  });
+
+  subscribeRealtime();
+  initSprintG();
+
+  document.getElementById('setupScreen').style.display='none';
+  const ls=document.getElementById('liveScreen');
+  ls.style.display='flex';
+  ls.style.flexDirection='column';
+
+  document.getElementById('liveClassLabel').textContent='📚 '+currentClass+' — '+currentTopic;
+  document.getElementById('sessionIdLabel').textContent=sessionId;
+  document.getElementById('studentLink').textContent=
+    window.location.origin+'/apps/eduos-teacher/student_lesson.html?session='+sessionId+'&class='+currentClass;
+
+  timerSec=sessionDuration*60;
+  updateTimerDisplay();
+  sessionTimer=setInterval(tickTimer,1000);
+
+  buildStudentGrid();
+  updatePhaseControls(0);
+  buildPhaseProgressBars();
+  showToast('✅ الحصة انطلقت! '+students.length+' طالبة');
+}
+
+// ─────────────────────────────────────────────
+// STUDENTS
+// ─────────────────────────────────────────────
+async function loadStudents(){
+  let data=null;
+  try{
+    const r=await fetch('/data/students.json');
+    if(r.ok) data=await r.json();
+  }catch{}
+  if(!data){
+    try{
+      const r2=await fetch('https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/students.json');
+      data=await r2.json();
+    }catch{}
+  }
+  const list=data&&data[currentClass];
+  if(list&&Array.isArray(list)){
+    students=list.map((s,i)=>({
+      id:'s'+i,
+      name: s.name_ar||s.nameAr||s.name||s.name_en||'طالبة '+(i+1),
+      vark: s.vark||(['V','A','R','K'][i%4]),
+      level: s.level||'متوسط',
+      status:'offline', phase:0, helpRequest:false,
+      obsCount: 0
+    }));
+  }else{
+    students=Array.from({length:24},(_,i)=>({
+      id:'s'+i, name:'طالبة '+(i+1),
+      vark:(['V','A','R','K'][i%4]),
+      level:'متوسط', status:'offline', phase:0, helpRequest:false, obsCount:0
+    }));
+  }
+  document.getElementById('totalCount').textContent=students.length;
+}
+
+function buildStudentGrid(){
+  const grid=document.getElementById('studentGrid');
+  grid.innerHTML='';
+  students.forEach((s,i)=>{
+    const color=avatarColors[i%avatarColors.length];
+    const initials=s.name.charAt(0);
+    const p=studentProgress[s.id]||{phase:0,status:'offline',help:false};
+    const statusCls=p.status==='active'?'active':p.help?'help':'offline';
+    const phaseLbl=p.phase<phases.length?phases[p.phase]:'—';
+    const phaseCls=p.phase===currentPhase?'active':p.phase>currentPhase?'done':'';
+    const hasFlaggedObs = sprintF.observations.some(o => o.sid === s.id && o.type === 'يحتاج دعم');
+    const gExits = sprintG.exitCounts[s.id] || 0;
+    const gScore = sprintG.intentScores[s.id] ?? 100;
+    const exitDot = gExits >= 3 ? '<span class="exit-dot" title="'+gExits+' خروجات"></span>' : '';
+    const intentWarn = gScore < 50 ? '<span class="intent-warn" title="درجة نية منخفضة">🔴</span>' : gScore < 75 ? '<span class="intent-warn">🟡</span>' : '';
+    grid.innerHTML+=`
+    <div class="student-tile ${statusCls}${hasFlaggedObs?' flagged':''}" id="tile-${s.id}" onclick="openObservation('${s.id}')">
+      ${exitDot}
+      ${p.help?'<span class="help-flag">🆘</span>':''}
+      ${s.obsCount>0?`<span class="obs-flag">📝${s.obsCount}</span>`:''}
+      <div class="stu-avatar" style="background:${color}22;color:${color};border-color:${color};">${initials}</div>
+      <div class="stu-name">${s.name}</div>
+      <span class="vark-tag vark-${s.vark}">${s.vark}</span>
+      <span class="stu-phase-badge ${phaseCls}">${phaseLbl}</span>
+      ${intentWarn}
+    </div>`;
+  });
+  updateStatBadges();
+}
+
+function refreshStudents(){ buildStudentGrid(); }
+
+function updateStatBadges(){
+  let active=0,help=0,idle=0;
+  students.forEach(s=>{
+    const p=studentProgress[s.id]||{};
+    if(p.help) help++;
+    else if(p.status==='active') active++;
+    else idle++;
+  });
+  document.getElementById('statActive').textContent=active;
+  document.getElementById('statHelp').textContent=help;
+  document.getElementById('statIdle').textContent=idle;
+}
+
+// ─────────────────────────────────────────────
+// SPRINT F: OBSERVATION MODAL
+// ─────────────────────────────────────────────
+function openObservation(sid){
+  const stu = students.find(s => s.id === sid);
+  if(!stu) { showToast('⚠️ الطالب غير موجود'); return; }
+
+  sprintF.currentObsStudent = stu;
+  sprintF.selectedObsType = null;
+  sprintF.selectedNewVark = null;
+
+  const i = students.indexOf(stu);
+  const color = avatarColors[i % avatarColors.length];
+
+  document.getElementById('obsAvatar').textContent = stu.name.charAt(0);
+  document.getElementById('obsAvatar').style.background = color+'22';
+  document.getElementById('obsAvatar').style.color = color;
+  document.getElementById('obsAvatar').style.borderColor = color;
+  document.getElementById('obsStudentName').textContent = stu.name;
+  document.getElementById('obsStudentMeta').textContent = `VARK: ${stu.vark} | المستوى: ${stu.level}`;
+  document.getElementById('obsCurrentVark').textContent = stu.vark;
+  document.getElementById('obsNote').value = '';
+  document.getElementById('varkReason').style.display = 'none';
+  document.getElementById('varkReason').value = '';
+
+  // Reset obs type buttons
+  document.querySelectorAll('.obs-type-btn').forEach(b => b.classList.remove('selected'));
+
+  // Reset VARK chips
+  document.querySelectorAll('.vark-chip.new-vark').forEach(c => {
+    c.classList.remove('selected');
+    if(c.dataset.vark === stu.vark) c.classList.add('current');
+    else c.classList.remove('current');
+  });
+
+  document.getElementById('obsOverlay').style.display = 'flex';
+}
+
+function closeObservation(){
+  document.getElementById('obsOverlay').style.display = 'none';
+  sprintF.currentObsStudent = null;
+  sprintF.selectedObsType = null;
+  sprintF.selectedNewVark = null;
+}
+
+function selectObsType(type, el){
+  sprintF.selectedObsType = type;
+  document.querySelectorAll('.obs-type-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function selectVark(v, el){
+  sprintF.selectedNewVark = v;
+  document.querySelectorAll('.vark-chip.new-vark').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('varkReason').style.display = v ? 'block' : 'none';
+}
+
+async function saveObservation(){
+  const stu = sprintF.currentObsStudent;
+  if(!stu){ closeObservation(); return; }
+
+  const note = document.getElementById('obsNote').value.trim();
+  const obsType = sprintF.selectedObsType;
+  const newVark = sprintF.selectedNewVark;
+  const varkReason = document.getElementById('varkReason').value;
+  const elapsed = Math.round((Date.now() - sprintF.sessionStartTimestamp) / 1000);
+
+  if(!obsType && !note){ showToast('⚠️ اختاري نوع الملاحظة أو أضيفي ملاحظة نصية'); return; }
+
+  // Save student observation
+  if(obsType || note){
+    const narrative = buildObsNarrative(stu.name, obsType, note, elapsed);
+    await logEvidence('student_observation', {
+      student_id: stu.id,
+      student_name: stu.name,
+      obs_type: obsType || 'ملاحظة حرة',
+      note: note,
+      elapsed_seconds: elapsed
+    }, narrative, mapObsToGoal(obsType));
+
+    // Track locally
+    sprintF.observations.push({ sid: stu.id, type: obsType, note });
+    stu.obsCount = (stu.obsCount || 0) + 1;
+
+    // Log truth event
+    logTruthEvent('student_observation', {
+      student_id: stu.id, student_name: stu.name, obs_type: obsType
+    });
+  }
+
+  // Save VARK override if changed
+  if(newVark && newVark !== stu.vark){
+    const oldVark = stu.vark;
+    const varkNarrative = `المعلمة غيّرت تصنيف ${stu.name} من ${oldVark} إلى ${newVark}${varkReason ? ' — السبب: ' + varkReason : ''}. هذا حكم مهني يتجاوز التصنيف الآلي ويُعدّ دليلاً على الملاحظة الفردية الدقيقة.`;
+    await logEvidence('vark_override', {
+      student_id: stu.id, student_name: stu.name,
+      old_vark: oldVark, new_vark: newVark, reason: varkReason
+    }, varkNarrative, 'التكيّف مع احتياجات الطلاب الفردية');
+
+    // Update student locally
+    stu.vark = newVark;
+    logTruthEvent('vark_override', {
+      student_name: stu.name, old_vark: oldVark, new_vark: newVark
+    });
+    showToast(`✅ تصنيف ${stu.name} تغيّر: ${oldVark} → ${newVark}`);
+  } else {
+    showToast(`✅ ملاحظة ${stu.name} سُجِّلت`);
+  }
+
+  buildStudentGrid();
+  closeObservation();
+}
+
+function buildObsNarrative(name, type, note, elapsed){
+  const timeMin = Math.round(elapsed / 60);
+  const typeMap = {
+    'مشاركة ممتازة': `في الدقيقة ${timeMin} من الحصة، لاحظت المعلمة أن ${name} أظهرت مشاركة ممتازة وانخراطاً حقيقياً في النشاط.`,
+    'تحسّن ملحوظ': `سجّلت المعلمة تحسّناً ملحوظاً لدى ${name} في الدقيقة ${timeMin}، مما يدل على استجابة إيجابية لاستراتيجية التدريس.`,
+    'سلوك إيجابي': `أشادت المعلمة بالسلوك الإيجابي لـ${name} في الدقيقة ${timeMin} من الحصة.`,
+    'يحتاج دعم': `لاحظت المعلمة في الدقيقة ${timeMin} أن ${name} تحتاج دعماً إضافياً، وتدخّلت لتقديم المساعدة المناسبة.`,
+    'غائب عقلياً': `رصدت المعلمة في الدقيقة ${timeMin} انفصالاً لدى ${name}، وسجّلت ذلك للمتابعة والتدخل في الأنشطة القادمة.`,
+  };
+  let narrative = typeMap[type] || `ملاحظة على ${name} في الدقيقة ${timeMin} من الحصة.`;
+  if(note) narrative += ` تفاصيل إضافية: ${note}`;
+  return narrative;
+}
+
+function mapObsToGoal(obsType){
+  if(!obsType) return null;
+  if(['يحتاج دعم','غائب عقلياً'].includes(obsType)) return 'التكيّف مع احتياجات الطلاب';
+  if(['مشاركة ممتازة','سلوك إيجابي'].includes(obsType)) return 'تعزيز بيئة التعلم الإيجابية';
+  if(obsType === 'تحسّن ملحوظ') return 'الأثر التحصيلي للطالب';
+  return null;
+}
+
+// ─────────────────────────────────────────────
+// SPRINT F: ACTIVITY CHANGE MODAL
+// ─────────────────────────────────────────────
+function openActivityChange(){
+  sprintF.selectedReason = null;
+  document.querySelectorAll('.reason-chip').forEach(c => c.classList.remove('selected'));
+  document.getElementById('actChangedTo').value = '';
+  document.getElementById('narrativePreview').textContent = 'اختاري النشاط الجديد والسبب لرؤية السرد التلقائي...';
+  document.getElementById('actPhaseInfo').textContent = `المرحلة الحالية: ${phases[currentPhase] || '—'} (${currentPhase+1}/5)`;
+  document.getElementById('activityOverlay').style.display = 'flex';
+}
+
+function closeActivityChange(){
+  document.getElementById('activityOverlay').style.display = 'none';
+  sprintF.selectedReason = null;
+}
+
+function selectReason(reason, el){
+  sprintF.selectedReason = reason;
+  document.querySelectorAll('.reason-chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  updateNarrativePreview();
+}
+
+function updateNarrativePreview(){
+  const to = document.getElementById('actChangedTo').value;
+  const reason = sprintF.selectedReason;
+  if(!to){ document.getElementById('narrativePreview').textContent = 'اختاري النشاط الجديد...'; return; }
+  const fromPhase = phases[currentPhase] || 'النشاط المخطط';
+  let narrative = `في مرحلة "${fromPhase}"، غيّرت المعلمة النشاط إلى "${to}"`;
+  if(reason) narrative += ` بسبب: ${reason}.`;
+  else narrative += '.';
+  narrative += ' هذا التكيّف الآني يعكس حكماً مهنياً ومرونة تربوية حقيقية.';
+  document.getElementById('narrativePreview').textContent = narrative;
+}
+
+async function saveActivityChange(){
+  const to = document.getElementById('actChangedTo').value;
+  const reason = sprintF.selectedReason;
+  if(!to){ showToast('⚠️ اختاري النشاط الجديد'); return; }
+
+  const fromPhase = phases[currentPhase] || 'النشاط المخطط';
+  const narrative = document.getElementById('narrativePreview').textContent;
+
+  await logEvidence('activity_change', {
+    from: fromPhase,
+    to: to,
+    reason: reason || 'لم تُحدَّد',
+    phase_index: currentPhase,
+    elapsed_seconds: Math.round((Date.now() - sprintF.sessionStartTimestamp) / 1000)
+  }, narrative, 'المرونة التربوية والتكيّف الآني');
+
+  logTruthEvent('activity_changed', { from: fromPhase, to, reason });
+  sprintF.activityChanges++;
+  showToast('✅ تم توثيق التغيير في الأدلة الصامتة');
+  closeActivityChange();
+}
+
+function openQuickMemo(){
+  const note = prompt('🎤 ملاحظة سريعة:');
+  if(!note || !note.trim()) return;
+  const elapsed = Math.round((Date.now() - sprintF.sessionStartTimestamp) / 1000);
+  const narrative = `ملاحظة صوتية في الدقيقة ${Math.round(elapsed/60)}: "${note.trim()}"`;
+  logEvidence('voice_memo_text', { note: note.trim(), elapsed_seconds: elapsed }, narrative, null);
+  logTruthEvent('student_observation', { note: note.trim(), type: 'voice_memo' });
+  showToast('✅ الملاحظة سُجِّلت');
+}
+
+// ─────────────────────────────────────────────
+// SPRINT F: EVIDENCE LOGGING
+// ─────────────────────────────────────────────
+async function logEvidence(type, data, narrative, mappedGoal){
+  try {
+    await sb.from('staff_evidence').insert({
+      teacher_id: TEACHER_ID,
+      session_id: sessionId,
+      class_key: currentClass,
+      subject: currentTopic,
+      evidence_type: type,
+      action_data: data || {},
+      auto_narrative: narrative || '',
+      mapped_goal: mappedGoal || null,
+      teacher_confirmed: false
+    });
+    sprintF.evidenceCount++;
+    document.getElementById('evidenceCounter').textContent = sprintF.evidenceCount;
+  } catch(e){ console.warn('Evidence log error:', e); }
+}
+
+async function logTruthEvent(eventType, data){
+  try {
+    const elapsed = sprintF.sessionStartTimestamp
+      ? Math.round((Date.now() - sprintF.sessionStartTimestamp) / 1000)
+      : 0;
+    await sb.from('lesson_truth_log').insert({
+      session_id: sessionId || 'pre-session',
+      class_key: currentClass,
+      event_type: eventType,
+      event_data: data || {},
+      teacher_id: TEACHER_ID,
+      elapsed_seconds: elapsed
+    });
+  } catch(e){ console.warn('Truth log error:', e); }
+}
+
+function openPortfolio(){
+  const url = `evidence_portfolio.html?teacher=${TEACHER_ID}`;
+  window.open(url, '_blank');
+}
+
+// ─────────────────────────────────────────────
+// PHASE CONTROLS
+// ─────────────────────────────────────────────
+function broadcastPhase(idx){
+  const prevPhase = currentPhase;
+  currentPhase=idx;
+  updatePhaseControls(idx);
+  sb.from('lesson_sessions').update({phase:idx}).eq('id',sessionId).then(()=>{});
+  if(liveChannel){
+    liveChannel.send({type:'broadcast',event:'phase_change',payload:{phase:idx}});
+  }
+  // Sprint F: Log truth event
+  logTruthEvent('phase_change', {
+    from: prevPhase, to: idx,
+    from_name: phases[prevPhase], to_name: phases[idx]
+  });
+  showToast('📡 تم بث المرحلة: '+phases[idx]);
+  buildPhaseProgressBars();
+}
+
+function updatePhaseControls(idx){
+  for(let i=0;i<5;i++){
+    const pc=document.getElementById('pc'+i);
+    const ps=document.getElementById('ps'+i);
+    if(!pc) continue;
+    pc.classList.remove('active-phase','broadcasting');
+    if(i===idx){pc.classList.add('active-phase','broadcasting');ps.textContent='🔴 يُبث الآن';}
+    else if(i<idx){ps.textContent='✅ مكتملة';}
+    else{ps.textContent='في الانتظار';}
+  }
+}
+
+function buildPhaseProgressBars(){
+  const cont=document.getElementById('phaseProgressBars');
+  cont.innerHTML='';
+  phases.forEach((ph,i)=>{
+    const count=students.filter(s=>(studentProgress[s.id]||{}).phase===i).length;
+    const pct=students.length?Math.round((count/students.length)*100):0;
+    cont.innerHTML+=`
+    <div class="poll-result-bar">
+      <div class="poll-result-label"><span>${ph}</span><span>${count}</span></div>
+      <div class="poll-result-track"><div class="poll-result-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  });
+}
+
+// ─────────────────────────────────────────────
+// REALTIME
+// ─────────────────────────────────────────────
+function subscribeRealtime(){
+  liveChannel = sb.channel('session-'+sessionId, {config:{broadcast:{self:false}}});
+  liveChannel
+    .on('broadcast', {event:'student_update'}, ({payload})=>{
+      const {student_id, phase, status, help} = payload;
+      studentProgress[student_id]={phase:phase||0, status:status||'active', help:!!help};
+      const tile=document.getElementById('tile-'+student_id);
+      if(tile) updateStudentTile(student_id);
+      updateStatBadges();
+      buildPhaseProgressBars();
+    })
+    .on('broadcast', {event:'help_request'}, ({payload})=>{
+      const {student_id, name} = payload;
+      if(studentProgress[student_id]) studentProgress[student_id].help=true;
+      const tile=document.getElementById('tile-'+student_id);
+      if(tile) tile.classList.add('help');
+      document.getElementById('statHelp').textContent=
+        parseInt(document.getElementById('statHelp').textContent||0)+1;
+      showToast('🆘 '+name+' تطلب مساعدة!');
+    })
+    .on('broadcast', {event:'poll_answer'}, ({payload})=>{ handlePollAnswer(payload); })
+    .on('broadcast', {event:'tab_exit'}, ({payload})=>{
+      handleTabExit(payload.student_id, payload.student_name);
+    })
+    .on('broadcast', {event:'tab_return'}, ({payload})=>{
+      updatePulse();
+    })
+    .on('broadcast', {event:'suspicious_timing'}, ({payload})=>{
+      handleSuspiciousTiming(payload);
+    })
+    .subscribe();
+}
+
+function updateStudentTile(sid){
+  const s=students.find(st=>st.id===sid);
+  if(!s) return;
+  const i=students.indexOf(s);
+  const color=avatarColors[i%avatarColors.length];
+  const p=studentProgress[sid]||{phase:0,status:'offline',help:false};
+  const statusCls=p.status==='active'?'active':p.help?'help':'offline';
+  const phaseLbl=p.phase<phases.length?phases[p.phase]:'—';
+  const phaseCls=p.phase===currentPhase?'active':p.phase>currentPhase?'done':'';
+  const hasFlagged = sprintF.observations.some(o => o.sid === sid && o.type === 'يحتاج دعم');
+  const gExits2 = sprintG.exitCounts[sid] || 0;
+  const gScore2 = sprintG.intentScores[sid] ?? 100;
+  const exitDot2 = gExits2 >= 3 ? '<span class="exit-dot"></span>' : '';
+  const intentWarn2 = gScore2 < 50 ? '<span class="intent-warn">🔴</span>' : gScore2 < 75 ? '<span class="intent-warn">🟡</span>' : '';
+  const tile=document.getElementById('tile-'+sid);
+  if(!tile) return;
+  tile.className=`student-tile ${statusCls}${hasFlagged?' flagged':''}`;
+  tile.innerHTML=`
+    ${exitDot2}
+    ${p.help?'<span class="help-flag">🆘</span>':''}
+    ${s.obsCount>0?`<span class="obs-flag">📝${s.obsCount}</span>`:''}
+    <div class="stu-avatar" style="background:${color}22;color:${color};border-color:${color};">${s.name.charAt(0)}</div>
+    <div class="stu-name">${s.name}</div>
+    <span class="vark-tag vark-${s.vark}">${s.vark}</span>
+    <span class="stu-phase-badge ${phaseCls}">${phaseLbl}</span>
+    ${intentWarn2}`;
+}
+
+// ─────────────────────────────────────────────
+// TIMER
+// ─────────────────────────────────────────────
+function tickTimer(){
+  timerSec--;
+  if(timerSec<=0){clearInterval(sessionTimer);showToast('⏰ انتهى وقت الحصة!');return;}
+  updateTimerDisplay();
+  // Sprint F: Alert at 25 min screen time (digital overuse principle)
+  if(timerSec === (sessionDuration * 60 - 25 * 60) && sessionDuration >= 30){
+    showToast('💡 مبدأ الإنسان أولاً: 25 دقيقة — هل فكّرت في لحظة بلا شاشة؟');
+  }
+}
+
+function updateTimerDisplay(){
+  const m=Math.floor(timerSec/60), s=timerSec%60;
+  document.getElementById('liveTimer').textContent=
+    String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
+
+// ─────────────────────────────────────────────
+// BROADCAST
+// ─────────────────────────────────────────────
+function sendBroadcastMsg(type){
+  const msgs={
+    attention:'🔔 اطلبي الانتباه! استمعي للمعلمة',
+    pause:'⏸ توقفي لحظة — لا تكملي حتى إشارة المعلمة',
+    check:'✅ تحققي من عملك قبل المتابعة',
+    celebrate:'🎉 ممتاز! استمري في العمل الرائع'
+  };
+  if(liveChannel){
+    liveChannel.send({type:'broadcast',event:'teacher_msg',payload:{msg:msgs[type],type}});
+  }
+  logTruthEvent('broadcast_msg', { msg_type: type });
+  showToast('📢 تم الإرسال: '+msgs[type].substring(0,30)+'...');
+}
+
+function sendQuickMessage(){
+  const msg=document.getElementById('quickMsgInput').value.trim();
+  if(!msg){showToast('⚠️ الرسالة فارغة');return;}
+  if(liveChannel){
+    liveChannel.send({type:'broadcast',event:'teacher_msg',payload:{msg,type:'custom'}});
+  }
+  logTruthEvent('broadcast_msg', { msg_type: 'custom', preview: msg.substring(0,50) });
+  document.getElementById('quickMsgInput').value='';
+  showToast('✅ تم إرسال الرسالة للجميع');
+}
+
+// ─────────────────────────────────────────────
+// POLL
+// ─────────────────────────────────────────────
+function openPollOverlay(){document.getElementById('pollOverlay').style.display='flex';}
+function closePollOverlay(){document.getElementById('pollOverlay').style.display='none';}
+
+function launchPoll(){
+  const q=document.getElementById('pollQ').value.trim();
+  const opts=[
+    document.getElementById('opt1').value.trim(),
+    document.getElementById('opt2').value.trim(),
+    document.getElementById('opt3').value.trim(),
+    document.getElementById('opt4').value.trim(),
+  ].filter(Boolean);
+  if(!q||opts.length<2){showToast('⚠️ أدخلي السؤال وخيارين على الأقل');return;}
+  pollData={question:q,options:opts};
+  pollResponses={};
+  opts.forEach((_,i)=>pollResponses[i]=0);
+  if(liveChannel){
+    liveChannel.send({type:'broadcast',event:'poll_start',payload:{question:q,options:opts}});
+  }
+  logTruthEvent('poll_launched', { question: q.substring(0,60), options_count: opts.length });
+  const card=document.getElementById('pollResultsCard');
+  card.style.display='block';
+  document.getElementById('pollQuestion').textContent=q;
+  renderPollBars();
+  closePollOverlay();
+  pollActive=true;
+  showToast('📊 تم إطلاق الاستطلاع!');
+}
+
+function handlePollAnswer({option_idx}){
+  if(!pollActive||option_idx===undefined) return;
+  pollResponses[option_idx]=(pollResponses[option_idx]||0)+1;
+  renderPollBars();
+}
+
+function renderPollBars(){
+  if(!pollData) return;
+  const total=Object.values(pollResponses).reduce((a,b)=>a+b,0);
+  const bars=document.getElementById('pollBars');
+  bars.innerHTML='';
+  pollData.options.forEach((opt,i)=>{
+    const cnt=pollResponses[i]||0;
+    const pct=total?Math.round((cnt/total)*100):0;
+    bars.innerHTML+=`
+    <div class="poll-result-bar">
+      <div class="poll-result-label"><span>${opt}</span><span>${pct}%</span></div>
+      <div class="poll-result-track"><div class="poll-result-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  });
+  document.getElementById('pollResponseCount').textContent=total+' من '+students.length+' أجابت';
+}
+
+// ─────────────────────────────────────────────
+// GROUPS
+// ─────────────────────────────────────────────
+function openGroupOverlay(){document.getElementById('groupOverlay').style.display='flex'; doGroup(groupingMode);}
+function closeGroupOverlay(){document.getElementById('groupOverlay').style.display='none';}
+
+function doGroup(mode){
+  groupingMode=mode;
+  ['gbVark','gbRand','gbLevel'].forEach(id=>document.getElementById(id)?.classList.remove('active-tool'));
+  const btnMap={VARK:'gbVark',random:'gbRand',level:'gbLevel'};
+  if(btnMap[mode]) document.getElementById(btnMap[mode])?.classList.add('active-tool');
+  let groups=[];
+  const shuffled=[...students].sort(()=>Math.random()-.5);
+  if(mode==='VARK'){
+    const varkGroups={V:[],A:[],R:[],K:[]};
+    shuffled.forEach(s=>varkGroups[s.vark]?.push(s));
+    groups=Object.entries(varkGroups).map(([k,v])=>({name:'مجموعة '+k,members:v})).filter(g=>g.members.length);
+  } else if(mode==='level'){
+    const lvls={متقدم:[],متوسط:[],دعم:[]};
+    shuffled.forEach(s=>{const l=s.level||'متوسط';if(lvls[l])lvls[l].push(s);});
+    groups=Object.entries(lvls).map(([k,v])=>({name:'مستوى '+k,members:v})).filter(g=>g.members.length);
+  } else {
+    const size=4;
+    for(let i=0;i<shuffled.length;i+=size){
+      groups.push({name:'مجموعة '+(Math.floor(i/size)+1),members:shuffled.slice(i,i+size)});
+    }
+  }
+  const grid=document.getElementById('groupGrid');
+  grid.innerHTML='';
+  groups.forEach(g=>{
+    grid.innerHTML+=`
+    <div class="group-card">
+      <div class="group-card-title">${g.name} (${g.members.length})</div>
+      ${g.members.map(m=>`<div class="group-member">• ${m.name} <span class="vark-tag vark-${m.vark}">${m.vark}</span></div>`).join('')}
+    </div>`;
+  });
+  if(liveChannel){
+    liveChannel.send({type:'broadcast',event:'groups',payload:{groups:groups.map(g=>({name:g.name,members:g.members.map(m=>m.id)}))}});
+  }
+}
+
+// ─────────────────────────────────────────────
+// ASSESSMENT
+// ─────────────────────────────────────────────
+function launchAssessment(type){
+  const labels={self:'التقييم الذاتي',peer:'تقييم الأقران',group:'التقييم الجماعي',exit:'بطاقة الخروج'};
+  if(liveChannel){
+    liveChannel.send({type:'broadcast',event:'assessment_start',payload:{type,label:labels[type]}});
+  }
+  logTruthEvent('assessment_launched', { assessment_type: type });
+  showToast('📝 تم إرسال '+labels[type]+' للطالبات');
+}
+
+// ─────────────────────────────────────────────
+// SPRINT F: SESSION SUMMARY & END
+// ─────────────────────────────────────────────
+function askEndSession(){
+  showSessionSummary();
+}
+
+function showSessionSummary(){
+  const elapsed = sprintF.sessionStartTimestamp
+    ? Math.round((Date.now() - sprintF.sessionStartTimestamp) / 1000)
+    : sessionDuration * 60;
+  const elapsedMin = Math.round(elapsed / 60);
+  const obsCount = sprintF.observations.length;
+
+  document.getElementById('sumPhases').textContent = `${currentPhase+1} / 5`;
+  document.getElementById('sumTime').textContent = `${elapsedMin} / ${sessionDuration} د`;
+  document.getElementById('sumEvidence').textContent = sprintF.evidenceCount;
+  document.getElementById('sumObs').textContent = obsCount;
+
+  // Build narrative
+  const narrative = buildSessionNarrative(currentPhase+1, elapsedMin, sprintF.activityChanges, obsCount);
+  document.getElementById('summaryNarrative').textContent = narrative;
+
+  document.getElementById('summaryOverlay').style.display = 'flex';
+}
+
+function closeSummary(){
+  document.getElementById('summaryOverlay').style.display = 'none';
+}
+
+function buildSessionNarrative(phases, time, actChanges, obsCount){
+  const actText = actChanges > 0 ? `أجرت ${actChanges} تعديل على الأنشطة استجابةً لديناميكية الصف، ` : '';
+  const obsText = obsCount > 0 ? `وسجّلت ${obsCount} ملاحظة فردية على الطلاب، ` : '';
+  const phasePct = Math.round((phases / 5) * 100);
+  return `أكملت الحصة ${phases} مرحلة من أصل 5 (${phasePct}%) خلال ${time} دقيقة. ${actText}${obsText}مع إجمالي ${sprintF.evidenceCount} دليل موثَّق تلقائياً في بورتفوليو الأدلة.
+
+${actChanges > 0 ? '💡 التكيّف مع الصف يعكس مرونة تربوية حقيقية لا يمكن لـ AI وحده تقييمها.' : '📋 الحصة سارت وفق الخطة المرسومة.'}
+
+⚖️ ملاحظة: هذا السرد مساعد تلقائي — راجعيه وأكّديه قبل الاعتماد الرسمي. AI يرى بعيوني — أنا أحكم بعقلي.`;
+}
+
+async function confirmAndEndSession(){
+  clearInterval(sessionTimer);
+
+  // Log session summary as evidence
+  const elapsed = sprintF.sessionStartTimestamp
+    ? Math.round((Date.now() - sprintF.sessionStartTimestamp) / 1000)
+    : sessionDuration * 60;
+
+  await logEvidence('lesson_summary', {
+    phases_planned: 5,
+    phases_done: currentPhase + 1,
+    time_planned: sessionDuration,
+    time_actual: Math.round(elapsed / 60),
+    activity_changes: sprintF.activityChanges,
+    observations_count: sprintF.observations.length,
+    total_evidence: sprintF.evidenceCount
+  }, buildSessionNarrative(currentPhase+1, Math.round(elapsed/60), sprintF.activityChanges, sprintF.observations.length),
+  'الأثر التعليمي الكلي للحصة');
+
+  // Broadcast end
+  if(liveChannel){
+    liveChannel.send({type:'broadcast',event:'session_end',payload:{msg:'انتهت الحصة. شكراً!'}});
+    await sb.removeChannel(liveChannel);
+  }
+
+  // Update session in Supabase
+  try{
+    await sb.from('lesson_sessions').update({
+      status:'completed', ended_at:new Date().toISOString(),
+      final_phase:currentPhase
+    }).eq('id',sessionId);
+  }catch(e){}
+
+  // Log truth event: session end
+  await logTruthEvent('session_end', {
+    final_phase: currentPhase,
+    total_evidence: sprintF.evidenceCount,
+    elapsed_seconds: elapsed
+  });
+
+  closeSummary();
+  showToast('✅ تم حفظ الحصة وكل الأدلة بنجاح!');
+  setTimeout(()=>window.location.href='index.html', 2500);
+}
+
+// ─────────────────────────────────────────────
+// TOAST
+// ─────────────────────────────────────────────
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3500);
+}
+
+// ═══════════════════════════════════════════════════
+// SPRINT G — نبض الفصل + كشف النية + درع التفرّد
+// ═══════════════════════════════════════════════════
+
+const sprintG = {
+  exitCounts: {},       // student_id → عدد الخروجات
+  intentScores: {},     // student_id → درجة النية (0-100)
+  badges: {},           // student_id → [badges]
+  confirmedFlags: {},   // student_id → عدد العلامات المؤكَّدة
+  dismissedFlags: {},   // student_id → عدد العلامات المرفوضة
+  totalAlerts: 0,
+  alertQueue: [],
+  alertShowing: false,
+};
+
+// ── التهيئة ──
+function initSprintG() {
+  students.forEach(s => {
+    sprintG.exitCounts[s.id] = 0;
+    sprintG.intentScores[s.id] = 100;
+    sprintG.badges[s.id] = [];
+    sprintG.confirmedFlags[s.id] = 0;
+    sprintG.dismissedFlags[s.id] = 0;
+  });
+  const btn = document.getElementById('brainBtn');
+  if (btn) btn.style.display = 'flex';
+  // نبض كل 15 ثانية
+  setInterval(updatePulse, 15000);
+  updatePulse();
+}
+
+// ── نبض الفصل ──
+function updatePulse() {
+  let green = 0, yellow = 0, red = 0;
+  students.forEach(s => {
+    const score = sprintG.intentScores[s.id] ?? 100;
+    const exits = sprintG.exitCounts[s.id] ?? 0;
+    const p = studentProgress[s.id] || {};
+    if (!p.status || p.status === 'offline') { yellow++; return; }
+    if (score >= 75 && exits < 3) green++;
+    else if (score >= 50 || exits < 5) yellow++;
+    else red++;
+  });
+  const pG = document.getElementById('pulseGreen');
+  const pY = document.getElementById('pulseYellow');
+  const pR = document.getElementById('pulseRed');
+  if (pG) pG.textContent = green;
+  if (pY) pY.textContent = yellow;
+  if (pR) pR.textContent = red;
+}
+
+// ── معالج خروج الطالب من التبويب ──
+function handleTabExit(studentId, studentName) {
+  if (!studentId) return;
+  sprintG.exitCounts[studentId] = (sprintG.exitCounts[studentId] || 0) + 1;
+  const count = sprintG.exitCounts[studentId];
+
+  // تخفيض درجة النية
+  sprintG.intentScores[studentId] = Math.max(0, (sprintG.intentScores[studentId] || 100) - 8);
+
+  // Badge عند 3 خروجات
+  if (count === 3 && !sprintG.badges[studentId]?.includes('🚪')) {
+    if (!sprintG.badges[studentId]) sprintG.badges[studentId] = [];
+    sprintG.badges[studentId].push('🚪');
+  }
+
+  // حفظ في Supabase
+  if (sessionId) {
+    sb.from('lesson_exit_log').upsert({
+      session_id: sessionId,
+      class_key: currentClass,
+      student_id: studentId,
+      student_name: studentName || '—',
+      total_exits: count,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'session_id,student_id' }).then(() => {});
+  }
+
+  // تنبيه عند 3+ خروجات
+  if (count === 3) {
+    showGAlert('🔴', studentName || studentId, `خرجت من الحصة ${count} مرات`, studentId);
+    logTruthEvent('tab_exit_alert', { student_id: studentId, student_name: studentName, count });
+  } else if (count >= 5) {
+    showGAlert('🚨', studentName || studentId, `تحذير: ${count} خروجات — يحتاج تدخلاً فورياً`, studentId);
+  }
+
+  updatePulse();
+  buildStudentGrid();
+}
+
+// ── معالج التوقيت المشبوه ──
+function handleSuspiciousTiming(payload) {
+  const { student_id, student_name, answer_time_seconds } = payload;
+  if (!student_id) return;
+  sprintG.intentScores[student_id] = Math.max(0, (sprintG.intentScores[student_id] || 100) - 12);
+  if (!sprintG.badges[student_id]) sprintG.badges[student_id] = [];
+  if (!sprintG.badges[student_id].includes('🔍')) sprintG.badges[student_id].push('🔍');
+  showGAlert('🔍', student_name || student_id,
+    `وقت إجابة مشبوه: ${answer_time_seconds || '—'} ثانية فقط`, student_id);
+  logTruthEvent('suspicious_timing', { student_id, student_name, answer_time_seconds });
+  updatePulse();
+  buildStudentGrid();
+}
+
+// ── نظام التنبيهات ──
+function showGAlert(icon, name, detail, studentId) {
+  sprintG.totalAlerts++;
+  const badge = document.getElementById('brainBadge');
+  if (badge) { badge.textContent = sprintG.totalAlerts; badge.style.display = 'flex'; }
+  sprintG.alertQueue.push({ icon, name, detail, studentId });
+  if (!sprintG.alertShowing) processAlertQueue();
+}
+
+function processAlertQueue() {
+  if (!sprintG.alertQueue.length) { sprintG.alertShowing = false; return; }
+  sprintG.alertShowing = true;
+  const al = sprintG.alertQueue.shift();
+  document.getElementById('alertIcon').textContent = al.icon;
+  document.getElementById('alertName').textContent = al.name;
+  document.getElementById('alertDetail').textContent = al.detail;
+  document.getElementById('alertActionBtn').onclick = () => {
+    if (al.studentId) openObservation(al.studentId);
+    dismissAlertBanner();
+  };
+  const banner = document.getElementById('alertBanner');
+  banner.classList.add('show');
+  setTimeout(() => {
+    banner.classList.remove('show');
+    setTimeout(() => processAlertQueue(), 400);
+  }, 5500);
+}
+
+function dismissAlertBanner() {
+  document.getElementById('alertBanner').classList.remove('show');
+  sprintG.alertShowing = false;
+  setTimeout(() => processAlertQueue(), 400);
+}
+
+// ── نافذة تحليل النوايا ──
+function openIntentOverlay() {
+  const list = document.getElementById('intentStudentList');
+  const suspects = students
+    .filter(s => (sprintG.exitCounts[s.id] || 0) > 0 || (sprintG.intentScores[s.id] ?? 100) < 95)
+    .sort((a, b) => (sprintG.intentScores[a.id] ?? 100) - (sprintG.intentScores[b.id] ?? 100));
+
+  if (!suspects.length) {
+    list.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text2);font-size:.85rem;">
+      ✅ لا نشاط مشبوه — كل الطلاب منتظمون في هذه الحصة<br>
+      <span style="font-size:.72rem;margin-top:8px;display:block;">AI يراقب باستمرار ويُحدِّث تلقائياً</span>
+    </div>`;
+  } else {
+    list.innerHTML = suspects.map(s => {
+      const score = sprintG.intentScores[s.id] ?? 100;
+      const exits = sprintG.exitCounts[s.id] ?? 0;
+      const confirmed = sprintG.confirmedFlags[s.id] || 0;
+      const scoreColor = score >= 75 ? 'var(--emerald)' : score >= 50 ? 'var(--amber)' : 'var(--rose)';
+      const riskLabel = score >= 75 ? '🟡 منخفض' : score >= 50 ? '🟠 متوسط' : '🔴 عالٍ';
+      return `
+      <div class="intent-stu-row">
+        <div style="flex:1;" onclick="openObservation('${s.id}')">
+          <div style="font-size:.85rem;font-weight:700;">${s.name}</div>
+          <div style="font-size:.7rem;color:var(--text2);margin-top:2px;">
+            🚪 ${exits} خروج &nbsp;·&nbsp; درجة النية: ${score}% &nbsp;·&nbsp; خطر: ${riskLabel}
+            ${confirmed > 0 ? ` &nbsp;·&nbsp; <span style="color:var(--rose);">🚩 ${confirmed} مؤكَّد</span>` : ''}
+          </div>
+          <div class="intent-score-bar" style="margin-top:5px;">
+            <div class="intent-score-fill" style="width:${score}%;background:${scoreColor};"></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:4px;flex-shrink:0;margin-right:8px;">
+          <button class="confirm-flag-btn" onclick="event.stopPropagation();confirmStudentFlag('${s.id}','${s.name}')">🚩 تأكيد</button>
+          <button class="dismiss-flag-btn" onclick="event.stopPropagation();dismissStudentFlag('${s.id}')">✓ رفع</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('intentOverlay').style.display = 'flex';
+}
+
+function closeIntentOverlay() {
+  document.getElementById('intentOverlay').style.display = 'none';
+}
+
+// ── نظام التحقق الثلاثي ──
+function confirmStudentFlag(studentId, studentName) {
+  sprintG.confirmedFlags[studentId] = (sprintG.confirmedFlags[studentId] || 0) + 1;
+  const cnt = sprintG.confirmedFlags[studentId];
+  logTruthEvent('flag_confirmed', { student_id: studentId, student_name: studentName, count: cnt });
+  if (cnt >= 3) {
+    // 3 مؤكَّدة → يُرسَل للإدارة تلقائياً (عبر الأدلة)
+    logEvidence('intent_confirmed_3x', {
+      student_id: studentId, student_name: studentName,
+      confirmed_flags: cnt,
+      intent_score: sprintG.intentScores[studentId] || 0
+    },
+    `المعلمة أكّدت ${cnt} حالة لدى ${studentName} — درجة النية: ${sprintG.intentScores[studentId] || 0}% — يُرفع للإدارة وفق السياسة`,
+    'نزاهة التقييم');
+    showToast(`🚩 ${studentName}: وصلت للإدارة تلقائياً (${cnt} مؤكَّدة)`);
+  } else {
+    showToast(`✅ تأكيد رقم ${cnt}/3 — عند 3 يُرسَل للإدارة`);
+  }
+  openIntentOverlay();
+}
+
+function dismissStudentFlag(studentId) {
+  sprintG.dismissedFlags[studentId] = (sprintG.dismissedFlags[studentId] || 0) + 1;
+  // الرفع يرفع الدرجة قليلاً
+  sprintG.intentScores[studentId] = Math.min(100, (sprintG.intentScores[studentId] || 100) + 10);
+  logTruthEvent('flag_dismissed', { student_id: studentId, dismissed_count: sprintG.dismissedFlags[studentId] });
+  showToast('✓ العلامة رُفعت — AI يُعدِّل نموذجه');
+  openIntentOverlay();
+  updatePulse();
+  buildStudentGrid();
+}
+
+// Demo simulation
+  if(!students.length||!sessionId) return;
+  const s=students[Math.floor(Math.random()*students.length)];
+  if(!studentProgress[s.id]) studentProgress[s.id]={phase:0,status:'offline',help:false};
+  studentProgress[s.id].status='active';
+  if(Math.random()>.7) studentProgress[s.id].phase=Math.min(currentPhase,4);
+  updateStudentTile(s.id);
+  updateStatBadges();
+  buildPhaseProgressBars();
+}
+setInterval(simulateDemoActivity,4000);
+</script>
+</body>
+</html>
