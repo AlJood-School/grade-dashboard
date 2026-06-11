@@ -115,9 +115,9 @@ const TYPE_META = {
     }, 8500);
   }
 
-  // أول ظهور بعد 5 ثوانٍ، ثم كل 75 ثانية
+  // أول ظهور بعد 5 ثوانٍ، ثم كل دقيقتين
   setTimeout(showNext, 5000);
-  setInterval(showNext, 75000);
+  setInterval(showNext, 120000);
 
   window.EduMOTD = window.EduMOTD || {};
   window.EduMOTD.showNow = showNext;
