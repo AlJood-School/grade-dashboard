@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>بطاقة الطالب الرقمية — مدرسة الجود</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="../platform-week.js"></script>
+<script src="../platform-motd.js"></script>
+<script src="../platform-autologout.js"></script>
+<script src="../platform-auth-guard.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  :root {
+    --bg: #0D1B2A;
+    --surface: rgba(255,255,255,0.04);
+    --border: rgba(255,255,255,0.08);
+    --accent: #6C63FF;
+    --accent2: #FF6584;
+    --gold: #FFD700;
+    --teal: #00D4AA;
+    --text: #E8EDF2;
+    --muted: #8899AA;
+    --card-bg: rgba(255,255,255,0.06);
+    --radius: 16px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Tajawal', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* HEADER */
+  .header {
+    background: linear-gradient(135deg, #1a0533 0%, #0D1B2A 50%, #0a2440 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .header-logo img {
+    width: 44px;
+    height: 44px;
+    object-fit: contain;
+  }
+  .header-title { font-size: 1.1rem; font-weight: 700; }
+  .header-sub { font-size: 0.75rem; color: var(--muted); }
+  .header-meta {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .header-meta span {
+    background: var(--surface);
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+  }
+  .btn-exit {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid var(--border);
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+    text-decoration: none;
+  }
+  .btn-exit:hover { background: rgba(220,53,69,0.3); border-color: #dc3545; color: #ff6b6b; }
+
+  /* MAIN LAYOUT */
+  .main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px 16px;
+  }
+
+  /* SEARCH */
+  .search-bar {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .search-field {
+    flex: 1;
+    min-width: 200px;
+    position: relative;
+  }
+  .search-field input, .search-field select {
+    width: 100%;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 16px 10px 40px;
+    color: var(--text);
+    font-family: 'Tajawal', sans-serif;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-field select { padding-right: 16px; }
+  .search-field input:focus, .search-field select:focus {
+    border-color: var(--accent);
+  }
+  .search-field .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .search-field select option { background: #1a2a3a; }
+  .btn-search {
+    background: linear-gradient(135deg, var(--accent), #8B5CF6);
+    border: none;
+    border-radius: 10px;
+    padding: 10px 24px;
+    color: white;
+    font-family: 'Tajawal', sans-serif;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+  }
+  .btn-search:hover { opacity: 0.85; }
+  .btn-print-all {
+    background: linear-gradient(135deg, var(--teal), #00A87A);
+    border: none;
+    border-radius: 10px;
+    padding: 10px 20px;
+    color: white;
+    font-family: 'Tajawal', sans-serif;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+  }
+  .btn-print-all:hover { opacity: 0.85; }
+
+  /* GRID */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+  }
+
+  /* STUDENT CARD */
+  .student-card {
+    background: linear-gradient(135deg, rgba(108,99,255,0.12) 0%, rgba(26,5,51,0.6) 50%, rgba(0,212,170,0.08) 100%);
+    border: 1px solid rgba(108,99,255,0.25);
+    border-radius: 20px;
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+    position: relative;
+  }
+  .student-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(108,99,255,0.25);
+  }
+  .student-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--teal), var(--accent2));
+  }
+
+  .card-header {
+    background: linear-gradient(135deg, rgba(108,99,255,0.2), rgba(0,212,170,0.1));
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    position: relative;
+  }
+  .card-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--teal));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: white;
+    flex-shrink: 0;
+    border: 2px solid rgba(255,255,255,0.2);
+  }
+  .card-name { font-size: 1rem; font-weight: 700; line-height: 1.3; }
+  .card-grade-label {
+    display: inline-block;
+    background: rgba(108,99,255,0.3);
+    border: 1px solid rgba(108,99,255,0.4);
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 0.72rem;
+    margin-top: 4px;
+    color: #a78bfa;
+  }
+  .card-school-logo {
+    position: absolute;
+    left: 16px;
+    top: 12px;
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    opacity: 0.7;
+  }
+
+  .card-body {
+    padding: 16px 20px;
+  }
+  .card-info-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 0.83rem;
+  }
+  .card-info-row .label {
+    color: var(--muted);
+    min-width: 80px;
+    flex-shrink: 0;
+  }
+  .card-info-row .value {
+    color: var(--text);
+    font-weight: 500;
+  }
+  .card-info-row i {
+    color: var(--accent);
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .card-qr {
+    background: white;
+    border-radius: 10px;
+    padding: 8px;
+    width: 80px;
+    height: 80px;
+    margin: 12px auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .card-qr canvas, .card-qr img {
+    width: 64px !important;
+    height: 64px !important;
+  }
+
+  .card-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 12px 0;
+  }
+
+  .card-footer {
+    padding: 10px 20px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .card-id {
+    font-size: 0.78rem;
+    color: var(--muted);
+    font-family: monospace;
+    letter-spacing: 1px;
+  }
+  .btn-print-card {
+    background: rgba(108,99,255,0.2);
+    border: 1px solid rgba(108,99,255,0.3);
+    border-radius: 8px;
+    padding: 5px 14px;
+    color: #a78bfa;
+    font-family: 'Tajawal', sans-serif;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-print-card:hover {
+    background: rgba(108,99,255,0.35);
+  }
+
+  /* SPECIAL NEEDS BADGE */
+  .badge-special {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255,101,132,0.15);
+    border: 1px solid rgba(255,101,132,0.3);
+    border-radius: 20px;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    color: #ff8fab;
+    margin-top: 4px;
+  }
+
+  /* STATS BAR */
+  .stats-bar {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 24px;
+    margin-bottom: 20px;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .stat-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .stat-icon {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+  }
+  .stat-num { font-size: 1.3rem; font-weight: 800; }
+  .stat-label { font-size: 0.75rem; color: var(--muted); }
+  .stat-divider {
+    width: 1px; height: 36px;
+    background: var(--border);
+  }
+
+  /* MODAL — Print Card */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(8px);
+  }
+  .modal-overlay.active { display: flex; }
+  .modal-box {
+    background: #1a2535;
+    border: 1px solid rgba(108,99,255,0.3);
+    border-radius: 20px;
+    padding: 32px;
+    max-width: 480px;
+    width: 90%;
+    text-align: center;
+  }
+  .modal-box h3 { font-size: 1.2rem; margin-bottom: 20px; }
+
+  /* PRINT CARD DESIGN */
+  .print-card {
+    background: linear-gradient(135deg, #1a0533, #0D1B2A, #0a2440);
+    border: 2px solid rgba(108,99,255,0.4);
+    border-radius: 16px;
+    padding: 20px;
+    margin: 0 auto 20px;
+    max-width: 320px;
+    position: relative;
+    overflow: hidden;
+  }
+  .print-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #6C63FF, #00D4AA, #FF6584);
+  }
+  .print-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+  .print-card-header img {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+  }
+  .print-card-school { font-size: 0.8rem; font-weight: 700; }
+  .print-card-sub { font-size: 0.65rem; color: var(--muted); }
+  .print-card-year {
+    margin-right: auto;
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+  .print-card-body {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .print-card-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--accent), var(--teal));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: white;
+    flex-shrink: 0;
+    border: 2px solid rgba(255,255,255,0.15);
+  }
+  .print-card-info { flex: 1; }
+  .print-card-name { font-size: 0.9rem; font-weight: 700; margin-bottom: 4px; }
+  .print-card-grade { font-size: 0.75rem; color: var(--muted); margin-bottom: 2px; }
+  .print-card-id { font-size: 0.7rem; color: var(--muted); font-family: monospace; }
+  .print-card-qr {
+    background: white;
+    border-radius: 8px;
+    padding: 6px;
+    width: 60px;
+    height: 60px;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .print-card-qr canvas, .print-card-qr img { width: 48px !important; height: 48px !important; }
+  .print-card-footer {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.68rem;
+    color: var(--muted);
+  }
+  .print-card-valid {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--teal);
+  }
+
+  .modal-btns {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+  .btn-modal-print {
+    background: linear-gradient(135deg, var(--accent), #8B5CF6);
+    border: none;
+    border-radius: 10px;
+    padding: 10px 24px;
+    color: white;
+    font-family: 'Tajawal', sans-serif;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: opacity 0.2s;
+  }
+  .btn-modal-print:hover { opacity: 0.85; }
+  .btn-modal-close {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 20px;
+    color: var(--text);
+    font-family: 'Tajawal', sans-serif;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  /* EMPTY STATE */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+    grid-column: 1/-1;
+  }
+  .empty-state i { font-size: 3rem; margin-bottom: 16px; display: block; }
+  .empty-state p { font-size: 1.1rem; }
+
+  /* LOADING */
+  .loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .spinner {
+    width: 48px; height: 48px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* PAGINATION */
+  .pagination {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+  }
+  .page-btn {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-family: 'Tajawal', sans-serif;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .page-btn:hover, .page-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  .page-info {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  /* PRINT MEDIA */
+  @media print {
+    body { background: white; }
+    .header, .search-bar, .stats-bar, .pagination, .modal-overlay,
+    .btn-print-card, .btn-print-all, .loading-overlay { display: none !important; }
+    .cards-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .student-card {
+      background: white !important;
+      border: 2px solid #333 !important;
+      break-inside: avoid;
+      color: #333 !important;
+    }
+    .card-name, .card-info-row .value, .card-id { color: #333 !important; }
+    .card-info-row .label, .card-grade-label { color: #666 !important; }
+  }
+
+  @media (max-width: 600px) {
+    .cards-grid { grid-template-columns: 1fr; }
+    .search-bar { flex-direction: column; }
+    .search-field { min-width: 100%; }
+    .stats-bar { gap: 12px; }
+    .stat-divider { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <p style="color:var(--muted); font-size:0.9rem;">جاري تحميل البطاقات...</p>
+</div>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-logo">
+    <img src="../eduos-logo.png" alt="EduOS">
+    <div>
+      <div class="header-title">بطاقة الطالب الرقمية</div>
+      <div class="header-sub" id="headerSub">العام الدراسي 2025–2026</div>
+    </div>
+  </div>
+  <div class="header-meta" id="headerMeta"></div>
+  <a href="../eduos-hub/" class="btn-exit" title="خروج"><i class="fas fa-times"></i></a>
+</header>
+
+<!-- MAIN -->
+<main class="main">
+  <!-- STATS -->
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-item">
+      <div class="stat-icon" style="background:rgba(108,99,255,0.15)"><i class="fas fa-id-card" style="color:#6C63FF"></i></div>
+      <div>
+        <div class="stat-num" id="statTotal">—</div>
+        <div class="stat-label">إجمالي الطلبة</div>
+      </div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <div class="stat-icon" style="background:rgba(0,212,170,0.15)"><i class="fas fa-check-circle" style="color:#00D4AA"></i></div>
+      <div>
+        <div class="stat-num" id="statActive">—</div>
+        <div class="stat-label">نشط</div>
+      </div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <div class="stat-icon" style="background:rgba(255,101,132,0.15)"><i class="fas fa-heart" style="color:#FF6584"></i></div>
+      <div>
+        <div class="stat-num" id="statSpecial">—</div>
+        <div class="stat-label">أصحاب الهمم</div>
+      </div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <div class="stat-icon" style="background:rgba(255,215,0,0.15)"><i class="fas fa-school" style="color:#FFD700"></i></div>
+      <div>
+        <div class="stat-num" id="statGrades">—</div>
+        <div class="stat-label">صفوف دراسية</div>
+      </div>
+    </div>
+    <div style="margin-right:auto; font-size:0.8rem; color:var(--muted)">
+      <i class="fas fa-info-circle"></i>
+      يمكن طباعة البطاقات بشكل فردي أو جماعي
+    </div>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="search-bar">
+    <div class="search-field" style="flex:2; min-width:220px">
+      <i class="fas fa-search search-icon"></i>
+      <input type="text" id="searchName" placeholder="ابحثي عن طالب بالاسم أو رقم الهوية..." oninput="filterCards()">
+    </div>
+    <div class="search-field" style="flex:1;">
+      <select id="filterGrade" onchange="filterCards()">
+        <option value="">كل الصفوف</option>
+      </select>
+    </div>
+    <div class="search-field" style="flex:1;">
+      <select id="filterSpecial" onchange="filterCards()">
+        <option value="">كل الطلبة</option>
+        <option value="special">أصحاب الهمم فقط</option>
+        <option value="regular">الطلبة العاديون</option>
+      </select>
+    </div>
+    <button class="btn-print-all" onclick="printAll()"><i class="fas fa-print"></i> طباعة الكل</button>
+  </div>
+
+  <!-- CARDS GRID -->
+  <div class="cards-grid" id="cardsGrid">
+    <div class="empty-state">
+      <i class="fas fa-id-card" style="color:var(--accent); opacity:0.4"></i>
+      <p>جاري التحميل...</p>
+    </div>
+  </div>
+
+  <!-- PAGINATION -->
+  <div class="pagination" id="pagination"></div>
+</main>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="printModal">
+  <div class="modal-box">
+    <h3><i class="fas fa-id-card" style="color:var(--accent)"></i> بطاقة الطالب</h3>
+    <div class="print-card" id="printCardContent"></div>
+    <div class="modal-btns">
+      <button class="btn-modal-print" onclick="doPrint()"><i class="fas fa-print"></i> طباعة</button>
+      <button class="btn-modal-close" onclick="closeModal()">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// INIT SUPABASE
+// ============================================================
+const SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQxMzgxMzIsImV4cCI6MjA1OTcxNDEzMn0.' + 'dp9_cHBHuUWS7miAOa_ydOL-BVHSOD1XPNB0BjQaWM4';
+const supabase = window.supabase.createClient(SB_URL, SB_KEY);
+
+let allStudents = [];
+let filteredStudents = [];
+let currentPage = 1;
+const PAGE_SIZE = 12;
+let printTarget = null;
+
+// ============================================================
+// PLATFORM HEADER
+// ============================================================
+function initHeader() {
+  if (typeof getPlatformWeek === 'function') {
+    const pw = getPlatformWeek();
+    document.getElementById('headerSub').textContent = `العام الدراسي ${pw.year} — الفصل ${pw.term}`;
+    document.getElementById('headerMeta').innerHTML = `
+      <span><i class="fas fa-calendar-week"></i> الأسبوع ${pw.week}</span>
+    `;
+  }
+}
+
+// ============================================================
+// LOAD STUDENTS
+// ============================================================
+async function loadStudents() {
+  try {
+    // Try from eduos-onboarding student list
+    const { data: studentsData, error } = await supabase
+      .from('edoos_students')
+      .select('*')
+      .order('grade_level, full_name');
+
+    if (!error && studentsData && studentsData.length > 0) {
+      allStudents = studentsData;
+    } else {
+      // Fallback: try inclusion_plans for special needs students
+      const { data: incData } = await supabase
+        .from('inclusion_plans')
+        .select('*')
+        .order('grade, student_name');
+
+      if (incData && incData.length > 0) {
+        allStudents = incData.map(s => ({
+          id: s.id,
+          student_id: s.manhel_id || s.id,
+          full_name: s.student_name,
+          grade_level: s.grade,
+          section: s.section || 'أ',
+          gender: s.gender || 'أنثى',
+          nationality: s.nationality || 'إماراتية',
+          is_special_needs: true,
+          disability_type: s.disability_type,
+          disability_level: s.disability_level,
+          status: 'active',
+          academic_year: '2025-2026'
+        }));
+      } else {
+        // Demo data
+        allStudents = generateDemoStudents();
+      }
+    }
+
+    filteredStudents = [...allStudents];
+    updateStats();
+    populateGradeFilter();
+    renderCards();
+  } catch (err) {
+    console.error(err);
+    allStudents = generateDemoStudents();
+    filteredStudents = [...allStudents];
+    updateStats();
+    populateGradeFilter();
+    renderCards();
+  } finally {
+    document.getElementById('loadingOverlay').style.display = 'none';
+  }
+}
+
+function generateDemoStudents() {
+  const grades = ['KG1','KG2','G1','G2','G3','G4','G5','G6','G7','G8'];
+  const names = [
+    'نورة محمد الهاشمي', 'ريم سالم المزروعي', 'منيرة خالد العامري',
+    'لطيفة عبدالله الكندي', 'أسماء راشد الشامسي', 'موزة أحمد بن دلموك',
+    'فاطمة علي النعيمي', 'مريم سعيد الظاهري', 'وفاء يوسف المرر',
+    'هند محمد الحمادي', 'شيخة راشد المري', 'عائشة خلفان الكعبي',
+    'بدرية ناصر الرميثي', 'صالحة جمعة بو شهاب', 'خلود سعد المنصوري'
+  ];
+  const disabilities = ['إعاقة بصرية', 'صعوبات تعلم', 'توحد', 'ضعف سمعي', null];
+  const nationals = ['إماراتية','سعودية','مصرية','فلسطينية','أردنية'];
+
+  return names.map((name, i) => ({
+    id: i + 1,
+    student_id: `AJ${String(2025001 + i).slice(-4)}`,
+    full_name: name,
+    grade_level: grades[i % grades.length],
+    section: ['أ','ب','ج'][i % 3],
+    gender: 'أنثى',
+    nationality: nationals[i % nationals.length],
+    is_special_needs: i % 5 === 0,
+    disability_type: i % 5 === 0 ? disabilities[i % 4] : null,
+    status: 'active',
+    academic_year: '2025-2026'
+  }));
+}
+
+// ============================================================
+// STATS
+// ============================================================
+function updateStats() {
+  document.getElementById('statTotal').textContent = allStudents.length;
+  document.getElementById('statActive').textContent = allStudents.filter(s => s.status === 'active' || !s.status).length;
+  document.getElementById('statSpecial').textContent = allStudents.filter(s => s.is_special_needs).length;
+  const grades = new Set(allStudents.map(s => s.grade_level));
+  document.getElementById('statGrades').textContent = grades.size;
+}
+
+// ============================================================
+// GRADE FILTER
+// ============================================================
+function populateGradeFilter() {
+  const grades = [...new Set(allStudents.map(s => s.grade_level))].sort();
+  const sel = document.getElementById('filterGrade');
+  grades.forEach(g => {
+    const opt = document.createElement('option');
+    opt.value = g;
+    opt.textContent = g;
+    sel.appendChild(opt);
+  });
+}
+
+// ============================================================
+// FILTER
+// ============================================================
+function filterCards() {
+  const q = document.getElementById('searchName').value.trim().toLowerCase();
+  const grade = document.getElementById('filterGrade').value;
+  const special = document.getElementById('filterSpecial').value;
+
+  filteredStudents = allStudents.filter(s => {
+    const matchQ = !q ||
+      (s.full_name && s.full_name.toLowerCase().includes(q)) ||
+      (s.student_id && String(s.student_id).toLowerCase().includes(q));
+    const matchGrade = !grade || s.grade_level === grade;
+    const matchSpecial = !special ||
+      (special === 'special' && s.is_special_needs) ||
+      (special === 'regular' && !s.is_special_needs);
+    return matchQ && matchGrade && matchSpecial;
+  });
+
+  currentPage = 1;
+  renderCards();
+}
+
+// ============================================================
+// RENDER CARDS
+// ============================================================
+function renderCards() {
+  const grid = document.getElementById('cardsGrid');
+  const total = filteredStudents.length;
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page = filteredStudents.slice(start, start + PAGE_SIZE);
+
+  if (total === 0) {
+    grid.innerHTML = `<div class="empty-state">
+      <i class="fas fa-search" style="color:var(--accent); opacity:0.4"></i>
+      <p>لا توجد نتائج مطابقة</p>
+    </div>`;
+    document.getElementById('pagination').innerHTML = '';
+    return;
+  }
+
+  grid.innerHTML = page.map((s, idx) => buildCardHTML(s, start + idx)).join('');
+
+  // Generate QR codes
+  page.forEach((s, idx) => {
+    const qrEl = document.getElementById(`qr_${start + idx}`);
+    if (qrEl) {
+      qrEl.innerHTML = '';
+      try {
+        new QRCode(qrEl, {
+          text: JSON.stringify({ id: s.student_id || s.id, name: s.full_name, grade: s.grade_level, year: '2025-2026' }),
+          width: 64, height: 64,
+          colorDark: '#1a0533', colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      } catch(e) {}
+    }
+  });
+
+  renderPagination(total);
+}
+
+function buildCardHTML(s, idx) {
+  const initials = (s.full_name || '').split(' ').slice(0,2).map(w => w[0] || '').join('');
+  const gradeColors = {
+    'KG1':'#FF6584','KG2':'#FF8C94','G1':'#6C63FF','G2':'#8B5CF6','G3':'#00D4AA',
+    'G4':'#10B981','G5':'#F59E0B','G6':'#EF4444','G7':'#3B82F6','G8':'#8B5CF6'
+  };
+  const color = gradeColors[s.grade_level] || '#6C63FF';
+  const studentId = s.student_id || `AJ-${String(s.id).padStart(4,'0')}`;
+
+  return `
+  <div class="student-card" onclick="showPrintCard(${idx})">
+    <div class="card-header">
+      <div class="card-avatar" style="background:linear-gradient(135deg,${color},${color}99)">${initials}</div>
+      <div style="flex:1">
+        <div class="card-name">${s.full_name || '—'}</div>
+        <span class="card-grade-label">${s.grade_level || ''} — ${s.section || 'أ'}</span>
+        ${s.is_special_needs ? `<br><span class="badge-special"><i class="fas fa-heart"></i> صاحبة همة</span>` : ''}
+      </div>
+      <img src="../eduos-logo.png" alt="" class="card-school-logo">
+    </div>
+    <div class="card-body">
+      <div class="card-info-row">
+        <i class="fas fa-id-badge"></i>
+        <span class="label">رقم الهوية:</span>
+        <span class="value">${studentId}</span>
+      </div>
+      <div class="card-info-row">
+        <i class="fas fa-flag"></i>
+        <span class="label">الجنسية:</span>
+        <span class="value">${s.nationality || 'إماراتية'}</span>
+      </div>
+      <div class="card-info-row">
+        <i class="fas fa-venus"></i>
+        <span class="label">الجنس:</span>
+        <span class="value">${s.gender || 'أنثى'}</span>
+      </div>
+      ${s.disability_type ? `<div class="card-info-row">
+        <i class="fas fa-wheelchair" style="color:#FF6584"></i>
+        <span class="label">الإعاقة:</span>
+        <span class="value" style="color:#ff8fab">${s.disability_type}</span>
+      </div>` : ''}
+      <div style="text-align:center">
+        <div class="card-qr" id="qr_${idx}"></div>
+        <div style="font-size:0.68rem; color:var(--muted); margin-top:4px">امسحي لعرض الملف الكامل</div>
+      </div>
+    </div>
+    <hr class="card-divider">
+    <div class="card-footer">
+      <span class="card-id">${studentId}</span>
+      <button class="btn-print-card" onclick="event.stopPropagation(); showPrintCard(${idx})">
+        <i class="fas fa-print"></i> طباعة
+      </button>
+    </div>
+  </div>`;
+}
+
+// ============================================================
+// PAGINATION
+// ============================================================
+function renderPagination(total) {
+  const pages = Math.ceil(total / PAGE_SIZE);
+  const pag = document.getElementById('pagination');
+  if (pages <= 1) { pag.innerHTML = ''; return; }
+
+  let html = `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>`;
+
+  for (let i = 1; i <= pages; i++) {
+    if (i === 1 || i === pages || Math.abs(i - currentPage) <= 2) {
+      html += `<button class="page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
+    } else if (Math.abs(i - currentPage) === 3) {
+      html += `<span class="page-info">...</span>`;
+    }
+  }
+
+  html += `<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===pages?'disabled':''}>›</button>`;
+  html += `<span class="page-info">${total} طالبة</span>`;
+  pag.innerHTML = html;
+}
+
+function goPage(p) {
+  const pages = Math.ceil(filteredStudents.length / PAGE_SIZE);
+  if (p < 1 || p > pages) return;
+  currentPage = p;
+  renderCards();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ============================================================
+// PRINT MODAL
+// ============================================================
+function showPrintCard(idx) {
+  const s = filteredStudents[idx];
+  if (!s) return;
+  printTarget = s;
+
+  const studentId = s.student_id || `AJ-${String(s.id).padStart(4,'0')}`;
+  const initials = (s.full_name || '').split(' ').slice(0,2).map(w => w[0] || '').join('');
+
+  document.getElementById('printCardContent').innerHTML = `
+    <div class="print-card-header">
+      <img src="../eduos-logo.png" alt="">
+      <div>
+        <div class="print-card-school">مدرسة الجود الخاصة</div>
+        <div class="print-card-sub">للتعليم الأساسي — أبوظبي</div>
+      </div>
+      <div class="print-card-year">2025–2026</div>
+    </div>
+    <div class="print-card-body">
+      <div class="print-card-avatar">${initials}</div>
+      <div class="print-card-info">
+        <div class="print-card-name">${s.full_name || '—'}</div>
+        <div class="print-card-grade">الصف: ${s.grade_level || ''} — ${s.section || 'أ'}</div>
+        <div class="print-card-id">${studentId}</div>
+        ${s.nationality ? `<div style="font-size:0.68rem;color:var(--muted);margin-top:2px">🏳️ ${s.nationality}</div>` : ''}
+        ${s.is_special_needs ? `<span class="badge-special" style="margin-top:4px"><i class="fas fa-heart"></i> صاحبة همة</span>` : ''}
+      </div>
+      <div class="print-card-qr" id="modalQR"></div>
+    </div>
+    <div class="print-card-footer">
+      <span>EduOS — مدرسة الجود</span>
+      <span class="print-card-valid"><i class="fas fa-check-circle"></i> بطاقة سارية</span>
+    </div>
+  `;
+
+  // QR
+  const qrEl = document.getElementById('modalQR');
+  try {
+    new QRCode(qrEl, {
+      text: JSON.stringify({ id: studentId, name: s.full_name, grade: s.grade_level }),
+      width: 48, height: 48,
+      colorDark: '#1a0533', colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } catch(e) {}
+
+  document.getElementById('printModal').classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('printModal').classList.remove('active');
+}
+
+function doPrint() {
+  window.print();
+}
+
+function printAll() {
+  window.print();
+}
+
+// ============================================================
+// BOOT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  initHeader();
+  if (typeof initMotd === 'function') initMotd();
+  if (typeof initAutoLogout === 'function') initAutoLogout(15);
+  if (typeof enforceAuth === 'function') enforceAuth();
+  loadStudents();
+});
+
+// Close modal on overlay click
+document.getElementById('printModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// URL hash tab persistence
+if (location.hash) {
+  const tab = location.hash.replace('#','');
+  if (tab) document.getElementById('filterGrade').value = tab;
+}
+</script>
+<script src="../platform-tour.js"></script>
+</body>
+</html>

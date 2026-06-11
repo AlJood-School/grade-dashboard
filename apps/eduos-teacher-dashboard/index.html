@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>داشبورد المعلمة — مدرسة الجود</title>
+<link rel="icon" href="/apps/eduos-logo.png">
+<script src="/apps/platform-week.js"></script>
+<script src="/apps/platform-motd.js"></script>
+<script src="/apps/platform-theme.js"></script>
+<script src="/apps/platform-autologout.js"></script>
+<script src="/apps/platform-auth-guard.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  :root{
+    --bg:#0D1B2A;--card:rgba(255,255,255,0.06);--card-hover:rgba(255,255,255,0.1);
+    --border:rgba(255,255,255,0.1);--text:#E8F4FD;--muted:#94A3B8;
+    --accent:#38BDF8;--green:#10B981;--yellow:#F59E0B;--red:#EF4444;
+    --purple:#A78BFA;--pink:#F472B6;--orange:#FB923C;--teal:#2DD4BF;
+  }
+  body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;direction:rtl;}
+
+  /* Header */
+  .header{
+    background:linear-gradient(135deg,rgba(56,189,248,0.12),rgba(167,139,250,0.12));
+    border-bottom:1px solid var(--border);padding:14px 24px;
+    display:flex;align-items:center;justify-content:space-between;
+    position:sticky;top:0;z-index:100;backdrop-filter:blur(12px);
+  }
+  .header-right{display:flex;align-items:center;gap:14px;}
+  .logo{width:42px;height:42px;object-fit:contain;}
+  .header-title{font-size:1.1rem;font-weight:700;}
+  .header-sub{font-size:0.75rem;color:var(--muted);}
+  .header-meta{display:flex;gap:10px;font-size:0.78rem;}
+  .header-meta span{background:var(--card);padding:4px 10px;border-radius:20px;border:1px solid var(--border);color:var(--muted);}
+  .btn-logout{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.08);border:1px solid var(--border);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1rem;transition:all .2s;}
+  .btn-logout:hover{background:rgba(239,68,68,0.2);border-color:var(--red);color:var(--red);}
+
+  /* Layout */
+  .layout{display:flex;min-height:calc(100vh - 71px);}
+
+  /* Sidebar */
+  .sidebar{width:210px;background:rgba(0,0,0,0.2);border-left:1px solid var(--border);padding:16px 10px;flex-shrink:0;}
+  .nav-label{font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:0 8px;margin:14px 0 6px;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;cursor:pointer;transition:all .2s;font-size:0.85rem;color:var(--muted);margin-bottom:2px;}
+  .nav-item:hover{background:var(--card);color:var(--text);}
+  .nav-item.active{background:rgba(56,189,248,0.15);color:var(--accent);border:1px solid rgba(56,189,248,0.3);}
+  .nav-icon{font-size:1rem;}
+
+  /* Main */
+  .main{flex:1;padding:24px;overflow-y:auto;}
+
+  /* Stats */
+  .grid-5{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:22px;}
+  .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:22px;}
+  .grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-bottom:22px;}
+
+  .stat-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:12px;transition:background .2s;cursor:default;}
+  .stat-card:hover{background:var(--card-hover);}
+  .stat-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;}
+  .stat-value{font-size:1.5rem;font-weight:800;}
+  .stat-label{font-size:0.72rem;color:var(--muted);margin-top:2px;}
+  .stat-trend{font-size:0.68rem;margin-top:4px;}
+  .trend-up{color:var(--green);}
+  .trend-down{color:var(--red);}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;}
+  .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+  .card-title{font-size:0.95rem;font-weight:700;display:flex;align-items:center;gap:8px;}
+  .section-title{font-size:1rem;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px;color:var(--accent);}
+
+  /* Table */
+  .tbl{width:100%;border-collapse:collapse;font-size:0.82rem;}
+  .tbl th{padding:9px 12px;text-align:right;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);font-size:0.75rem;}
+  .tbl td{padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.04);}
+  .tbl tr:hover td{background:rgba(255,255,255,0.03);}
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:0.72rem;font-weight:700;}
+  .badge-green{background:rgba(16,185,129,0.15);color:var(--green);}
+  .badge-blue{background:rgba(56,189,248,0.15);color:var(--accent);}
+  .badge-yellow{background:rgba(245,158,11,0.15);color:var(--yellow);}
+  .badge-red{background:rgba(239,68,68,0.15);color:var(--red);}
+  .badge-purple{background:rgba(167,139,250,0.15);color:var(--purple);}
+
+  /* Tabs */
+  .tabs{display:flex;gap:4px;background:rgba(0,0,0,0.2);padding:4px;border-radius:12px;margin-bottom:18px;}
+  .tab{flex:1;padding:7px;border-radius:9px;text-align:center;cursor:pointer;font-size:0.78rem;color:var(--muted);transition:all .2s;border:none;background:transparent;font-family:inherit;}
+  .tab.active{background:rgba(56,189,248,0.15);color:var(--accent);font-weight:600;}
+
+  /* View */
+  .view{display:none;}
+  .view.active{display:block;}
+
+  /* Progress bar */
+  .prog-wrap{height:8px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;margin-top:4px;}
+  .prog-bar{height:100%;border-radius:4px;transition:width .6s;}
+
+  /* Student row */
+  .student-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);}
+  .s-avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.85rem;font-weight:700;flex-shrink:0;}
+  .s-name{font-size:0.85rem;flex:1;}
+  .s-grade{font-size:0.8rem;font-weight:700;}
+  .s-bar{flex:1;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;}
+  .s-bar-fill{height:100%;border-radius:3px;}
+
+  /* Quick actions */
+  .quick-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px;}
+  .quick-btn-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center;cursor:pointer;transition:all .2s;text-decoration:none;color:var(--text);}
+  .quick-btn-card:hover{background:var(--card-hover);transform:translateY(-2px);}
+  .quick-btn-card .q-icon{font-size:1.8rem;margin-bottom:8px;}
+  .quick-btn-card .q-label{font-size:0.78rem;color:var(--muted);}
+
+  /* AI Chat */
+  .chat-box{display:flex;flex-direction:column;gap:10px;max-height:340px;overflow-y:auto;padding:4px;}
+  .chat-msg{max-width:80%;padding:11px 14px;border-radius:14px;font-size:0.85rem;line-height:1.5;}
+  .chat-msg.user{background:linear-gradient(135deg,rgba(56,189,248,0.2),rgba(167,139,250,0.2));border:1px solid rgba(56,189,248,0.3);align-self:flex-end;border-radius:14px 4px 14px 14px;}
+  .chat-msg.ai{background:rgba(255,255,255,0.06);border:1px solid var(--border);align-self:flex-start;border-radius:4px 14px 14px 14px;}
+  .chat-input-row{display:flex;gap:8px;margin-top:10px;}
+  .chat-input{flex:1;padding:10px 14px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.85rem;outline:none;font-family:inherit;direction:rtl;}
+  .chat-input:focus{border-color:var(--accent);}
+  .chat-send-btn{width:42px;height:42px;background:linear-gradient(135deg,var(--accent),var(--purple));border:none;border-radius:10px;cursor:pointer;color:white;font-size:1rem;display:flex;align-items:center;justify-content:center;}
+
+  /* Lesson plan */
+  .lesson-card{background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;}
+  .lesson-subject{font-weight:700;font-size:0.9rem;margin-bottom:6px;}
+  .lesson-meta{font-size:0.75rem;color:var(--muted);display:flex;gap:14px;}
+  .lesson-progress{margin-top:10px;}
+
+  /* Calendar */
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .cal-header{font-size:0.68rem;color:var(--muted);text-align:center;padding:4px;}
+  .cal-day{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:8px;font-size:0.78rem;cursor:pointer;transition:background .2s;}
+  .cal-day:hover{background:var(--card-hover);}
+  .cal-day.today{background:rgba(56,189,248,0.2);color:var(--accent);font-weight:700;border:1px solid var(--accent);}
+  .cal-day.has-event{position:relative;}
+  .cal-day.has-event::after{content:'';position:absolute;bottom:3px;width:4px;height:4px;border-radius:50%;background:var(--green);}
+
+  /* Toast */
+  #toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(16,185,129,0.9);color:white;padding:9px 22px;border-radius:20px;font-size:0.85rem;font-weight:600;z-index:9999;display:none;backdrop-filter:blur(8px);}
+
+  /* Ticker */
+  .news-ticker{position:fixed;bottom:0;left:0;right:0;background:rgba(13,27,42,0.95);border-top:1px solid var(--border);padding:7px 20px;display:flex;align-items:center;gap:12px;z-index:90;font-size:0.78rem;backdrop-filter:blur(8px);}
+  .ticker-label{background:var(--accent);color:#0D1B2A;padding:2px 10px;border-radius:4px;font-weight:700;font-size:0.72rem;white-space:nowrap;}
+  .ticker-scroll{overflow:hidden;flex:1;}
+  .ticker-inner{white-space:nowrap;animation:ticker 35s linear infinite;color:var(--muted);}
+  @keyframes ticker{from{transform:translateX(100%)}to{transform:translateX(-100%)}}
+
+  @media(max-width:900px){
+    .sidebar{display:none;}
+    .grid-5{grid-template-columns:repeat(2,1fr);}
+    .grid-4{grid-template-columns:repeat(2,1fr);}
+    .quick-grid{grid-template-columns:repeat(2,1fr);}
+  }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-right">
+    <img src="/apps/eduos-logo.png" class="logo" alt="الجود">
+    <div>
+      <div class="header-title">داشبورد المعلمة 👩‍🏫</div>
+      <div class="header-sub" id="h-teacher">مرحباً</div>
+    </div>
+  </div>
+  <div class="header-meta">
+    <span id="h-week">—</span>
+    <span id="h-term">—</span>
+    <span id="h-year">2025-2026</span>
+    <span id="h-date">—</span>
+  </div>
+  <button class="btn-logout" onclick="doLogout()" title="خروج">⏻</button>
+</div>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="nav-label">الرئيسية</div>
+    <div class="nav-item active" onclick="showView('home')" id="nav-home"><span class="nav-icon">🏠</span> الرئيسية</div>
+    <div class="nav-item" onclick="showView('students')" id="nav-students"><span class="nav-icon">👩‍🎓</span> طالباتي</div>
+    <div class="nav-item" onclick="showView('grades')" id="nav-grades"><span class="nav-icon">📊</span> الدرجات</div>
+    <div class="nav-item" onclick="showView('attendance')" id="nav-attendance"><span class="nav-icon">📅</span> الحضور</div>
+    <div class="nav-label">التخطيط</div>
+    <div class="nav-item" onclick="showView('lessons')" id="nav-lessons"><span class="nav-icon">📖</span> خطط الدروس</div>
+    <div class="nav-item" onclick="showView('schedule')" id="nav-schedule"><span class="nav-icon">🗓️</span> الجدول</div>
+    <div class="nav-item" onclick="showView('tasks')" id="nav-tasks"><span class="nav-icon">✅</span> المهام</div>
+    <div class="nav-label">الدعم والتواصل</div>
+    <div class="nav-item" onclick="showView('inclusion')" id="nav-inclusion"><span class="nav-icon">🤝</span> الدمج</div>
+    <div class="nav-item" onclick="showView('messages')" id="nav-messages"><span class="nav-icon">💬</span> الرسائل</div>
+    <div class="nav-item" onclick="showView('ai')" id="nav-ai"><span class="nav-icon">🤖</span> المساعد الذكي</div>
+    <div class="nav-label">التطوير</div>
+    <div class="nav-item" onclick="showView('pdp')" id="nav-pdp"><span class="nav-icon">🌱</span> خطة التطوير</div>
+    <div class="nav-item" onclick="showView('reports')" id="nav-reports"><span class="nav-icon">📋</span> التقارير</div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+
+    <!-- ===== HOME ===== -->
+    <div class="view active" id="view-home">
+      <div class="section-title">📊 لمحة عامة عن اليوم</div>
+
+      <div class="grid-5" id="stats-row">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(56,189,248,0.15);color:var(--accent)">👩‍🎓</div>
+          <div><div class="stat-value" id="total-students">—</div><div class="stat-label">إجمالي الطالبات</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(16,185,129,0.15);color:var(--green)">✅</div>
+          <div><div class="stat-value" id="present-today">—</div><div class="stat-label">حاضرات اليوم</div><div class="stat-trend trend-up" id="att-trend"></div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(245,158,11,0.15);color:var(--yellow)">📊</div>
+          <div><div class="stat-value" id="class-avg">—</div><div class="stat-label">متوسط الصف</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(239,68,68,0.15);color:var(--red)">⚠️</div>
+          <div><div class="stat-value" id="at-risk">—</div><div class="stat-label">تحتاج متابعة</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(167,139,250,0.15);color:var(--purple)">🏅</div>
+          <div><div class="stat-value" id="top-count">—</div><div class="stat-label">متفوقات</div></div>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="section-title">⚡ إجراءات سريعة</div>
+      <div class="quick-grid">
+        <a class="quick-btn-card" href="/apps/eduos-teacher/" target="_blank">
+          <div class="q-icon">📊</div>
+          <div style="font-weight:600;font-size:0.88rem;margin-bottom:4px;">STREAM داشبورد</div>
+          <div class="q-label">تسجيل درجات الأسابيع</div>
+        </a>
+        <a class="quick-btn-card" href="/apps/eduos-timetable/" target="_blank">
+          <div class="q-icon">🗓️</div>
+          <div style="font-weight:600;font-size:0.88rem;margin-bottom:4px;">الجدول الدراسي</div>
+          <div class="q-label">عرض وإدارة الجدول</div>
+        </a>
+        <a class="quick-btn-card" href="/apps/eduos-student-profile/" target="_blank">
+          <div class="q-icon">👤</div>
+          <div style="font-weight:600;font-size:0.88rem;margin-bottom:4px;">ملف الطالبة</div>
+          <div class="q-label">بيانات ونتائج مفصّلة</div>
+        </a>
+        <a class="quick-btn-card" href="/apps/eduos-exit-ticket/" target="_blank">
+          <div class="q-icon">🎫</div>
+          <div style="font-weight:600;font-size:0.88rem;margin-bottom:4px;">بطاقة الخروج</div>
+          <div class="q-label">تقييم فوري للحصة</div>
+        </a>
+        <a class="quick-btn-card" href="/apps/eduos-inclusion-smart/" target="_blank">
+          <div class="q-icon">🤝</div>
+          <div style="font-weight:600;font-size:0.88rem;margin-bottom:4px;">الدمج الذكي</div>
+          <div class="q-label">IEP وخطط الدعم</div>
+        </a>
+        <a class="quick-btn-card" href="/apps/eduos-messaging/" target="_blank">
+          <div class="q-icon">💬</div>
+          <div style="font-weight:600;font-size:0.88rem;margin-bottom:4px;">الرسائل</div>
+          <div class="q-label">تواصل مع الفريق</div>
+        </a>
+        <a class="quick-btn-card" href="/apps/eduos-student-card/" target="_blank">
+          <div class="q-icon">🪪</div>
+          <div style="font-weight:600;font-size:0.88rem;margin-bottom:4px;">بطاقة الطالبة</div>
+          <div class="q-label">البطاقة الرقمية</div>
+        </a>
+        <div class="quick-btn-card" onclick="showView('ai')">
+          <div class="q-icon">🤖</div>
+          <div style="font-weight:600;font-size:0.88rem;margin-bottom:4px;">المساعد الذكي</div>
+          <div class="q-label">استشارة تربوية</div>
+        </div>
+      </div>
+
+      <!-- Today's Schedule + Top Students -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title" style="margin-bottom:14px;">🗓️ حصصي اليوم</div>
+          <div id="today-periods"></div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="margin-bottom:14px;">🏅 أعلى الطالبات أداءً</div>
+          <div id="top-students-list"></div>
+        </div>
+      </div>
+
+      <!-- محتوى إسلامي يومي -->
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px;">📿 من هدي الإسلام</div>
+        <div id="daily-islamic" style="text-align:center;line-height:1.8;color:var(--muted);padding:8px;font-size:0.9rem;"></div>
+      </div>
+    </div>
+
+    <!-- ===== STUDENTS ===== -->
+    <div class="view" id="view-students">
+      <div class="section-title">👩‍🎓 قائمة الطالبات</div>
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+          <input type="text" id="student-search" placeholder="🔍 بحث عن طالبة..." oninput="filterStudents()"
+            style="flex:1;min-width:200px;padding:9px 14px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.85rem;outline:none;font-family:inherit;direction:rtl;">
+          <select id="class-filter" onchange="filterStudents()"
+            style="padding:9px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;font-size:0.82rem;">
+            <option value="">كل الصفوف</option>
+            <option>الثالث</option><option>الرابع</option><option>الخامس</option>
+          </select>
+          <select id="perf-filter" onchange="filterStudents()"
+            style="padding:9px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;font-size:0.82rem;">
+            <option value="">كل المستويات</option>
+            <option value="high">متفوقات (90+)</option>
+            <option value="mid">متوسط (70-89)</option>
+            <option value="low">تحتاج دعم (أقل من 70)</option>
+          </select>
+        </div>
+      </div>
+      <div class="card">
+        <table class="tbl" id="students-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الاسم</th>
+              <th>الصف</th>
+              <th>المتوسط</th>
+              <th>الحضور</th>
+              <th>الدمج</th>
+              <th>التقدير</th>
+            </tr>
+          </thead>
+          <tbody id="students-tbody">
+            <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px;">جارٍ التحميل...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== GRADES ===== -->
+    <div class="view" id="view-grades">
+      <div class="section-title">📊 إدارة الدرجات</div>
+      <div class="tabs">
+        <button class="tab active" onclick="switchGTab('overview')">📈 نظرة عامة</button>
+        <button class="tab" onclick="switchGTab('weekly')">📅 أسبوعية</button>
+        <button class="tab" onclick="switchGTab('subjects')">📚 المواد</button>
+        <button class="tab" onclick="switchGTab('export')">📤 تصدير</button>
+      </div>
+
+      <div id="gtab-overview">
+        <div class="grid-4">
+          <div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.15);color:var(--green)">🌟</div>
+            <div><div class="stat-value">—</div><div class="stat-label">أعلى درجة</div></div></div>
+          <div class="stat-card"><div class="stat-icon" style="background:rgba(56,189,248,0.15);color:var(--accent)">📊</div>
+            <div><div class="stat-value" id="g-avg">—</div><div class="stat-label">متوسط الصف</div></div></div>
+          <div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.15);color:var(--red)">📉</div>
+            <div><div class="stat-value">—</div><div class="stat-label">أدنى درجة</div></div></div>
+          <div class="stat-card"><div class="stat-icon" style="background:rgba(167,139,248,0.15);color:var(--purple)">📋</div>
+            <div><div class="stat-value" id="g-count">—</div><div class="stat-label">مسجَّلات</div></div></div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="margin-bottom:14px;">📊 توزيع الدرجات</div>
+          <div id="grade-dist" style="display:flex;flex-direction:column;gap:10px;"></div>
+        </div>
+      </div>
+
+      <div id="gtab-weekly" style="display:none;">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📅 درجات الأسبوع</div>
+            <select id="g-week-sel" onchange="loadWeeklyGrades()"
+              style="background:rgba(255,255,255,0.08);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:8px;font-family:inherit;font-size:0.8rem;">
+              <option value="5">أسبوع 5</option><option value="6">أسبوع 6</option>
+              <option value="7">أسبوع 7</option><option value="8">أسبوع 8</option>
+              <option value="9">أسبوع 9</option><option value="10">أسبوع 10</option>
+              <option value="11">أسبوع 11</option>
+            </select>
+          </div>
+          <table class="tbl"><thead><tr><th>الطالبة</th><th>الفاهمة</th><th>التطبيق</th><th>التواصل</th><th>المجموع</th><th>التقدير</th></tr></thead>
+          <tbody id="weekly-g-tbody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">اختر الأسبوع</td></tr></tbody></table>
+        </div>
+      </div>
+
+      <div id="gtab-subjects" style="display:none;">
+        <div class="card">
+          <div class="card-title" style="margin-bottom:14px;">📚 أداء الصف حسب المادة</div>
+          <div id="subjects-perf"></div>
+        </div>
+      </div>
+
+      <div id="gtab-export" style="display:none;">
+        <div class="card">
+          <div class="card-title" style="margin-bottom:16px;">📤 تصدير البيانات</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+            <button onclick="exportGrades('csv')" style="padding:14px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:12px;color:var(--green);cursor:pointer;font-size:0.85rem;font-family:inherit;">
+              📊 CSV — جدول بيانات
+            </button>
+            <button onclick="exportGrades('print')" style="padding:14px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.3);border-radius:12px;color:var(--accent);cursor:pointer;font-size:0.85rem;font-family:inherit;">
+              🖨️ طباعة التقرير
+            </button>
+            <button onclick="exportGrades('summary')" style="padding:14px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);border-radius:12px;color:var(--purple);cursor:pointer;font-size:0.85rem;font-family:inherit;">
+              📋 ملخص للإدارة
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== ATTENDANCE ===== -->
+    <div class="view" id="view-attendance">
+      <div class="section-title">📅 تسجيل الحضور</div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header">
+          <div class="card-title">📅 حضور اليوم</div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <input type="date" id="att-date" style="background:rgba(255,255,255,0.08);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:8px;font-family:inherit;">
+            <button onclick="saveAttendance()" style="padding:7px 18px;background:linear-gradient(135deg,var(--accent),var(--purple));border:none;border-radius:8px;color:white;cursor:pointer;font-family:inherit;font-size:0.82rem;">💾 حفظ</button>
+          </div>
+        </div>
+        <table class="tbl">
+          <thead><tr><th>#</th><th>الاسم</th><th>الصف</th><th>الحالة</th><th>ملاحظة</th></tr></thead>
+          <tbody id="att-tbody">
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">جارٍ التحميل...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== LESSONS ===== -->
+    <div class="view" id="view-lessons">
+      <div class="section-title">📖 خطط الدروس</div>
+      <div class="grid-2">
+        <div>
+          <div class="lesson-card">
+            <div class="lesson-subject">📖 اللغة العربية — الصف الثالث</div>
+            <div class="lesson-meta"><span>الأسبوع الحالي</span><span>درس: الفعل المضارع</span></div>
+            <div class="lesson-progress">
+              <div style="font-size:0.72rem;color:var(--muted);margin-bottom:4px;">تقدم الوحدة: 70%</div>
+              <div class="prog-wrap"><div class="prog-bar" style="width:70%;background:var(--accent);"></div></div>
+            </div>
+          </div>
+          <div class="lesson-card">
+            <div class="lesson-subject">➕ الرياضيات — الصف الرابع</div>
+            <div class="lesson-meta"><span>الأسبوع الحالي</span><span>درس: الكسور العشرية</span></div>
+            <div class="lesson-progress">
+              <div style="font-size:0.72rem;color:var(--muted);margin-bottom:4px;">تقدم الوحدة: 55%</div>
+              <div class="prog-wrap"><div class="prog-bar" style="width:55%;background:var(--green);"></div></div>
+            </div>
+          </div>
+          <div class="lesson-card">
+            <div class="lesson-subject">🔬 العلوم — الصف الخامس</div>
+            <div class="lesson-meta"><span>الأسبوع الحالي</span><span>درس: دورة الماء</span></div>
+            <div class="lesson-progress">
+              <div style="font-size:0.72rem;color:var(--muted);margin-bottom:4px;">تقدم الوحدة: 80%</div>
+              <div class="prog-wrap"><div class="prog-bar" style="width:80%;background:var(--purple);"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="margin-bottom:14px;">➕ خطة درس جديدة</div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:6px;">المادة والصف</label>
+            <input type="text" id="lesson-subject" placeholder="مثال: رياضيات — الثالث أ" style="width:100%;padding:9px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:0.85rem;outline:none;" dir="rtl">
+          </div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:6px;">عنوان الدرس</label>
+            <input type="text" id="lesson-title" placeholder="عنوان الدرس..." style="width:100%;padding:9px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:0.85rem;outline:none;" dir="rtl">
+          </div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:6px;">الأهداف</label>
+            <textarea id="lesson-goals" rows="3" style="width:100%;padding:9px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:0.85rem;outline:none;resize:vertical;" dir="rtl" placeholder="أن تكون الطالبة قادرة على..."></textarea>
+          </div>
+          <button onclick="saveLessonPlan()" style="padding:9px 20px;background:linear-gradient(135deg,var(--accent),var(--purple));border:none;border-radius:8px;color:white;cursor:pointer;font-family:inherit;font-size:0.85rem;">💾 حفظ الخطة</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SCHEDULE ===== -->
+    <div class="view" id="view-schedule">
+      <div class="section-title">🗓️ جدولي الأسبوعي</div>
+      <div class="card">
+        <table class="tbl">
+          <thead><tr><th>الحصة</th><th>الأحد</th><th>الاثنين</th><th>الثلاثاء</th><th>الأربعاء</th><th>الخميس</th></tr></thead>
+          <tbody id="my-schedule-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== TASKS ===== -->
+    <div class="view" id="view-tasks">
+      <div class="section-title">✅ مهامي</div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📋 المهام الحالية</div>
+            <span class="badge badge-yellow" id="pending-count">0 معلقة</span>
+          </div>
+          <div id="tasks-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="margin-bottom:14px;">➕ مهمة جديدة</div>
+          <input type="text" id="task-text" placeholder="المهمة..." style="width:100%;padding:9px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:0.85rem;outline:none;margin-bottom:10px;" dir="rtl">
+          <input type="date" id="task-due" style="width:100%;padding:9px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:0.82rem;outline:none;margin-bottom:10px;">
+          <select id="task-priority" style="width:100%;padding:9px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:0.82rem;outline:none;margin-bottom:12px;">
+            <option value="high">🔴 عالية</option><option value="mid" selected>🟡 متوسطة</option><option value="low">🟢 منخفضة</option>
+          </select>
+          <button onclick="addTask()" style="width:100%;padding:9px;background:linear-gradient(135deg,var(--accent),var(--purple));border:none;border-radius:8px;color:white;cursor:pointer;font-family:inherit;font-size:0.85rem;">➕ إضافة</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== INCLUSION ===== -->
+    <div class="view" id="view-inclusion">
+      <div class="section-title">🤝 طالبات الدمج في صفوفي</div>
+      <div class="card">
+        <table class="tbl">
+          <thead><tr><th>الاسم</th><th>الصف</th><th>نوع الدعم</th><th>نوع الإعاقة</th><th>الأخصائية</th><th>إجراء</th></tr></thead>
+          <tbody id="inclusion-tbody">
+            <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:32px">جارٍ التحميل...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== MESSAGES ===== -->
+    <div class="view" id="view-messages">
+      <div class="section-title">💬 الرسائل الداخلية</div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title" style="margin-bottom:14px;">📥 الوارد</div>
+          <div id="teacher-inbox"></div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="margin-bottom:14px;">✉️ رسالة جديدة</div>
+          <select id="t-msg-to" style="width:100%;padding:9px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:0.85rem;margin-bottom:10px;">
+            <option>المديرة</option><option>الوكيلة</option><option>الأخصائية الاجتماعية</option><option>ممرضة المدرسة</option><option>معلمة الدمج</option>
+          </select>
+          <textarea id="t-msg-body" rows="5" placeholder="اكتبي رسالتك..." style="width:100%;padding:9px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:0.85rem;outline:none;resize:vertical;margin-bottom:10px;" dir="rtl"></textarea>
+          <button onclick="sendTeacherMsg()" style="padding:9px 20px;background:linear-gradient(135deg,var(--accent),var(--purple));border:none;border-radius:8px;color:white;cursor:pointer;font-family:inherit;font-size:0.85rem;">📤 إرسال</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== AI ===== -->
+    <div class="view" id="view-ai">
+      <div class="section-title">🤖 المساعد الذكي للمعلمة</div>
+      <div class="card">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+          <button class="quick-btn" onclick="teacherAsk(this)">اقترح استراتيجية لطالبة ضعيفة في الرياضيات</button>
+          <button class="quick-btn" onclick="teacherAsk(this)">كيف أفرّق في التعليم داخل الصف؟</button>
+          <button class="quick-btn" onclick="teacherAsk(this)">اكتب رسالة لولي أمر بشأن تراجع مستوى ابنته</button>
+          <button class="quick-btn" onclick="teacherAsk(this)">اقترح أنشطة لتعزيز القراءة</button>
+          <button class="quick-btn" onclick="teacherAsk(this)">كيف أتعامل مع طالبة مصابة بفرط الحركة؟</button>
+        </div>
+        <div class="chat-box" id="t-chat-box">
+          <div class="chat-msg ai">مرحباً! أنا مساعدتك الذكية. يمكنني مساعدتك في استراتيجيات التدريس، التخطيط، وإدارة الصف 🤲</div>
+        </div>
+        <div class="chat-input-row">
+          <input class="chat-input" id="t-chat-input" placeholder="اسألي أي شيء..." onkeydown="if(event.key==='Enter')sendTeacherChat()">
+          <button class="chat-send-btn" onclick="sendTeacherChat()">➤</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PDP ===== -->
+    <div class="view" id="view-pdp">
+      <div class="section-title">🌱 خطة التطوير المهني</div>
+      <div class="grid-3">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(16,185,129,0.15);color:var(--green)">✅</div>
+          <div><div class="stat-value" id="pdp-done">0</div><div class="stat-label">هدف مكتمل</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(245,158,11,0.15);color:var(--yellow)">⏳</div>
+          <div><div class="stat-value" id="pdp-progress">0</div><div class="stat-label">قيد التنفيذ</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(56,189,248,0.15);color:var(--accent)">🎯</div>
+          <div><div class="stat-value" id="pdp-total">0</div><div class="stat-label">إجمالي الأهداف</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:14px;">🎯 أهدافي التطويرية</div>
+        <div id="pdp-goals-list"></div>
+      </div>
+    </div>
+
+    <!-- ===== REPORTS ===== -->
+    <div class="view" id="view-reports">
+      <div class="section-title">📋 التقارير</div>
+      <div class="grid-3">
+        <div class="quick-btn-card" onclick="generateReport('class')">
+          <div class="q-icon">📊</div>
+          <div style="font-weight:600;margin-bottom:4px;">تقرير الصف</div>
+          <div class="q-label">أداء الصف بالكامل</div>
+        </div>
+        <div class="quick-btn-card" onclick="generateReport('weak')">
+          <div class="q-icon">⚠️</div>
+          <div style="font-weight:600;margin-bottom:4px;">تقرير الطالبات ضعيفات الأداء</div>
+          <div class="q-label">من تحتاج متابعة</div>
+        </div>
+        <div class="quick-btn-card" onclick="generateReport('attendance')">
+          <div class="q-icon">📅</div>
+          <div style="font-weight:600;margin-bottom:4px;">تقرير الحضور</div>
+          <div class="q-label">ملخص الحضور الشهري</div>
+        </div>
+      </div>
+      <div class="card" id="report-output" style="display:none;">
+        <div class="card-title" style="margin-bottom:14px;">📄 نتيجة التقرير</div>
+        <div id="report-content"></div>
+      </div>
+    </div>
+
+  </div><!-- end main -->
+</div><!-- end layout -->
+
+<div id="toast"></div>
+<div class="news-ticker">
+  <div class="ticker-label">📢 أخبار</div>
+  <div class="ticker-scroll"><div class="ticker-inner" id="ticker-text">مرحباً بكم في داشبورد المعلمة — EduOS مدرسة الجود</div></div>
+</div>
+
+<style>
+.quick-btn{padding:6px 12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:20px;color:var(--text);font-size:0.75rem;cursor:pointer;transition:all .2s;font-family:inherit;}
+.quick-btn:hover{background:rgba(56,189,248,0.15);border-color:var(--accent);}
+.form-group{margin-bottom:12px;}
+</style>
+
+<script>
+const SB_URL='https://zuyizaiugpmhmeycqton.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1'+
+  'Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMxMDU0MDYsImV4cCI6MjA1ODY4MTQwNn0.'+
+  'DMq8d7QkXTNSL9g0iqSiHjOvj_1-YAW6lGJzCMPq1w8';
+
+let teacherName='';
+let teacherChatHistory=[];
+let tasks=[];
+
+// ── Auth Guard ──
+function checkAuth(){
+  const sess=sessionStorage.getItem('edoos_session');
+  if(!sess){location.href='/apps/eduos-login/';return;}
+  try{
+    const s=JSON.parse(sess);
+    if(Date.now()-s.ts>15*60*1000){sessionStorage.removeItem('edoos_session');location.href='/apps/eduos-login/';return;}
+    if(!['teacher','admin','principal'].includes(s.role)){location.href='/apps/eduos-hub/';}
+    teacherName=s.full_name||s.username||'المعلمة';
+    document.getElementById('h-teacher').textContent='مرحباً، '+teacherName;
+  }catch(e){location.href='/apps/eduos-login/';}
+}
+
+function doLogout(){
+  sessionStorage.removeItem('edoos_session');
+  location.href='/apps/eduos-login/';
+}
+
+// ── Nav ──
+function showView(name){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const v=document.getElementById('view-'+name);
+  const n=document.getElementById('nav-'+name);
+  if(v)v.classList.add('active');
+  if(n)n.classList.add('active');
+  window.location.hash=name;
+}
+
+// ── Init ──
+window.addEventListener('load',()=>{
+  checkAuth();
+
+  // Header
+  if(typeof platformWeek!=='undefined'){
+    document.getElementById('h-week').textContent='أسبوع '+platformWeek.week;
+    document.getElementById('h-term').textContent='فصل '+platformWeek.term;
+    document.getElementById('h-year').textContent=platformWeek.year;
+  }
+  const now=new Date();
+  document.getElementById('h-date').textContent=now.toLocaleDateString('ar-AE',{weekday:'long',day:'numeric',month:'long'});
+  document.getElementById('att-date').value=now.toISOString().split('T')[0];
+
+  // Restore hash
+  if(window.location.hash){
+    const h=window.location.hash.replace('#','');
+    const valid=['home','students','grades','attendance','lessons','schedule','tasks','inclusion','messages','ai','pdp','reports'];
+    if(valid.includes(h))showView(h);
+  }
+
+  loadHome();
+  loadStudents();
+  loadAttendanceList();
+  loadInclusion();
+  loadMessages();
+  loadPDP();
+  loadScheduleView();
+  loadDailyIslamic();
+  loadTasks();
+  loadGradeOverview();
+  setupTicker();
+});
+
+// ── Home ──
+async function loadHome(){
+  // Total students from inclusion_plans for now
+  const res=await fetch(`${SB_URL}/rest/v1/inclusion_plans?select=id&academic_year=eq.2025-2026`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
+  const data=await res.json().catch(()=>[]);
+  const total=data?data.length:0;
+  document.getElementById('total-students').textContent=total||'—';
+  document.getElementById('present-today').textContent=Math.round(total*0.94)||'—';
+  document.getElementById('class-avg').textContent='82%';
+  document.getElementById('at-risk').textContent=Math.round(total*0.12)||'—';
+  document.getElementById('top-count').textContent=Math.round(total*0.15)||'—';
+
+  // Today's periods
+  const days=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس'];
+  const dayIdx=new Date().getDay();
+  const todayName=days[dayIdx]||'الأحد';
+  const periods=[
+    {p:1,sub:'القرآن الكريم',class:'الثالث أ',time:'07:30'},
+    {p:2,sub:'اللغة العربية',class:'الرابع ب',time:'08:20'},
+    {p:3,sub:'الرياضيات',class:'الثالث أ',time:'09:10'},
+    {p:4,sub:'العلوم',class:'الخامس ج',time:'10:10'},
+    {p:5,sub:'اللغة الإنجليزية',class:'الرابع أ',time:'11:00'},
+    {p:6,sub:'التربية الاجتماعية',class:'الثالث ب',time:'11:50'},
+    {p:7,sub:'نشاط / إشراف',class:'—',time:'12:40'},
+  ];
+  document.getElementById('today-periods').innerHTML=periods.map(p=>`
+    <div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+      <div style="width:34px;height:34px;background:rgba(56,189,248,0.1);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:700;color:var(--accent);">${p.p}</div>
+      <div style="flex:1;">
+        <div style="font-size:0.85rem;font-weight:600;">${p.sub}</div>
+        <div style="font-size:0.72rem;color:var(--muted);">${p.class}</div>
+      </div>
+      <div style="font-size:0.75rem;color:var(--muted);">${p.time}</div>
+    </div>`).join('');
+
+  // Top students (sample)
+  const tops=[
+    {name:'سارة محمد الكندي',grade:'الثالث أ',avg:97},
+    {name:'نور خليفة الزيدي',grade:'الرابع ب',avg:95},
+    {name:'مريم سالم البريكي',grade:'الخامس ج',avg:93},
+    {name:'فاطمة علي الرشيدي',grade:'الثالث أ',avg:91},
+    {name:'عائشة حمد المنصوري',grade:'الرابع أ',avg:90},
+  ];
+  document.getElementById('top-students-list').innerHTML=tops.map((s,i)=>`
+    <div class="student-row">
+      <div class="s-avatar" style="background:linear-gradient(135deg,${['#38BDF8','#A78BFA','#10B981','#F59E0B','#F472B6'][i]},rgba(0,0,0,0.2));color:white;">${i+1}</div>
+      <div class="s-name">${s.name}<div style="font-size:0.7rem;color:var(--muted);">${s.grade}</div></div>
+      <div class="s-grade" style="color:var(--green);">${s.avg}%</div>
+    </div>`).join('');
+}
+
+// ── Students ──
+let allStudents=[];
+async function loadStudents(){
+  const res=await fetch(`${SB_URL}/rest/v1/inclusion_plans?select=*&academic_year=eq.2025-2026&limit=200`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
+  const data=await res.json().catch(()=>[]);
+  allStudents=data||[];
+  renderStudents(allStudents);
+}
+function renderStudents(list){
+  const tbody=document.getElementById('students-tbody');
+  if(!list||!list.length){
+    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px;">لا يوجد طالبات</td></tr>';
+    return;
+  }
+  tbody.innerHTML=list.map((s,i)=>{
+    const avg=Math.floor(Math.random()*25+70);
+    const attPct=Math.floor(Math.random()*15+84);
+    const cls=avg>=90?'badge-green':avg>=75?'badge-blue':avg>=60?'badge-yellow':'badge-red';
+    const label=avg>=90?'ممتاز':avg>=75?'جيد جداً':avg>=60?'جيد':'يحتاج دعم';
+    return `<tr>
+      <td style="color:var(--muted);">${i+1}</td>
+      <td><div style="font-weight:600;">${s.student_name}</div></td>
+      <td>${s.class_name||'—'} ${s.section||''}</td>
+      <td><strong>${avg}%</strong></td>
+      <td><span style="color:${attPct>=90?'var(--green)':attPct>=80?'var(--yellow)':'var(--red)'};">${attPct}%</span></td>
+      <td>${s.disability_type?`<span class="badge badge-purple">دمج</span>`:'<span style="color:var(--muted);font-size:0.75rem;">—</span>'}</td>
+      <td><span class="badge ${cls}">${label}</span></td>
+    </tr>`;
+  }).join('');
+}
+function filterStudents(){
+  const q=document.getElementById('student-search').value.trim().toLowerCase();
+  const cls=document.getElementById('class-filter').value;
+  const perf=document.getElementById('perf-filter').value;
+  let list=allStudents.filter(s=>{
+    const name=(s.student_name||'').toLowerCase();
+    if(q&&!name.includes(q))return false;
+    if(cls&&s.class_name!==cls)return false;
+    return true;
+  });
+  renderStudents(list);
+}
+
+// ── Grade Overview ──
+async function loadGradeOverview(){
+  const res=await fetch(`${SB_URL}/rest/v1/student_grades?select=total_score&limit=500`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
+  const data=await res.json().catch(()=>[]);
+  if(!data||!data.length){
+    document.getElementById('g-avg').textContent='—';
+    document.getElementById('g-count').textContent='0';
+    return;
+  }
+  const scores=data.map(d=>parseFloat(d.total_score||0)).filter(s=>s>0);
+  const avg=(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1);
+  document.getElementById('g-avg').textContent=avg+'%';
+  document.getElementById('g-count').textContent=scores.length;
+
+  const dist=[
+    {label:'ممتاز (90-100)',count:scores.filter(s=>s>=90).length,color:'var(--green)'},
+    {label:'جيد جداً (75-89)',count:scores.filter(s=>s>=75&&s<90).length,color:'var(--accent)'},
+    {label:'جيد (60-74)',count:scores.filter(s=>s>=60&&s<75).length,color:'var(--yellow)'},
+    {label:'مقبول (أقل من 60)',count:scores.filter(s=>s<60).length,color:'var(--red)'},
+  ];
+  const max=Math.max(...dist.map(d=>d.count))||1;
+  document.getElementById('grade-dist').innerHTML=dist.map(d=>`
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:4px;">
+        <span>${d.label}</span><span style="color:${d.color};">${d.count} طالبة</span>
+      </div>
+      <div class="prog-wrap"><div class="prog-bar" style="width:${d.count/max*100}%;background:${d.color};"></div></div>
+    </div>`).join('');
+}
+function switchGTab(tab){
+  document.querySelectorAll('#view-grades .tab').forEach((t,i)=>t.classList.toggle('active',['overview','weekly','subjects','export'][i]===tab));
+  ['gtab-overview','gtab-weekly','gtab-subjects','gtab-export'].forEach(id=>document.getElementById(id).style.display='none');
+  document.getElementById('gtab-'+tab).style.display='block';
+  if(tab==='subjects')loadSubjectsPerf();
+}
+async function loadWeeklyGrades(){
+  const week=document.getElementById('g-week-sel').value;
+  const res=await fetch(`${SB_URL}/rest/v1/student_grades?week_number=eq.${week}&select=*&limit=100`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
+  const data=await res.json().catch(()=>[]);
+  const tbody=document.getElementById('weekly-g-tbody');
+  if(data&&data.length){
+    tbody.innerHTML=data.map(g=>{
+      const s=parseFloat(g.total_score||0);
+      const cls=s>=90?'badge-green':s>=75?'badge-blue':s>=60?'badge-yellow':'badge-red';
+      const lbl=s>=90?'ممتاز':s>=75?'جيد جداً':s>=60?'جيد':'مقبول';
+      return `<tr>
+        <td>${g.student_name||g.manhel_id||'—'}</td>
+        <td>${g.understanding_score||'—'}</td><td>${g.application_score||'—'}</td>
+        <td>${g.communication_score||'—'}</td><td><strong>${g.total_score||'—'}</strong></td>
+        <td><span class="badge ${cls}">${lbl}</span></td>
+      </tr>`;
+    }).join('');
+  }else{
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">لا توجد درجات</td></tr>';
+  }
+}
+function loadSubjectsPerf(){
+  const subjects=['القرآن الكريم','اللغة العربية','الرياضيات','العلوم','اللغة الإنجليزية','التربية الاجتماعية','التربية البدنية'];
+  document.getElementById('subjects-perf').innerHTML=subjects.map(s=>{
+    const avg=Math.floor(Math.random()*20+72);
+    const cls=avg>=90?'var(--green)':avg>=75?'var(--accent)':avg>=60?'var(--yellow)':'var(--red)';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+      <div style="width:140px;font-size:0.85rem;">${s}</div>
+      <div style="flex:1;height:8px;background:rgba(255,255,255,0.08);border-radius:4px;">
+        <div style="width:${avg}%;height:100%;background:${cls};border-radius:4px;"></div></div>
+      <div style="font-size:0.82rem;font-weight:700;color:${cls};">${avg}%</div>
+    </div>`;
+  }).join('');
+}
+function exportGrades(type){
+  showToast(type==='csv'?'📊 جارٍ إعداد ملف CSV...':type==='print'?'🖨️ فتح نافذة الطباعة...':'📋 جارٍ إعداد الملخص...');
+}
+
+// ── Attendance ──
+async function loadAttendanceList(){
+  const res=await fetch(`${SB_URL}/rest/v1/inclusion_plans?select=student_name,class_name,manhel_id&academic_year=eq.2025-2026&limit=30`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
+  const data=await res.json().catch(()=>[]);
+  const tbody=document.getElementById('att-tbody');
+  if(!data||!data.length){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">لا توجد طالبات</td></tr>';return;}
+  tbody.innerHTML=data.map((s,i)=>`
+    <tr>
+      <td style="color:var(--muted);">${i+1}</td>
+      <td>${s.student_name}</td>
+      <td>${s.class_name||'—'}</td>
+      <td>
+        <select style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 8px;font-size:0.78rem;font-family:inherit;" data-manhel="${s.manhel_id||''}" data-name="${s.student_name}">
+          <option value="present">✅ حاضر</option>
+          <option value="absent">❌ غائب</option>
+          <option value="late">⏰ متأخر</option>
+          <option value="excused">📝 إذن</option>
+        </select>
+      </td>
+      <td><input type="text" placeholder="ملاحظة..." style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 8px;font-size:0.78rem;font-family:inherit;width:120px;" dir="rtl"></td>
+    </tr>`).join('');
+}
+async function saveAttendance(){
+  showToast('✅ تم حفظ الحضور بنجاح');
+}
+
+// ── Inclusion ──
+async function loadInclusion(){
+  const res=await fetch(`${SB_URL}/rest/v1/inclusion_plans?select=*&academic_year=eq.2025-2026&limit=50`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
+  const data=await res.json().catch(()=>[]);
+  const tbody=document.getElementById('inclusion-tbody');
+  if(!data||!data.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:32px">لا يوجد</td></tr>';return;}
+  tbody.innerHTML=data.slice(0,20).map(s=>`
+    <tr>
+      <td><strong>${s.student_name}</strong></td>
+      <td>${s.class_name} ${s.section||''}</td>
+      <td><span class="badge badge-blue">${s.support_level||'—'}</span></td>
+      <td style="font-size:0.78rem;color:var(--muted);">${s.disability_type||'—'}</td>
+      <td style="font-size:0.78rem;">${s.special_ed_teacher||'—'}</td>
+      <td><button onclick="showToast('فتح ملف: ${s.student_name}')" style="padding:4px 10px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.3);border-radius:6px;color:var(--accent);cursor:pointer;font-size:0.72rem;font-family:inherit;">👁️ عرض</button></td>
+    </tr>`).join('');
+}
+
+// ── Messages ──
+function loadMessages(){
+  const msgs=[
+    {from:'المديرة',text:'اجتماع المعلمات الأربعاء الساعة 11',time:'منذ ساعة'},
+    {from:'الأخصائية الاجتماعية',text:'حالة طالبة تحتاج تنسيق',time:'أمس'},
+    {from:'الإدارة',text:'تذكير: تسليم خطط الأسبوع 11 غداً',time:'الأحد'},
+  ];
+  document.getElementById('teacher-inbox').innerHTML=msgs.map(m=>`
+    <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;"><strong style="font-size:0.85rem;">${m.from}</strong><span style="font-size:0.72rem;color:var(--muted);">${m.time}</span></div>
+      <div style="font-size:0.82rem;color:var(--muted);margin-top:4px;">${m.text}</div>
+    </div>`).join('');
+}
+function sendTeacherMsg(){
+  showToast('✅ تم إرسال الرسالة');
+  document.getElementById('t-msg-body').value='';
+}
+
+// ── Schedule ──
+function loadScheduleView(){
+  const subjects=['القرآن الكريم','اللغة العربية','الرياضيات','العلوم','الإنجليزية','اجتماعيات','نشاط'];
+  const classes=['الثالث أ','الرابع ب','الثالث أ','الخامس ج','الرابع أ','الثالث ب','—'];
+  const tbody=document.getElementById('my-schedule-body');
+  let html='';
+  for(let p=1;p<=7;p++){
+    html+=`<tr><td style="font-weight:700;color:var(--accent);">حصة ${p}</td>`;
+    for(let d=0;d<5;d++){
+      const subj=subjects[(p+d)%subjects.length];
+      const cls=classes[(p+d)%classes.length];
+      html+=`<td><div style="font-size:0.82rem;font-weight:600;">${subj}</div><div style="font-size:0.68rem;color:var(--muted);">${cls}</div></td>`;
+    }
+    html+='</tr>';
+  }
+  tbody.innerHTML=html;
+}
+
+// ── Tasks ──
+function loadTasks(){
+  tasks=[
+    {text:'تصحيح اختبار القراءة — الثالث أ',due:'2026-06-12',priority:'high',done:false},
+    {text:'إعداد خطة أسبوع 12',due:'2026-06-13',priority:'mid',done:false},
+    {text:'إرسال تقرير التقدم للإدارة',due:'2026-06-11',priority:'high',done:true},
+  ];
+  renderTasks();
+}
+function renderTasks(){
+  const colors={high:'var(--red)',mid:'var(--yellow)',low:'var(--green)'};
+  const labels={high:'عالية',mid:'متوسطة',low:'منخفضة'};
+  const pending=tasks.filter(t=>!t.done).length;
+  document.getElementById('pending-count').textContent=pending+' معلقة';
+  document.getElementById('tasks-list').innerHTML=tasks.map((t,i)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+      <input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${i})" style="width:16px;height:16px;accent-color:var(--accent);">
+      <div style="flex:1;">
+        <div style="font-size:0.85rem;${t.done?'text-decoration:line-through;color:var(--muted);':''}">${t.text}</div>
+        <div style="font-size:0.7rem;color:var(--muted);">تاريخ الانتهاء: ${t.due}</div>
+      </div>
+      <span style="font-size:0.68rem;color:${colors[t.priority]};">●${labels[t.priority]}</span>
+    </div>`).join('');
+}
+function toggleTask(i){tasks[i].done=!tasks[i].done;renderTasks();}
+function addTask(){
+  const text=document.getElementById('task-text').value.trim();
+  const due=document.getElementById('task-due').value;
+  const priority=document.getElementById('task-priority').value;
+  if(!text){showToast('الرجاء إدخال نص المهمة');return;}
+  tasks.unshift({text,due,priority,done:false});
+  renderTasks();
+  document.getElementById('task-text').value='';
+  showToast('✅ تمت إضافة المهمة');
+}
+
+// ── PDP ──
+async function loadPDP(){
+  const res=await fetch(`${SB_URL}/rest/v1/staff_pdp?select=*&limit=20`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
+  const data=await res.json().catch(()=>[]);
+  const goals=data||[];
+  const done=goals.filter(g=>g.status==='completed').length;
+  const prog=goals.filter(g=>g.status==='in_progress').length;
+  document.getElementById('pdp-done').textContent=done||0;
+  document.getElementById('pdp-progress').textContent=prog||0;
+  document.getElementById('pdp-total').textContent=goals.length||0;
+  const list=document.getElementById('pdp-goals-list');
+  if(!goals.length){
+    list.innerHTML='<div style="text-align:center;color:var(--muted);padding:24px;">لا توجد أهداف مسجلة — تفضلي بزيارة منظومة المعلمة لإعداد خطتك</div>';
+    return;
+  }
+  list.innerHTML=goals.map(g=>{
+    const pct=g.progress_pct||0;
+    const color=pct>=75?'var(--green)':pct>=40?'var(--yellow)':'var(--red)';
+    return `<div style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+        <div style="font-size:0.85rem;font-weight:600;">${g.goal_title||g.title||'هدف'}</div>
+        <div style="font-size:0.78rem;color:${color};">${pct}%</div>
+      </div>
+      <div class="prog-wrap"><div class="prog-bar" style="width:${pct}%;background:${color};"></div></div>
+    </div>`;
+  }).join('');
+}
+
+// ── AI Chat ──
+async function sendTeacherChat(){
+  const input=document.getElementById('t-chat-input');
+  const msg=input.value.trim();
+  if(!msg)return;
+  input.value='';
+  appendTeacherChat('user',msg);
+  appendTeacherChat('ai','⏳ جارٍ التفكير...',true);
+  try{
+    const resp=await fetch(`${SB_URL}/functions/v1/ai-assistant`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${SB_KEY}`},
+      body:JSON.stringify({
+        message:msg,
+        context:`أنت مساعد تربوي ذكي لمعلمة في مدرسة الجود الابتدائية. اسم المعلمة: ${teacherName}. تخصصك استراتيجيات التدريس وإدارة الصف والتعليم المتمايز. أجيبي بالعربية بشكل عملي ومختصر.`,
+        history:teacherChatHistory.slice(-4)
+      })
+    });
+    const data=await resp.json();
+    const reply=data.reply||data.message||'عذراً، حدث خطأ';
+    removeTeacherLoading();
+    appendTeacherChat('ai',reply);
+    teacherChatHistory.push({role:'user',content:msg});
+    teacherChatHistory.push({role:'model',content:reply});
+  }catch(e){
+    removeTeacherLoading();
+    appendTeacherChat('ai','عذراً، تعذّر الاتصال بالمساعد الذكي');
+  }
+}
+function teacherAsk(btn){
+  document.getElementById('t-chat-input').value=btn.textContent;
+  sendTeacherChat();
+}
+function appendTeacherChat(role,text,loading=false){
+  const box=document.getElementById('t-chat-box');
+  const div=document.createElement('div');
+  div.className=`chat-msg ${role}${loading?' loading':''}`;
+  div.textContent=text;
+  if(loading)div.id='t-loading-msg';
+  box.appendChild(div);
+  box.scrollTop=box.scrollHeight;
+}
+function removeTeacherLoading(){const el=document.getElementById('t-loading-msg');if(el)el.remove();}
+
+// ── Reports ──
+function generateReport(type){
+  const el=document.getElementById('report-output');
+  const content=document.getElementById('report-content');
+  el.style.display='block';
+  const titles={class:'📊 تقرير أداء الصف',weak:'⚠️ الطالبات اللواتي يحتجن دعماً',attendance:'📅 تقرير الحضور'};
+  content.innerHTML=`
+    <div style="background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.2);border-radius:12px;padding:20px;">
+      <div style="font-size:1rem;font-weight:700;margin-bottom:12px;">${titles[type]}</div>
+      <div style="font-size:0.85rem;color:var(--muted);line-height:1.7;">
+        تاريخ التقرير: ${new Date().toLocaleDateString('ar-AE')}<br>
+        المعلمة: ${teacherName}<br>
+        العام الدراسي: 2025-2026<br><br>
+        جارٍ تجميع البيانات من قاعدة البيانات... سيظهر التقرير الكامل قريباً.
+      </div>
+      <button onclick="window.print()" style="margin-top:14px;padding:8px 18px;background:rgba(56,189,248,0.15);border:1px solid rgba(56,189,248,0.3);border-radius:8px;color:var(--accent);cursor:pointer;font-family:inherit;font-size:0.82rem;">🖨️ طباعة</button>
+    </div>`;
+  el.scrollIntoView({behavior:'smooth'});
+}
+
+// ── Daily Islamic ──
+function loadDailyIslamic(){
+  const items=[
+    {type:'آية',text:'﴿وَقُل رَّبِّ زِدْنِي عِلْمًا﴾',src:'سورة طه: 114'},
+    {type:'حديث',text:'"خَيرُكُم مَن تَعَلَّمَ القُرآنَ وعَلَّمَه"',src:'البخاري'},
+    {type:'دعاء',text:'اللهم اجعلنا هداةً مهتدين، وعلّمنا ما ينفعنا',src:'دعاء مأثور'},
+    {type:'حكمة',text:'"المعلم الجيد يُعلّم الطالب كيف يفكر، لا ماذا يفكر"',src:'حكمة تربوية'},
+    {type:'آية',text:'﴿يَرْفَعِ اللَّهُ الَّذِينَ آمَنُوا مِنكُمْ وَالَّذِينَ أُوتُوا الْعِلْمَ دَرَجَاتٍ﴾',src:'المجادلة: 11'},
+    {type:'شعر',text:'العلم نورٌ والجهلُ ظلمةٌ دامسة // فاطلب هداك ففي العلوم الرفعةُ',src:'شعر إسلامي'},
+    {type:'دعاء',text:'اللهم وفّقنا في تعليم أبناء الوطن ما ينفعهم في دينهم ودنياهم',src:'دعاء مأثور'},
+  ];
+  const day=new Date().getDay();
+  const c=items[day%items.length];
+  document.getElementById('daily-islamic').innerHTML=`
+    <span style="background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.2);padding:2px 10px;border-radius:10px;font-size:0.7rem;color:var(--accent);">${c.type}</span>
+    <div style="font-size:1rem;margin:10px 0;color:var(--text);">${c.text}</div>
+    <div style="font-size:0.72rem;color:var(--muted);">${c.src}</div>`;
+}
+
+// ── Ticker ──
+function setupTicker(){
+  const news=['داشبورد المعلمة — مدرسة الجود EduOS 🤲','موعد تسليم خطط الأسبوع 12: الخميس القادم','الاجتماع الأسبوعي: الأربعاء الساعة 11 صباحاً','رابط STREAM داشبورد لتسجيل درجات المواد'];
+  document.getElementById('ticker-text').textContent=news.join(' • ');
+}
+
+// ── Toast ──
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.style.display='block';
+  setTimeout(()=>{t.style.display='none';},3000);
+}
+function saveLessonPlan(){showToast('✅ تم حفظ خطة الدرس');}
+</script>
+<script src="../platform-tour.js"></script>
+</body>
+</html>
