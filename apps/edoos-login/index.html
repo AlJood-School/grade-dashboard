@@ -1051,6 +1051,7 @@ async function handleLogin(e) {
     sessionStorage.setItem('aljood_user', JSON.stringify(session));
 
     // Check onboarding (admin/principal only — once)
+    // نتحقق فقط إذا كانت الجداول موجودة وكان الإعداد لم يكتمل بعد
     const adminRoles = ['admin','principal'];
     if (adminRoles.includes(role)) {
       try {
@@ -1058,16 +1059,30 @@ async function handleLogin(e) {
         const cfgRes = await fetch(`${SUPA_URL}/rest/v1/school_config?select=setup_complete&limit=1`, {
           headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}` }
         });
-        const cfgData = await cfgRes.json();
-        const isSetupDone = Array.isArray(cfgData) && cfgData.length > 0 && cfgData[0].setup_complete;
-        if (!isSetupDone) {
-          // First time — go to onboarding wizard
-          setTimeout(() => {
-            showRedirectOverlay({ icon:'🧙‍♀️', label:'إعداد المدرسة' }, displayName, '../edoos-onboarding/');
-          }, 900);
-          return;
+        // إذا فشل الطلب أو الجدول غير موجود → تجاوز الإعداد والتوجه للـ Hub
+        if (cfgRes.ok) {
+          const cfgData = await cfgRes.json();
+          const isSetupDone = Array.isArray(cfgData) && cfgData.length > 0 && cfgData[0].setup_complete === true;
+          if (!isSetupDone && Array.isArray(cfgData) && cfgData.length > 0) {
+            // الجدول موجود لكن الإعداد لم يكتمل → onboarding
+            setTimeout(() => {
+              showRedirectOverlay({ icon:'🧙‍♀️', label:'إعداد المدرسة' }, displayName, '../edoos-onboarding/');
+            }, 900);
+            return;
+          }
         }
-      } catch(e) { /* network error — proceed normally */ }
+        // الجدول غير موجود أو الإعداد مكتمل → توجه للـ Hub مباشرة
+        setTimeout(() => {
+          showRedirectOverlay({ icon:'🏠', label:'لوحة التحكم' }, displayName, '../edoos-hub/');
+        }, 900);
+        return;
+      } catch(e) {
+        // خطأ في الشبكة → توجه للـ Hub
+        setTimeout(() => {
+          showRedirectOverlay({ icon:'🏠', label:'لوحة التحكم' }, displayName, '../edoos-hub/');
+        }, 900);
+        return;
+      }
     }
 
     // Show redirect overlay
