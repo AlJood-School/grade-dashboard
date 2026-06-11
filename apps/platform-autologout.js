@@ -13,7 +13,7 @@
  *    window.EDOOS_AUTOLOGOUT_CONFIG = {
  *      idleMinutes: 15,           // وقت الخمول قبل الخروج (افتراضي: 15)
  *      warnMinutes: 2,            // تحذير قبل كذا دقيقة (افتراضي: 2)
- *      loginUrl: '../edoos-login/', // رابط صفحة الدخول
+ *      loginUrl: '../eduos-login/', // رابط صفحة الدخول
  *      userName: 'المستخدم',       // اسم المستخدم للعرض
  *      role: 'موظف',               // الدور
  *      breathingMinutes: 45,       // تذكير التنفس كل كذا دقيقة (0=معطّل)
@@ -196,8 +196,8 @@
     hideWarning();
     const loginUrl = cfg.loginUrl || (
       location.pathname.includes('/apps/')
-        ? location.pathname.replace(/\/apps\/[^/]+\/.*$/, '/apps/edoos-login/')
-        : '/apps/edoos-login/'
+        ? location.pathname.replace(/\/apps\/[^/]+\/.*$/, '/apps/eduos-login/')
+        : '/apps/eduos-login/'
     );
     // تسجيل وقت آخر خروج (session flag فقط — لا localStorage)
     try { sessionStorage.setItem('eal_logged_out', '1'); } catch(e) {}

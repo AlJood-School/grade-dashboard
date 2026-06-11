@@ -424,7 +424,7 @@
   ═══════════════════════════════════════════════ */
   function init() {
     // لا تضيف زر الجولة في صفحة الدخول
-    if (location.pathname.includes('edoos-login')) return;
+    if (location.pathname.includes('eduos-login')) return;
     buildBtn();
   }
 

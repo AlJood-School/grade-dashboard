@@ -7,7 +7,7 @@
 
   const style = document.createElement('style');
   style.textContent = `
-    #edoos-splash {
+    #eduos-splash {
       position: fixed; inset: 0;
       z-index: 999999;
       background: radial-gradient(ellipse at 50% 40%, #050d1e 0%, #020610 60%, #000 100%);
@@ -17,7 +17,7 @@
       overflow: hidden;
       transition: opacity 0.7s ease;
     }
-    #edoos-splash.spl-out {
+    #eduos-splash.spl-out {
       opacity: 0;
       pointer-events: none;
     }
@@ -106,7 +106,7 @@
 
   /* ── جسيمات خلفية ── */
   const splash = document.createElement('div');
-  splash.id = 'edoos-splash';
+  splash.id = 'eduos-splash';
 
   for (let i = 0; i < 20; i++) {
     const d = document.createElement('div');
@@ -139,7 +139,7 @@
   const logoWrap = document.createElement('div');
   logoWrap.id = 'spl-logo';
   const img = document.createElement('img');
-  img.src = '/apps/edoos-logo-transparent.png';
+  img.src = '/apps/eduos-logo-transparent.png';
   img.alt = 'EduOS';
   img.draggable = false;
   logoWrap.appendChild(img);
@@ -239,7 +239,7 @@
   setTimeout(() => {
     // حاول تحديد موضع الشعار في الـ nav
     const navLogo = document.querySelector(
-      '.nav-logo img, .nav-brand img, header img[src*="edoos-logo"], .logo img, nav img'
+      '.nav-logo img, .nav-brand img, header img[src*="eduos-logo"], .logo img, nav img'
     );
     let targetX = '44vw', targetY = '-46vh';
 
