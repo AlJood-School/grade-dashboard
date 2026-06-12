@@ -550,14 +550,10 @@ body{background:var(--dark);min-height:100vh;color:#fff}
 //  SUPABASE CONFIG
 // ══════════════════════════════════════
 const SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
-const SB_K1 = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9u';
-const SB_K2 = 'Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI0MDY2MzUsImV4cCI6MjA1Nzk4MjYzNX0.0bodxGpDsKjRVIhGy-bVYBfgS1-K_cDnN1uS3VL3vhE';
-const SB_KEY = SB_K1 + SB_K2;
-
-// ══════════════════════════════════════
-//  OPENROUTER AI
-// ══════════════════════════════════════
-const AI_MODEL = 'meta-llama/llama-3.3-70b-instruct:free';
+const SB_K1 = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1';
+const SB_K2 = 'Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0';
+const SB_K3 = '.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+const SB_KEY = SB_K1 + SB_K2 + SB_K3;
 
 async function sbFetch(table, opts = {}) {
   const { method='GET', body=null, query='' } = opts;
@@ -781,37 +777,30 @@ async function loadExpenseBars() {
 // ══════════════════════════════════════
 async function loadBudget() {
   try {
-    const data = await sbFetch('financial_transactions', { query:'?select=*&type=eq.budget_item' });
+    const data = await sbFetch('budget_items', { query:'?order=category,name' });
     const el = document.getElementById('budgetList');
     const colors = ['#3B82F6','#F59E0B','#10B981','#EC4899','#8B5CF6','#14B8A6','#EF4444','#94A3B8'];
-    // استخدم بيانات Supabase إذا وُجدت، وإلا البيانات الافتراضية
-    const budgetItems = (data && data.length > 0)
-      ? data.map((d,i) => ({ name: d.description||d.category||'بند', allocated: d.amount||0, spent: d.spent||0, color: colors[i%colors.length] }))
-      : [
-          { name:'رواتب المعلمات', allocated:500000, spent:490000, color:'#3B82F6' },
-          { name:'الصيانة والمرافق', allocated:80000, spent:62000, color:'#F59E0B' },
-          { name:'اللوازم المدرسية', allocated:30000, spent:18500, color:'#10B981' },
-          { name:'الأنشطة والرحلات', allocated:25000, spent:21000, color:'#EC4899' },
-          { name:'التقنية والبنية', allocated:40000, spent:15000, color:'#8B5CF6' },
-        ];
+    if (!data || !data.length) { el.innerHTML='<div class="empty">لا توجد بنود ميزانية بعد</div>'; return; }
     let totalAlloc = 0, totalSpent = 0;
-    el.innerHTML = budgetItems.map(b=>{
-      const pct = Math.min(Math.round(b.spent/b.allocated*100), 100);
-      const rem = b.allocated - b.spent;
-      totalAlloc += b.allocated; totalSpent += b.spent;
-      const barColor = pct > 90 ? '#EF4444' : pct > 70 ? '#F59E0B' : b.color;
+    el.innerHTML = data.map((b,i)=>{
+      const allocated = Number(b.allocated)||0;
+      const spent = Number(b.spent)||0;
+      const pct = allocated ? Math.min(Math.round(spent/allocated*100), 100) : 0;
+      const rem = allocated - spent;
+      totalAlloc += allocated; totalSpent += spent;
+      const barColor = pct > 90 ? '#EF4444' : pct > 70 ? '#F59E0B' : colors[i%colors.length];
       return `<div class="budget-item">
         <div class="budget-header">
           <div class="budget-name">${b.name}</div>
-          <div class="budget-amounts">${fmt(b.spent)} / ${fmt(b.allocated)} ريال</div>
+          <div class="budget-amounts">${fmt(spent)} / ${fmt(allocated)} درهم</div>
         </div>
         <div class="budget-bar"><div class="budget-fill" style="width:${pct}%;background:${barColor}"></div></div>
-        <div class="budget-pct">${pct}% مستخدم · متبقٍ: ${fmt(rem)} ريال</div>
+        <div class="budget-pct">${pct}% مستخدم · متبقٍ: ${fmt(rem)} درهم</div>
       </div>`;
     }).join('');
-    document.getElementById('totalAllocated').textContent = fmt(totalAlloc) + ' ريال';
-    document.getElementById('totalSpentBudget').textContent = fmt(totalSpent) + ' ريال';
-    document.getElementById('totalRemainingBudget').textContent = fmt(totalAlloc-totalSpent) + ' ريال';
+    document.getElementById('totalAllocated').textContent = fmt(totalAlloc) + ' درهم';
+    document.getElementById('totalSpentBudget').textContent = fmt(totalSpent) + ' درهم';
+    document.getElementById('totalRemainingBudget').textContent = fmt(totalAlloc-totalSpent) + ' درهم';
   } catch(e) { document.getElementById('budgetList').innerHTML='<div class="empty">تعذّر التحميل</div>'; }
 }
 
@@ -821,14 +810,18 @@ async function addBudgetItem() {
   if(!name) { msg.innerHTML='<span style="color:var(--red)">⚠️ أدخل اسم البند</span>'; return; }
   msg.innerHTML='<span style="color:var(--gold)">جارٍ الحفظ...</span>';
   try {
-    await sbFetch('financial_transactions', { method:'POST', body:{
-      type:'budget_item', description:name,
-      amount:Number(document.getElementById('budgetAllocated').value),
-      notes:JSON.stringify({spent:Number(document.getElementById('budgetSpent').value),year:document.getElementById('budgetYear').value}),
-      category:document.getElementById('budgetCategory').value, status:'approved'
+    await sbFetch('budget_items', { method:'POST', body:{
+      name: name,
+      allocated: Number(document.getElementById('budgetAllocated').value)||0,
+      spent: Number(document.getElementById('budgetSpent').value)||0,
+      category: document.getElementById('budgetCategory').value,
+      academic_year: document.getElementById('budgetYear').value||'2025-2026'
     }});
     msg.innerHTML='<span style="color:var(--green)">✅ تم الإضافة</span>';
-    setTimeout(()=>msg.innerHTML='',3000);
+    setTimeout(()=>{ msg.innerHTML=''; loadBudget(); },2000);
+    document.getElementById('budgetName').value='';
+    document.getElementById('budgetAllocated').value='';
+    document.getElementById('budgetSpent').value='';
   } catch(e) { msg.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`; }
 }
 
