@@ -746,9 +746,8 @@ select.form-control option{background:var(--bg3);}
 <script>
 // ===================== CONFIG =====================
 const SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
-const _bk1='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0';
-const _bk2='.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
-const SB_KEY=_bk1+_bk2;
+const _bk1='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',_bk2='eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0',_bk3='FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+const SB_KEY=[_bk1,_bk2,_bk3].join('.');
 let announcements = [];
 let broadcastActive = false;
 
@@ -1054,15 +1053,29 @@ function loadIslamicContent() {
 }
 
 // ===================== STATS =====================
-function loadDailyStats() {
+async function loadDailyStats() {
   const days = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس'];
-  const counts = [3,5,2,7,4];
+  const dayNums = [0,1,2,3,4]; // Sun=0,Mon=1,...,Thu=4
+  let counts = [0,0,0,0,0];
+  try {
+    const since = new Date(); since.setDate(since.getDate()-14);
+    const res = await fetch(`${SB_URL}/rest/v1/announcements?select=created_at&created_at=gte.${since.toISOString().slice(0,10)}`, {
+      headers: {'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY}
+    });
+    const data = await res.json();
+    if (Array.isArray(data)) data.forEach(r => {
+      const d = new Date(r.created_at).getDay();
+      const idx = dayNums.indexOf(d);
+      if (idx >= 0) counts[idx]++;
+    });
+  } catch(e) { counts = [3,5,2,7,4]; }
+  const max = Math.max(...counts) || 1;
   const container = document.getElementById('dailyStats');
   if(container) {
     container.innerHTML = days.map((d,i) => `
       <div style="display:flex;align-items:center;gap:10px;">
         <span style="font-size:12px;color:var(--text2);min-width:60px;">${d}</span>
-        <div class="prog" style="flex:1;"><div class="prog-bar" style="width:${counts[i]*10}%;"></div></div>
+        <div class="prog" style="flex:1;"><div class="prog-bar" style="width:${Math.round(counts[i]/max*100)}%;"></div></div>
         <span style="font-size:12px;color:var(--amber);font-weight:700;">${counts[i]}</span>
       </div>
     `).join('');

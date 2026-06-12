@@ -921,12 +921,28 @@ function drawTermChart() {
   });
 }
 
-function loadReports() {
-  document.getElementById('r-total').textContent = '20';
-  document.getElementById('r-closed').textContent = '12';
-  document.getElementById('r-sessions').textContent = '28';
-  document.getElementById('r-parents').textContent = '18';
-  document.getElementById('r-referrals').textContent = '3';
+async function loadReports() {
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/social_cases?select=id,status,sessions_count,parent_contacted,referred_to`, {
+      headers: {'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY}
+    });
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      const total = data.length;
+      const closed = data.filter(c => c.status === 'closed').length;
+      const sessions = data.reduce((s, c) => s + (c.sessions_count || 0), 0);
+      const parents = data.filter(c => c.parent_contacted).length;
+      const referrals = data.filter(c => c.referred_to && c.referred_to.trim() !== '').length;
+      if (document.getElementById('r-total')) document.getElementById('r-total').textContent = total;
+      if (document.getElementById('r-closed')) document.getElementById('r-closed').textContent = closed;
+      if (document.getElementById('r-sessions')) document.getElementById('r-sessions').textContent = sessions;
+      if (document.getElementById('r-parents')) document.getElementById('r-parents').textContent = parents;
+      if (document.getElementById('r-referrals')) document.getElementById('r-referrals').textContent = referrals;
+    }
+  } catch(e) {
+    console.error('loadReports:', e);
+    ['r-total','r-closed','r-sessions','r-parents','r-referrals'].forEach(id => { const el = document.getElementById(id); if(el) el.textContent = '—'; });
+  }
   drawTermChart();
 }
 
@@ -956,7 +972,7 @@ function appendAI(chatId, text, role) {
 }
 async function callAI(q) {
   try {
-    const r = await fetch('https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt, context, module:'socialworker'})}));
+    const r = await fetch('https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt: q, context: 'الأخصائية الاجتماعية — مدرسة الجود', module:'socialworker'})});
     const d = await r.json();
     return d.choices?.[0]?.message?.content || 'تعذّر الحصول على رد. 🌙';
   } catch { return 'خطأ في الاتصال 🌙'; }
