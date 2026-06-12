@@ -783,14 +783,17 @@ async function loadBudget() {
   try {
     const data = await sbFetch('financial_transactions', { query:'?select=*&type=eq.budget_item' });
     const el = document.getElementById('budgetList');
-    // Use stored budget items or show mock data
-    const budgetItems = [
-      { name:'رواتب المعلمات', allocated:500000, spent:490000, color:'#3B82F6' },
-      { name:'الصيانة والمرافق', allocated:80000, spent:62000, color:'#F59E0B' },
-      { name:'اللوازم المدرسية', allocated:30000, spent:18500, color:'#10B981' },
-      { name:'الأنشطة والرحلات', allocated:25000, spent:21000, color:'#EC4899' },
-      { name:'التقنية والبنية', allocated:40000, spent:15000, color:'#8B5CF6' },
-    ];
+    const colors = ['#3B82F6','#F59E0B','#10B981','#EC4899','#8B5CF6','#14B8A6','#EF4444','#94A3B8'];
+    // استخدم بيانات Supabase إذا وُجدت، وإلا البيانات الافتراضية
+    const budgetItems = (data && data.length > 0)
+      ? data.map((d,i) => ({ name: d.description||d.category||'بند', allocated: d.amount||0, spent: d.spent||0, color: colors[i%colors.length] }))
+      : [
+          { name:'رواتب المعلمات', allocated:500000, spent:490000, color:'#3B82F6' },
+          { name:'الصيانة والمرافق', allocated:80000, spent:62000, color:'#F59E0B' },
+          { name:'اللوازم المدرسية', allocated:30000, spent:18500, color:'#10B981' },
+          { name:'الأنشطة والرحلات', allocated:25000, spent:21000, color:'#EC4899' },
+          { name:'التقنية والبنية', allocated:40000, spent:15000, color:'#8B5CF6' },
+        ];
     let totalAlloc = 0, totalSpent = 0;
     el.innerHTML = budgetItems.map(b=>{
       const pct = Math.min(Math.round(b.spent/b.allocated*100), 100);
@@ -1021,7 +1024,7 @@ async function generateFullReport() {
 //  AI CORE
 // ══════════════════════════════════════
 async function callAI(prompt) {
-  const r = await fetch('https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt, context, module:'financial'})}));
+  const r = await fetch('https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt, context:'', module:'financial'})});
   if(!r.ok) throw new Error('AI error');
   const j = await r.json();
   return j.choices?.[0]?.message?.content || '—';
