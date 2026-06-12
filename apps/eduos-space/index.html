@@ -621,9 +621,15 @@ const SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
 const SB_P1  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1';
 const SB_P2  = 'Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
 const SB_KEY = SB_P1 + SB_P2;
-const OR_P1  = 'sk-or-v1-61abae706c617ebe661a3945';
-const OR_P2  = 'bf0e20bea345f7222e4b1adfb47f913d9ff6e9bf';
-const OR_KEY = OR_P1 + OR_P2;
+const AI_FN = 'https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant';
+async function askAI(prompt, ctx='') {
+  try {
+    const r = await fetch(AI_FN, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ prompt, context: ctx, module:'space' }) });
+    const d = await r.json();
+    return d.success ? d.text : 'لم أتمكن من الحصول على رد.';
+  } catch(e) { return 'خطأ في المساعد الذكي.'; }
+}
 
 // ══════════════════════════════════════
 // SUPABASE
@@ -745,39 +751,27 @@ function cancelBooking(btn) {
 // ══════════════════════════════════════
 // SCHEDULE
 // ══════════════════════════════════════
-const scheduleData = {
-  'الأحد': [
-    { time: '7:00', facility: '💻 مختبر الحاسوب', class: '6A', teacher: 'لطيفة', status: 'مؤكدة' },
-    { time: '7:50', facility: '🔬 مختبر العلوم', class: '3A', teacher: 'أمل', status: 'جارية' },
-    { time: '8:40', facility: '📚 المكتبة', class: '4B', teacher: 'سارة', status: 'مجدولة' },
-    { time: '9:45', facility: '🏛️ قاعة الاجتماعات', class: '—', teacher: 'الإدارة', status: 'مجدولة' },
-    { time: '10:35', facility: '🎭 قاعة العروض', class: '5B', teacher: 'نورة', status: 'مجدولة' },
-    { time: '11:40', facility: '💻 مختبر الحاسوب', class: '4A', teacher: 'سارة', status: 'مجدولة' },
-  ],
-  'الاثنين': [
-    { time: '7:00', facility: '🎨 مختبر الفن', class: '3B', teacher: 'هنادي', status: 'مؤكدة' },
-    { time: '8:40', facility: '💻 مختبر الحاسوب', class: '5A', teacher: 'لطيفة', status: 'مجدولة' },
-    { time: '9:45', facility: '📚 المكتبة', class: '4C', teacher: 'مريم', status: 'مجدولة' },
-    { time: '11:40', facility: '⚽ الملعب الرياضي', class: '6B', teacher: 'نهى', status: 'مجدولة' },
-  ],
-};
-
-function renderSchedule() {
+async function renderSchedule() {
   const day = document.getElementById('sched-day').value;
-  const slots = scheduleData[day] || [];
   const grid = document.getElementById('schedule-grid');
-  if (!slots.length) {
+  grid.innerHTML = '<div class="info-box">⏳ جارٍ التحميل...</div>';
+
+  // تحميل من Supabase أولاً
+  const bookings = await SB.get('facility_bookings', `day_name=eq.${day}&order=period&limit=30`);
+  if (bookings && bookings.length) {
+    grid.innerHTML = bookings.map(b => {
+      const statusColor = b.status === 'جارية' ? 'b-amber' : b.status === 'ملغي' ? 'b-red' : 'b-cyan';
+      const cls = b.class_name ? 'الفصل ' + b.class_name : 'اجتماع';
+      return `<div class="timeline-slot">
+        <div class="time-tag">ح${b.period||'—'}</div>
+        <div class="slot-info"><div class="slot-name">${b.facility_name||'—'} — ${cls}</div>
+        <div class="slot-sub">المعلمة: ${b.teacher_name||'—'}${b.purpose?' • '+b.purpose:''}</div></div>
+        <span class="badge ${statusColor}">${b.status||'مؤكدة'}</span>
+      </div>`;
+    }).join('');
+  } else {
     grid.innerHTML = '<div class="info-box">📋 لا توجد حجوزات مسجّلة ليوم ' + day + '</div>';
-    return;
   }
-  grid.innerHTML = slots.map(s => {
-    const statusColor = s.status === 'جارية' ? 'b-amber' : s.status === 'مؤكدة' ? 'b-cyan' : 'b-blue';
-    return `<div class="timeline-slot">
-      <div class="time-tag">${s.time}</div>
-      <div class="slot-info"><div class="slot-name">${s.facility} — ${s.class !== '—' ? 'الفصل ' + s.class : 'اجتماع'}</div><div class="slot-sub">المعلمة / المستخدم: ${s.teacher}</div></div>
-      <span class="badge ${statusColor}">${s.status}</span>
-    </div>`;
-  }).join('');
 }
 
 // ══════════════════════════════════════
@@ -789,15 +783,8 @@ async function facilityReport(name) {
   document.getElementById('report-title').textContent = '📊 تقرير ' + name;
   document.getElementById('report-content').textContent = '⏳ جارٍ توليد التقرير...';
   openModal('modal-facility-report');
-  try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + OR_KEY, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://aljood.eduos.ae' },
-      body: JSON.stringify({ model: 'meta-llama/llama-3.3-70b-instruct:free', messages: [{ role: 'system', content: 'أنت مدير مرافق في مدرسة. قدّم تقارير موجزة ومفيدة.' }, { role: 'user', content: `قدّم تقرير مرفق موجز عن "${name}" في مدرسة ابتدائية. يشمل: معدل الاستخدام، توصيات الصيانة، اقتراحات لتحسين الاستخدام. 5-7 نقاط.` }], max_tokens: 350 })
-    });
-    const d = await res.json();
-    document.getElementById('report-content').textContent = d.choices?.[0]?.message?.content || '—';
-  } catch { document.getElementById('report-content').textContent = '❌ خطأ في الاتصال'; }
+  const txt = await askAI(`قدّم تقرير مرفق موجز عن "${name}" في مدرسة ابتدائية إماراتية. يشمل: معدل الاستخدام المتوقع، توصيات الصيانة، اقتراحات لتحسين الاستخدام. 5-7 نقاط عملية.`);
+  document.getElementById('report-content').textContent = txt;
 }
 
 function addFacility() {
@@ -826,15 +813,8 @@ async function aiScheduleOptimize() {
   const box = document.getElementById('ai-schedule-box');
   box.style.display = 'block';
   document.getElementById('ai-schedule-out').textContent = '⏳ جارٍ التحليل...';
-  try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + OR_KEY, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://aljood.eduos.ae' },
-      body: JSON.stringify({ model: 'meta-llama/llama-3.3-70b-instruct:free', messages: [{ role: 'system', content: 'أنت خبير في إدارة مرافق المدارس. حلّل وقدّم توصيات عملية وقابلة للتطبيق.' }, { role: 'user', content: `في مدرسة ابتدائية لديها 9 مرافق: المكتبة، مختبر العلوم، مختبر الحاسوب، مختبر الفن، قاعة الاجتماعات، الساحة، الملعب، قاعة العروض، غرفة الإبداع. السؤال: ${q}. قدّم 5 توصيات عملية.` }], max_tokens: 450 })
-    });
-    const d = await res.json();
-    document.getElementById('ai-schedule-out').textContent = d.choices?.[0]?.message?.content || '—';
-  } catch { document.getElementById('ai-schedule-out').textContent = '❌ خطأ في الاتصال'; }
+  const txt = await askAI(`في مدرسة ابتدائية إماراتية لديها 9 مرافق: المكتبة، مختبر العلوم، مختبر الحاسوب، مختبر الفن، قاعة الاجتماعات، الساحة، الملعب، قاعة العروض، غرفة الإبداع. السؤال: ${q}. قدّم 5 توصيات عملية وقابلة للتطبيق.`);
+  document.getElementById('ai-schedule-out').textContent = txt;
 }
 
 async function aiConflictCheck() {
@@ -843,30 +823,16 @@ async function aiConflictCheck() {
   const box = document.getElementById('ai-conflict-box');
   box.style.display = 'block';
   document.getElementById('ai-conflict-out').textContent = '⏳ جارٍ الفحص الذكي...';
-  try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + OR_KEY, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://aljood.eduos.ae' },
-      body: JSON.stringify({ model: 'meta-llama/llama-3.3-70b-instruct:free', messages: [{ role: 'system', content: 'أنت مساعد إداري ذكي في مدرسة.' }, { role: 'user', content: `تحقق من احتمالية التعارض في "${facility}" يوم ${day}. قدّم: الأوقات الأقل ازدحاماً عادةً، ونصائح للحجز الأمثل.` }], max_tokens: 300 })
-    });
-    const d = await res.json();
-    document.getElementById('ai-conflict-out').textContent = d.choices?.[0]?.message?.content || '—';
-  } catch { document.getElementById('ai-conflict-out').textContent = '❌ خطأ'; }
+  const txt = await askAI(`تحقق من احتمالية التعارض في "${facility}" يوم ${day} في مدرسة ابتدائية. قدّم: الأوقات الأقل ازدحاماً عادةً، ونصائح للحجز الأمثل.`);
+  document.getElementById('ai-conflict-out').textContent = txt;
 }
 
 async function aiFullReport() {
   const box = document.getElementById('ai-full-box');
   box.style.display = 'block';
   document.getElementById('ai-full-out').textContent = '⏳ جارٍ توليد التقرير الشامل...';
-  try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + OR_KEY, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://aljood.eduos.ae' },
-      body: JSON.stringify({ model: 'meta-llama/llama-3.3-70b-instruct:free', messages: [{ role: 'system', content: 'أنت مستشار تعليمي متخصص في إدارة المرافق المدرسية.' }, { role: 'user', content: 'أعطِ تقريراً شاملاً عن استخدام المرافق في مدرسة ابتدائية ابتدائية مع هذه البيانات: مختبر الحاسوب 94%، مختبر العلوم 80%، المكتبة 70%، قاعة العروض 52%، غرفة الإبداع 34%، مختبر الفن 28%. التقرير يشمل: التحليل، المخاوف، التوصيات لزيادة الاستخدام، وأولويات الصيانة.' }], max_tokens: 600 })
-    });
-    const d = await res.json();
-    document.getElementById('ai-full-out').textContent = d.choices?.[0]?.message?.content || '—';
-  } catch { document.getElementById('ai-full-out').textContent = '❌ خطأ في الاتصال'; }
+  const txt = await askAI('أعطِ تقريراً شاملاً عن استخدام المرافق في مدرسة ابتدائية إماراتية مع هذه البيانات: مختبر الحاسوب 94%، مختبر العلوم 80%، المكتبة 70%، قاعة العروض 52%، غرفة الإبداع 34%، مختبر الفن 28%. التقرير يشمل: التحليل، المخاوف، التوصيات لزيادة الاستخدام، وأولويات الصيانة.');
+  document.getElementById('ai-full-out').textContent = txt;
 }
 
 // ══════════════════════════════════════
