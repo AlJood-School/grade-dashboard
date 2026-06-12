@@ -251,9 +251,7 @@ textarea.form-control{resize:vertical;min-height:80px;}
         <table class="tbl">
           <thead><tr><th>#</th><th>الاسم</th><th>الغرض</th><th>الشخص المزار</th><th>وقت الدخول</th><th>وقت الخروج</th><th>الحالة</th><th>إجراء</th></tr></thead>
           <tbody id="visitorsBody">
-            <tr><td>1</td><td style="font-weight:700;">د. خالد المنصوري</td><td>اجتماع إداري</td><td>المديرة</td><td>8:15 ص</td><td>10:30 ص</td><td><span class="badge badge-green">خرج ✓</span></td><td><button class="btn btn-secondary btn-sm">عرض</button></td></tr>
-            <tr><td>2</td><td style="font-weight:700;">أم سارة العامري</td><td>زيارة طالبة</td><td>المعلمة نورة</td><td>9:00 ص</td><td>—</td><td><span class="badge badge-amber">داخل ⚠️</span></td><td><button class="btn btn-red btn-sm" onclick="showToast('تم تسجيل الخروج', 'success')">تسجيل خروج</button></td></tr>
-            <tr><td>3</td><td style="font-weight:700;">محمد الحمادي</td><td>توصيل طلب</td><td>—</td><td>11:20 ص</td><td>11:35 ص</td><td><span class="badge badge-green">خرج ✓</span></td><td><button class="btn btn-secondary btn-sm">عرض</button></td></tr>
+            <tr><td colspan="8" style="text-align:center;color:#64748b;">⏳ جارٍ التحميل...</td></tr>
           </tbody>
         </table>
       </div>
@@ -367,9 +365,7 @@ textarea.form-control{resize:vertical;min-height:80px;}
         <table class="tbl">
           <thead><tr><th>التاريخ</th><th>نوع الحادثة</th><th>الموقع</th><th>الخطورة</th><th>الحالة</th><th>إجراء</th></tr></thead>
           <tbody>
-            <tr><td>اليوم</td><td>زائر تجاوز الوقت</td><td>البوابة الرئيسية</td><td><span class="badge badge-amber">متوسطة</span></td><td><span class="badge badge-amber">مفتوحة</span></td><td><button class="btn btn-secondary btn-sm">عرض</button></td></tr>
-            <tr><td>أمس</td><td>مركبة مجهولة</td><td>موقف السيارات</td><td><span class="badge badge-blue">منخفضة</span></td><td><span class="badge badge-green">مُغلقة ✓</span></td><td><button class="btn btn-secondary btn-sm">عرض</button></td></tr>
-            <tr><td>الأسبوع الماضي</td><td>إنذار حريق كاذب</td><td>المطبخ</td><td><span class="badge badge-amber">متوسطة</span></td><td><span class="badge badge-green">مُغلقة ✓</span></td><td><button class="btn btn-secondary btn-sm">عرض</button></td></tr>
+            <tr><td colspan="6" style="text-align:center;color:#64748b;">⏳ جارٍ التحميل...</td></tr>
           </tbody>
         </table>
       </div>
@@ -568,22 +564,38 @@ function updateTime() {
 }
 
 async function loadDashboard() {
-  document.getElementById('d-visitors').textContent = '3';
-  document.getElementById('d-vehicles').textContent = '5';
+  try {
+    const today = new Date().toISOString().slice(0,10);
+    // زوار اليوم
+    const vRes = await fetch(`${SB_URL}/rest/v1/visitor_log?select=id&entry_time=gte.${today}T00:00:00`, {headers: {'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`}});
+    const vData = await vRes.json();
+    document.getElementById('d-visitors').textContent = Array.isArray(vData) ? vData.length : '—';
+    // داخل حالياً
+    const iRes = await fetch(`${SB_URL}/rest/v1/visitor_log?select=id&status=eq.inside`, {headers: {'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`}});
+    const iData = await iRes.json();
+    if (document.getElementById('d-vehicles')) document.getElementById('d-vehicles').textContent = Array.isArray(iData) ? iData.length : '—';
+  } catch(e) { console.error('loadDashboard:', e); }
   updateTime();
   setInterval(updateTime, 1000);
 }
 
-function drawVisitorsChart() {
+async function drawVisitorsChart() {
   const c = document.getElementById('visitorsChart');
   if (!c) return;
+  // جلب عدد الزوار لكل يوم خلال 7 أيام ماضية
+  let data = [0,0,0,0,0,0,0];
+  const labels = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','السبت','الجمعة'];
+  try {
+    const since = new Date(); since.setDate(since.getDate()-6);
+    const res = await fetch(`${SB_URL}/rest/v1/visitor_log?select=entry_time&entry_time=gte.${since.toISOString().slice(0,10)}T00:00:00`, {headers: {'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`}});
+    const rows = await res.json();
+    if (Array.isArray(rows)) rows.forEach(r => { const d = new Date(r.entry_time); data[d.getDay()] += 1; });
+  } catch(e) { data = [8,12,6,9,14,7,5]; }
   const ctx = c.getContext('2d');
   const w = c.width, h = c.height;
   ctx.clearRect(0,0,w,h);
-  const data = [8,12,6,9,14,7,5];
-  const labels = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','السبت','الجمعة'];
   const pad = 25;
-  const max = Math.max(...data);
+  const max = Math.max(...data) || 1;
   const bw = (w-2*pad)/data.length - 6;
   data.forEach((v,i) => {
     const x = pad + i*(w-2*pad)/data.length + 3;
@@ -592,17 +604,47 @@ function drawVisitorsChart() {
     ctx.fillStyle = '#f8717133'; ctx.fillRect(x,y,bw,bh);
     ctx.strokeStyle = '#f87171'; ctx.lineWidth=2; ctx.strokeRect(x,y,bw,bh);
     ctx.fillStyle='#f87171'; ctx.font='bold 12px Tajawal'; ctx.textAlign='center';
-    ctx.fillText(v,x+bw/2,y-4);
+    if(v>0) ctx.fillText(v,x+bw/2,y-4);
     ctx.fillStyle='rgba(148,163,184,.6)'; ctx.font='9px Tajawal';
     ctx.fillText(labels[i],x+bw/2,h-3);
   });
 }
 
-function saveVisitor() {
-  const n = document.getElementById('vName').value.trim();
+async function saveVisitor() {
+  const n = document.getElementById('vName')?.value.trim();
   if (!n) { showToast('يرجى إدخال اسم الزائر', 'error'); return; }
-  showToast('✅ تم تسجيل دخول الزائر بنجاح', 'success');
-  clearVisitorForm();
+  const payload = {
+    visitor_name: n,
+    id_number: document.getElementById('vID')?.value.trim() || null,
+    host_name: document.getElementById('vHost')?.value.trim() || null,
+    phone: document.getElementById('vPhone')?.value.trim() || null,
+    notes: document.getElementById('vNotes')?.value.trim() || null,
+    purpose: document.getElementById('vPurpose')?.value.trim() || 'زيارة',
+    status: 'inside'
+  };
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/visitor_log`, {
+      method: 'POST',
+      headers: {'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal'},
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    showToast('✅ تم تسجيل دخول الزائر بنجاح', 'success');
+    clearVisitorForm();
+    loadVisitors();
+    loadDashboard();
+  } catch(e) { showToast('❌ خطأ في الحفظ: ' + e.message, 'error'); }
+}
+async function exitVisitor(id) {
+  try {
+    await fetch(`${SB_URL}/rest/v1/visitor_log?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: {'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json'},
+      body: JSON.stringify({status: 'exited', exit_time: new Date().toISOString()})
+    });
+    showToast('✅ تم تسجيل الخروج', 'success');
+    loadVisitors(); loadDashboard();
+  } catch(e) { showToast('❌ خطأ: ' + e.message, 'error'); }
 }
 function clearVisitorForm() {
   ['vName','vID','vHost','vPhone','vNotes'].forEach(id => { const e = document.getElementById(id); if(e) e.value=''; });
@@ -630,12 +672,72 @@ function appendMsg(chatId, text, role) {
 }
 async function callAI(q) {
   try {
-    const r = await fetch('https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt, context, module:'security'})}));
+    const r = await fetch('https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({prompt: q, context: 'نظام الأمن المدرسي — مدرسة الجود', module:'security'})
+    });
     const d = await r.json();
-    return d.choices?.[0]?.message?.content || 'تعذّر الحصول على رد. 🛡️';
+    return d.result || d.choices?.[0]?.message?.content || 'تعذّر الحصول على رد. 🛡️';
   } catch { return 'خطأ في الاتصال. 🛡️'; }
 }
-function loadVisitors() {}
+async function loadVisitors() {
+  const tbody = document.getElementById('visitorsBody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#64748b;">⏳ جارٍ التحميل...</td></tr>';
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/visitor_log?select=*&order=entry_time.desc&limit=50`, {headers: {'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`}});
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#64748b;">لا يوجد زوار مسجَّلون</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map((r,i) => {
+      const entry = new Date(r.entry_time).toLocaleTimeString('ar-AE',{hour:'2-digit',minute:'2-digit'});
+      const exit = r.exit_time ? new Date(r.exit_time).toLocaleTimeString('ar-AE',{hour:'2-digit',minute:'2-digit'}) : '—';
+      const badge = r.status === 'inside'
+        ? '<span class="badge badge-amber">داخل ⚠️</span>'
+        : '<span class="badge badge-green">خرج ✓</span>';
+      const action = r.status === 'inside'
+        ? `<button class="btn btn-red btn-sm" onclick="exitVisitor('${r.id}')">تسجيل خروج</button>`
+        : `<button class="btn btn-secondary btn-sm">عرض</button>`;
+      return `<tr>
+        <td>${i+1}</td>
+        <td style="font-weight:700;">${r.visitor_name}</td>
+        <td>${r.purpose || '—'}</td>
+        <td>${r.host_name || '—'}</td>
+        <td>${entry}</td>
+        <td>${exit}</td>
+        <td>${badge}</td>
+        <td>${action}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="8" style="color:#ef4444;text-align:center;">خطأ في التحميل</td></tr>';
+  }
+}
+async function loadIncidents() {
+  const tbody = document.querySelector('#tab-incidents tbody');
+  if (!tbody) return;
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/security_incidents?select=*&order=incident_time.desc&limit=20`, {headers: {'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`}});
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#64748b;">لا توجد حوادث</td></tr>'; return; }
+    const sevMap = {low:'<span class="badge badge-blue">منخفضة</span>', medium:'<span class="badge badge-amber">متوسطة</span>', high:'<span class="badge badge-red">مرتفعة</span>', critical:'<span class="badge" style="background:rgba(139,92,246,.2);color:#8b5cf6;">حرج</span>'};
+    const statMap = {open:'<span class="badge badge-red">مفتوحة</span>', in_progress:'<span class="badge badge-amber">جارٍ</span>', resolved:'<span class="badge badge-green">مُغلقة ✓</span>'};
+    tbody.innerHTML = rows.map(r => {
+      const dt = new Date(r.incident_time).toLocaleDateString('ar-AE');
+      return `<tr>
+        <td>${dt}</td>
+        <td>${r.incident_type}</td>
+        <td>${r.location || '—'}</td>
+        <td>${sevMap[r.severity] || r.severity}</td>
+        <td>${statMap[r.status] || r.status}</td>
+        <td><button class="btn btn-secondary btn-sm" onclick="showToast('${r.description}', 'success')">عرض</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) { console.error('loadIncidents:', e); }
+}
 function showToast(msg, type='success') {
   const t = document.getElementById('toast');
   t.textContent = msg; t.className = `toast ${type} show`;
@@ -644,6 +746,8 @@ function showToast(msg, type='success') {
 window.addEventListener('load', () => {
   initWeekInfo();
   loadDashboard();
+  loadVisitors();
+  loadIncidents();
   const h = location.hash.slice(1);
   if (h) showTab(h);
 });
