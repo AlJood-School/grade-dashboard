@@ -18,7 +18,7 @@
     --accent:#38BDF8;--green:#10B981;--yellow:#F59E0B;--red:#EF4444;
     --purple:#A78BFA;--pink:#F472B6;--orange:#FB923C;--teal:#2DD4BF;
   }
-  body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;direction:rtl;}
+  body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;direction:rtl;}
 
   /* Header */
   .header{
@@ -629,18 +629,29 @@ const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 let teacherName='';
 let teacherChatHistory=[];
 let tasks=[];
+let currentStaffId = null;
 
 // ── Auth Guard ──
 function checkAuth(){
-  const sess=sessionStorage.getItem('edoos_session');
-  if(!sess){location.href='/apps/eduos-login/';return;}
+  // يقرأ من edoos_user (المعيار الجديد) أو edoos_session (للتوافق)
+  const raw = sessionStorage.getItem('edoos_user') || sessionStorage.getItem('edoos_session');
+  if(!raw){location.href='/apps/eduos-login/';return;}
   try{
-    const s=JSON.parse(sess);
-    if(Date.now()-s.ts>15*60*1000){sessionStorage.removeItem('edoos_session');location.href='/apps/eduos-login/';return;}
+    const s=JSON.parse(raw);
     if(!['teacher','admin','principal'].includes(s.role)){location.href='/apps/eduos-hub/';}
     teacherName=s.full_name||s.username||'المعلمة';
+    currentStaffId = s.staff_id || null;
     document.getElementById('h-teacher').textContent='مرحباً، '+teacherName;
+    // عرض staff_id في header للتأكيد
+    const metaEl = document.querySelector('.header-sub');
+    if(metaEl && currentStaffId) metaEl.textContent = 'داشبورد المعلمة — ' + currentStaffId;
   }catch(e){location.href='/apps/eduos-login/';}
+}
+
+function doLogout(){
+  sessionStorage.removeItem('edoos_user');
+  sessionStorage.removeItem('edoos_session');
+  location.href='/apps/eduos-login/';
 }
 
 function doLogout(){
@@ -789,7 +800,8 @@ function filterStudents(){
 
 // ── Grade Overview ──
 async function loadGradeOverview(){
-  const res=await fetch(`${SB_URL}/rest/v1/student_grades?select=total_score&limit=500`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
+  const staffFilter = currentStaffId ? `&staff_id=eq.${currentStaffId}` : '';
+  const res=await fetch(`${SB_URL}/rest/v1/student_grades?select=total_score${staffFilter}&limit=500`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
   const data=await res.json().catch(()=>[]);
   if(!data||!data.length){
     document.getElementById('g-avg').textContent='—';
@@ -824,7 +836,8 @@ function switchGTab(tab){
 }
 async function loadWeeklyGrades(){
   const week=document.getElementById('g-week-sel').value;
-  const res=await fetch(`${SB_URL}/rest/v1/student_grades?week_number=eq.${week}&select=*&limit=100`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
+  const staffFilter2 = currentStaffId ? `&staff_id=eq.${currentStaffId}` : '';
+  const res=await fetch(`${SB_URL}/rest/v1/student_grades?week_number=eq.${week}&select=*${staffFilter2}&limit=100`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
   const data=await res.json().catch(()=>[]);
   const tbody=document.getElementById('weekly-g-tbody');
   if(data&&data.length){
