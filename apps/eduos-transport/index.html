@@ -452,12 +452,7 @@ body{background:var(--bg);min-height:100vh;color:var(--text)}
         </select>
       </div>
       <div class="grid-3" id="students-grid">
-        <div class="student-card"><div style="font-size:14px;font-weight:700">فاطمة محمد الزعابي</div><div style="font-size:12px;color:var(--muted);margin-top:4px">الفصل 3/2 &nbsp;|&nbsp; <span style="color:var(--green)">حافلة 2</span></div><div style="font-size:12px;color:var(--muted)">موقف: كورنيش أبوظبي</div><div style="margin-top:8px"><span class="badge b-green">✅ مشتركة</span></div></div>
-        <div class="student-card"><div style="font-size:14px;font-weight:700">نورة علي الشامسي</div><div style="font-size:12px;color:var(--muted);margin-top:4px">الفصل 4/1 &nbsp;|&nbsp; <span style="color:var(--red)">حافلة 7</span></div><div style="font-size:12px;color:var(--muted)">موقف: شارع الكورنيش</div><div style="margin-top:8px"><span class="badge b-red">⚠️ حافلتها متأخرة</span></div></div>
-        <div class="student-card"><div style="font-size:14px;font-weight:700">سارة خالد المنصوري</div><div style="font-size:12px;color:var(--muted);margin-top:4px">الفصل 4/3 &nbsp;|&nbsp; <span style="color:var(--cyan)">حافلة 1</span></div><div style="font-size:12px;color:var(--muted)">موقف: منطقة الريم</div><div style="margin-top:8px"><span class="badge b-cyan">✅ وصلت</span></div></div>
-        <div class="student-card"><div style="font-size:14px;font-weight:700">مريم سعيد الحمادي</div><div style="font-size:12px;color:var(--muted);margin-top:4px">الفصل 2/1 &nbsp;|&nbsp; <span style="color:var(--green)">حافلة 4</span></div><div style="font-size:12px;color:var(--muted)">موقف: حي المشرف</div><div style="margin-top:8px"><span class="badge b-green">⚡ في الطريق</span></div></div>
-        <div class="student-card"><div style="font-size:14px;font-weight:700">لطيفة راشد العامري</div><div style="font-size:12px;color:var(--muted);margin-top:4px">الفصل 5/2 &nbsp;|&nbsp; <span style="color:var(--green)">حافلة 8</span></div><div style="font-size:12px;color:var(--muted)">موقف: البطين</div><div style="margin-top:8px"><span class="badge b-green">⚡ في الطريق</span></div></div>
-        <div class="student-card"><div style="font-size:14px;font-weight:700">شيخة محمد القاسمي</div><div style="font-size:12px;color:var(--muted);margin-top:4px">الفصل 6/1 &nbsp;|&nbsp; <span style="color:var(--cyan)">حافلة 1</span></div><div style="font-size:12px;color:var(--muted)">موقف: منطقة الريم</div><div style="margin-top:8px"><span class="badge b-cyan">✅ وصلت</span></div></div>
+        <div style="color:var(--muted);font-size:13px;grid-column:1/-1;text-align:center;padding:30px">⏳ جارٍ تحميل بيانات الطالبات...</div>
       </div>
     </div>
   </div>
@@ -653,11 +648,7 @@ body{background:var(--bg);min-height:100vh;color:var(--text)}
     </div>
     <div class="form-group"><label>الحافلة</label>
       <select id="as-bus">
-        <option value="1">الحافلة 1 — الريم</option>
-        <option value="2">الحافلة 2 — الخالدية</option>
-        <option value="4">الحافلة 4 — المشرف</option>
-        <option value="7">الحافلة 7 — الكورنيش</option>
-        <option value="8">الحافلة 8 — البطين</option>
+        <option value="">⏳ جارٍ التحميل...</option>
       </select>
     </div>
     <div class="form-group"><label>موقف الصعود</label><input type="text" id="as-stop" placeholder="اسم الموقف / العنوان"></div>
@@ -709,11 +700,52 @@ async function loadTransportData() {
     document.getElementById('kpi-active').textContent = routes.filter(r => r.status === 'نشط').length;
     document.getElementById('kpi-delayed').textContent = routes.filter(r => r.status === 'تأخر').length;
     document.getElementById('kpi-maint').textContent = routes.filter(r => r.status === 'صيانة').length;
+    // تعبئة قائمة الحافلات في نموذج التسجيل
+    const busSel = document.getElementById('as-bus');
+    busSel.innerHTML = '<option value="">اختاري الحافلة...</option>';
+    routes.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.id; // UUID
+      opt.textContent = `${r.bus_number} — ${r.route_name}`;
+      busSel.appendChild(opt);
+    });
   }
-  const assignments = await SB.get('transport_assignments', 'order=created_at.desc&limit=100');
+  const assignments = await SB.get('transport_assignments', 'order=created_at.desc&limit=200');
   if (assignments && assignments.length) {
     document.getElementById('kpi-students').textContent = assignments.length;
+    renderStudentsGrid(assignments, routes || []);
   }
+}
+
+function renderStudentsGrid(assignments, routes) {
+  const routeMap = {};
+  (routes||[]).forEach(r => { routeMap[r.id] = r; });
+
+  const busColors = { 'حافلة 1':'var(--cyan)', 'حافلة 2':'var(--green)', 'حافلة 4':'var(--blue)',
+    'حافلة 7':'var(--red)', 'حافلة 8':'var(--yellow)', 'حافلة 11':'var(--purple)' };
+
+  const grid = document.getElementById('students-grid');
+  grid.innerHTML = '';
+  assignments.forEach(a => {
+    const route = routeMap[a.route_id];
+    const busName = route ? route.bus_number : 'حافلة —';
+    const busColor = busColors[busName] || 'var(--muted)';
+    const isDelayed = route && route.status === 'تأخر';
+    const badgeHtml = isDelayed
+      ? '<span class="badge b-red">⚠️ حافلتها متأخرة</span>'
+      : '<span class="badge b-green">✅ مسجّلة</span>';
+
+    const card = document.createElement('div');
+    card.className = 'student-card';
+    card.dataset.name = a.student_name;
+    card.dataset.bus = busName;
+    card.innerHTML = `
+      <div style="font-size:14px;font-weight:700">${a.student_name}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">الفصل ${a.class_name} &nbsp;|&nbsp; <span style="color:${busColor}">${busName}</span></div>
+      <div style="font-size:12px;color:var(--muted)">موقف: ${a.boarding_stop||'—'}</div>
+      <div style="margin-top:8px">${badgeHtml}</div>`;
+    grid.appendChild(card);
+  });
 }
 
 // ══════════════════════════════════════
@@ -796,15 +828,16 @@ function saveBus() {
 // STUDENTS
 // ══════════════════════════════════════
 function filterStudents() {
-  const q = document.getElementById('search-student').value.toLowerCase();
+  const q = document.getElementById('search-student').value.trim().toLowerCase();
   const bus = document.getElementById('filter-bus').value;
   document.querySelectorAll('#students-grid .student-card').forEach(card => {
     const text = card.textContent.toLowerCase();
-    card.style.display = (text.includes(q) && (!bus || text.includes('حافلة '+bus))) ? '' : 'none';
+    const busMatch = !bus || (card.dataset.bus && card.dataset.bus.includes(bus));
+    card.style.display = (text.includes(q) && busMatch) ? '' : 'none';
   });
 }
 
-function saveStudent() {
+async function saveStudent() {
   const name = document.getElementById('as-name').value.trim();
   const cls  = document.getElementById('as-class').value;
   const bus  = document.getElementById('as-bus').value;
@@ -812,18 +845,14 @@ function saveStudent() {
   if (!name) { showToast('⚠️ يُرجى إدخال اسم الطالبة'); return; }
 
   // Save to Supabase
-  SB.post('transport_assignments', { student_name: name, class_name: cls, route_id: parseInt(bus), boarding_stop: stop, status: 'نشط' }).then(r => {
-    if (r) showToast('✅ تم تسجيل ' + name + ' في الحافلة ' + bus);
-    else showToast('✅ تم الحفظ محلياً: ' + name);
-  });
-
-  // Add to grid
-  const grid = document.getElementById('students-grid');
-  const card = document.createElement('div');
-  card.className = 'student-card';
-  card.innerHTML = `<div style="font-size:14px;font-weight:700">${name}</div><div style="font-size:12px;color:var(--muted);margin-top:4px">${cls} &nbsp;|&nbsp; <span style="color:var(--green)">حافلة ${bus}</span></div><div style="font-size:12px;color:var(--muted)">${stop||'—'}</div><div style="margin-top:8px"><span class="badge b-green">✅ مسجّلة</span></div>`;
-  grid.appendChild(card);
-  closeModal('modal-add-student');
+  const r = await SB.post('transport_assignments', { student_name: name, class_name: cls, route_id: bus, boarding_stop: stop, status: 'نشط' });
+  if (r) {
+    showToast('✅ تم تسجيل ' + name + ' في الحافلة بنجاح');
+    closeModal('modal-add-student');
+    await loadTransportData(); // تحديث الشبكة من Supabase
+  } else {
+    showToast('⚠️ تعذّر الحفظ، حاولي مجدداً');
+  }
 }
 
 function exportStudents() { showToast('📥 جارٍ تصدير قائمة طالبات النقل...'); }
