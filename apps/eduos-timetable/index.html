@@ -784,6 +784,37 @@ function generateSampleTimetable() {
 
 let TIMETABLE = generateSampleTimetable();
 
+// ═══ تحميل الجدول الحقيقي من Supabase ═══
+async function loadRealTimetable() {
+  try {
+    const SB_URL_TT = 'https://zuyizaiugpmhmeycqton.supabase.co';
+    const _ttk1='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',_ttk2='eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0',_ttk3='FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+    const TTK=[_ttk1,_ttk2,_ttk3].join('.');
+    const res = await fetch(`${SB_URL_TT}/rest/v1/timetable_slots?select=*&order=period_number.asc`, {
+      headers: {'apikey': TTK, 'Authorization': `Bearer ${TTK}`}
+    });
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) return;
+    const dayMap = {'الأحد':'sun','الاثنين':'mon','الثلاثاء':'tue','الأربعاء':'wed','الخميس':'thu'};
+    const subjectIdMap = {'الرياضيات':'math','اللغة العربية':'arabic','العلوم':'science','اللغة الإنجليزية':'english','التربية الإسلامية':'islamic','الاجتماعيات':'social','التربية الفنية':'art','التربية البدنية':'pe','مهارات الحياة':'life'};
+    const tt = {...TIMETABLE};
+    rows.forEach(r => {
+      const dayKey = dayMap[r.day_of_week] || r.day_of_week;
+      const subjId = subjectIdMap[r.subject] || r.subject;
+      if (!tt[r.class_name]) tt[r.class_name] = {};
+      if (!tt[r.class_name][dayKey]) tt[r.class_name][dayKey] = {};
+      tt[r.class_name][dayKey][r.period_number] = {
+        subject: subjId,
+        teacher: r.teacher_name || '',
+        teacherId: r.teacher_name || '',
+        room: r.room || '',
+      };
+    });
+    TIMETABLE = tt;
+    console.log('✅ تم تحميل الجدول الحقيقي من Supabase');
+  } catch(e) { console.warn('لم يتم تحميل الجدول من DB, يُستخدم البديل:', e); }
+}
+
 // Swap requests
 let swapRequests = [
   {id:'SW001', fromTeacher:'منيرة المري', fromDay:'الأحد', fromPeriod:3, toTeacher:'سارة الهاشمي', toDay:'الاثنين', toPeriod:2, reason:'موعد طبي', status:'pending', date:'2026-06-08'},
@@ -796,7 +827,8 @@ let substitutes = [
 ];
 
 // ═══ INIT ═══
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadRealTimetable();
   initHeader();
   renderDashboard();
   renderPeriodTimeline();

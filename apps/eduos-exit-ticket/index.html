@@ -857,43 +857,46 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── السجل التاريخي ──
-const MOCK_HISTORY = [
-  { date:'2026-06-08', class_name:'3A', subject:'Math', topic:'الجمع والطرح', responses:22, avg:'😊 جيد', status:'مكتملة' },
-  { date:'2026-06-07', class_name:'3B', subject:'Arabic', topic:'أدوات الاستفهام', responses:19, avg:'😐 متوسط', status:'مكتملة' },
-  { date:'2026-06-06', class_name:'4A', subject:'Science', topic:'دورة الماء', responses:25, avg:'😄 ممتاز', status:'مكتملة' },
-  { date:'2026-06-05', class_name:'4B', subject:'English', topic:'Present Tense', responses:21, avg:'😊 جيد', status:'مكتملة' },
-  { date:'2026-06-04', class_name:'3C', subject:'Math', topic:'الضرب', responses:18, avg:'😟 يحتاج دعم', status:'مكتملة' },
-];
+const SB_URL_ET = 'https://zuyizaiugpmhmeycqton.supabase.co';
 
-function loadHistory() {
-  const cls = document.getElementById('hist-class').value;
-  const subj = document.getElementById('hist-subject').value;
-  let rows = MOCK_HISTORY;
-  if (cls) rows = rows.filter(r => r.class_name === cls);
-  if (subj) rows = rows.filter(r => r.subject === subj);
-
-  document.getElementById('stat-total').textContent = rows.length;
-  document.getElementById('stat-week').textContent = rows.filter(r => r.date >= '2026-06-06').length;
-  document.getElementById('stat-low').textContent = rows.filter(r => r.avg.includes('دعم')).length;
-
+async function loadHistory() {
   const tbody = document.getElementById('historyTbody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted)">⏳ جارٍ التحميل...</td></tr>';
+  const cls = document.getElementById('hist-class')?.value || '';
+  const subj = document.getElementById('hist-subject')?.value || '';
+  let query = `${SB_URL_ET}/rest/v1/exit_tickets?select=*&order=session_date.desc&limit=50`;
+  if (cls) query += `&class_name=eq.${encodeURIComponent(cls)}`;
+  if (subj) query += `&subject=ilike.*${encodeURIComponent(subj)}*`;
+  let rows = [];
+  try {
+    const res = await fetch(query, {headers: {'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`}});
+    rows = await res.json();
+    if (!Array.isArray(rows)) rows = [];
+  } catch(e) { rows = []; }
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="padding:30px;text-align:center;color:var(--muted)">لا توجد نتائج</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="padding:30px;text-align:center;color:var(--muted)">لا توجد نتائج</td></tr>';
     return;
   }
-  tbody.innerHTML = rows.map(r => `
+
+  const thisWeek = new Date(); thisWeek.setDate(thisWeek.getDate()-7);
+  const weekStr = thisWeek.toISOString().slice(0,10);
+  if (document.getElementById('stat-total')) document.getElementById('stat-total').textContent = rows.length;
+  if (document.getElementById('stat-week')) document.getElementById('stat-week').textContent = rows.filter(r => r.session_date >= weekStr).length;
+  if (document.getElementById('stat-low')) document.getElementById('stat-low').textContent = rows.filter(r => r.avg_feeling && r.avg_feeling.includes('دعم')).length;
+
+  if (tbody) tbody.innerHTML = rows.map(r => `
     <tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:12px 16px;font-size:0.85rem">${r.date}</td>
+      <td style="padding:12px 16px;font-size:0.85rem">${r.session_date || '—'}</td>
       <td style="padding:12px 16px;font-size:0.85rem;font-weight:600">${r.class_name}</td>
       <td style="padding:12px 16px;font-size:0.85rem">${r.subject}</td>
       <td style="padding:12px 16px;font-size:0.85rem">${r.topic}</td>
-      <td style="padding:12px 16px;font-size:0.85rem;text-align:center">${r.responses}</td>
-      <td style="padding:12px 16px;font-size:0.9rem">${r.avg}</td>
-      <td style="padding:12px 16px"><span style="background:rgba(0,212,170,0.15);color:#00D4AA;border-radius:20px;padding:3px 10px;font-size:0.75rem">${r.status}</span></td>
-      <td style="padding:12px 16px"><button onclick="viewTicketDetail('${r.date}')" style="background:rgba(108,99,255,0.12);border:1px solid rgba(108,99,255,0.25);color:var(--accent);border-radius:8px;padding:5px 12px;cursor:pointer;font-family:Tajawal;font-size:0.78rem">عرض</button></td>
+      <td style="padding:12px 16px;font-size:0.85rem;text-align:center">${r.total_responses || 0}</td>
+      <td style="padding:12px 16px;font-size:0.9rem">${r.avg_feeling || '—'}</td>
+      <td style="padding:12px 16px"><span style="background:rgba(0,212,170,0.15);color:#00D4AA;border-radius:20px;padding:3px 10px;font-size:0.75rem">${r.status || 'مكتملة'}</span></td>
+      <td style="padding:12px 16px"><button onclick="viewTicketDetail('${r.id}')" style="background:rgba(108,99,255,0.12);border:1px solid rgba(108,99,255,0.25);color:var(--accent);border-radius:8px;padding:5px 12px;cursor:pointer;font-family:Tajawal;font-size:0.78rem">عرض</button></td>
     </tr>
   `).join('');
-  renderWeeklyChart(rows);
+  renderWeeklyChart(rows.map(r => ({avg: r.avg_feeling})));
 }
 
 function renderWeeklyChart(rows) {
@@ -916,10 +919,15 @@ function viewTicketDetail(date) {
 سيتم ربط هذه الميزة بـ Supabase في التحديث القادم.');
 }
 
-function exportHistoryCSV() {
-  const rows = MOCK_HISTORY;
+async function exportHistoryCSV() {
+  let rows = [];
+  try {
+    const res = await fetch(`${SB_URL_ET}/rest/v1/exit_tickets?select=*&order=session_date.desc&limit=200`, {headers: {'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`}});
+    rows = await res.json();
+    if (!Array.isArray(rows)) rows = [];
+  } catch(e) {}
   const csv = 'التاريخ,الفصل,المادة,الموضوع,المشاركات
-' + rows.map(r => `${r.date},${r.class_name},${r.subject},${r.topic},${r.responses}`).join('
+' + rows.map(r => `${r.session_date},${r.class_name},${r.subject},${r.topic},${r.total_responses}`).join('
 ');
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
