@@ -159,7 +159,7 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
 
 <!-- Header -->
 <header class="header">
-  <img src="../edoos-logo.png" class="header-logo" alt="EduOS">
+  <img src="../eduos-logo.png" class="header-logo" alt="EduOS">
   <div>
     <div class="header-title">🛡️ Duty OS — نظام المناوبات الذكي</div>
     <div class="header-subtitle" id="headerSub">جارٍ التحميل...</div>
@@ -437,7 +437,7 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
 // ─────────────────────────────────────────────
 const SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
 const SB_KEY = ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9','eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0','FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI'].join('.');
-const OR_KEY = ['sk-or-v1','61abae706c617ebe661a3945bf0e20bea345f7222e4b1adfb47f913d9ff6e9bf'].join('-');
+const DUTY_AI = 'https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant';
 
 const HEADERS = {
   'apikey': SB_KEY,
@@ -924,20 +924,12 @@ async function aiAnalyze(prompt) {
   const context = `معطيات المناوبات اليوم: إجمالي ${allDuties.length} مناوبة، حاضر: ${allDuties.filter(d=>d.status==='present').length}، غائب: ${allDuties.filter(d=>d.status==='absent').length}، مجدولة: ${allDuties.filter(d=>d.status==='scheduled').length}. المواقع: ${[...new Set(allDuties.map(d=>d.location))].join('، ')}.`;
 
   try {
-    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json','Authorization':'Bearer '+OR_KEY},
-      body: JSON.stringify({
-        model: 'meta-llama/llama-3.3-70b-instruct:free',
-        messages: [
-          {role:'system',content:'أنت مساعد ذكي متخصص في إدارة مناوبات المدارس. أجب بالعربية بشكل موجز ومفيد.'},
-          {role:'user',content:context+'\n\n'+prompt}
-        ],
-        max_tokens: 400
-      })
+    const resp = await fetch(DUTY_AI, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({prompt: context+'\n\n'+prompt, context:'مساعد ذكي متخصص في إدارة مناوبات المدارس. أجب بالعربية بشكل موجز.', module:'duty'})
     });
     const data = await resp.json();
-    output.textContent = data.choices?.[0]?.message?.content || 'لم أتمكن من الإجابة';
+    output.textContent = data.success ? data.text : 'لم أتمكن من الإجابة';
   } catch(e) {
     output.textContent = 'تعذر الاتصال بالمساعد الذكي — تحقق من الاتصال بالإنترنت';
   }
@@ -962,17 +954,12 @@ async function aiSuggestSubstitute() {
   div.innerHTML = '<div class="spinner"></div>';
   
   try {
-    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json','Authorization':'Bearer '+OR_KEY},
-      body: JSON.stringify({
-        model: 'meta-llama/llama-3.3-70b-instruct:free',
-        messages: [{role:'system',content:'أنت مساعد إداري ذكي للمدارس. أجب بالعربية بشكل مختصر ومفيد.'},{role:'user',content:prompt}],
-        max_tokens: 300
-      })
+    const resp = await fetch(DUTY_AI, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({prompt, context:'مساعد إداري ذكي للمدارس. أجب بالعربية بشكل مختصر ومفيد.', module:'duty'})
     });
     const data = await resp.json();
-    const text = data.choices?.[0]?.message?.content || 'لا اقتراح متاح';
+    const text = data.success ? data.text : 'لا اقتراح متاح';
     div.innerHTML = `<div class="alert info">${text}</div>`;
   } catch(e) {
     div.innerHTML = '<div class="alert danger">تعذر الاتصال بالمساعد الذكي</div>';
@@ -1034,7 +1021,7 @@ function showToast(msg) {
 }
 
 function goHome() {
-  window.location.href = '../edoos-hub/index.html';
+  window.location.href = '../eduos-hub/index.html';
 }
 
 // No localStorage — all data via Supabase or JS memory

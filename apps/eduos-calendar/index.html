@@ -462,7 +462,7 @@ select.form-control option{background:var(--bg3);}
 <script>
 const SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.' + 'FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
-const OR_KEY = 'sk-or-v1-61abae706c617ebe661a3945bf0e20bea345' + '7222e4b1adfb47f913d9ff6e9bf';
+const AI_FN_CAL = 'https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant';
 
 let currentDate = new Date();
 let currentMonth = currentDate.getMonth();
@@ -727,20 +727,11 @@ async function sendAiMsg() {
   appendMsg(msg, 'user');
   appendMsg('<span class="loading"></span>', 'bot');
   try {
-    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method:'POST',
-      headers:{ 'Authorization':'Bearer '+OR_KEY, 'Content-Type':'application/json' },
-      body: JSON.stringify({
-        model:'meta-llama/llama-3.3-70b-instruct:free',
-        messages:[
-          {role:'system',content:'أنت مساعد ذكي للتقويم الأكاديمي في مدرسة إسلامية. ترد باللغة العربية بإيجاز مفيد.'},
-          {role:'user',content:msg}
-        ]
-      })
-    });
+    const r = await fetch(AI_FN_CAL, {method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({prompt: msg, context:'مساعد ذكي للتقويم الأكاديمي في مدرسة إسلامية. أجب بالعربية بإيجاز.', module:'calendar'})});
     const d = await r.json();
     removeLastBot();
-    appendMsg(d.choices?.[0]?.message?.content || 'عذراً، لم أستطع الرد الآن.','bot');
+    appendMsg(d.success ? d.text : 'عذراً، لم أستطع الرد الآن.', 'bot');
   } catch(e) { removeLastBot(); appendMsg('⚠️ تعذّر الاتصال.','bot'); }
 }
 function quickAI(p) { document.getElementById('aiInput').value=p; sendAiMsg(); switchTab('ai'); }
@@ -824,19 +815,14 @@ updateCalendarStats();
 
 // AI for event suggestions
 async function getAISuggestedEvents() {
-  const OR_K = 'sk-or-v1-61abae706c617ebe661a3945bf0e20bea' + '345f7222e4b1adfb47f913d9ff6e9bf';
   const el = document.getElementById('ai-calendar-suggest');
   if (!el) return;
-  el.textContent = '⏳ AI يحلل التقويم...';
+  el.textContent = '⏳ المساعد الذكي يحلل التقويم...';
   try {
-    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+OR_K},
-      body: JSON.stringify({model:'meta-llama/llama-3.3-70b-instruct:free',
-        messages:[{role:'system',content:'أنت مساعد تربوي لمدرسة ابتدائية إماراتية.'},
-          {role:'user',content:'اقترحي 3 فعاليات مدرسية مناسبة لشهر ديسمبر وفبراير في مدرسة ابتدائية بنات. اذكري: الاسم، الهدف، ومدة التحضير. الرد مختصر.'}],max_tokens:250})
-    });
+    const r = await fetch(AI_FN_CAL, {method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({prompt:'اقترحي 3 فعاليات مدرسية مناسبة لشهر ديسمبر وفبراير في مدرسة ابتدائية بنات إماراتية. اذكري: الاسم، الهدف، ومدة التحضير. الرد مختصر.', context:'مساعد تربوي لمدرسة ابتدائية إماراتية.', module:'calendar'})});
     const d = await r.json();
-    if (el) el.textContent = d.choices?.[0]?.message?.content || 'تعذر التحميل';
+    if (el) el.textContent = d.success ? d.text : 'تعذر التحميل';
   } catch { if (el) el.textContent = 'تعذر الاتصال بـ AI'; }
 }
 // Auto-load AI suggestions
