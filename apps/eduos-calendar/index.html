@@ -523,20 +523,35 @@ function setDefaultEventDate() {
 
 async function loadEvents() {
   try {
-    // Try loading from exam_schedule
-    const r = await fetch(`${SB_URL}/rest/v1/exam_schedule?order=exam_date.asc&limit=20`, {
-      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
-    });
-    const data = await r.json();
-    if(data && data.length > 0) {
-      const examEvents = data.map(e => ({
-        id: e.id, title: e.subject_name || 'اختبار', type: 'exam',
-        start: e.exam_date, end: e.exam_date, desc: e.grade_level || '', location: e.exam_room || '', audience:'students', priority:'high'
-      }));
-      events = [...sampleEvents, ...examEvents];
-    } else {
-      events = sampleEvents;
+    const headers = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
+    // Load from exam_schedule
+    const [rExam, rSchool] = await Promise.all([
+      fetch(`${SB_URL}/rest/v1/exam_schedule?order=exam_date.asc&limit=30`, {headers}),
+      fetch(`${SB_URL}/rest/v1/school_events?order=event_date.asc&limit=50`, {headers})
+    ]);
+    let combined = [...sampleEvents];
+    if(rExam.ok) {
+      const data = await rExam.json();
+      if(Array.isArray(data) && data.length > 0) {
+        combined = combined.concat(data.map(e => ({
+          id: 'ex_'+e.id, title: e.subject_name || 'اختبار', type: 'exam',
+          start: e.exam_date, end: e.exam_date, desc: e.grade_level || '',
+          location: e.exam_room || '', audience:'students', priority:'high'
+        })));
+      }
     }
+    if(rSchool.ok) {
+      const data = await rSchool.json();
+      if(Array.isArray(data) && data.length > 0) {
+        combined = combined.concat(data.map(e => ({
+          id: 'ev_'+e.id, title: e.title || e.event_title || 'حدث', type: e.event_type || 'event',
+          start: e.event_date || e.date, end: e.event_date || e.date,
+          desc: e.description || e.content || '', location: e.location || '',
+          audience:'all', priority: e.priority || 'normal'
+        })));
+      }
+    }
+    events = combined;
   } catch(e) { events = sampleEvents; }
 }
 

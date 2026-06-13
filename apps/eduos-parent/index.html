@@ -364,9 +364,10 @@ select.form-control option{background:var(--bg3);}
     <!-- ===== GRADES ===== -->
     <div class="tab-content" id="tab-grades">
       <div class="card">
-        <div class="card-title" style="justify-content:space-between;">
+        <div class="card-title" style="justify-content:space-between;flex-wrap:wrap;gap:10px;">
           <span>📊 سجل الدرجات الشامل</span>
-          <div style="display:flex;gap:8px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <input id="parentChildSearch" type="text" placeholder="🔍 اسم الطالبة..." class="form-control" style="width:180px;font-size:12px;" oninput="debounceParentGrades(this.value)">
             <select class="form-control" style="width:130px;" id="gradeSubjFilter" onchange="loadGrades()">
               <option value="">كل المواد</option>
               <option value="math">رياضيات</option>
@@ -1188,6 +1189,41 @@ async function loadDashboard() {
 }
 
 // ============ GRADES ============
+let _parentTimer = null;
+function debounceParentGrades(name) {
+  clearTimeout(_parentTimer);
+  _parentTimer = setTimeout(() => { if(name.length >= 2) loadGradesByChild(name); else loadGrades(); }, 600);
+}
+
+async function loadGradesByChild(childName) {
+  document.getElementById('gradesBody').innerHTML = '<tr><td colspan="6"><div class="spinner"></div></td></tr>';
+  try {
+    const enc = encodeURIComponent(childName);
+    const r = await fetch(`${SB_URL}/rest/v1/student_grades?student_name=ilike.*${enc}*&order=week_number.desc&limit=50`, {
+      headers: {'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY}
+    });
+    const data = await r.json();
+    if (Array.isArray(data) && data.length > 0) {
+      const colors = {'A+':'green','A':'green','A-':'green','B+':'blue','B':'blue','C':'amber','D':'red'};
+      document.getElementById('gradesBody').innerHTML = data.map(d => {
+        const sc = d.score || d.mark || 0;
+        const mx = d.max_score || 20;
+        const gr = d.grade_letter || (sc/mx >= 0.95?'A+':(sc/mx>=0.9?'A':(sc/mx>=0.85?'A-':(sc/mx>=0.8?'B+':(sc/mx>=0.75?'B':'C')))));
+        return `<tr>
+          <td style="font-weight:700;">${d.subject_name||d.subject||'—'}</td>
+          <td>W${d.week_number||'—'}</td>
+          <td style="font-weight:800;color:var(--teal);">${sc}</td>
+          <td style="color:var(--text2);">${mx}</td>
+          <td><span class="badge badge-${colors[gr]||'blue'}">${gr}</span></td>
+          <td style="font-size:11px;color:var(--text2);">${d.notes||d.teacher_comment||'—'}</td>
+        </tr>`;
+      }).join('');
+      return;
+    }
+  } catch(e) {}
+  loadGrades();
+}
+
 async function loadGrades() {
   document.getElementById('gradesBody').innerHTML = '<tr><td colspan="6"><div class="spinner"></div></td></tr>';
   await new Promise(r => setTimeout(r, 500));
