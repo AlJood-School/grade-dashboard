@@ -239,6 +239,29 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
         </div>
       </div>
 
+      <!-- ✨ نمط التعليم — يظهر ديناميكياً حسب النوع والجهة -->
+      <div class="field-group" id="edu_pattern_group" style="display:none">
+        <div class="field">
+          <label><span class="req">*</span> نمط التعليم
+            <span style="font-size:.75rem;color:var(--muted);font-weight:400;margin-right:6px">— يتغير حسب نوع المدرسة والجهة</span>
+          </label>
+          <div class="radio-group" id="rg_pattern">
+            <!-- تُملأ ديناميكياً بـ updatePatternField() -->
+          </div>
+        </div>
+        <div class="field" id="third_lang_field" style="display:none">
+          <label>🌐 اللغة الثالثة المُدرَّسة</label>
+          <select id="sel_third_lang" style="padding:10px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:'Tajawal',sans-serif;font-size:.92rem;width:100%">
+            <option value="french">🇫🇷 اللغة الفرنسية</option>
+            <option value="german">🇩🇪 اللغة الألمانية</option>
+            <option value="chinese">🇨🇳 اللغة الصينية (ماندرين)</option>
+            <option value="spanish">🇪🇸 اللغة الإسبانية</option>
+            <option value="japanese">🇯🇵 اللغة اليابانية</option>
+            <option value="italian">🇮🇹 اللغة الإيطالية</option>
+          </select>
+        </div>
+      </div>
+
       <div class="field-group">
         <div class="field">
           <label><span class="req">*</span> مرحلة التعليم</label>
@@ -557,6 +580,24 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
           <div class="role-info"><div class="role-name">مساعد/ة معلم (TA)</div><div class="role-access">Teacher OS (وضع مساعد) + حضور + ملاحظات</div></div>
           <input class="role-count" type="number" min="0" max="100" value="5" id="rc_ta">
         </div>
+        <!-- معلم لغة ثالثة — يظهر فقط إذا النمط = لغة ثالثة -->
+        <div class="role-row" id="row_third_lang_teacher" style="display:none;border-color:rgba(56,189,248,.3);background:rgba(56,189,248,.05)">
+          <div class="role-icon">🌐</div>
+          <div class="role-info">
+            <div class="role-name">معلم/ة اللغة الثالثة</div>
+            <div class="role-access">Teacher OS + جدول اللغة الثالثة + تقييمات خاصة</div>
+          </div>
+          <input class="role-count" type="number" min="0" max="50" value="2" id="rc_third_lang">
+        </div>
+        <!-- منسق برامج متقدمة — يظهر فقط إذا النمط = أكاديمي متقدم -->
+        <div class="role-row" id="row_ap_coordinator" style="display:none;border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.05)">
+          <div class="role-icon">🏆</div>
+          <div class="role-info">
+            <div class="role-name">منسق/ة البرامج المتقدمة (AP)</div>
+            <div class="role-access">إدارة برامج AP + متابعة الطلاب المتفوقين + التواصل مع الجهات</div>
+          </div>
+          <input class="role-count" type="number" min="0" max="10" value="1" id="rc_ap_coord">
+        </div>
         <div class="role-row">
           <div class="role-icon">♿</div>
           <div class="role-info"><div class="role-name">أخصائي/ة تربية خاصة</div><div class="role-access">SpecialEd OS كامل + IEP + تقارير الهمم</div></div>
@@ -739,6 +780,7 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
         <div class="summary-item"><div class="summary-label">إجمالي الطلاب</div><div class="summary-value" id="sum_students">—</div></div>
         <div class="summary-item"><div class="summary-label">أولياء الأمور</div><div class="summary-value" id="sum_parents">—</div></div>
         <div class="summary-item" id="sum_devices_box"><div class="summary-label">💻 الأجهزة</div><div class="summary-value" id="sum_devices">—</div></div>
+        <div class="summary-item" id="sum_pattern_box" style="display:none;border-color:rgba(56,189,248,.4);background:rgba(56,189,248,.07)"><div class="summary-label">🎓 نمط التعليم</div><div class="summary-value" id="sum_pattern" style="color:#38BDF8">—</div></div>
         <div class="summary-item" id="sum_sped_box" style="display:none;border-color:rgba(168,85,247,.4);background:rgba(168,85,247,.08)"><div class="summary-label">♿ أصحاب الهمم</div><div class="summary-value" id="sum_sped" style="color:#C084FC">—</div></div>
       </div>
     </div>
@@ -968,6 +1010,7 @@ function updateAuthority() {
     html = '<span class="authority-badge auth-moe">🟢 وزارة التربية والتعليم — MOE</span>';
   }
   badge.innerHTML = html;
+  updatePatternField();
 }
 
 // Attach type change
@@ -1010,6 +1053,94 @@ function resetSchoolSelect() {
 }
 
 function onSchoolChange() {}
+
+// ============================================================
+// نمط التعليم — يظهر ديناميكياً حسب نوع المدرسة والجهة
+// ============================================================
+const PATTERNS = {
+  'MOE': [
+    { value: 'ministerial', label: '📗 وزاري (المنهج الوطني الأساسي)' },
+    { value: 'advanced_national', label: '🏆 النموذج الوطني المتقدم' },
+    { value: 'bilingual', label: '🗣️ ثنائي اللغة (Bilingual)' }
+  ],
+  'ADEK_GOV': [
+    { value: 'ministerial', label: '📗 وزاري (المنهج الوطني الأساسي)' },
+    { value: 'advanced', label: '🔬 أكاديمي متقدم (Advanced Academics / AP)' },
+    { value: 'third_language', label: '🌐 برنامج اللغة الثالثة (Third Language)' },
+    { value: 'bilingual', label: '🗣️ ثنائي اللغة (Bilingual)' }
+  ],
+  'ADEK_PVT': [
+    { value: 'standard', label: '📘 المنهج المعتمد (حسب الترخيص)' },
+    { value: 'bilingual', label: '🗣️ ثنائي اللغة' }
+  ],
+  'KHDA': [
+    { value: 'standard', label: '📘 المنهج المعتمد (حسب الترخيص)' },
+    { value: 'bilingual', label: '🗣️ ثنائي اللغة' }
+  ],
+  'SPEA': [
+    { value: 'standard', label: '📘 المنهج المعتمد (حسب الترخيص)' }
+  ]
+};
+
+const PATTERN_LABELS_AR = {
+  'ministerial': 'وزاري',
+  'advanced_national': 'نموذج وطني متقدم',
+  'advanced': 'أكاديمي متقدم (AP)',
+  'third_language': 'برنامج اللغة الثالثة',
+  'bilingual': 'ثنائي اللغة',
+  'standard': 'المنهج المعتمد'
+};
+
+const THIRD_LANG_LABELS = {
+  'french': 'الفرنسية', 'german': 'الألمانية', 'chinese': 'الصينية',
+  'spanish': 'الإسبانية', 'japanese': 'اليابانية', 'italian': 'الإيطالية'
+};
+
+function updatePatternField() {
+  const authText = document.getElementById('auth_badge').textContent.trim();
+  const type = document.querySelector('input[name="school_type"]:checked')?.value || 'حكومية';
+  const group = document.getElementById('edu_pattern_group');
+  const rg = document.getElementById('rg_pattern');
+
+  let key = null;
+  if (type === 'حكومية') {
+    if (authText.includes('ADEK')) key = 'ADEK_GOV';
+    else key = 'MOE';
+  } else if (type === 'خاصة' || type === 'خاصة-دينية') {
+    if (authText.includes('ADEK')) key = 'ADEK_PVT';
+    else if (authText.includes('KHDA')) key = 'KHDA';
+    else if (authText.includes('SPEA')) key = 'SPEA';
+  }
+  // للمدارس الدولية أو بدون جهة محددة — لا يُعرض
+  if (!key) { group.style.display = 'none'; return; }
+
+  const patterns = PATTERNS[key];
+  group.style.display = '';
+  rg.innerHTML = patterns.map((p, i) =>
+    `<label class="radio-opt ${i===0?'sel':''}"><input type="radio" name="edu_pattern" value="${p.value}" ${i===0?'checked':''}> ${p.label}</label>`
+  ).join('');
+
+  // attach events
+  rg.querySelectorAll('input[name="edu_pattern"]').forEach(r => {
+    r.addEventListener('change', onPatternChange);
+    r.closest('.radio-opt').addEventListener('click', () => {
+      rg.querySelectorAll('.radio-opt').forEach(el => el.classList.remove('sel'));
+      r.closest('.radio-opt').classList.add('sel');
+    });
+  });
+  onPatternChange();
+}
+
+function onPatternChange() {
+  const sel = document.querySelector('input[name="edu_pattern"]:checked')?.value;
+  const thirdLangField = document.getElementById('third_lang_field');
+  const rowThird = document.getElementById('row_third_lang_teacher');
+  const rowAP = document.getElementById('row_ap_coordinator');
+
+  thirdLangField.style.display = sel === 'third_language' ? '' : 'none';
+  if (rowThird) rowThird.style.display = sel === 'third_language' ? '' : 'none';
+  if (rowAP) rowAP.style.display = sel === 'advanced' ? '' : 'none';
+}
 
 function toggleGenderSep(show) {
   document.getElementById('gender_sep_field').classList.toggle('show', show);
@@ -1111,6 +1242,19 @@ function renderSummary() {
     const types = [...document.querySelectorAll('#cg_disability input:checked')].map(i=>i.value).join(' • ') || 'غير محدد';
     document.getElementById('sum_sped').textContent = types;
   }
+  // نمط التعليم
+  const patternVal = document.querySelector('input[name="edu_pattern"]:checked')?.value;
+  if (patternVal && document.getElementById('edu_pattern_group').style.display !== 'none') {
+    document.getElementById('sum_pattern_box').style.display = 'block';
+    let patternText = PATTERN_LABELS_AR[patternVal] || patternVal;
+    if (patternVal === 'third_language') {
+      const lang = document.getElementById('sel_third_lang')?.value;
+      patternText += ` — ${THIRD_LANG_LABELS[lang] || lang}`;
+    }
+    document.getElementById('sum_pattern').textContent = patternText;
+  } else {
+    document.getElementById('sum_pattern_box').style.display = 'none';
+  }
   // devices summary
   const deviceLabels = {
     ipad:'iPad/Apple','android_tablet':'تابلت Android','chromebook':'Chromebook',
@@ -1183,6 +1327,8 @@ async function saveConfig() {
     gender_policy: document.querySelector('input[name="gender_pol"]:checked')?.value,
     gender_separate_from_grade: document.getElementById('sel_gender_from').value || null,
     subjects: [...mandatorySubjects, ...currSubjects, ...extraSubjects],
+    education_pattern: document.querySelector('input[name="edu_pattern"]:checked')?.value || null,
+    third_language: document.getElementById('sel_third_lang')?.value || null,
     has_special_ed: document.getElementById('tog_sped').checked,
     special_ed_types: spedTypes,
     special_ed_count: parseInt(document.getElementById('sped_count').value)||0,

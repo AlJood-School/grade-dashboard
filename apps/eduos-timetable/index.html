@@ -85,6 +85,8 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
 .subj-pe{background:linear-gradient(135deg,rgba(248,113,113,.3),rgba(248,113,113,.1));border:1px solid rgba(248,113,113,.3);}
 .subj-art{background:linear-gradient(135deg,rgba(244,114,182,.25),rgba(167,139,250,.1));border:1px solid rgba(244,114,182,.3);}
 .subj-computer{background:linear-gradient(135deg,rgba(45,212,191,.2),rgba(96,165,250,.1));border:1px solid rgba(45,212,191,.3);}
+.subj-third-lang{background:linear-gradient(135deg,rgba(56,189,248,.3),rgba(56,189,248,.1));border:1px solid rgba(56,189,248,.4);}
+.subj-ap{background:linear-gradient(135deg,rgba(251,191,36,.3),rgba(251,191,36,.1));border:1px solid rgba(251,191,36,.4);}
 
 /* ═══ FORMS ═══ */
 .form-group{margin-bottom:14px;}
@@ -733,6 +735,13 @@ const SUBJECTS = {
   art:     {name:'فنون',      icon:'🎨', color:'#f472b6', cls:'subj-art'},
   computer:{name:'حاسوب',     icon:'💻', color:'#67e8f9', cls:'subj-computer'},
   islamic: {name:'تربية إسلامية',icon:'🕌',color:'#86efac',cls:'subj-quran'},
+  third_lang:{name:'لغة ثالثة',icon:'🌐', color:'#38bdf8', cls:'subj-third-lang'},
+  ap_subject:{name:'برنامج متقدم',icon:'🏆',color:'#fbbf24',cls:'subj-ap'},
+};
+
+const THIRD_LANG_NAMES = {
+  french:'الفرنسية', german:'الألمانية', chinese:'الصينية',
+  spanish:'الإسبانية', japanese:'اليابانية', italian:'الإيطالية'
 };
 
 const TEACHERS = [
@@ -827,7 +836,45 @@ let substitutes = [
 ];
 
 // ═══ INIT ═══
+// ═══ قراءة نمط التعليم من app_settings ═══
+async function loadEducationPattern() {
+  try {
+    const SB_URL_TT = 'https://zuyizaiugpmhmeycqton.supabase.co';
+    const _ttk1='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',_ttk2='eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0',_ttk3='FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+    const TTK=[_ttk1,_ttk2,_ttk3].join('.');
+    const res = await fetch(`${SB_URL_TT}/rest/v1/app_settings?select=education_pattern,third_language&limit=1`, {
+      headers: {'apikey': TTK, 'Authorization': `Bearer ${TTK}`}
+    });
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) return;
+    const { education_pattern, third_language } = rows[0];
+    // تحديث اسم اللغة الثالثة
+    if (education_pattern === 'third_language' && third_language) {
+      SUBJECTS.third_lang.name = THIRD_LANG_NAMES[third_language] || 'لغة ثالثة';
+      SUBJECTS.third_lang.icon = third_language === 'french' ? '🇫🇷' :
+                                   third_language === 'german' ? '🇩🇪' :
+                                   third_language === 'chinese' ? '🇨🇳' :
+                                   third_language === 'spanish' ? '🇪🇸' : '🌐';
+    }
+    // إظهار شارة نمط التعليم في الهيدر
+    if (education_pattern) {
+      const patLabels = {
+        'ministerial':'وزاري', 'advanced':'أكاديمي متقدم (AP)',
+        'third_language': third_language ? `لغة ثالثة — ${THIRD_LANG_NAMES[third_language]||third_language}` : 'لغة ثالثة',
+        'bilingual':'ثنائي اللغة', 'advanced_national':'نموذج وطني متقدم', 'standard':'المنهج المعتمد'
+      };
+      const badge = document.createElement('span');
+      badge.style.cssText = 'font-size:.75rem;padding:3px 10px;border-radius:20px;background:rgba(56,189,248,.15);color:#38BDF8;border:1px solid rgba(56,189,248,.3);margin-right:8px';
+      badge.textContent = '🎓 ' + (patLabels[education_pattern] || education_pattern);
+      const hdr = document.getElementById('weekInfo');
+      if (hdr) hdr.parentElement?.insertBefore(badge, hdr.nextSibling);
+    }
+    console.log('✅ نمط التعليم:', education_pattern, third_language||'');
+  } catch(e) { console.warn('لم يتم تحميل نمط التعليم:', e); }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+  await loadEducationPattern();
   await loadRealTimetable();
   initHeader();
   renderDashboard();

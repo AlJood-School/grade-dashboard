@@ -544,6 +544,15 @@ body {
     </div>
   </div>
 
+  <!-- شارة هوية المدرسة -->
+  <div id="school-identity-banner" style="display:none;margin-bottom:16px;padding:10px 18px;border-radius:12px;background:rgba(56,189,248,.07);border:1px solid rgba(56,189,248,.2);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span style="font-size:.85rem;color:var(--text-muted)">🏫 هوية المدرسة:</span>
+    <span id="hub-school-name" style="font-weight:700;color:#e2e8f0;font-size:.9rem">—</span>
+    <span style="color:var(--border)">|</span>
+    <span id="hub-authority" style="font-size:.82rem;color:#94a3b8">—</span>
+    <span id="hub-pattern-badge" style="display:none;font-size:.78rem;padding:3px 10px;border-radius:20px;background:rgba(56,189,248,.15);color:#38BDF8;border:1px solid rgba(56,189,248,.3)"></span>
+  </div>
+
   <!-- STATS -->
   <div class="stats-row">
     <div class="stat-card">
@@ -900,6 +909,35 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ─── STATS FROM SUPABASE ───
+// ═══ هوية المدرسة + نمط التعليم ═══
+async function loadSchoolIdentity() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/app_settings?select=school_name,authority,education_pattern,third_language&limit=1`, {
+      headers: {'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`}
+    });
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) return;
+    const s = rows[0];
+    const banner = document.getElementById('school-identity-banner');
+    if (banner) banner.style.display = 'flex';
+    if (s.school_name) document.getElementById('hub-school-name').textContent = s.school_name;
+    if (s.authority) document.getElementById('hub-authority').textContent = s.authority;
+    if (s.education_pattern) {
+      const thirdLangNames = {french:'الفرنسية',german:'الألمانية',chinese:'الصينية',spanish:'الإسبانية',japanese:'اليابانية',italian:'الإيطالية'};
+      const patLabels = {
+        ministerial:'📗 وزاري', advanced:'🔬 أكاديمي متقدم (AP)',
+        third_language:'🌐 لغة ثالثة', bilingual:'🗣️ ثنائي اللغة',
+        advanced_national:'🏆 نموذج وطني متقدم', standard:'📘 المنهج المعتمد'
+      };
+      let txt = patLabels[s.education_pattern] || s.education_pattern;
+      if (s.education_pattern === 'third_language' && s.third_language)
+        txt += ` — ${thirdLangNames[s.third_language] || s.third_language}`;
+      const badge = document.getElementById('hub-pattern-badge');
+      badge.textContent = txt; badge.style.display = 'inline';
+    }
+  } catch(e) { console.warn('school identity:', e); }
+}
+
 async function loadStats() {
   try {
     const headers = {
@@ -947,6 +985,8 @@ async function loadStats() {
   }
 }
 loadStats();
+loadSchoolIdentity();
+// (loadSchoolIdentity uses SB_URL/SB_KEY defined above)
 
 // ─── SEARCH + FILTER ───
 let activeFilter = 'all';
