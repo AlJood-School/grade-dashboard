@@ -971,6 +971,21 @@ body {
       </div>
     </div>
 
+    <!-- اتجاه الحضور الأسبوعي -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+        <div class="card-title">📈 اتجاه الحضور — آخر 7 أيام</div>
+        <button onclick="loadWeeklyTrend()" style="background:rgba(99,179,237,0.1);border:1px solid rgba(99,179,237,0.3);color:var(--blue);border-radius:8px;padding:5px 12px;cursor:pointer;font-family:Tajawal;font-size:11px">🔄 تحديث</button>
+      </div>
+      <div class="card-body">
+        <div id="weeklyTrendBars" style="display:flex;gap:8px;align-items:flex-end;height:80px;padding-bottom:4px">
+          <div style="color:var(--text2);font-size:12px">⏳ جارٍ التحميل...</div>
+        </div>
+        <div id="weeklyTrendLabels" style="display:flex;gap:8px;margin-top:6px"></div>
+        <div id="weeklyTrendStats" style="margin-top:12px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;text-align:center"></div>
+      </div>
+    </div>
+
   </div>
 
   <!-- ══════════ TAB: HEALTH ══════════ -->
@@ -1446,7 +1461,7 @@ function switchTab(name) {
   document.getElementById('tab-'+name).classList.add('active');
   event.target.classList.add('active');
   // تحميل بيانات حسب التبويب
-  if (name === 'attendance') loadAttendanceData();
+  if (name === 'attendance') { loadAttendanceData(); loadWeeklyTrend(); }
   if (name === 'backup') loadBackups();
 }
 
@@ -1667,6 +1682,95 @@ ${summary || 'لا توجد سجلات اليوم بعد'}
     res.innerHTML = text.replace(/\n/g, '<br>');
   } catch(e) {
     res.innerHTML = '⚠️ تعذّر الاتصال بالمساعد الذكي';
+  }
+}
+
+// ════════════════════════════════════════════
+// اتجاه الحضور الأسبوعي — آخر 7 أيام
+// ════════════════════════════════════════════
+async function loadWeeklyTrend() {
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    days.push(d.toISOString().split('T')[0]);
+  }
+  const barsEl = document.getElementById('weeklyTrendBars');
+  const labelsEl = document.getElementById('weeklyTrendLabels');
+  const statsEl = document.getElementById('weeklyTrendStats');
+  if (!barsEl) return;
+  barsEl.innerHTML = '<div style="color:var(--text2);font-size:12px">⏳ جارٍ التحميل...</div>';
+
+  try {
+    // جلب كل سجلات الأسبوع
+    const from = days[0]; const to = days[6];
+    const r = await fetch(
+      `${SUPA_URL}/rest/v1/staff_daily_attendance?date=gte.${from}&date=lte.${to}&select=date,status`,
+      { headers: { apikey: SUPA_ANON, Authorization: 'Bearer ' + SUPA_ANON } }
+    );
+    const rows = await r.json();
+
+    // جلب عدد الموظفين
+    const sr = await fetch(`${SUPA_URL}/rest/v1/staff_profiles?select=id`, {
+      headers: { apikey: SUPA_ANON, Authorization: 'Bearer ' + SUPA_ANON }
+    });
+    const staffAll = await sr.json();
+    const total = staffAll.length || 1;
+
+    // تجميع per day
+    const dayMap = {};
+    days.forEach(d => { dayMap[d] = { present:0, late:0, absent:0 }; });
+    rows.forEach(r => {
+      if (!dayMap[r.date]) return;
+      if (r.status === 'present') dayMap[r.date].present++;
+      else if (r.status === 'late') dayMap[r.date].late++;
+    });
+    days.forEach(d => { dayMap[d].absent = Math.max(0, total - dayMap[d].present - dayMap[d].late); });
+
+    // رسم الأعمدة
+    const dayNames = { 0:'الأحد', 1:'الاثنين', 2:'الثلاثاء', 3:'الأربعاء', 4:'الخميس', 5:'الجمعة', 6:'السبت' };
+    const maxH = 70;
+    barsEl.innerHTML = days.map(d => {
+      const pct = Math.round(((dayMap[d].present + dayMap[d].late) / total) * 100);
+      const h = Math.round((pct / 100) * maxH);
+      const color = pct >= 90 ? 'var(--emerald)' : pct >= 75 ? 'var(--gold)' : 'var(--coral)';
+      const isToday = d === new Date().toISOString().split('T')[0];
+      return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+        <span style="font-size:10px;color:var(--text2)">${pct}%</span>
+        <div style="width:100%;height:${h}px;background:${color};border-radius:4px 4px 0 0;min-height:4px;${isToday?'box-shadow:0 0 8px '+color:''}"></div>
+      </div>`;
+    }).join('');
+
+    labelsEl.innerHTML = days.map(d => {
+      const dayOfWeek = new Date(d).getDay();
+      const isToday = d === new Date().toISOString().split('T')[0];
+      return `<div style="flex:1;text-align:center;font-size:9px;color:${isToday?'var(--accent)':'var(--text2)'}">
+        ${isToday ? '●<br>' : ''}${dayNames[dayOfWeek] || d.slice(5)}
+      </div>`;
+    }).join('');
+
+    // إحصاءات مختصرة
+    const allPresent = Object.values(dayMap).reduce((s,d) => s+d.present, 0);
+    const avgPct = Math.round((allPresent / (total * 7)) * 100);
+    const bestDay = days.reduce((b, d) => dayMap[d].present > dayMap[b].present ? d : b);
+    const worstDay = days.reduce((w, d) => dayMap[d].absent > dayMap[w].absent ? d : w);
+    const bestDayName = dayNames[new Date(bestDay).getDay()];
+    const worstDayName = dayNames[new Date(worstDay).getDay()];
+
+    statsEl.innerHTML = `
+      <div style="background:rgba(16,185,129,0.08);border-radius:8px;padding:8px">
+        <div style="font-size:18px;font-weight:800;color:var(--emerald)">${avgPct}%</div>
+        <div style="font-size:10px;color:var(--text2)">متوسط الأسبوع</div>
+      </div>
+      <div style="background:rgba(99,179,237,0.08);border-radius:8px;padding:8px">
+        <div style="font-size:13px;font-weight:700;color:var(--blue)">${bestDayName}</div>
+        <div style="font-size:10px;color:var(--text2)">🏆 أفضل يوم</div>
+      </div>
+      <div style="background:rgba(252,129,129,0.08);border-radius:8px;padding:8px">
+        <div style="font-size:13px;font-weight:700;color:var(--coral)">${worstDayName}</div>
+        <div style="font-size:10px;color:var(--text2)">⚠️ أقل حضور</div>
+      </div>`;
+  } catch(e) {
+    barsEl.innerHTML = '<div style="color:var(--coral);font-size:12px">⚠️ تعذّر تحميل البيانات</div>';
   }
 }
 

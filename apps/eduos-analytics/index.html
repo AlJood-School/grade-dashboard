@@ -173,6 +173,7 @@ body{background:var(--dark);min-height:100vh;color:#fff}
     <span id="week-num" style="font-size:11px;color:var(--gray)"></span>
   </div>
   <div id="live-time">--:--</div>
+  <span id="analytics-pattern-badge" style="display:none;background:rgba(0,212,255,0.12);border:1px solid rgba(0,212,255,0.3);border-radius:20px;padding:4px 12px;font-size:11px;color:var(--accent)"></span>
   <button class="close-btn" onclick="history.back()" title="رجوع">✕</button>
 </div>
 
@@ -421,6 +422,64 @@ body{background:var(--dark);min-height:100vh;color:#fff}
    SUPABASE CONFIG
 ══════════════════════════════════════ */
 const SB_URL='https://zuyizaiugpmhmeycqton.supabase.co';
+
+// ═══ نمط التعليم — يُضاف لسياق كل AI call ═══
+let _eduPattern = '';
+let _eduPatternLabel = '';
+async function loadEduPattern() {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/app_settings?select=education_pattern,third_language&limit=1`, {
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+    });
+    const rows = await r.json();
+    if (!rows || !rows[0]) return;
+    const s = rows[0];
+    const thirdLangNames = {french:'الفرنسية',german:'الألمانية',chinese:'الصينية',spanish:'الإسبانية',japanese:'اليابانية',italian:'الإيطالية'};
+    const patLabels = {
+      ministerial:'وزاري', advanced:'AP — أكاديمي متقدم',
+      third_language:'لغة ثالثة', bilingual:'ثنائي اللغة',
+      advanced_national:'نموذج وطني متقدم', standard:'منهج معتمد'
+    };
+    _eduPattern = s.education_pattern || '';
+    _eduPatternLabel = patLabels[_eduPattern] || _eduPattern;
+    if (_eduPattern === 'third_language' && s.third_language)
+      _eduPatternLabel += ` (${thirdLangNames[s.third_language]||s.third_language})`;
+    const badge = document.getElementById('analytics-pattern-badge');
+    if (badge && _eduPatternLabel) {
+      badge.textContent = '🎓 ' + _eduPatternLabel;
+      badge.style.display = 'inline';
+    }
+    // إضافة بطاقات تحليل خاصة بالنمط
+    addPatternQuickPrompts();
+  } catch {}
+}
+function addPatternQuickPrompts() {
+  if (!_eduPattern) return;
+  const tags = document.querySelector('.tags-row');
+  if (!tags) return;
+  if (_eduPattern === 'advanced') {
+    const btn = document.createElement('span');
+    btn.className = 'tag tc';
+    btn.onclick = () => askQuick('حلل أداء طالبات برنامج AP مقارنةً بالمعيار الوطني وقدم توصيات لتحسين نسب النجاح');
+    btn.textContent = '🔬 تحليل AP';
+    tags.appendChild(btn);
+  }
+  if (_eduPattern === 'third_language') {
+    const btn = document.createElement('span');
+    btn.className = 'tag tc';
+    btn.onclick = () => askQuick(`حلل تأثير برنامج اللغة الثالثة (${_eduPatternLabel}) على التحصيل العام للطالبات وهل هناك تعارض مع المواد الأساسية؟`);
+    btn.textContent = '🌐 تحليل اللغة الثالثة';
+    tags.appendChild(btn);
+  }
+  if (_eduPattern === 'bilingual') {
+    const btn = document.createElement('span');
+    btn.className = 'tag tc';
+    btn.onclick = () => askQuick('قارن الأداء الأكاديمي في المواد المدرَّسة بالعربية مقابل تلك المدرَّسة بالإنجليزية في البرنامج الثنائي');
+    btn.textContent = '🗣️ تحليل ثنائي اللغة';
+    tags.appendChild(btn);
+  }
+}
+document.addEventListener('DOMContentLoaded', loadEduPattern);
 const _ak1='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',_ak2='eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0',_ak3='FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
 const SB_KEY=[_ak1,_ak2,_ak3].join('.');
 
@@ -448,7 +507,8 @@ async function callAI(prompt, boxId, context='') {
   box.style.display='block';
   box.textContent='🧠 المحلل الذكي يعمل...';
   try {
-    const sys = `أنت محلل بيانات تعليمي ذكي لمدرسة الجود الابتدائية في أبوظبي. تحلل البيانات الفعلية وتقدم توصيات عملية. إجاباتك بالعربية، موجزة، دقيقة، قابلة للتطبيق. ${context}`;
+    const patCtx = _eduPatternLabel ? `نمط التعليم المعتمد في المدرسة: ${_eduPatternLabel}. ` : '';
+    const sys = `أنت محلل بيانات تعليمي ذكي لمدرسة الجود الابتدائية في أبوظبي. ${patCtx}تحلل البيانات الفعلية وتقدم توصيات عملية. إجاباتك بالعربية، موجزة، دقيقة، قابلة للتطبيق. ${context}`;
     const res = await fetch('https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt: prompt + '\n' + sys, context: context, module:'analytics'})});
     const d = await res.json();
     box.textContent = d.result || d.choices?.[0]?.message?.content || 'لا يوجد رد من المحلل الذكي.';

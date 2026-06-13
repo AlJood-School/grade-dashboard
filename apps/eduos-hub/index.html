@@ -934,8 +934,55 @@ async function loadSchoolIdentity() {
         txt += ` — ${thirdLangNames[s.third_language] || s.third_language}`;
       const badge = document.getElementById('hub-pattern-badge');
       badge.textContent = txt; badge.style.display = 'inline';
+
+      // ── بطاقات ديناميكية حسب النمط ──
+      const pat = s.education_pattern;
+      if (pat === 'advanced') addDynamicCard('academic', 'eduos-teacher', '🎓', 'منسق AP', 'تنسيق برامج Advanced Placement', 'badge-new');
+      if (pat === 'third_language') {
+        const lang = s.third_language ? `(${({french:'فرنسية',german:'ألمانية',chinese:'صينية',spanish:'إسبانية',japanese:'يابانية',italian:'إيطالية'})[s.third_language]||s.third_language})` : '';
+        addDynamicCard('academic', 'eduos-teacher', '🌐', `معلمة اللغة الثالثة ${lang}`, 'إدارة حصص اللغة الثالثة', 'badge-active');
+      }
+      if (pat === 'bilingual') addDynamicCard('academic', 'eduos-teacher', '🗣️', 'برنامج ثنائي اللغة', 'حصص ومحتوى اللغة الثانية', 'badge-active');
+    }
+
+    // ── custom_widgets — إخفاء الأقسام المخفية ──
+    const wr = await fetch(`${SUPABASE_URL}/rest/v1/app_settings?select=custom_widgets&limit=1`, {
+      headers: {'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`}
+    });
+    const wrows = await wr.json();
+    if (wrows && wrows[0] && wrows[0].custom_widgets) {
+      try {
+        const ws = JSON.parse(wrows[0].custom_widgets);
+        const sectionMap = { admin:'grid-admin', academic:'grid-academic', students:'grid-students', staff:'grid-staff', services:'grid-services' };
+        (ws.hiddenSections||[]).forEach(sid => {
+          const el = document.getElementById(sectionMap[sid] || sid);
+          if (el) el.style.display = 'none';
+        });
+        // إضافة روابط مخصصة
+        if (ws.customLinks && ws.customLinks.length) {
+          const grid = document.getElementById('grid-services') || document.querySelector('.apps-grid');
+          ws.customLinks.forEach(l => {
+            if (!l.url || !l.label) return;
+            const a = document.createElement('a');
+            a.href = l.url; a.className = 'app-card c-indigo';
+            a.innerHTML = `<div class="app-icon-wrap">${l.icon||'🔗'}</div><div class="app-name">${l.label}</div><div class="app-desc">رابط مخصص</div>`;
+            if (grid) grid.appendChild(a);
+          });
+        }
+      } catch {}
     }
   } catch(e) { console.warn('school identity:', e); }
+}
+
+function addDynamicCard(gridId, path, icon, name, desc, badge) {
+  const grid = document.getElementById('grid-' + gridId);
+  if (!grid) return;
+  // تجنب التكرار
+  if (grid.querySelector(`[data-dynamic="${name}"]`)) return;
+  const a = document.createElement('a');
+  a.href = `/apps/${path}/`; a.className = 'app-card c-teal'; a.setAttribute('data-dynamic', name);
+  a.innerHTML = `<div class="app-icon-wrap">${icon}</div><div class="app-name">${name}</div><div class="app-desc">${desc}</div><span class="app-badge ${badge}">ديناميكي</span>`;
+  grid.appendChild(a);
 }
 
 async function loadStats() {

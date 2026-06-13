@@ -386,10 +386,11 @@ body[data-theme="remote"] .brand-title { background:none; -webkit-text-fill-colo
     <button id="theme-toggle-btn" onclick="EduTheme.openPicker()" title="تغيير الثيم"
       style="width:36px;height:36px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .2s;color:var(--text)">🎨</button>
     <div class="user-info">
-      <div class="user-name">منيرة المري</div>
-      <div class="user-role">👩‍🏫 معلمة CCDI & AI</div>
+      <div class="user-name" id="teacher-name-display">جارٍ التحميل...</div>
+      <div class="user-role" id="teacher-role-display">👩‍🏫 معلمة</div>
+      <span id="teacher-slots-badge" style="display:none;background:rgba(16,185,129,0.15);color:var(--emerald2);border:1px solid rgba(16,185,129,0.3);border-radius:12px;padding:2px 8px;font-size:10px;margin-top:2px"></span>
     </div>
-    <div class="user-avatar">م</div>
+    <div class="user-avatar" id="teacher-avatar">؟</div>
   </div>
 </div>
 
@@ -1835,6 +1836,91 @@ const _K = ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
             'FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI'].join('.');
 let sb2 = null;
 try { sb2 = supabase.createClient(SUPA_URL, _K); } catch(e) {}
+
+// ─── expose for sub-functions that use window.SUPA_URL/SUPA_KEY ───
+window.SUPA_URL = SUPA_URL;
+window.SUPA_KEY = _K;
+
+// ════════════════════════════════════════════════════════
+// STAFF IDENTITY — ربط المعلمة بـ staff_profiles
+// ════════════════════════════════════════════════════════
+window.CURRENT_STAFF_ID   = null;
+window.CURRENT_STAFF_NAME = null;
+window.CURRENT_STAFF_ROLE = null;
+
+async function initStaffIdentity() {
+  try {
+    // قراءة الجلسة
+    const raw = sessionStorage.getItem('edoos_user');
+    if (!raw) return;
+    const user = JSON.parse(raw);
+    const username = user.username || user.user || '';
+    if (!username) return;
+
+    // جلب staff_id من staff_profiles
+    const r = await fetch(
+      `${SUPA_URL}/rest/v1/staff_profiles?select=id,name,role,subject&username=eq.${encodeURIComponent(username)}&limit=1`,
+      { headers: { apikey: _K, Authorization: 'Bearer ' + _K } }
+    );
+    const rows = await r.json();
+    if (!Array.isArray(rows) || !rows.length) return;
+    const profile = rows[0];
+
+    window.CURRENT_STAFF_ID   = profile.id;
+    window.CURRENT_STAFF_NAME = profile.name;
+    window.CURRENT_STAFF_ROLE = profile.role;
+
+    // تحديث واجهة الترحيب
+    const nameEl = document.getElementById('teacher-name-display');
+    if (nameEl && profile.name) nameEl.textContent = profile.name;
+    const roleEl = document.getElementById('teacher-role-display');
+    if (roleEl && profile.role) roleEl.textContent = '👩‍🏫 ' + profile.role;
+    // avatar
+    const avEl = document.getElementById('teacher-avatar');
+    if (avEl && profile.name) avEl.textContent = profile.name.charAt(0);
+    // تحديث greeting
+    const greetSub = document.getElementById('greetingSub');
+    if (greetSub && profile.name) {
+      const hour = new Date().getHours();
+      const greeting = hour < 12 ? '🌅 صباح النور،' : hour < 17 ? '☀️ نهاركِ مبارك،' : '🌙 مساء الخير،';
+      document.getElementById('greetingMsg').textContent = `${greeting} ${profile.name}`;
+    }
+
+    // تحميل حصص المعلمة من timetable_slots
+    loadTeacherTimetableSlots(profile.id);
+  } catch(e) { console.warn('initStaffIdentity:', e); }
+}
+
+async function loadTeacherTimetableSlots(staffId) {
+  if (!staffId) return;
+  try {
+    const r = await fetch(
+      `${SUPA_URL}/rest/v1/timetable_slots?select=class_name,subject,day,period&staff_id=eq.${staffId}&order=day,period`,
+      { headers: { apikey: _K, Authorization: 'Bearer ' + _K } }
+    );
+    const slots = await r.json();
+    if (!Array.isArray(slots) || !slots.length) return;
+
+    // استخرج الصفوف الفريدة لهذه المعلمة
+    const classes = [...new Set(slots.map(s => s.class_name))].filter(Boolean);
+    window.TEACHER_CLASSES = classes;
+
+    // تحديث filter الصفوف إذا وُجد
+    const sel = document.getElementById('class-select') || document.getElementById('wk-class-filter');
+    if (sel && classes.length) {
+      const currentVal = sel.value;
+      sel.innerHTML = classes.map(c => `<option value="${c}">${c}</option>`).join('');
+      if (classes.includes(currentVal)) sel.value = currentVal;
+      else sel.value = classes[0];
+    }
+
+    // badge يظهر عدد حصص المعلمة
+    const badge = document.getElementById('teacher-slots-badge');
+    if (badge) { badge.textContent = `${slots.length} حصة`; badge.style.display = 'inline'; }
+  } catch(e) { console.warn('loadTeacherTimetableSlots:', e); }
+}
+
+document.addEventListener('DOMContentLoaded', initStaffIdentity);
 
 async function sbFetch(table, query='') {
   const r = await fetch(`${SUPA_URL}/rest/v1/${table}?${query}&limit=500`, {
