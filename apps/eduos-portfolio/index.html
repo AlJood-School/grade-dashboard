@@ -318,9 +318,23 @@ const DEMO_STUDENTS = {
   G2: ['أسماء راشد الشامسي','منيرة خالد العامري']
 };
 
-function loadStudentList() {
+async function loadStudentList() {
   const grade = document.getElementById('selGrade').value;
   const sel = document.getElementById('selStudent');
+  sel.innerHTML = '<option>جارٍ التحميل...</option>';
+  try {
+    const { data, error } = await supabase
+      .from('student_grades')
+      .select('student_name')
+      .eq('grade_level', grade)
+      .order('student_name');
+    if (!error && data && data.length > 0) {
+      const unique = [...new Set(data.map(d => d.student_name))];
+      sel.innerHTML = '<option>اختاري الطالبة...</option>' + unique.map(n => `<option value="${n}">${n}</option>`).join('');
+      return;
+    }
+  } catch(e) {}
+  // fallback static
   sel.innerHTML = '<option>اختاري الطالبة...</option>';
   (DEMO_STUDENTS[grade] || []).forEach(n => {
     const opt = document.createElement('option');
@@ -340,11 +354,36 @@ function loadPortfolio() {
   document.getElementById('heroName').textContent = name;
   document.getElementById('heroBadge').textContent = `${grade} — الصف ${gradeAr(grade)}`;
 
+  portfolioWorks = [];
+  portfolioNotes = [];
+
   renderTimeline(grade);
   renderAchievements();
   renderSkills();
   renderWorks();
   renderNotes();
+  loadPortfolioFromDB(name);
+}
+
+async function loadPortfolioFromDB(studentName) {
+  try {
+    const enc = encodeURIComponent(studentName);
+    const { data, error } = await supabase
+      .from('portfolio_items')
+      .select('*')
+      .ilike('student_name', `%${studentName}%`)
+      .order('created_at', { ascending: false });
+    if (!error && data && data.length > 0) {
+      portfolioWorks = data.map(d => ({
+        title: d.item_title,
+        type: d.item_type,
+        subject: d.subject || '—',
+        grade: d.grade_score || '—',
+        icon: d.icon || '📄'
+      }));
+      renderWorks();
+    }
+  } catch(e) {}
 }
 
 function gradeAr(g) {
@@ -483,18 +522,36 @@ function showAddWork() {
 function closeAddWork() {
   document.getElementById('addWorkModal').classList.remove('active');
 }
-function saveWork() {
+async function saveWork() {
   const title = document.getElementById('workTitle').value.trim();
   if (!title) { alert('الرجاء إدخال عنوان العمل'); return; }
   const icons = {'مشروع بحثي':'🔬','قصيدة / كتابة إبداعية':'📜','رسم وفن':'🎨','تقرير علمي':'📊','عرض تقديمي':'📋','مسابقة / جائزة':'🏆','نشاط لاصفي':'⚽','شهادة تقدير':'🎖️'};
   const type = document.getElementById('workType').value;
-  portfolioWorks.unshift({
-    title,
-    type,
+  const item = {
+    student_name: currentStudent ? currentStudent.name : 'غير محدد',
+    grade_level: currentStudent ? currentStudent.grade : '',
+    item_title: title,
+    item_type: type,
     subject: document.getElementById('workSubject').value || 'عام',
-    grade: document.getElementById('workGrade').value || '—',
+    grade_score: document.getElementById('workGrade').value || '—',
+    description: document.getElementById('workDesc') ? document.getElementById('workDesc').value : '',
     icon: icons[type] || '📄'
-  });
+  };
+  // حفظ في Supabase
+  try {
+    const { error } = await supabase.from('portfolio_items').insert([item]);
+    if (!error) {
+      portfolioWorks.unshift({title, type, subject: item.subject, grade: item.grade_score, icon: item.icon});
+      closeAddWork();
+      renderWorks();
+      document.getElementById('workTitle').value = '';
+      // تحديث من Supabase
+      if (currentStudent) loadPortfolioFromDB(currentStudent.name);
+      return;
+    }
+  } catch(e) {}
+  // fallback local
+  portfolioWorks.unshift({title, type, subject: item.subject, grade: item.grade_score, icon: item.icon});
   closeAddWork();
   renderWorks();
   document.getElementById('workTitle').value = '';
