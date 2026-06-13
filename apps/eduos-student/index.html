@@ -1252,23 +1252,31 @@ async function loadGradesByName(studentName) {
   document.getElementById('gradesBody').innerHTML = '<tr><td colspan="6"><div class="spinner"></div></td></tr>';
   try {
     const enc = encodeURIComponent(studentName);
-    const r = await sb(`student_grades?student_name=ilike.*${enc}*&order=week_number.desc&limit=50`);
+    const r = await sb(`dash_grades?student_name=ilike.*${enc}*&order=term.asc&limit=50`);
     if (Array.isArray(r) && r.length > 0) {
-      const colors = {'A+':'green','A':'green','A-':'green','B+':'blue','B':'blue','C':'amber','D':'red','F':'red'};
+      const gradeColor = (v) => v>=90?'green':v>=80?'blue':v>=70?'amber':'red';
+      const gradeLabel = (v) => v>=95?'A+':v>=90?'A':v>=85?'A-':v>=80?'B+':v>=75?'B':v>=70?'C':'D';
       document.getElementById('gradesBody').innerHTML = r.map(d => {
-        const gr = d.grade_letter || (d.score >= 90?'A+':(d.score>=85?'A':(d.score>=80?'A-':(d.score>=75?'B+':(d.score>=70?'B':'C')))));
+        const f = parseFloat(d.formative)||0;
+        const s = parseFloat(d.summative)||0;
+        const t = parseFloat(d.term1_total)||0;
+        const display = t || s || f;
+        const gl = gradeLabel(display);
         return `<tr>
-          <td style="font-weight:700;">${d.subject_name||d.subject||'—'}</td>
-          <td>W${d.week_number||'—'}</td>
-          <td style="font-weight:800;color:var(--indigo);">${d.score??d.mark??'—'}</td>
-          <td style="color:var(--text2);">${d.max_score||20}</td>
-          <td><span class="badge badge-${colors[gr]||'blue'}">${gr}</span></td>
-          <td style="color:var(--text2);">${d.class_name||d.grade_level||'—'}</td>
+          <td style="font-weight:700;">${d.student_name}</td>
+          <td>الفصل ${d.term||1}</td>
+          <td style="font-weight:800;color:var(--indigo);">${f||'—'}</td>
+          <td style="color:var(--text2);">${s||'—'}</td>
+          <td><span class="badge badge-${gradeColor(display)}">${gl}</span></td>
+          <td style="color:var(--text2);">الصف ${d.grade}${d.section}</td>
         </tr>`;
       }).join('');
-      const avg = r.reduce((s,d)=>s+(d.score||d.mark||0),0)/r.length;
-      document.getElementById('myAvg').textContent = Math.round(avg)+'%';
-      document.getElementById('topGrade').textContent = Math.max(...r.map(d=>d.score||d.mark||0));
+      const totals = r.map(d=>parseFloat(d.term1_total)||parseFloat(d.formative)||0).filter(x=>x>0);
+      if(totals.length){
+        const avg = totals.reduce((a,b)=>a+b,0)/totals.length;
+        document.getElementById('myAvg').textContent = Math.round(avg)+'%';
+        document.getElementById('topGrade').textContent = Math.max(...totals);
+      }
       drawChart();
       return;
     }
