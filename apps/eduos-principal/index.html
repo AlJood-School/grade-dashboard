@@ -986,6 +986,36 @@ body {
       </div>
     </div>
 
+    <!-- مقارنة أسبوعية لكل موظفة -->
+    <div class="card" style="margin-bottom:16px;border-color:rgba(167,139,250,0.25)">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+        <div class="card-title">🗓️ المقارنة الأسبوعية — كل موظفة</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-size:10px;color:var(--text2)">
+            <span style="color:#10d9a0">●حاضر</span>
+            <span style="color:#f6ad55;margin-right:6px">●متأخر</span>
+            <span style="color:#fc8181;margin-right:6px">●غائب</span>
+            <span style="color:#a78bfa;margin-right:6px">●إجازة</span>
+          </span>
+          <button onclick="loadWeeklyStaffComparison()" style="background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:8px;padding:5px 12px;cursor:pointer;font-family:Tajawal;font-size:11px">🔄</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0">
+        <div id="weeklyStaffMatrix" style="overflow-x:auto">
+          <div style="text-align:center;padding:24px;color:var(--text2)">⏳ جاري تحليل آخر 7 أيام...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- تنبيهات تراكمية ذكية -->
+    <div class="card" id="cumulativeAlertsCard" style="margin-bottom:16px;border-color:rgba(252,129,129,0.25);display:none">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+        <div class="card-title">⚡ تنبيهات تراكمية ذكية</div>
+        <span id="cumulativeAlertsBadge" style="padding:3px 10px;background:rgba(252,129,129,0.15);border:1px solid rgba(252,129,129,0.4);border-radius:20px;font-size:11px;color:#fc8181;font-weight:700">0</span>
+      </div>
+      <div class="card-body" id="cumulativeAlertsBody"></div>
+    </div>
+
   </div>
 
   <!-- ══════════ TAB: HEALTH ══════════ -->
@@ -1461,7 +1491,7 @@ function switchTab(name) {
   document.getElementById('tab-'+name).classList.add('active');
   event.target.classList.add('active');
   // تحميل بيانات حسب التبويب
-  if (name === 'attendance') { loadAttendanceData(); loadWeeklyTrend(); }
+  if (name === 'attendance') { loadAttendanceData(); loadWeeklyTrend(); loadWeeklyStaffComparison(); }
   if (name === 'backup') loadBackups();
 }
 
@@ -1771,6 +1801,138 @@ async function loadWeeklyTrend() {
       </div>`;
   } catch(e) {
     barsEl.innerHTML = '<div style="color:var(--coral);font-size:12px">⚠️ تعذّر تحميل البيانات</div>';
+  }
+}
+
+// ══════════════════════════════════════
+// المقارنة الأسبوعية — كل موظفة 7 أيام
+// ══════════════════════════════════════
+async function loadWeeklyStaffComparison() {
+  const el = document.getElementById('weeklyStaffMatrix');
+  el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text2)">⏳ جاري التحليل...</div>';
+
+  try {
+    // آخر 7 أيام عمل
+    const days = [];
+    const d = new Date();
+    while (days.length < 7) {
+      const day = d.getDay();
+      if (day !== 5 && day !== 6) { // استثناء الجمعة والسبت
+        days.unshift(d.toISOString().split('T')[0]);
+      }
+      d.setDate(d.getDate() - 1);
+    }
+
+    // جلب جدول الموظفات
+    const [staffRes, attRes] = await Promise.all([
+      fetch(`${SUPA_URL}/rest/v1/staff_profiles?select=id,name,role&order=name`, {
+        headers: { 'apikey': SUPA_ANON, 'Authorization': 'Bearer ' + SUPA_ANON }
+      }),
+      fetch(`${SUPA_URL}/rest/v1/staff_daily_attendance?date=gte.${days[0]}&date=lte.${days[days.length-1]}&select=staff_id,date,status,checkin_time`, {
+        headers: { 'apikey': SUPA_ANON, 'Authorization': 'Bearer ' + SUPA_ANON }
+      })
+    ]);
+
+    const staff = await staffRes.json();
+    const att = await attRes.json();
+
+    if (!Array.isArray(staff) || !staff.length) {
+      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text2)">لا توجد بيانات موظفات</div>';
+      return;
+    }
+
+    // بناء map: staff_id → date → status
+    const map = {};
+    if (Array.isArray(att)) {
+      att.forEach(r => {
+        if (!map[r.staff_id]) map[r.staff_id] = {};
+        map[r.staff_id][r.date] = r.status;
+      });
+    }
+
+    // تحليل الأنماط التراكمية
+    const alerts = [];
+    const dayLabels = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس'];
+    const statusColor = { present:'#10d9a0', late:'#f6ad55', absent:'#fc8181', on_leave:'#a78bfa', suspicious:'#f97316' };
+    const statusLabel = { present:'حاضر', late:'متأخر', absent:'غائب', on_leave:'إجازة', suspicious:'مشبوه' };
+
+    // بناء الجدول HTML
+    const rows = staff.map(s => {
+      const dots = days.map(date => {
+        const st = map[s.id]?.[date];
+        const color = st ? (statusColor[st] || '#888') : 'rgba(255,255,255,0.12)';
+        const label = st ? (statusLabel[st] || st) : '—';
+        const dayName = dayLabels[new Date(date).getDay()] || '';
+        return `<td style="text-align:center;padding:6px 4px">
+          <div title="${dayName}: ${label}" style="width:26px;height:26px;border-radius:50%;background:${color};margin:auto;
+            box-shadow:0 0 6px ${color}66;transition:transform .2s" 
+            onmouseover="this.style.transform='scale(1.3)'" 
+            onmouseout="this.style.transform='scale(1)'"></div>
+        </td>`;
+      }).join('');
+
+      // تحليل الأنماط
+      const statuses = days.map(date => map[s.id]?.[date] || null);
+      let lateStreak = 0, maxLateStreak = 0, absCount = 0, suspCount = 0;
+      statuses.forEach(st => {
+        if (st === 'late') { lateStreak++; maxLateStreak = Math.max(maxLateStreak, lateStreak); }
+        else lateStreak = 0;
+        if (st === 'absent') absCount++;
+        if (st === 'suspicious') suspCount++;
+      });
+
+      const alertBadges = [];
+      if (maxLateStreak >= 3) { alertBadges.push(`<span style="font-size:9px;padding:2px 6px;background:rgba(246,173,85,0.15);border:1px solid rgba(246,173,85,0.4);border-radius:10px;color:#f6ad55">⚠️ ${maxLateStreak} متأخرات</span>`); alerts.push({ name: s.name, msg: `${maxLateStreak} تأخيرات متتالية هذا الأسبوع` }); }
+      if (absCount >= 2) { alertBadges.push(`<span style="font-size:9px;padding:2px 6px;background:rgba(252,129,129,0.15);border:1px solid rgba(252,129,129,0.4);border-radius:10px;color:#fc8181">🔴 ${absCount} غيابات</span>`); alerts.push({ name: s.name, msg: `${absCount} غيابات هذا الأسبوع` }); }
+      if (suspCount >= 1) { alertBadges.push(`<span style="font-size:9px;padding:2px 6px;background:rgba(249,115,22,0.15);border:1px solid rgba(249,115,22,0.4);border-radius:10px;color:#f97316">🚨 ${suspCount} مشبوه</span>`); alerts.push({ name: s.name, msg: `${suspCount} حضور مشبوه يستلزم مراجعة` }); }
+
+      return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+        <td style="padding:8px 12px;white-space:nowrap">
+          <div style="font-size:12px;font-weight:700">${s.name}</div>
+          <div style="font-size:10px;color:var(--text2)">${s.role||''}</div>
+          <div style="margin-top:4px">${alertBadges.join(' ')}</div>
+        </td>
+        ${dots}
+      </tr>`;
+    }).join('');
+
+    const dateHeaders = days.map(date => {
+      const dn = dayLabels[new Date(date).getDay()] || '';
+      const dd = date.split('-').slice(1).join('/');
+      return `<th style="padding:6px 4px;font-size:10px;color:var(--text2);text-align:center;font-weight:600">${dn}<br><span style="font-size:9px;opacity:.6">${dd}</span></th>`;
+    }).join('');
+
+    el.innerHTML = `<table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+          <th style="padding:8px 12px;font-size:11px;color:var(--text2);text-align:right">الموظفة</th>
+          ${dateHeaders}
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+    // عرض التنبيهات التراكمية
+    const alertCard = document.getElementById('cumulativeAlertsCard');
+    const alertBody = document.getElementById('cumulativeAlertsBody');
+    const alertBadge = document.getElementById('cumulativeAlertsBadge');
+    if (alerts.length) {
+      alertCard.style.display = 'block';
+      alertBadge.textContent = alerts.length;
+      alertBody.innerHTML = alerts.map(a => `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+          <div style="width:36px;height:36px;border-radius:50%;background:rgba(252,129,129,0.15);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">⚡</div>
+          <div>
+            <div style="font-size:12px;font-weight:700">${a.name}</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:2px">${a.msg}</div>
+          </div>
+        </div>`).join('');
+    } else {
+      alertCard.style.display = 'none';
+    }
+
+  } catch(e) {
+    el.innerHTML = `<div style="text-align:center;padding:20px;color:var(--coral)">⚠️ تعذّر التحليل: ${e.message}</div>`;
   }
 }
 
