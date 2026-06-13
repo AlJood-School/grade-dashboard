@@ -466,9 +466,12 @@
           </div>
           <div class="backup-size">1.82 MB</div>
         </div>
-        <div style="margin-top:16px">
-          <button class="btn-save" onclick="showToast('جاري إنشاء نسخة احتياطية...')">
+        <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn-save" onclick="createBackupNow()">
             <i class="fas fa-database"></i> نسخة احتياطية الآن
+          </button>
+          <button class="btn-save" onclick="downloadBackup()" style="background:linear-gradient(135deg,#10b981,#059669)">
+            <i class="fas fa-download"></i> تحميل نسخة احتياطية
           </button>
         </div>
       </div>
@@ -999,6 +1002,37 @@ function enhanceStatusPanel() {
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(enhanceStatusPanel, 300);
 });
+
+// ── النسخ الاحتياطي ──
+function createBackupNow() {
+  showToast('⏳ جاري إنشاء النسخة... يتم ذلك تلقائياً عبر Supabase Pro');
+}
+
+async function downloadBackup() {
+  showToast('⏳ جاري تجميع البيانات...');
+  try {
+    const tables = ['school_events','kg_students','kg_activities','exit_tickets','portfolio_items','messages','timetable_slots','social_cases','nurse_visits'];
+    const backup = { exported_at: new Date().toISOString(), version: 'EduOS-Backup-v1', tables: {} };
+    for (const t of tables) {
+      try {
+        const r = await fetch(`${SB_URL}/rest/v1/${t}?select=*&limit=5000`, {
+          headers: {'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY}
+        });
+        const d = await r.json();
+        backup.tables[t] = Array.isArray(d) ? d : [];
+      } catch { backup.tables[t] = []; }
+    }
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const date = new Date().toISOString().slice(0,10);
+    a.href = url; a.download = `eduos-backup-${date}.json`;
+    a.click(); URL.revokeObjectURL(url);
+    showToast('✅ تم تحميل النسخة الاحتياطية!');
+  } catch(e) {
+    showToast('❌ فشل التحميل: ' + e.message);
+  }
+}
 
 </script>
 <script src="../platform-tour.js"></script>

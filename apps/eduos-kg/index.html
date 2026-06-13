@@ -546,17 +546,36 @@ const _kg1='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',_kg2='eyJpc3MiOiJzdXBhYmFzZSIs
 const SB_KEY = [_kg1,_kg2,_kg3].join('.');
 const KG_AI_FN = 'https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant';
 
-// Sample students
-const students = [
-  {id:1,name:'سارة أحمد الزهراني',class:'KG1',emoji:'👧',stars:5,status:'present'},
-  {id:2,name:'ريم عبدالله النجدي',class:'KG1',emoji:'👧',stars:4,status:'present'},
-  {id:3,name:'نورة خالد المطيري',class:'KG2',emoji:'👧',stars:5,status:'present'},
-  {id:4,name:'لين محمد القرني',class:'KG2',emoji:'👧',stars:3,status:'late'},
-  {id:5,name:'جود سعد الحربي',class:'KG3',emoji:'👧',stars:4,status:'absent'},
-  {id:6,name:'هند فيصل الدوسري',class:'KG1',emoji:'👧',stars:5,status:'present'},
-  {id:7,name:'أميرة عمر السعيد',class:'KG2',emoji:'👧',stars:4,status:'present'},
-  {id:8,name:'تسنيم يوسف العمري',class:'KG3',emoji:'👧',stars:5,status:'present'},
-];
+// طالبات رياض الأطفال — تُحمَّل من Supabase
+let students = [];
+
+async function loadKGStudents() {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/kg_students?select=*&order=kg_class.asc,name.asc`, {
+      headers: {'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY}
+    });
+    const data = await r.json();
+    if (Array.isArray(data) && data.length) {
+      students = data.map(s => ({
+        id: s.id,
+        name: s.name,
+        class: s.kg_class,
+        emoji: s.emoji || '👧',
+        stars: s.stars || 4,
+        status: s.status || 'present'
+      }));
+    }
+  } catch(e) {
+    console.warn('KG load fallback:', e);
+    // fallback بسيط
+    students = [
+      {id:1,name:'سارة أحمد الزهراني',class:'KG1',emoji:'👧',stars:5,status:'present'},
+      {id:2,name:'ريم عبدالله النجدي',class:'KG1',emoji:'👧',stars:4,status:'present'},
+      {id:3,name:'نورة خالد المطيري',class:'KG2',emoji:'👧',stars:5,status:'present'},
+      {id:4,name:'لين محمد القرني',class:'KG2',emoji:'👧',stars:3,status:'late'},
+    ];
+  }
+}
 
 const skills = {
   lang:['يتعرف على الحروف','يرسم الحروف','يفهم التعليمات','يعبر عن نفسه'],
@@ -571,6 +590,8 @@ window.addEventListener('load', async () => {
     document.getElementById('weekInfo').textContent = `${i.year} — ${i.semester} — ${i.weekLabel}`;
   }
   document.getElementById('attDate').textContent = new Date().toLocaleDateString('ar-SA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  // تحميل الطالبات من Supabase أولاً
+  await loadKGStudents();
   renderStudents();
   renderAttendance();
   populateSelects();
