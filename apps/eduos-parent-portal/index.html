@@ -983,8 +983,47 @@ function initApp() {
   setupTicker();
 }
 
+// ── CHECK STUDENT_SESSION FROM NEW LOGIN PAGE ──
+async function checkStudentSessionFromLogin() {
+  const stuSess = sessionStorage.getItem('student_session');
+  if (stuSess) {
+    try {
+      const s = JSON.parse(stuSess);
+      if (s.expires && Date.now() < s.expires && s.student_id) {
+        // جلب بيانات من inclusion_plans أو students
+        const r1 = await fetch(`${SB_URL}/rest/v1/inclusion_plans?student_id=eq.${encodeURIComponent(s.student_id)}&limit=1`, {
+          headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
+        });
+        const data1 = await r1.json();
+        if (data1 && data1.length > 0) {
+          currentStudent = data1[0];
+          sessionStorage.setItem('parent_session', JSON.stringify({ id: s.student_id, name: s.student_name, ts: Date.now() }));
+          initApp(); return true;
+        }
+        // جرب من students مباشرة
+        const r2 = await fetch(`${SB_URL}/rest/v1/students?id=eq.${encodeURIComponent(s.student_id)}&select=*&limit=1`, {
+          headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
+        });
+        const data2 = await r2.json();
+        if (data2 && data2.length > 0) {
+          const st = data2[0];
+          currentStudent = { student_name: st.name, class_name: st.grade||'', section: st.class_name||'', manhel_id: st.id, student_id: st.id, plan_type: 'general' };
+          sessionStorage.setItem('parent_session', JSON.stringify({ id: s.student_id, name: s.student_name, ts: Date.now() }));
+          initApp(); return true;
+        }
+      }
+    } catch(e) { console.warn('checkStudentSessionFromLogin error:', e); }
+  }
+  return false;
+}
+
 // Check existing session
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
+  // أولاً: تحقق من جلسة student-login الجديدة
+  const fromNew = await checkStudentSessionFromLogin();
+  if (fromNew) return;
+
+  // ثانياً: تحقق من الجلسة القديمة
   const sess = sessionStorage.getItem('parent_session');
   if (sess) {
     try {

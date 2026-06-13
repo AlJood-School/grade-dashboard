@@ -1603,13 +1603,102 @@ function filterBooks() {
   });
 }
 
+// ============ STUDENT SESSION GUARD ============
+let CURRENT_STUDENT_SESSION = null;
+let IS_STAFF_VIEW = false;
+
+function initStudentAuth() {
+  // أولوية 1: جلسة طالبة/ولي أمر من student-login
+  const stuSess = sessionStorage.getItem('student_session');
+  // أولوية 2: جلسة موظف من platform-auth-guard
+  const staffSess = sessionStorage.getItem('edoos_user');
+
+  if (stuSess) {
+    try {
+      const s = JSON.parse(stuSess);
+      if (s.expires && Date.now() < s.expires) {
+        CURRENT_STUDENT_SESSION = s;
+        IS_STAFF_VIEW = false;
+        // إظهار اسم الطالبة في الهيدر
+        const nameEl = document.getElementById('hdrStudentName');
+        if (nameEl) nameEl.textContent = s.student_name || 'الطالبة';
+        // إخفاء زر البحث (لا يحق للطالبة البحث عن أخريات)
+        const searchBar = document.querySelector('.student-search-bar');
+        if (searchBar) searchBar.style.display = 'none';
+        return;
+      } else {
+        sessionStorage.removeItem('student_session');
+      }
+    } catch(e) { sessionStorage.removeItem('student_session'); }
+  }
+
+  if (staffSess) {
+    IS_STAFF_VIEW = true;
+    CURRENT_STUDENT_SESSION = null;
+    return; // موظف مصرَّح له برؤية كل الطلاب
+  }
+
+  // لا جلسة صالحة — اعرض اختيار طريقة الدخول
+  document.body.innerHTML = `
+  <div style="font-family:'Tajawal',sans-serif;background:#0D1B2A;min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:20px;padding:20px">
+    <img src="../eduos-logo.png" style="width:60px;border-radius:12px">
+    <h2 style="color:#E2E8F0;font-size:1.2rem">بوابة الطالبة</h2>
+    <p style="color:#94A3B8;font-size:0.85rem;text-align:center">يجب الدخول أولاً للوصول لهذه الصفحة</p>
+    <a href="../eduos-student-login/" style="background:#8B5CF6;color:#fff;padding:12px 28px;border-radius:12px;text-decoration:none;font-size:0.9rem;font-weight:700">
+      🎓 دخول الطالبة وولي الأمر
+    </a>
+    <a href="../eduos-login/" style="color:#64748B;font-size:0.8rem;text-decoration:underline">موظفة / معلمة؟ ادخلي من هنا</a>
+  </div>`;
+}
+
+// تطبيق فلتر الطالبة على جلب البيانات
+function getStudentFilter() {
+  if (!IS_STAFF_VIEW && CURRENT_STUDENT_SESSION) {
+    return CURRENT_STUDENT_SESSION.student_id;
+  }
+  return null; // موظف يرى الكل
+}
+
+// تحديث loadDashboard لتحميل بيانات الطالبة الحقيقية
+async function loadStudentRealData() {
+  const studentId = getStudentFilter();
+  if (!studentId) return; // موظف — demo data تكفي
+
+  try {
+    // جلب درجات الطالبة من dash_grades
+    const res = await sb(`dash_grades?student_id=eq.${encodeURIComponent(studentId)}&order=subject.asc&limit=30`);
+    const grades = await res.json();
+    if (grades && grades.length) {
+      const avg = Math.round(grades.reduce((s,g)=>(s+(parseFloat(g.final_grade)||0)),0)/grades.length);
+      document.getElementById('avgGrade').textContent = avg + '%';
+    }
+
+    // جلب الحضور من attendance
+    const attRes = await sb(`attendance?student_id=eq.${encodeURIComponent(studentId)}&order=date.desc&limit=90`);
+    const att = await attRes.json();
+    if (att && att.length) {
+      const present = att.filter(a=>a.status==='present'||a.status==='حاضرة').length;
+      const rate = Math.round(present/att.length*100);
+      document.getElementById('attRate').textContent = rate + '%';
+    }
+
+    // تحديث اسم الطالبة في الواجهة
+    const nameEls = document.querySelectorAll('.student-name-display');
+    nameEls.forEach(el => el.textContent = CURRENT_STUDENT_SESSION.student_name || 'الطالبة');
+    const gradeEls = document.querySelectorAll('.student-grade-display');
+    gradeEls.forEach(el => el.textContent = (CURRENT_STUDENT_SESSION.grade || '') + ' — ' + (CURRENT_STUDENT_SESSION.class_name || ''));
+  } catch(e) { console.warn('loadStudentRealData error:', e); }
+}
+
 // ============ INIT ============
 window.addEventListener('load', () => {
+  initStudentAuth();
   initWeekInfo();
   initMOTD();
   loadDashboard();
   loadProfile();
   loadStream();
+  loadStudentRealData();
   const h = location.hash.slice(1);
   if (h) showTab(h);
 });

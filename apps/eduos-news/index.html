@@ -1013,6 +1013,149 @@ function updateNewsStats() {
 }
 document.addEventListener('DOMContentLoaded', () => setTimeout(updateNewsStats, 400));
 
+/* ══════════════════════════════════════════════════
+   🔴 LIVE DATA FROM SUPABASE — تحميل حي من Supabase
+══════════════════════════════════════════════════ */
+const PRIORITY_COLORS = {urgent:'#EF4444',high:'#F59E0B',normal:'#10B981'};
+const TYPE_EMOJIS = {general:'📰',emergency:'🚨',event:'🎉',reminder:'📌',academic:'🎓',activity:'🌟'};
+const TYPE_LABELS = {general:'عام',emergency:'طارئ',event:'فعالية',reminder:'تذكير',academic:'أكاديمي',activity:'نشاط'};
+
+async function loadLiveFeed() {
+  const grid = document.getElementById('newsGrid');
+  if (!grid) return;
+  grid.innerHTML = '<div style="text-align:center;padding:32px;color:#94a3b8;grid-column:1/-1">جاري تحميل الأخبار... 📡</div>';
+  try {
+    // تحميل broadcasts
+    const [brRes, evRes] = await Promise.all([
+      fetch(`${SUPA_URL_N}/rest/v1/broadcasts?order=created_at.desc&limit=20`, {
+        headers: {'apikey': SUPA_KEY_N, 'Authorization': 'Bearer ' + SUPA_KEY_N}
+      }),
+      fetch(`${SUPA_URL_N}/rest/v1/school_events?order=event_date.desc&limit=10&select=id,title,description,event_type,event_date`, {
+        headers: {'apikey': SUPA_KEY_N, 'Authorization': 'Bearer ' + SUPA_KEY_N}
+      })
+    ]);
+    const broadcasts = await brRes.json() || [];
+    const events = await evRes.json() || [];
+
+    // دمج المصدرين
+    const allItems = [
+      ...broadcasts.map(b => ({
+        id: 'br-'+b.id, title: b.title, excerpt: b.content||'', 
+        type: b.broadcast_type||'general', priority: b.priority||'normal',
+        date: b.created_at, source: 'broadcast'
+      })),
+      ...events.map(e => ({
+        id: 'ev-'+e.id, title: e.title||'فعالية', excerpt: e.description||'',
+        type: 'event', priority: 'normal',
+        date: e.event_date||e.created_at, source: 'event'
+      }))
+    ].sort((a,b) => new Date(b.date) - new Date(a.date));
+
+    if (!allItems.length) {
+      grid.innerHTML = '<div style="text-align:center;padding:32px;color:#94a3b8;grid-column:1/-1">لا توجد أخبار بعد</div>'; return;
+    }
+
+    grid.innerHTML = allItems.map(item => `
+      <div class="news-card" data-tag="${item.type}">
+        <div class="news-img">${TYPE_EMOJIS[item.type]||'📄'}</div>
+        <div class="news-body">
+          <div class="news-category" style="color:${PRIORITY_COLORS[item.priority]||'#10B981'}">
+            ${item.priority==='urgent'?'🔴 عاجل — ':''}${TYPE_LABELS[item.type]||item.type}
+          </div>
+          <div class="news-title">${item.title}</div>
+          <div class="news-excerpt">${(item.excerpt||'').slice(0,180)}${(item.excerpt||'').length>180?'...':''}</div>
+          <div class="news-meta">
+            <span>🕐 ${new Date(item.date).toLocaleDateString('ar-AE',{year:'numeric',month:'short',day:'numeric'})}</span>
+            <span class="news-tag" style="background:rgba(139,92,246,0.15);color:#A78BFA">${item.source==='broadcast'?'📡 بث':'📅 فعالية'}</span>
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+    // تحديث الإحصائيات
+    const stats = {total: allItems.length, urgent: allItems.filter(i=>i.priority==='urgent').length, thisMonth: allItems.filter(i=>new Date(i.date).getMonth()===new Date().getMonth()).length};
+    if (document.getElementById('statsTotal')) document.getElementById('statsTotal').textContent = stats.total;
+    if (document.getElementById('statsPending')) document.getElementById('statsPending').textContent = stats.urgent;
+    if (document.getElementById('statsPublished')) document.getElementById('statsPublished').textContent = stats.thisMonth;
+
+    // تحديث شريط التيكر
+    const ticker = document.querySelector('.ticker-inner');
+    if (ticker && broadcasts.length > 0) {
+      ticker.textContent = broadcasts.slice(0,5).map(b=>`${TYPE_EMOJIS[b.broadcast_type]||'📢'} ${b.title}`).join(' ● ');
+    }
+  } catch(e) {
+    console.warn('loadLiveFeed error:', e);
+  }
+}
+
+async function loadLiveAnnouncements() {
+  const list = document.getElementById('announcementsList');
+  if (!list) return;
+  list.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">جاري التحميل...</div>';
+  try {
+    const res = await fetch(`${SUPA_URL_N}/rest/v1/broadcasts?order=created_at.desc&limit=30`, {
+      headers: {'apikey': SUPA_KEY_N, 'Authorization': 'Bearer ' + SUPA_KEY_N}
+    });
+    const rows = await res.json() || [];
+    const urgent = rows.filter(r=>r.priority==='urgent'||r.priority==='high'||r.broadcast_type==='emergency');
+    const rest = rows.filter(r=>!urgent.includes(r));
+    const all = [...urgent, ...rest];
+    if (!all.length) { list.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">لا إعلانات</div>'; return; }
+    list.innerHTML = all.map(b=>`
+      <div class="ann-card">
+        <div class="ann-icon" style="background:rgba(${b.priority==='urgent'?'239,68,68':b.priority==='high'?'245,158,11':'34,197,94'},.15)">${TYPE_EMOJIS[b.broadcast_type]||'📢'}</div>
+        <div class="ann-body">
+          <div class="ann-title">${b.title}</div>
+          <div class="ann-text">${b.content||''}</div>
+          <div class="ann-meta">
+            <span>📅 ${new Date(b.created_at).toLocaleDateString('ar-AE',{year:'numeric',month:'long',day:'numeric'})}</span>
+            <span class="badge" style="background:rgba(${b.priority==='urgent'?'239,68,68':b.priority==='high'?'245,158,11':'34,197,94'},.15);color:${b.priority==='urgent'?'#EF4444':b.priority==='high'?'#F59E0B':'#22C55E'}">${b.priority==='urgent'?'عاجل':b.priority==='high'?'مهم':'عادي'}</span>
+            ${b.is_sent?'<span class="badge b-green">✓ مُرسَل</span>':''}
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) { list.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">خطأ في التحميل</div>'; }
+}
+
+// نشر خبر حقيقي إلى Supabase
+async function publishNewsToDB() {
+  const title = document.getElementById('newsTitle')?.value?.trim();
+  const body = document.getElementById('newsBody')?.value?.trim();
+  const type = document.getElementById('newsType')?.value||'general';
+  const priority = document.getElementById('newsPriority')?.value||'normal';
+  const audience = document.getElementById('newsAudience')?.value||'الجميع';
+  if (!title||!body) { showToast('يرجى ملء العنوان والمحتوى','error'); return; }
+  const payload = {title, content:body, broadcast_type:type, priority, channels:[audience], is_sent:true, sent_at:new Date().toISOString(), created_by: (JSON.parse(sessionStorage.getItem('edoos_user')||'{}')).username||'admin'};
+  const res = await fetch(`${SUPA_URL_N}/rest/v1/broadcasts`, {
+    method:'POST', headers:{'apikey':SUPA_KEY_N,'Authorization':'Bearer '+SUPA_KEY_N,'Content-Type':'application/json','Prefer':'return=minimal'},
+    body:JSON.stringify(payload)
+  });
+  if (res.ok||res.status===201) {
+    document.getElementById('publishResult').innerHTML = `<div class="alert alert-success">✅ تم نشر الخبر بنجاح: <strong>${title}</strong></div>`;
+    showToast('✅ تم النشر وحُفظ في قاعدة البيانات','success');
+    loadLiveFeed();
+  } else {
+    const err = await res.json();
+    showToast('خطأ في النشر: '+(err.message||'فشل'),'error');
+  }
+}
+
+// استبدال دالة النشر القديمة
+window.publishNews = publishNewsToDB;
+
+// تحديث تلقائي عند فتح تبويب الإعلانات
+const origShowTab = window.showTab;
+window.showTab = function(id) {
+  origShowTab(id);
+  if (id==='tab-announcements') loadLiveAnnouncements();
+};
+
+// تحميل عند فتح الصفحة
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(loadLiveFeed, 300);
+});
+
 </script>
 <script src="../platform-tour.js"></script>
 <script src="/apps/platform-week.js"></script>
