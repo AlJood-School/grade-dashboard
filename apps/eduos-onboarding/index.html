@@ -227,14 +227,23 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
       <div class="field-group">
         <div class="field">
           <label><span class="req">*</span> اسم المدرسة</label>
+          <div style="position:relative;margin-bottom:6px">
+            <input type="text" id="school_search" placeholder="🔍 ابحث بالاسم أو الكود..." disabled
+              style="width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Tajawal',sans-serif;font-size:.88rem;outline:none"
+              oninput="onSchoolSearch(this.value)">
+            <div id="school_suggestions" style="display:none;position:absolute;z-index:99;top:100%;right:0;left:0;background:#1a2940;border:1px solid var(--border);border-radius:10px;max-height:200px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.4)"></div>
+          </div>
           <select id="sel_school" disabled onchange="onSchoolChange()">
-            <option value="">— اختر الإمارة والمنطقة أولاً —</option>
+            <option value="">— اختر الإمارة أولاً —</option>
           </select>
         </div>
         <div class="field">
           <label>الجهة التعليمية المرجعية</label>
           <div id="auth_badge" style="padding-top:8px">
             <span class="authority-badge auth-moe">🟢 وزارة التربية والتعليم — MOE</span>
+          </div>
+          <div id="school_code_badge" style="display:none;margin-top:8px;padding:6px 12px;background:rgba(108,61,214,.15);border:1px solid rgba(108,61,214,.4);border-radius:8px;font-size:.82rem;color:#A78BFA;font-family:monospace">
+            🏷️ كود المدرسة: <strong id="school_code_val">—</strong>
           </div>
         </div>
       </div>
@@ -1032,18 +1041,57 @@ function updateSchoolList() {
   const em = document.getElementById('sel_emirate').value;
   const type = document.querySelector('input[name="school_type"]:checked')?.value || 'حكومية';
   const schoolSel = document.getElementById('sel_school');
+  const searchInp = document.getElementById('school_search');
   schoolSel.innerHTML = '<option value="">— اختر اسم المدرسة —</option>';
-  schoolSel.disabled = !em;
-  let list = [];
-  if (type === 'حكومية') list = GOV_SCHOOLS[em] || [];
-  else list = PRIVATE_SCHOOLS[em] || [];
+
+  if (!em) { schoolSel.disabled = true; searchInp.disabled = true; return; }
+
+  // خريطة نوع المدرسة
+  const typeMap = { 'حكومية': 'حكومية', 'خاصة': 'خاصة', 'دولية': 'دولية', 'خاصة-دينية': 'خاصة-دينية' };
+
+  // تطابق الإمارة مع قاعدة البيانات
+  const emirateMap = {
+    'أبوظبي-المدينة': 'أبوظبي', 'أبوظبي-العين': 'أبوظبي',
+    'أبوظبي-الظفرة': 'أبوظبي',
+    'دبي': 'دبي', 'الشارقة': 'الشارقة', 'عجمان': 'عجمان',
+    'أم القيوين': 'أم القيوين', 'رأس الخيمة': 'رأس الخيمة', 'الفجيرة': 'الفجيرة'
+  };
+  const regionMap = {
+    'أبوظبي-المدينة': 'أبوظبي المدينة', 'أبوظبي-العين': 'العين', 'أبوظبي-الظفرة': 'الظفرة'
+  };
+
+  const emirate = emirateMap[em] || em;
+  const region  = regionMap[em] || null;
+
+  let list = SCHOOLS_DB.filter(s => {
+    const emMatch = s.emirate === emirate;
+    const regMatch = region ? s.region === region : true;
+    const typMatch = type === 'دولية'
+      ? s.type === 'دولية'
+      : type === 'خاصة-دينية'
+      ? s.type === 'خاصة-دينية'
+      : s.type === typeMap[type];
+    return emMatch && regMatch && typMatch;
+  });
+
   if (list.length === 0) {
-    schoolSel.innerHTML += '<option value="أخرى">مدرسة غير مدرجة — اتصل بالدعم</option>';
+    // fallback: كل الإمارة بدون تصفية منطقة
+    list = SCHOOLS_DB.filter(s => s.emirate === emirate && s.type === typeMap[type]);
+  }
+
+  if (list.length === 0) {
+    schoolSel.innerHTML += '<option value="أخرى|غير مدرجة">🔍 مدرستي غير مدرجة — أدخل الاسم يدوياً</option>';
   } else {
-    list.forEach(s => { const o=document.createElement('option');o.value=s;o.textContent=s;schoolSel.appendChild(o); });
-    schoolSel.innerHTML += '<option value="أخرى">🔍 مدرستي غير مدرجة في القائمة</option>';
+    list.forEach(s => {
+      const o = document.createElement('option');
+      o.value = s.code;
+      o.textContent = `${s.name_ar} [${s.code}]`;
+      schoolSel.appendChild(o);
+    });
+    schoolSel.innerHTML += '<option value="أخرى|غير مدرجة">🔍 مدرستي غير مدرجة في القائمة</option>';
   }
   schoolSel.disabled = false;
+  searchInp.disabled = false;
 }
 
 function resetSchoolSelect() {
@@ -1052,7 +1100,102 @@ function resetSchoolSelect() {
   s.disabled = true;
 }
 
-function onSchoolChange() {}
+function onSchoolChange() {
+  const sel = document.getElementById('sel_school');
+  const code = sel.value;
+  const codeBadge = document.getElementById('school_code_badge');
+  const codeVal   = document.getElementById('school_code_val');
+
+  if (!code || code.startsWith('أخرى')) {
+    codeBadge.style.display = 'none';
+    return;
+  }
+
+  const school = getSchoolByCode(code);
+  if (!school) { codeBadge.style.display = 'none'; return; }
+
+  // عرض الكود
+  codeBadge.style.display = '';
+  codeVal.textContent = school.code;
+
+  // تحديث شارة الجهة
+  const authMap = {
+    'ADEK': '<span class="authority-badge auth-adek">🔵 هيئة أبوظبي للتعليم والمعرفة — ADEK</span>',
+    'MOE':  '<span class="authority-badge auth-moe">🟢 وزارة التربية والتعليم — MOE</span>',
+    'KHDA': '<span class="authority-badge auth-khda">🟡 هيئة المعرفة والتنمية البشرية — KHDA</span>',
+    'SPEA': '<span class="authority-badge auth-spea">🟣 هيئة الشارقة للتعليم الخاص — SPEA</span>',
+  };
+  document.getElementById('auth_badge').innerHTML =
+    authMap[school.authority] || authMap['MOE'];
+
+  // نمط التعليم
+  updatePatternField();
+
+  // المنهج — تحديث اختيار المنهج تلقائياً
+  const currSel = document.getElementById('sel_curriculum');
+  if (currSel) {
+    const currMap = {
+      'MOE': 'MOE', 'IB': 'IB', 'British': 'British',
+      'American': 'American', 'French': 'French',
+      'Indian': 'Indian', 'Pakistani': 'Pakistani', 'MOE+IB': 'MOE+IB'
+    };
+    const val = currMap[school.curriculum];
+    if (val) { currSel.value = val; onCurriculumChange && onCurriculumChange(); }
+  }
+
+  // اللغة
+  const langSel = document.getElementById('sel_lang');
+  if (langSel) {
+    const langMap = { 'عربي': 'arabic', 'إنجليزي': 'english', 'ثنائي': 'bilingual', 'فرنسي': 'french' };
+    const lv = langMap[school.language];
+    if (lv) langSel.value = lv;
+  }
+
+  // إبراز الحقول المُملّأة تلقائياً بتلميح
+  showToast(`✅ تم التعرف على المدرسة: ${school.name_ar}`, 'success');
+}
+
+function onSchoolSearch(query) {
+  const sugg = document.getElementById('school_suggestions');
+  if (!query || query.length < 2) { sugg.style.display = 'none'; return; }
+  const results = searchSchools(query).slice(0, 8);
+  if (!results.length) { sugg.style.display = 'none'; return; }
+  sugg.innerHTML = results.map(s =>
+    `<div onclick="pickSchoolFromSearch('${s.code}')"
+      style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);font-size:.85rem;display:flex;justify-content:space-between;align-items:center;gap:8px"
+      onmouseover="this.style.background='rgba(108,61,214,.2)'" onmouseout="this.style.background=''">
+      <span>${s.name_ar}</span>
+      <span style="font-family:monospace;color:#A78BFA;font-size:.75rem;flex-shrink:0">${s.code}</span>
+    </div>`
+  ).join('');
+  sugg.style.display = 'block';
+}
+
+function pickSchoolFromSearch(code) {
+  const sel = document.getElementById('sel_school');
+  // إضافة الخيار إن لم يكن موجوداً
+  let opt = sel.querySelector(`option[value="${code}"]`);
+  if (!opt) {
+    const school = getSchoolByCode(code);
+    if (!school) return;
+    opt = document.createElement('option');
+    opt.value = code;
+    opt.textContent = `${school.name_ar} [${code}]`;
+    sel.insertBefore(opt, sel.firstChild.nextSibling);
+  }
+  sel.value = code;
+  document.getElementById('school_search').value = '';
+  document.getElementById('school_suggestions').style.display = 'none';
+  onSchoolChange();
+}
+
+// إغلاق اقتراحات البحث عند النقر خارجها
+document.addEventListener('click', e => {
+  if (!e.target.closest('#school_search') && !e.target.closest('#school_suggestions')) {
+    const s = document.getElementById('school_suggestions');
+    if (s) s.style.display = 'none';
+  }
+});
 
 // ============================================================
 // نمط التعليم — يظهر ديناميكياً حسب نوع المدرسة والجهة
@@ -1374,6 +1517,7 @@ function showToast(msg,type='success') {
   setTimeout(()=>t.className='',3500);
 }
 </script>
+<script src="/apps/platform-schools-db.js"></script>
 <script src="/apps/platform-week.js"></script>
 <script src="/apps/platform-motd.js"></script>
 </body>
