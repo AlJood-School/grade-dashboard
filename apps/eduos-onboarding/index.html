@@ -248,6 +248,51 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
         </div>
       </div>
 
+      <!-- ✨ الرقم الرسمي للمدرسة — ذكي: تلقائي إذا موثّق / يدوي إذا لا -->
+      <div id="official_id_section" style="display:none;margin-bottom:16px">
+        <div style="background:rgba(16,185,129,.07);border:1.5px solid rgba(16,185,129,.3);border-radius:14px;padding:16px 18px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <span style="font-size:1.1rem">🔢</span>
+            <span style="font-weight:800;font-size:.92rem;color:#6EE7B7">الرقم الرسمي للمدرسة</span>
+            <span style="font-size:.75rem;color:var(--muted);font-weight:400">(eSIS / MOE / ADEK / KHDA)</span>
+          </div>
+
+          <!-- الحالة ١: موثّق تلقائياً -->
+          <div id="official_id_verified" style="display:none">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <div style="background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.5);border-radius:10px;padding:8px 16px;font-family:monospace;font-size:1.2rem;font-weight:900;color:#10B981;letter-spacing:2px" id="official_id_display">—</div>
+              <div style="display:flex;align-items:center;gap:6px;color:#10B981;font-size:.85rem;font-weight:700">
+                <span>✅</span> موثّق رسمياً في قاعدة بيانات EduOS
+              </div>
+            </div>
+            <div style="margin-top:8px;font-size:.78rem;color:var(--muted)">
+              هذا الرقم مُستخرَج من السجلات الرسمية ولا يحتاج تأكيداً. يمكنك تعديله إذا تغيّر.
+              <button onclick="allowEditOfficialId()" style="background:none;border:none;color:#6EE7B7;cursor:pointer;font-family:'Tajawal',sans-serif;font-size:.78rem;text-decoration:underline;padding:0;margin-right:6px">تعديل</button>
+            </div>
+          </div>
+
+          <!-- الحالة ٢: غير موثّق — إدخال يدوي -->
+          <div id="official_id_manual" style="display:none">
+            <div style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+              هذه المدرسة ليست في قاعدة البيانات الموثّقة بعد — أدخل رقمها الرسمي:
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <input type="text" id="official_id_input" placeholder="مثال: 1705"
+                inputmode="numeric" maxlength="6"
+                style="width:140px;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Tajawal',sans-serif;font-size:1.1rem;font-weight:700;outline:none;text-align:center;letter-spacing:2px"
+                oninput="validateOfficialIdInput(this)"
+                onfocus="this.style.borderColor='#10B981'"
+                onblur="this.style.borderColor='var(--border)'">
+              <div id="official_id_input_status" style="font-size:.82rem;color:var(--muted)">أدخل 3–5 أرقام</div>
+            </div>
+            <div class="info-tip" style="margin-top:10px">
+              💡 الرقم الرسمي يُطبَع على الوثائق الرسمية للمدرسة وقرارات التأسيس.
+              إذا لم تجده الآن، يمكنك تركه فارغاً وتحديثه لاحقاً من إعدادات المدرسة.
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ✨ نمط التعليم — يظهر ديناميكياً حسب النوع والجهة -->
       <div class="field-group" id="edu_pattern_group" style="display:none">
         <div class="field">
@@ -781,6 +826,7 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
       <div class="card-title"><div class="icon">✅</div> ملخص الإعداد الكامل</div>
       <div class="summary-grid" id="summary_grid">
         <div class="summary-item"><div class="summary-label">المدرسة</div><div class="summary-value" id="sum_school">—</div></div>
+        <div class="summary-item"><div class="summary-label">الرقم الرسمي</div><div class="summary-value" id="sum_official_id" style="font-family:monospace;color:#6EE7B7">—</div></div>
         <div class="summary-item"><div class="summary-label">الإمارة / المنطقة</div><div class="summary-value" id="sum_loc">—</div></div>
         <div class="summary-item"><div class="summary-label">الجهة التعليمية</div><div class="summary-value" id="sum_auth">—</div></div>
         <div class="summary-item"><div class="summary-label">المنهج</div><div class="summary-value" id="sum_curr">—</div></div>
@@ -1108,15 +1154,42 @@ function onSchoolChange() {
 
   if (!code || code.startsWith('أخرى')) {
     codeBadge.style.display = 'none';
+    document.getElementById('official_id_section').style.display = 'none';
     return;
   }
 
   const school = getSchoolByCode(code);
-  if (!school) { codeBadge.style.display = 'none'; return; }
+  if (!school) {
+    codeBadge.style.display = 'none';
+    document.getElementById('official_id_section').style.display = 'none';
+    return;
+  }
 
-  // عرض الكود
+  // عرض الكود الداخلي
   codeBadge.style.display = '';
   codeVal.textContent = school.code;
+
+  // ─── الرقم الرسمي ───────────────────────────
+  const secOfficialId = document.getElementById('official_id_section');
+  const divVerified   = document.getElementById('official_id_verified');
+  const divManual     = document.getElementById('official_id_manual');
+  const idDisplay     = document.getElementById('official_id_display');
+
+  secOfficialId.style.display = '';
+  if (school.official_id) {
+    // موثّق في قاعدة البيانات
+    divVerified.style.display = '';
+    divManual.style.display   = 'none';
+    idDisplay.textContent     = school.official_id;
+  } else {
+    // غير موثّق — يدوي
+    divVerified.style.display = 'none';
+    divManual.style.display   = '';
+    document.getElementById('official_id_input').value = '';
+    document.getElementById('official_id_input_status').textContent = 'أدخل 3–5 أرقام';
+    document.getElementById('official_id_input_status').style.color = 'var(--muted)';
+  }
+  // ─────────────────────────────────────────────
 
   // تحديث شارة الجهة
   const authMap = {
@@ -1135,9 +1208,9 @@ function onSchoolChange() {
   const currSel = document.getElementById('sel_curriculum');
   if (currSel) {
     const currMap = {
-      'MOE': 'MOE', 'IB': 'IB', 'British': 'British',
-      'American': 'American', 'French': 'French',
-      'Indian': 'Indian', 'Pakistani': 'Pakistani', 'MOE+IB': 'MOE+IB'
+      'MOE': 'MOE', 'IB': 'IB-Full', 'British': 'British-GCSE',
+      'American': 'American-Core', 'French': 'French',
+      'Indian': 'CBSE', 'Pakistani': 'Pakistani', 'MOE+IB': 'IB-Full'
     };
     const val = currMap[school.curriculum];
     if (val) { currSel.value = val; onCurriculumChange && onCurriculumChange(); }
@@ -1146,13 +1219,73 @@ function onSchoolChange() {
   // اللغة
   const langSel = document.getElementById('sel_lang');
   if (langSel) {
-    const langMap = { 'عربي': 'arabic', 'إنجليزي': 'english', 'ثنائي': 'bilingual', 'فرنسي': 'french' };
+    const langMap = { 'عربي': 'ar', 'إنجليزي': 'en', 'ثنائي': 'ar-en', 'فرنسي': 'fr' };
     const lv = langMap[school.language];
     if (lv) langSel.value = lv;
   }
 
-  // إبراز الحقول المُملّأة تلقائياً بتلميح
-  showToast(`✅ تم التعرف على المدرسة: ${school.name_ar}`, 'success');
+  // toast
+  const idLabel = school.official_id ? ` — رقم: ${school.official_id}` : '';
+  showToast(`✅ تم التعرف على المدرسة: ${school.name_ar}${idLabel}`, 'success');
+}
+
+/** السماح بتعديل الرقم الرسمي الموثّق */
+function allowEditOfficialId() {
+  const divVerified = document.getElementById('official_id_verified');
+  const divManual   = document.getElementById('official_id_manual');
+  const sel         = document.getElementById('sel_school');
+  const school      = getSchoolByCode(sel.value);
+  divVerified.style.display = 'none';
+  divManual.style.display   = '';
+  const inp = document.getElementById('official_id_input');
+  if (school && school.official_id) inp.value = school.official_id;
+  inp.focus();
+}
+
+/** التحقق من صحة الإدخال اليدوي للرقم الرسمي */
+function validateOfficialIdInput(inp) {
+  const val    = inp.value.trim();
+  const status = document.getElementById('official_id_input_status');
+  if (!val) {
+    status.textContent = 'أدخل 3–5 أرقام';
+    status.style.color = 'var(--muted)';
+    inp.style.borderColor = 'var(--border)';
+    return;
+  }
+  if (/^\d{3,5}$/.test(val)) {
+    // تحقق إضافي: هل الرقم موجود في قاعدة البيانات لمدرسة أخرى؟
+    const existing = getSchoolByOfficialId(val);
+    const curCode  = document.getElementById('sel_school').value;
+    if (existing && existing.code !== curCode) {
+      status.textContent = `⚠️ هذا الرقم مسجّل لـ "${existing.name_ar}"`;
+      status.style.color = '#F59E0B';
+      inp.style.borderColor = '#F59E0B';
+    } else {
+      status.textContent = '✅ رقم صحيح';
+      status.style.color = '#10B981';
+      inp.style.borderColor = '#10B981';
+    }
+  } else {
+    status.textContent = '❌ أرقام فقط (3–5 خانات)';
+    status.style.color = '#EF4444';
+    inp.style.borderColor = '#EF4444';
+  }
+}
+
+/** قراءة الرقم الرسمي النهائي عند الحفظ */
+function getFinalOfficialId() {
+  const divVerified = document.getElementById('official_id_verified');
+  if (divVerified && divVerified.style.display !== 'none') {
+    const sel    = document.getElementById('sel_school');
+    const school = getSchoolByCode(sel ? sel.value : '');
+    return school && school.official_id ? school.official_id : null;
+  }
+  const inp = document.getElementById('official_id_input');
+  if (inp) {
+    const v = inp.value.trim();
+    return isValidOfficialId(v) ? parseInt(v, 10) : null;
+  }
+  return null;
 }
 
 function onSchoolSearch(query) {
@@ -1373,6 +1506,12 @@ function renderSummary() {
   const sped = document.getElementById('tog_sped').checked;
 
   document.getElementById('sum_school').textContent = school;
+  // الرقم الرسمي في الملخص
+  const finalOfficialId = getFinalOfficialId();
+  const sumOfficialIdEl = document.getElementById('sum_official_id');
+  if (sumOfficialIdEl) {
+    sumOfficialIdEl.textContent = finalOfficialId ? `${finalOfficialId} ✅` : '—  (يُضاف لاحقاً)';
+  }
   document.getElementById('sum_loc').textContent = `${em} — ${reg}`;
   document.getElementById('sum_auth').textContent = auth;
   document.getElementById('sum_curr').textContent = curr;
@@ -1456,7 +1595,8 @@ async function saveConfig() {
   roles.forEach(r => { staff[r] = parseInt(document.getElementById('rc_'+r)?.value)||0; });
 
   const config = {
-    school_name: document.getElementById('sel_school').value,
+    school_name:    document.getElementById('sel_school').value,
+    school_official_id: getFinalOfficialId(),
     emirate: em,
     region: document.getElementById('sel_region').value,
     school_type: type,

@@ -1,9 +1,9 @@
 /**
- * platform-schools-db.js — v1.0
+ * platform-schools-db.js — v2.0
  * قاعدة بيانات المدارس الإماراتية الشاملة
  * EduOS — NAFAS FOR ARTIFICIAL INTELLIGENCE © 2026
  *
- * نظام الترميز:
+ * نظام الترميز الداخلي:
  *   [إمارة]-[نوع]-[رقم ثلاثي]
  *   إمارة: AUH=أبوظبي مدينة | AIN=العين | DHF=الظفرة
  *          DXB=دبي | SHJ=الشارقة | AJM=عجمان
@@ -11,7 +11,9 @@
  *   نوع:   G=حكومية | P=خاصة | I=دولية | R=دينية خاصة
  *
  * الحقول:
- *   code         — الكود الفريد
+ *   code         — الكود الداخلي الفريد لـ EduOS
+ *   official_id  — الرقم الرسمي الصادر من الجهة التعليمية (eSIS/MOE/ADEK/KHDA)
+ *                  اختياري — يُملأ فقط للمدارس الموثّقة رسمياً
  *   name_ar      — الاسم بالعربية
  *   name_en      — الاسم بالإنجليزية
  *   emirate      — الإمارة
@@ -24,6 +26,9 @@
  *   curriculum   — MOE | IB | British | American | French | Indian | Pakistani | MOE+IB
  *   language     — عربي | إنجليزي | ثنائي
  *   area         — الحي / المنطقة الجغرافية
+ *
+ * ملاحظة: official_id موجود فقط للمدارس التي تم توثيق رقمها الرسمي.
+ *          المدارس بدون official_id ستطلب من المدير إدخاله عند الإعداد.
  */
 
 const SCHOOLS_DB = [
@@ -67,7 +72,8 @@ const SCHOOLS_DB = [
   { code:'AIN-G-012', name_ar:'مدرسة الزاهر للتعليم الأساسي',            name_en:'Al Zaher Basic Education School',                  emirate:'أبوظبي', region:'العين', type:'حكومية', authority:'ADEK', authority_url:'adek.gov.ae', stages:['ابتدائي','متوسط'], gender:'بنات', curriculum:'MOE', language:'عربي', area:'الزاهر' },
   { code:'AIN-G-013', name_ar:'مدرسة الملقطة للتعليم الأساسي',           name_en:'Al Malaqa Basic Education School',                 emirate:'أبوظبي', region:'العين', type:'حكومية', authority:'ADEK', authority_url:'adek.gov.ae', stages:['ابتدائي','متوسط'], gender:'مختلط',curriculum:'MOE', language:'عربي', area:'الملقطة' },
   { code:'AIN-G-014', name_ar:'مدرسة المطارة للتعليم الأساسي',           name_en:'Al Mutarad Basic Education School',                emirate:'أبوظبي', region:'العين', type:'حكومية', authority:'ADEK', authority_url:'adek.gov.ae', stages:['ابتدائي','متوسط'], gender:'مختلط',curriculum:'MOE', language:'عربي', area:'المطارة' },
-  { code:'AIN-G-015', name_ar:'ثانوية الجود',                             name_en:'Al Jood Secondary School',                        emirate:'أبوظبي', region:'العين', type:'حكومية', authority:'ADEK', authority_url:'adek.gov.ae', stages:['ثانوي'],              gender:'بنات', curriculum:'MOE', language:'عربي', area:'هيلي' },
+  { code:'AIN-G-015', name_ar:'مدرسة الجود للتعليم الأساسي',              name_en:'Al Jood Basic Education School',                   official_id:1705, emirate:'أبوظبي', region:'العين', type:'حكومية', authority:'ADEK', authority_url:'adek.gov.ae', stages:['KG','ابتدائي','متوسط'], gender:'بنات', curriculum:'MOE', language:'عربي', area:'هيلي' },
+  { code:'AIN-G-016', name_ar:'ثانوية الجود للبنات',                      name_en:'Al Jood Secondary School for Girls',               emirate:'أبوظبي', region:'العين', type:'حكومية', authority:'ADEK', authority_url:'adek.gov.ae', stages:['ثانوي'],              gender:'بنات', curriculum:'MOE', language:'عربي', area:'هيلي' },
 
   /* ═══════════════════════════════════════════════
      الظفرة — حكومية (ADEK)
@@ -245,20 +251,43 @@ function getSchoolsByEmirateAndType(emirate, type) {
   );
 }
 
-/** بحث بالنص أو الكود */
+/** بحث بالنص أو الكود الداخلي أو الرقم الرسمي */
 function searchSchools(query) {
   const q = query.trim().toLowerCase();
+  const numQ = parseInt(query.trim(), 10);
   return SCHOOLS_DB.filter(s =>
     s.code.toLowerCase().includes(q) ||
     s.name_ar.includes(query) ||
     s.name_en.toLowerCase().includes(q) ||
-    s.area.includes(query)
+    s.area.includes(query) ||
+    (!isNaN(numQ) && s.official_id === numQ)
   );
 }
 
-/** جلب مدرسة بكودها */
+/** جلب مدرسة بكودها الداخلي */
 function getSchoolByCode(code) {
   return SCHOOLS_DB.find(s => s.code === code) || null;
+}
+
+/**
+ * جلب مدرسة برقمها الرسمي (eSIS / MOE / ADEK / KHDA)
+ * @param {number|string} id — الرقم الرسمي
+ * @returns {object|null}
+ */
+function getSchoolByOfficialId(id) {
+  const numId = parseInt(id, 10);
+  if (isNaN(numId)) return null;
+  return SCHOOLS_DB.find(s => s.official_id === numId) || null;
+}
+
+/**
+ * التحقق من صحة الرقم الرسمي (3–5 أرقام فقط)
+ * @param {string|number} id
+ * @returns {boolean}
+ */
+function isValidOfficialId(id) {
+  const s = String(id).trim();
+  return /^\d{3,5}$/.test(s);
 }
 
 /** إحصائيات */
