@@ -784,6 +784,42 @@ body {
       </div>
     </div>
 
+    <!-- ══ ويدجت التوطين ══ -->
+    <div class="card" id="emr-widget" style="margin-top:16px;">
+      <div class="card-header">
+        <div class="card-title">🇦🇪 نسبة التوطين في الكادر</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span class="pill pill-blue" id="emr-school-type">حكومي • ADEK</span>
+          <a href="../eduos-emiratization/" class="btn btn-ghost" style="font-size:12px;padding:5px 12px;">عرض التفاصيل ←</a>
+        </div>
+      </div>
+      <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;">
+        <!-- المؤشر الرئيسي -->
+        <div style="background:var(--card2);border-radius:12px;padding:16px;text-align:center;border:2px solid var(--border);transition:border-color 0.3s;" id="emr-main-card">
+          <div style="font-size:36px;font-weight:900;" id="emr-pct">–%</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px;">نسبة الإماراتيين</div>
+          <div style="font-size:11px;margin-top:6px;" id="emr-target-lbl">الهدف: –%</div>
+        </div>
+        <!-- عدد الإماراتيين -->
+        <div style="background:var(--card2);border-radius:12px;padding:16px;text-align:center;">
+          <div style="font-size:28px;font-weight:900;color:var(--emerald);" id="emr-count">–</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px;">موظف إماراتي</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px;" id="emr-nafis-count">–  مسجّل في Nafis</div>
+        </div>
+        <!-- إجمالي الكادر -->
+        <div style="background:var(--card2);border-radius:12px;padding:16px;text-align:center;">
+          <div style="font-size:28px;font-weight:900;color:var(--blue);" id="emr-total">–</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px;">إجمالي الكادر</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px;" id="emr-gap">–</div>
+        </div>
+        <!-- الإجراء المطلوب -->
+        <div id="emr-action-card" style="background:var(--card2);border-radius:12px;padding:16px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;">
+          <div style="font-size:13px;font-weight:700;text-align:center;" id="emr-action-msg">جارٍ التحميل...</div>
+          <button class="btn btn-ghost" style="font-size:12px;" id="emr-action-btn" onclick="window.location.href='../eduos-emiratization/'">عرض لوحة التوطين</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- ══════════ TAB: TOOLS ══════════ -->
@@ -2452,5 +2488,91 @@ document.getElementById('toolModal').addEventListener('click', function(e) {
 <script src="../../staff-card.js"></script>
 <script src="../platform-autologout.js"></script>
 <script src="../platform-tour.js"></script>
+
+<!-- ══ ويدجت التوطين ══ -->
+<script>
+(async function initEmirWidget(){
+  // ── مفاتيح Supabase (موروثة من الصفحة) ──
+  const _SBU = typeof SUPA_URL!=='undefined' ? SUPA_URL : 'https://zuyizaiugpmhmeycqton.supabase.co';
+  const _KEY = [_pa1,_pa2,_pa3].join('.');
+  const _H   = {'apikey':_KEY,'Authorization':'Bearer '+_KEY};
+  const get  = async (table,q)=>{
+    const r=await fetch(`${_SBU}/rest/v1/${table}?${q}`,{headers:_H});
+    return r.ok ? r.json() : [];
+  };
+
+  try{
+    // 1. إعدادات المدرسة
+    const settings = await get('app_settings','key=in.(emiratization_target_pct,school_type)&select=key,value');
+    let target=30, schoolType='government';
+    (settings||[]).forEach(s=>{
+      if(s.key==='emiratization_target_pct') target=parseInt(s.value)||30;
+      if(s.key==='school_type')              schoolType=s.value||'government';
+    });
+
+    // 2. بيانات الكادر
+    const staff = await get('staff_profiles','select=is_emirati,nafis_registered');
+    if(!Array.isArray(staff)||staff.length===0) throw new Error('no data');
+
+    const total   = staff.length;
+    const emirati = staff.filter(s=>s.is_emirati).length;
+    const nafis   = staff.filter(s=>s.nafis_registered).length;
+    const pct     = total>0 ? Math.round(emirati/total*100) : 0;
+    const gap     = Math.max(0, Math.ceil(total*target/100) - emirati);
+
+    // 3. تحديث الواجهة
+    const E = id=>document.getElementById(id);
+    E('emr-pct').textContent        = pct+'%';
+    E('emr-count').textContent      = emirati;
+    E('emr-nafis-count').textContent= nafis+' مسجّل في Nafis';
+    E('emr-total').textContent      = total;
+    E('emr-target-lbl').textContent = 'الهدف: '+target+'%';
+    E('emr-gap').textContent        = gap>0 ? 'يحتاج '+gap+' توظيف إضافي' : '✅ تم تحقيق الهدف';
+
+    // 4. لون المؤشر الرئيسي
+    const mc = E('emr-main-card');
+    if(pct >= target){
+      E('emr-pct').style.color='var(--emerald)';
+      mc.style.borderColor='var(--emerald)';
+    } else if(pct >= target*0.7){
+      E('emr-pct').style.color='var(--warning)';
+      mc.style.borderColor='var(--warning)';
+    } else {
+      E('emr-pct').style.color='var(--danger)';
+      mc.style.borderColor='var(--danger)';
+    }
+
+    // 5. رسالة الإجراء — حسب نوع المدرسة
+    if(pct >= target){
+      E('emr-action-msg').innerHTML = '<span style="color:var(--emerald)">✅ نسبة التوطين محققة</span>';
+      E('emr-action-btn').textContent = 'عرض لوحة التوطين';
+    } else if(schoolType==='government'){
+      // مدرسة حكومية — الحل عبر طلب لـ ADEK
+      E('emr-action-msg').innerHTML =
+        '<span style="color:var(--warning)">⚠️ النسبة أقل من الهدف</span><br>'+
+        '<span style="font-size:11px;color:var(--text2);">التعيينات تتم عبر طلب لـ ADEK</span>';
+      E('emr-action-btn').textContent = 'إنشاء طلب لـ ADEK';
+      E('emr-action-btn').onclick = ()=> window.location.href='../eduos-emiratization/#requests';
+      E('emr-school-type').textContent = 'حكومي • ADEK';
+    } else {
+      // مدرسة خاصة — deadline + تحذير
+      const daysLeft = Math.ceil((new Date('2026-06-30') - new Date()) / 86400000);
+      const dLabel   = daysLeft>0 ? daysLeft+' يوم متبقٍّ' : 'انتهى الموعد';
+      E('emr-action-msg').innerHTML =
+        '<span style="color:var(--danger)">⚠️ النسبة أقل من الهدف</span><br>'+
+        '<span style="font-size:11px;color:var(--warning);">⏳ '+dLabel+' — 30 يونيو 2026</span>';
+      E('emr-action-btn').textContent = 'معالجة قبل الموعد';
+      E('emr-action-btn').onclick = ()=> window.location.href='../eduos-emiratization/';
+      E('emr-school-type').textContent = 'خاص • Nafis';
+      E('emr-school-type').style.background='rgba(252,129,129,0.15)';
+      E('emr-school-type').style.color='var(--danger)';
+    }
+
+  }catch(err){
+    const E=id=>document.getElementById(id);
+    E('emr-action-msg').innerHTML='<span style="color:var(--text3);font-size:12px;">تعذّر تحميل بيانات التوطين</span>';
+  }
+})();
+</script>
 </body>
 </html>
