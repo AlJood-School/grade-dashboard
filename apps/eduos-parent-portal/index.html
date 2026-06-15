@@ -507,12 +507,12 @@
     <h2>بوابة ولي الأمر</h2>
     <p>مدرسة الجود — منظومة EduOS</p>
     <div class="form-group">
-      <label>رقم هوية الطالب / الرقم المدني</label>
-      <input type="text" id="login-id" placeholder="أدخل رقم الهوية" dir="ltr">
+      <label>رقم هوية ولي الأمر (الرقم المدني)</label>
+      <input type="text" id="login-id" placeholder="مثال: 784197xxxxxxxxx" dir="ltr" inputmode="numeric">
     </div>
     <div class="form-group">
-      <label>كلمة المرور</label>
-      <input type="password" id="login-pass" placeholder="كلمة المرور" dir="ltr">
+      <label>كلمة المرور (رقم هاتفك المسجّل في المدرسة)</label>
+      <input type="password" id="login-pass" placeholder="مثال: 05xxxxxxxx" dir="ltr" inputmode="numeric">
     </div>
     <button class="btn-primary" onclick="doLogin()">دخول</button>
     <div class="login-err" id="login-err">بيانات الدخول غير صحيحة</div>
@@ -917,40 +917,72 @@
 const SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
 const _ppk1='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',_ppk2='eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0',_ppk3='FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
 const SB_KEY=[_ppk1,_ppk2,_ppk3].join('.');
+const PARENT_LOGIN_FN = SB_URL + '/functions/v1/parent-login';
 
-let currentStudent = null;
+let currentParent = null;   // بيانات ولي الأمر
+let allChildren   = [];     // كل الأبناء + درجاتهم
+let currentChild  = null;   // الطفل المعروض حالياً
+let currentChildIdx = 0;
 let chatHistory = [];
+// حفاظاً على التوافق مع الكود القديم
+let currentStudent = null;
 
 // ── Login ──
 async function doLogin() {
-  const id = document.getElementById('login-id').value.trim();
+  const id   = document.getElementById('login-id').value.trim();
   const pass = document.getElementById('login-pass').value.trim();
   const errEl = document.getElementById('login-err');
+  const btn   = document.querySelector('.login-card .btn-primary');
   errEl.style.display = 'none';
 
-  if (!id || !pass) { errEl.textContent = 'الرجاء إدخال البيانات'; errEl.style.display='block'; return; }
+  if (!id || !pass) {
+    errEl.textContent = 'الرجاء إدخال رقم الهوية وكلمة المرور';
+    errEl.style.display = 'block';
+    return;
+  }
 
-  // البحث عن الطالب بالرقم المدني
-  const res = await fetch(`${SB_URL}/rest/v1/inclusion_plans?manhel_id=eq.${id}&select=*&limit=1`, {
-    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
-  });
-  const data = await res.json();
+  btn.textContent = '⏳ جارٍ التحقق...';
+  btn.disabled = true;
 
-  if (data && data.length > 0) {
-    // تحقق بسيط بكلمة مرور = آخر 4 أرقام من الرقم + "JD"
-    const expectedPass = id.slice(-4) + 'JD';
-    if (pass === expectedPass || pass === 'parent2026') {
-      currentStudent = data[0];
-      sessionStorage.setItem('parent_session', JSON.stringify({ id, name: currentStudent.student_name, ts: Date.now() }));
-      initApp();
-    } else {
-      errEl.textContent = 'كلمة المرور غير صحيحة';
+  try {
+    const res = await fetch(PARENT_LOGIN_FN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
+      body: JSON.stringify({ national_id: id, password: pass })
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      errEl.textContent = data.error || 'فشل تسجيل الدخول';
       errEl.style.display = 'block';
+      btn.textContent = 'دخول';
+      btn.disabled = false;
+      return;
     }
-  } else {
-    errEl.textContent = 'الرقم غير موجود في النظام';
+
+    // حفظ الجلسة في sessionStorage
+    sessionStorage.setItem('edoos_parent', JSON.stringify({
+      token:      data.session_token,
+      expires_at: data.expires_at,
+      parent:     data.parent,
+      children:   data.children,
+      ts:         Date.now(),
+    }));
+
+    currentParent   = data.parent;
+    allChildren     = data.children || [];
+    currentChildIdx = 0;
+    currentChild    = allChildren[0] || null;
+    currentStudent  = currentChild; // توافق
+
+    initApp();
+  } catch (e) {
+    errEl.textContent = 'خطأ في الاتصال — تحقق من الإنترنت';
     errEl.style.display = 'block';
   }
+
+  btn.textContent = 'دخول';
+  btn.disabled = false;
 }
 
 function initApp() {
@@ -958,19 +990,18 @@ function initApp() {
   document.getElementById('app').style.display = 'block';
   document.getElementById('news-ticker').style.display = 'flex';
 
-  // Header
-  document.getElementById('s-name').textContent = currentStudent.student_name;
-  document.getElementById('s-grade').textContent = currentStudent.class_name + ' — ' + (currentStudent.section || '');
-  document.getElementById('h-parent-name').textContent = 'مرحباً بولي أمر: ' + currentStudent.student_name;
-  const firstLetter = currentStudent.student_name.charAt(0);
-  document.getElementById('s-avatar').textContent = firstLetter;
+  // تحديث Header بالطفل الحالي
+  refreshChildHeader();
 
-  // Week/Term from platform-week.js
+  // Week/Term من platform-week.js
   if (typeof platformWeek !== 'undefined') {
     document.getElementById('h-week').textContent = 'أسبوع ' + platformWeek.week;
     document.getElementById('h-term').textContent = 'فصل ' + platformWeek.term;
     document.getElementById('h-year').textContent = platformWeek.year;
   }
+
+  // إذا أكثر من طفل → أضف أزرار تبديل
+  if (allChildren.length > 1) buildChildSwitcher();
 
   loadDashboard();
   loadAttendance();
@@ -983,70 +1014,85 @@ function initApp() {
   setupTicker();
 }
 
-// ── CHECK STUDENT_SESSION FROM NEW LOGIN PAGE ──
-async function checkStudentSessionFromLogin() {
-  const stuSess = sessionStorage.getItem('student_session');
-  if (stuSess) {
-    try {
-      const s = JSON.parse(stuSess);
-      if (s.expires && Date.now() < s.expires && s.student_id) {
-        // جلب بيانات من inclusion_plans أو students
-        const r1 = await fetch(`${SB_URL}/rest/v1/inclusion_plans?student_id=eq.${encodeURIComponent(s.student_id)}&limit=1`, {
-          headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
-        });
-        const data1 = await r1.json();
-        if (data1 && data1.length > 0) {
-          currentStudent = data1[0];
-          sessionStorage.setItem('parent_session', JSON.stringify({ id: s.student_id, name: s.student_name, ts: Date.now() }));
-          initApp(); return true;
-        }
-        // جرب من students مباشرة
-        const r2 = await fetch(`${SB_URL}/rest/v1/students?id=eq.${encodeURIComponent(s.student_id)}&select=*&limit=1`, {
-          headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
-        });
-        const data2 = await r2.json();
-        if (data2 && data2.length > 0) {
-          const st = data2[0];
-          currentStudent = { student_name: st.name, class_name: st.grade||'', section: st.class_name||'', manhel_id: st.id, student_id: st.id, plan_type: 'general' };
-          sessionStorage.setItem('parent_session', JSON.stringify({ id: s.student_id, name: s.student_name, ts: Date.now() }));
-          initApp(); return true;
-        }
-      }
-    } catch(e) { console.warn('checkStudentSessionFromLogin error:', e); }
-  }
-  return false;
+function refreshChildHeader() {
+  if (!currentChild) return;
+  const childName  = currentChild.name || currentChild.student_name || '—';
+  const childGrade = (currentChild.grade || currentChild.class_name || '') +
+                     (currentChild.section ? ' — ' + currentChild.section : '');
+  const parentName = currentParent?.name_ar || 'ولي الأمر';
+
+  const nameEl  = document.getElementById('s-name');
+  const gradeEl = document.getElementById('s-grade');
+  const hpnEl   = document.getElementById('h-parent-name');
+  const avEl    = document.getElementById('s-avatar');
+
+  if (nameEl)  nameEl.textContent  = childName;
+  if (gradeEl) gradeEl.textContent = childGrade;
+  if (hpnEl)   hpnEl.textContent   = 'مرحباً بـ ' + parentName;
+  if (avEl)    avEl.textContent    = childName.charAt(0);
 }
 
-// Check existing session
-window.addEventListener('load', async () => {
-  // أولاً: تحقق من جلسة student-login الجديدة
-  const fromNew = await checkStudentSessionFromLogin();
-  if (fromNew) return;
+function buildChildSwitcher() {
+  // أضف شريط تبديل أبناء أسفل الـ header مباشرة
+  let switcher = document.getElementById('child-switcher');
+  if (!switcher) {
+    switcher = document.createElement('div');
+    switcher.id = 'child-switcher';
+    switcher.style.cssText = 'display:flex;gap:8px;padding:8px 24px;background:rgba(255,255,255,0.04);border-bottom:1px solid rgba(255,255,255,0.07);flex-wrap:wrap;';
+    document.querySelector('.header')?.insertAdjacentElement('afterend', switcher);
+  }
+  switcher.innerHTML = allChildren.map((c, i) => `
+    <button onclick="switchChild(${i})"
+      style="padding:5px 14px;border-radius:20px;border:1px solid rgba(255,255,255,0.15);
+             background:${i===currentChildIdx?'rgba(56,189,248,0.2)':'transparent'};
+             color:${i===currentChildIdx?'#38BDF8':'#94A3B8'};
+             font-family:Tajawal,sans-serif;font-size:0.8rem;cursor:pointer;transition:all 0.2s;">
+      ${c.name || 'طالب'} — ${c.grade || ''}
+    </button>`).join('');
+}
 
-  // ثانياً: تحقق من الجلسة القديمة
-  const sess = sessionStorage.getItem('parent_session');
-  if (sess) {
-    try {
-      const s = JSON.parse(sess);
-      if (Date.now() - s.ts < 15 * 60 * 1000) {
-        // reload student data
-        fetch(`${SB_URL}/rest/v1/inclusion_plans?manhel_id=eq.${s.id}&select=*&limit=1`, {
-          headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
-        }).then(r => r.json()).then(data => {
-          if (data && data.length > 0) {
-            currentStudent = data[0];
-            initApp();
-          }
-        });
-        return;
-      }
-    } catch(e) {}
+function switchChild(idx) {
+  currentChildIdx = idx;
+  currentChild    = allChildren[idx];
+  currentStudent  = currentChild;
+  refreshChildHeader();
+  buildChildSwitcher();
+  loadDashboard();
+}
+
+// ── استعادة الجلسة المحفوظة ──
+window.addEventListener('load', () => {
+  try {
+    const raw = sessionStorage.getItem('edoos_parent');
+    if (!raw) return;
+    const sess = JSON.parse(raw);
+
+    // تحقق من انتهاء الصلاحية
+    if (new Date(sess.expires_at) < new Date()) {
+      sessionStorage.removeItem('edoos_parent');
+      return;
+    }
+
+    // استعادة البيانات
+    currentParent   = sess.parent   || null;
+    allChildren     = sess.children || [];
+    currentChildIdx = 0;
+    currentChild    = allChildren[0] || null;
+    currentStudent  = currentChild;
+
+    if (currentChild) initApp();
+  } catch(e) {
+    console.warn('session restore error:', e);
   }
 });
 
 function logout() {
-  sessionStorage.removeItem('parent_session');
+  sessionStorage.removeItem('edoos_parent');
+  sessionStorage.removeItem('parent_session'); // توافق قديم
+  currentParent = null; allChildren = []; currentChild = null; currentStudent = null;
   document.getElementById('app').style.display = 'none';
+  const sw = document.getElementById('child-switcher');
+  if (sw) sw.remove();
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('news-ticker').style.display = 'none';
 }
@@ -1069,121 +1115,75 @@ if (window.location.hash) {
 
 // ── Dashboard ──
 async function loadDashboard() {
-  if (!currentStudent) return;
+  if (!currentChild) return;
 
-  // Load grades from student_grades
-  const grRes = await fetch(`${SB_URL}/rest/v1/student_grades?manhel_id=eq.${currentStudent.manhel_id}&select=*&order=week_number.desc&limit=20`, {
-    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
-  });
-  const grades = await grRes.json().catch(() => []);
+  // ── الدرجات: من البيانات المُحمَّلة عند الدخول (dash_grades)
+  const grades = currentChild.grades || [];
+  const tbody  = document.getElementById('recent-grades-body');
+  const avgEl  = document.getElementById('avg-grade');
 
-  if (grades && grades.length > 0) {
-    let total = 0;
-    grades.forEach(g => { if(g.total_score) total += parseFloat(g.total_score); });
-    const avg = (total / grades.length).toFixed(1);
-    document.getElementById('avg-grade').textContent = avg + '%';
+  if (grades.length > 0) {
+    // احسب المتوسط من total_school
+    const scores = grades.map(g => parseFloat(g.total_school || g.end_of_term || g.sb1 || 0)).filter(s => s > 0);
+    const avg = scores.length ? (scores.reduce((a,b)=>a+b,0) / scores.length).toFixed(1) : '—';
+    if (avgEl) avgEl.textContent = avg + (scores.length ? '%' : '');
 
-    // Recent grades table
-    const tbody = document.getElementById('recent-grades-body');
-    tbody.innerHTML = grades.slice(0,6).map(g => {
-      const score = parseFloat(g.total_score || 0);
-      const cls = score >= 90 ? 'grade-a' : score >= 75 ? 'grade-b' : score >= 60 ? 'grade-c' : 'grade-d';
+    if (tbody) tbody.innerHTML = grades.slice(0, 6).map(g => {
+      const score = parseFloat(g.total_school || g.end_of_term || g.sb1 || 0);
+      const cls   = score >= 90 ? 'grade-a' : score >= 75 ? 'grade-b' : score >= 60 ? 'grade-c' : 'grade-d';
       const label = score >= 90 ? 'ممتاز' : score >= 75 ? 'جيد جداً' : score >= 60 ? 'جيد' : 'مقبول';
       return `<tr>
-        <td>${g.subject_name || g.subject || '—'}</td>
-        <td>${g.total_score || '—'}</td>
+        <td>${g.student_name || '—'}</td>
+        <td>${g.grade || ''}${g.section ? ' / '+g.section : ''}</td>
+        <td>${score || '—'}</td>
         <td><span class="grade-badge ${cls}">${label}</span></td>
-        <td>أسبوع ${g.week_number || '—'}</td>
       </tr>`;
     }).join('');
   } else {
-    document.getElementById('avg-grade').textContent = '—';
-    document.getElementById('recent-grades-body').innerHTML =
+    if (avgEl) avgEl.textContent = '—';
+    if (tbody) tbody.innerHTML =
       '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">لا توجد درجات مسجلة بعد</td></tr>';
   }
 
-  // Attendance stats
-  const attRes = await fetch(`${SB_URL}/rest/v1/student_attendance?manhel_id=eq.${currentStudent.manhel_id}&select=status`, {
-    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
-  });
-  const attData = await attRes.json().catch(() => []);
+  // ── إحصائيات الحضور: عرض توضيحي (جدول الحضور الحقيقي غير متصل بطالب بعد)
+  const attPctEl = document.getElementById('att-pct');
+  if (attPctEl) attPctEl.textContent = '—';
 
-  let present = 0, absent = 0, late = 0;
-  if (attData && attData.length > 0) {
-    attData.forEach(a => {
-      if (a.status === 'present') present++;
-      else if (a.status === 'absent') absent++;
-      else if (a.status === 'late') late++;
-    });
-    const total = attData.length;
-    const pct = Math.round(present / total * 100);
-    document.getElementById('att-pct').textContent = pct + '%';
-    document.getElementById('bar-present').style.width = (present/total*100)+'%';
-    document.getElementById('bar-absent').style.width = (absent/total*100)+'%';
-    document.getElementById('bar-late').style.width = (late/total*100)+'%';
-    document.getElementById('pct-present').textContent = present;
-    document.getElementById('pct-absent').textContent = absent;
-    document.getElementById('pct-late').textContent = late;
-  } else {
-    document.getElementById('att-pct').textContent = '—';
-  }
-
-  // Upcoming events
-  const evRes = await fetch(`${SB_URL}/rest/v1/school_events?event_date=gte.${new Date().toISOString().split('T')[0]}&select=*&order=event_date.asc&limit=4`, {
-    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
-  });
-  const events = await evRes.json().catch(() => []);
-  const evContainer = document.getElementById('upcoming-events');
-  if (events && events.length > 0) {
-    evContainer.innerHTML = events.map(e => `
-      <div style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:12px;padding:12px 16px;min-width:200px;">
-        <div style="font-size:0.72rem;color:var(--accent);">${new Date(e.event_date).toLocaleDateString('ar-AE')}</div>
-        <div style="font-weight:600;margin-top:4px;">${e.event_name || e.title || '—'}</div>
-        <div style="font-size:0.75rem;color:var(--muted);margin-top:3px;">${e.description || ''}</div>
-      </div>`).join('');
-  } else {
-    evContainer.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:10px;">لا توجد مواعيد قادمة مسجلة</div>';
-  }
+  // ── الفعاليات القادمة (عامة للمدرسة — بيانات حقيقية)
+  try {
+    const evRes = await fetch(
+      `${SB_URL}/rest/v1/school_events?event_date=gte.${new Date().toISOString().split('T')[0]}&select=*&order=event_date.asc&limit=4`,
+      { headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` } }
+    );
+    const events = await evRes.json().catch(() => []);
+    const evContainer = document.getElementById('upcoming-events');
+    if (evContainer) {
+      if (Array.isArray(events) && events.length > 0) {
+        evContainer.innerHTML = events.map(e => `
+          <div style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:12px;padding:12px 16px;min-width:200px;">
+            <div style="font-size:0.72rem;color:var(--accent);">${new Date(e.event_date).toLocaleDateString('ar-AE')}</div>
+            <div style="font-weight:600;margin-top:4px;">${e.event_name || e.title || '—'}</div>
+            <div style="font-size:0.75rem;color:var(--muted);margin-top:3px;">${e.description || ''}</div>
+          </div>`).join('');
+      } else {
+        evContainer.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:10px;">لا توجد مواعيد قادمة مسجلة</div>';
+      }
+    }
+  } catch(e) { console.warn('events load error:', e); }
 }
 
 // ── Attendance ──
 async function loadAttendance() {
-  if (!currentStudent) return;
-  const res = await fetch(`${SB_URL}/rest/v1/student_attendance?manhel_id=eq.${currentStudent.manhel_id}&select=*&order=date.desc`, {
-    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
-  });
-  const data = await res.json().catch(() => []);
+  // ملاحظة: حضور الطلاب سيُربط لاحقاً بجدول خاص
+  // حالياً: عرض رسالة توضيحية
   const tbody = document.getElementById('att-detail-body');
-  let present=0, absent=0, late=0;
-
-  if (data && data.length > 0) {
-    data.forEach(a => {
-      if (a.status === 'present') present++;
-      else if (a.status === 'absent') absent++;
-      else if (a.status === 'late') late++;
-    });
-    document.getElementById('att-present-count').textContent = present;
-    document.getElementById('att-absent-count').textContent = absent;
-    document.getElementById('att-late-count').textContent = late;
-
-    const days = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
-    tbody.innerHTML = data.map(a => {
-      const d = new Date(a.date);
-      const dayName = days[d.getDay()];
-      const color = a.status==='present'?'var(--green)':a.status==='absent'?'var(--red)':'var(--yellow)';
-      const label = a.status==='present'?'✅ حاضر':a.status==='absent'?'❌ غائب':'⏰ متأخر';
-      return `<tr>
-        <td>${d.toLocaleDateString('ar-AE')}</td>
-        <td>${dayName}</td>
-        <td><span style="color:${color};font-weight:600;">${label}</span></td>
-        <td style="color:var(--muted);font-size:0.8rem;">${a.note || '—'}</td>
-      </tr>`;
-    }).join('');
-  } else {
-    document.getElementById('att-present-count').textContent = '—';
-    document.getElementById('att-absent-count').textContent = '—';
-    document.getElementById('att-late-count').textContent = '—';
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">لا توجد سجلات حضور</td></tr>';
+  const countEls = ['att-present-count','att-absent-count','att-late-count'];
+  countEls.forEach(id => { const el=document.getElementById(id); if(el) el.textContent='—'; });
+  if (tbody) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:32px;">
+      <div style="font-size:1.5rem;margin-bottom:8px;">🔄</div>
+      <div>سجل الحضور اليومي للطلاب سيكون متاحاً قريباً</div>
+    </td></tr>`;
   }
 }
 
