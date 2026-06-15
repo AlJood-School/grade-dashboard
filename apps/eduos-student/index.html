@@ -456,12 +456,12 @@ select.form-control option{background:var(--bg3);}
         <table class="tbl">
           <thead>
             <tr>
-              <th>المادة</th>
-              <th>الأسبوع</th>
-              <th>الدرجة</th>
-              <th>من</th>
+              <th>اسم الطالبة</th>
+              <th>الصف</th>
+              <th>SB1</th>
+              <th>المجموع</th>
               <th>التقدير</th>
-              <th>الترتيب</th>
+              <th>نهاية الفصل</th>
             </tr>
           </thead>
           <tbody id="gradesBody">
@@ -1252,26 +1252,26 @@ async function loadGradesByName(studentName) {
   document.getElementById('gradesBody').innerHTML = '<tr><td colspan="6"><div class="spinner"></div></td></tr>';
   try {
     const enc = encodeURIComponent(studentName);
-    const r = await sb(`dash_grades?student_name=ilike.*${enc}*&order=term.asc&limit=50`);
+    // dash_grades أعمدة: grade, section, student_no, student_name, sb1, effort, total_school, end_of_term
+    const r = await sb(`dash_grades?student_name=ilike.*${enc}*&order=student_name.asc&limit=50`);
     if (Array.isArray(r) && r.length > 0) {
       const gradeColor = (v) => v>=90?'green':v>=80?'blue':v>=70?'amber':'red';
       const gradeLabel = (v) => v>=95?'A+':v>=90?'A':v>=85?'A-':v>=80?'B+':v>=75?'B':v>=70?'C':'D';
       document.getElementById('gradesBody').innerHTML = r.map(d => {
-        const f = parseFloat(d.formative)||0;
-        const s = parseFloat(d.summative)||0;
-        const t = parseFloat(d.term1_total)||0;
-        const display = t || s || f;
-        const gl = gradeLabel(display);
+        const sb1Val = parseFloat(d.sb1)||0;
+        const total  = parseFloat(d.total_school)||parseFloat(d.end_of_term)||sb1Val;
+        const eot    = parseFloat(d.end_of_term)||0;
+        const gl = total>0 ? gradeLabel(total) : '—';
         return `<tr>
           <td style="font-weight:700;">${d.student_name}</td>
-          <td>الفصل ${d.term||1}</td>
-          <td style="font-weight:800;color:var(--indigo);">${f||'—'}</td>
-          <td style="color:var(--text2);">${s||'—'}</td>
-          <td><span class="badge badge-${gradeColor(display)}">${gl}</span></td>
-          <td style="color:var(--text2);">الصف ${d.grade}${d.section}</td>
+          <td>الصف ${d.grade} ${d.section}</td>
+          <td style="font-weight:800;color:var(--indigo);">${sb1Val||'—'}</td>
+          <td style="color:var(--text2);">${d.total_school||'—'}</td>
+          <td><span class="badge badge-${gradeColor(total)}">${gl}</span></td>
+          <td style="color:var(--text2);">${eot||'—'}</td>
         </tr>`;
       }).join('');
-      const totals = r.map(d=>parseFloat(d.term1_total)||parseFloat(d.formative)||0).filter(x=>x>0);
+      const totals = r.map(d=>parseFloat(d.total_school)||parseFloat(d.end_of_term)||parseFloat(d.sb1)||0).filter(x=>x>0);
       if(totals.length){
         const avg = totals.reduce((a,b)=>a+b,0)/totals.length;
         document.getElementById('myAvg').textContent = Math.round(avg)+'%';
@@ -1659,34 +1659,52 @@ function getStudentFilter() {
   return null; // موظف يرى الكل
 }
 
-// تحديث loadDashboard لتحميل بيانات الطالبة الحقيقية
+// تحميل بيانات الطالبة الحقيقية من dash_grades
 async function loadStudentRealData() {
-  const studentId = getStudentFilter();
-  if (!studentId) return; // موظف — demo data تكفي
+  if (!CURRENT_STUDENT_SESSION) return; // موظف — demo data تكفي
 
   try {
-    // جلب درجات الطالبة من dash_grades
-    const res = await sb(`dash_grades?student_id=eq.${encodeURIComponent(studentId)}&order=subject.asc&limit=30`);
-    const grades = await res.json();
+    const studentName = CURRENT_STUDENT_SESSION.student_name || '';
+    // البحث في dash_grades بالاسم (لا يوجد student_id في الجدول)
+    // الأعمدة: grade, section, student_no, student_name, sb1, effort, total_school, end_of_term
+    let grades = null;
+    if (studentName.length >= 3) {
+      const enc = encodeURIComponent(studentName);
+      grades = await sb(`dash_grades?student_name=ilike.*${enc}*&limit=10`);
+    }
+    // fallback: البحث بـ student_no إن كان موجوداً في الجلسة
+    if ((!grades || !grades.length) && CURRENT_STUDENT_SESSION.student_number) {
+      const no = parseInt(CURRENT_STUDENT_SESSION.student_number, 10);
+      if (!isNaN(no)) grades = await sb(`dash_grades?student_no=eq.${no}&limit=5`);
+    }
+
     if (grades && grades.length) {
-      const avg = Math.round(grades.reduce((s,g)=>(s+(parseFloat(g.final_grade)||0)),0)/grades.length);
-      document.getElementById('avgGrade').textContent = avg + '%';
+      const totals = grades.map(g => parseFloat(g.total_school)||parseFloat(g.end_of_term)||parseFloat(g.sb1)||0).filter(x=>x>0);
+      if (totals.length) {
+        const avg = Math.round(totals.reduce((a,b)=>a+b,0)/totals.length);
+        const avgEl = document.getElementById('avgGrade');
+        if (avgEl) avgEl.textContent = avg + '%';
+        const topEl = document.getElementById('topGrade');
+        if (topEl) topEl.textContent = Math.max(...totals);
+      }
+      // تحديث شارة الصف
+      const g0 = grades[0];
+      const gradeEls = document.querySelectorAll('.student-grade-display');
+      gradeEls.forEach(el => el.textContent = `${g0.grade} ${g0.section}`);
     }
 
-    // جلب الحضور من attendance
-    const attRes = await sb(`attendance?student_id=eq.${encodeURIComponent(studentId)}&order=date.desc&limit=90`);
-    const att = await attRes.json();
-    if (att && att.length) {
-      const present = att.filter(a=>a.status==='present'||a.status==='حاضرة').length;
-      const rate = Math.round(present/att.length*100);
-      document.getElementById('attRate').textContent = rate + '%';
-    }
-
-    // تحديث اسم الطالبة في الواجهة
+    // تحديث اسم الطالبة في كل أماكن العرض
     const nameEls = document.querySelectorAll('.student-name-display');
-    nameEls.forEach(el => el.textContent = CURRENT_STUDENT_SESSION.student_name || 'الطالبة');
-    const gradeEls = document.querySelectorAll('.student-grade-display');
-    gradeEls.forEach(el => el.textContent = (CURRENT_STUDENT_SESSION.grade || '') + ' — ' + (CURRENT_STUDENT_SESSION.class_name || ''));
+    nameEls.forEach(el => el.textContent = studentName || 'الطالبة');
+
+    // تحديث هيدر الطالبة إن وُجد
+    const hdrName = document.getElementById('hdrStudentName');
+    if (hdrName && studentName) hdrName.textContent = studentName;
+
+    // الحضور: لا جدول حضور طلاب في Supabase حالياً — نعرض 100% كافتراضي مع رسالة
+    const attEl = document.getElementById('attRate');
+    if (attEl && attEl.textContent === '--') attEl.textContent = '—';
+
   } catch(e) { console.warn('loadStudentRealData error:', e); }
 }
 
