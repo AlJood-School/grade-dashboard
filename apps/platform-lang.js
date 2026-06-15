@@ -623,6 +623,7 @@
 
     // Auto-inject toggle into header if it has id="eduos-header-actions"
     autoInjectToggle() {
+      // Try known header containers first
       const targets = ['eduos-header-actions', 'eduos-lang-container', 'header-actions'];
       for (const id of targets) {
         const el = document.getElementById(id);
@@ -631,6 +632,21 @@
           return;
         }
       }
+
+      // Fallback: inject a floating fixed button (top-left corner, above everything)
+      if (document.getElementById('eduos-lang-float')) return;
+      const btn = document.createElement('button');
+      btn.id = 'eduos-lang-float';
+      btn.innerHTML = this.current === 'ar' ? '🌐 EN' : '🌐 ع';
+      btn.setAttribute('title', this.current === 'ar' ? 'Switch to English' : 'التبديل للعربية');
+      btn.setAttribute('aria-label', 'Language toggle');
+      btn.addEventListener('click', () => {
+        const newLang = this.current === 'ar' ? 'en' : 'ar';
+        this.setLang(newLang);
+        btn.innerHTML = this.current === 'ar' ? '🌐 EN' : '🌐 ع';
+        btn.setAttribute('title', this.current === 'ar' ? 'Switch to English' : 'التبديل للعربية');
+      });
+      document.body.appendChild(btn);
     },
 
     // Initialize
@@ -678,6 +694,34 @@
     }
     [dir="ltr"] .eduos-lang-btn {
       direction: ltr;
+    }
+    /* Floating fallback button */
+    #eduos-lang-float {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 99999;
+      background: rgba(13, 27, 42, 0.85);
+      color: #fff;
+      border: 1px solid rgba(108, 61, 214, 0.6);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-family: 'Tajawal', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 2px 12px rgba(108,61,214,0.3);
+    }
+    #eduos-lang-float:hover {
+      background: rgba(108, 61, 214, 0.7);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(108,61,214,0.5);
+    }
+    [dir="ltr"] #eduos-lang-float {
+      left: auto;
+      right: 12px;
     }
   `;
   document.head.appendChild(style);
