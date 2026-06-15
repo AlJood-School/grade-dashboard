@@ -274,15 +274,35 @@
     'نتائج الطالب':           'Student Results',
     'التقرير الأكاديمي':      'Academic Report',
     'تواصل مع المدرسة':       'Contact School',
+    // With definite article 'ال' — common in descriptions
+    'الأكاديمي':              'Academic',
+    'الأكاديمية':             'Academic',
+    'الإدارة':                'Administration',
+    'المدير':                 'Principal',
+    'المديرة':                'Principal',
+    'المعلم':                 'Teacher',
+    'المعلمة':                'Teacher',
+    'الطالب':                 'Student',
+    'الطالبة':                'Student',
+    'الطلاب':                 'Students',
+    'الطلبة':                 'Students',
+    'الحضور':                 'Attendance',
+    'الدرجات':                'Grades',
+    'الجدول':                 'Schedule',
+    'التحليلات':              'Analytics',
+    'التقارير':               'Reports',
+    'الميزانية':              'Budget',
+    'المكتبة':                'Library',
+    'الإذاعة':                'Broadcasting',
+    'المنظومة':               'Module',
+    'المنظومات':              'Modules',
+    'المهام':                 'Tasks',
+    'الاختبارات':             'Exams',
+    'الرسائل':                'Messages',
+    'الإعدادات':              'Settings',
     // Misc
     'نعم':                    'Yes',
     'لا':                     'No',
-    'أو':                     'or',
-    'و':                      'and',
-    'من':                     'from',
-    'إلى':                    'to',
-    'في':                     'in',
-    'على':                    'on',
     // News ticker / broadcasts
     'أخبار EduOS':            'EduOS News',
     'إعلان':                  'Announcement',
@@ -385,16 +405,25 @@
           return;
         }
 
-        // Partial match — replace all known phrases within the text
+        // Partial match — space-boundary aware replacement
+        // Only replaces phrases that are whole words (surrounded by whitespace or string edges)
         let replaced = orig;
         let changed = false;
-        // Sort by length desc so longer phrases match first
         const sortedKeys = Object.keys(PHRASES).sort((a,b) => b.length - a.length);
         for (const ar of sortedKeys) {
-          if (replaced.includes(ar)) {
-            replaced = replaced.split(ar).join(PHRASES[ar]);
-            changed = true;
-          }
+          if (!replaced.includes(ar)) continue;
+          const escaped = ar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          // Boundary = whitespace, punctuation, Arabic punctuation, or string edge
+          const B = '(^|[\\s،؛؟!.·|—\\-\\/\\(\\)\\[\\]:])';
+          const E = '($|[\\s،؛؟!.·|—\\-\\/\\(\\)\\[\\]:])';
+          try {
+            const regex = new RegExp(B + escaped + E, 'g');
+            const next = replaced.replace(regex, (m, pre, post) => {
+              if (post === undefined) return (pre || '') + PHRASES[ar];
+              return (pre || '') + PHRASES[ar] + (post || '');
+            });
+            if (next !== replaced) { replaced = next; changed = true; }
+          } catch(e) {}
         }
         if (changed) {
           if (!_originals.has(node)) _originals.set(node, orig);
