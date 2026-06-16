@@ -609,10 +609,75 @@ function closeModal(){ document.getElementById('evalOverlay').classList.remove('
 function logout(){ sessionStorage.clear(); location.href='../eduos-login/'; }
 
 function printEval(){
-  window.print();
+  if(!currentStaff){alert('اختر موظفاً أولاً');return;}
+  const dateAr=new Date().toLocaleDateString('ar-AE',{year:'numeric',month:'long',day:'numeric'});
+  const cAvg=CRITERIA.map(c=>scores[c.id]||0).filter(v=>v>0);
+  const pAvg=COMPS.map(c=>scores[c.id]||0).filter(v=>v>0);
+  const cMean=cAvg.length?cAvg.reduce((a,b)=>a+b,0)/cAvg.length:0;
+  const pMean=pAvg.length?pAvg.reduce((a,b)=>a+b,0)/pAvg.length:0;
+  const overall=(cMean&&pMean?(cMean*0.7+pMean*0.3):(cMean||pMean)).toFixed(2);
+  const lvl=overall>=5?'متميز':overall>=4?'كفء':overall>=3?'مقبول':overall>=2?'يحتاج تطوير':'غير مقبول';
+  const color=overall>=4?'#10b981':overall>=3?'#3b82f6':overall>=2?'#f59e0b':'#ef4444';
+
+  const criteriaRows=CRITERIA.map(c=>`
+    <tr><td>${c.name}</td><td style="text-align:center;font-weight:900;color:${scores[c.id]>=4?'#10b981':scores[c.id]>=3?'#3b82f6':'#f59e0b'}">${scores[c.id]||'—'}/6</td></tr>`).join('');
+  const compRows=COMPS.map(c=>`
+    <tr><td>${c.name}</td><td style="text-align:center;font-weight:900;color:${scores[c.id]>=4?'#10b981':scores[c.id]>=3?'#3b82f6':'#f59e0b'}">${scores[c.id]||'—'}/6</td></tr>`).join('');
+
+  const html=`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Tajawal',sans-serif;background:#fff;color:#0D1B2A;padding:20px;direction:rtl;}
+  .ph{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #6C3DD6;padding-bottom:12px;margin-bottom:16px;}
+  .lsq{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);display:flex;align-items:center;justify-content:center;font-size:22px;}
+  .tb{text-align:center;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border-radius:10px;padding:12px;margin-bottom:16px;}
+  .result-box{text-align:center;border:3px solid ${color};border-radius:14px;padding:20px;margin:16px 0;}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px;}
+  th{background:#6C3DD6;color:#fff;padding:8px;}
+  td{padding:7px 10px;border:1px solid #e2e8f0;}
+  @media print{body{padding:10px;}}
+</style></head>
+<body>
+<div class="ph">
+  <div style="display:flex;align-items:center;gap:10px;"><div class="lsq">🎓</div>
+    <div><div style="font-weight:900;color:#6C3DD6">EduOS — مدرسة الجود</div><div style="font-size:10px;color:#64748b">NAFAS | إطار التقييم MOE 2015</div></div></div>
+  <div style="font-size:11px;font-weight:700;color:#1e40af;text-align:left">📚 تربية وتعليم أبوظبي</div>
+</div>
+<div class="tb"><h1 style="font-size:17px;font-weight:900">📋 نموذج التقييم الوظيفي السنوي</h1>
+<p style="font-size:11px;opacity:.85">السنة الأكاديمية 2025-2026 | ${dateAr}</p></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;font-size:12px;">
+  <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;"><strong>الموظف/ة:</strong> ${currentStaff.full_name||'—'}<br><strong>المنصب:</strong> ${currentStaff.role||'—'}</div>
+  <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;"><strong>المقيِّم:</strong> ${JSON.parse(sessionStorage.getItem('edoos_user')||'{}').full_name||'المدير'}<br><strong>التاريخ:</strong> ${dateAr}</div>
+</div>
+<div class="result-box">
+  <div style="font-size:40px;font-weight:900;color:${color}">${overall}</div>
+  <div style="font-size:20px;font-weight:700;color:${color};margin-top:4px">${lvl}</div>
+  <div style="font-size:11px;color:#64748b;margin-top:4px">من أصل 6 درجات | المعايير 70% + الكفاءات 30%</div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+<div><table><thead><tr><th colspan="2">المعايير الستة (MOE)</th></tr></thead><tbody>${criteriaRows}</tbody></table></div>
+<div><table><thead><tr><th colspan="2">الكفاءات المهنية</th></tr></thead><tbody>${compRows}</tbody></table></div>
+</div>
+<div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+  <div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;text-align:center;">
+    <div style="font-size:11px;color:#64748b;margin-bottom:24px;">توقيع الموظف/ة</div>
+    <div style="border-top:1px solid #cbd5e1;padding-top:4px;font-size:10px;">_______________</div>
+  </div>
+  <div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;text-align:center;">
+    <div style="font-size:11px;color:#64748b;margin-bottom:24px;">توقيع المدير</div>
+    <div style="border-top:1px solid #cbd5e1;padding-top:4px;font-size:10px;">_______________</div>
+  </div>
+</div>
+<script>window.onload=()=>window.print();<\/script>
+</body></html>`;
+  const win=window.open('','_blank','width=900,height=700');
+  win.document.write(html);
+  win.document.close();
 }
+
 function printReport(){
-  window.print();
+  printEval();
 }
 
 // ── Header week info
