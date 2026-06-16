@@ -89,6 +89,19 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
 /* AI Loading */
 .ai-loading{background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.2);border-radius:10px;padding:12px;font-size:0.8rem;color:var(--purple);display:none}
 </style>
+
+<style>
+    @media print {
+      body { background: #fff !important; color: #000 !important; font-family: 'Tajawal', sans-serif; }
+      .nav, .sidebar, header nav, .btn-logout, .platform-tour-btn, #auto-logout-banner,
+      .no-print, button:not(.print-btn), .fab { display: none !important; }
+      .card, .achievement-card { background: #fff !important; border: 1px solid #ccc !important;
+        box-shadow: none !important; break-inside: avoid; }
+      .achievement-badge, .certificate { page-break-inside: avoid; border: 2px solid #6C3DD6 !important; }
+      h1, h2, h3 { color: #6C3DD6 !important; }
+      @page { margin: 1.5cm; }
+    }
+</style>
 </head>
 <body>
 
@@ -353,13 +366,109 @@ function renderAchievements(data) {
         <div class="ach-type" style="color:${t.color}">${t.icon} ${t.label} — ${a.level==='national'?'وطني':a.level==='international'?'دولي':a.level==='regional'?'إقليمي':'مدرسي'}</div>
         <div class="ach-title">${a.title}</div>
         <div class="ach-desc">${(a.description||'').slice(0,100)}${(a.description||'').length>100?'...':''}</div>
-        <div class="ach-meta">
+        <div class="ach-meta" style="margin-bottom:10px">
           <span>📅 ${d}</span>
           <span class="ach-tag">${a.student_name||''}</span>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button onclick="event.stopPropagation();printAchCert(${JSON.stringify(a).replace(/'/g,"\\'")})" style="flex:1;padding:6px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);color:var(--gold);border-radius:8px;font-family:'Tajawal',sans-serif;font-size:0.72rem;cursor:pointer">🖨️ شهادة</button>
+          <button onclick="event.stopPropagation();aiDescribeCard(${a.id||0})" style="flex:1;padding:6px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.2);color:var(--purple);border-radius:8px;font-family:'Tajawal',sans-serif;font-size:0.72rem;cursor:pointer">🤲 وصف AI</button>
         </div>
       </div>
     </div>`;
   }).join('');
+}
+
+/* ── طباعة شهادة إنجاز رسمية ── */
+function printAchCert(a) {
+  const t = ACH_TYPES[a.achievement_type] || {icon:'🏆',color:'#FBBF24',label:'إنجاز'};
+  const d = a.achievement_date ? new Date(a.achievement_date).toLocaleDateString('ar-AE',{year:'numeric',month:'long',day:'numeric'}) : '';
+  const today = new Date().toLocaleDateString('ar-AE',{year:'numeric',month:'long',day:'numeric'});
+  const levelAr = {school:'مدرسي',regional:'إقليمي',national:'وطني',international:'دولي'}[a.level||'school'];
+
+  const html = `<!DOCTYPE html><html dir="rtl"><head>
+    <meta charset="UTF-8"><title>شهادة — ${a.title}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800;900&display=swap" rel="stylesheet">
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:'Tajawal',sans-serif;background:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh}
+      @page{margin:1cm;size:A4 landscape}
+      .cert{width:260mm;padding:28px 36px;border:6px solid #FBBF24;border-radius:16px;position:relative;overflow:hidden;box-shadow:0 0 0 10px #fffbeb}
+      .bg-deco{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0.04;font-size:120px;display:flex;align-items:center;justify-content:center;pointer-events:none}
+      .hdr{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #FBBF24;padding-bottom:16px;margin-bottom:18px}
+      .logo-box{background:linear-gradient(135deg,#6C3DD6,#22D3EE);width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:28px}
+      h1{font-size:1.4rem;font-weight:900;color:#1a1a2e}
+      .sub{font-size:0.78rem;color:#6366F1}
+      .cert-type{text-align:center;font-size:0.85rem;color:${t.color};font-weight:800;letter-spacing:2px;margin-bottom:10px}
+      .cert-title{text-align:center;font-size:2.2rem;font-weight:900;color:#1a1a2e;margin-bottom:14px;line-height:1.3}
+      .cert-body{text-align:center;font-size:1rem;color:#444;line-height:2;margin-bottom:20px}
+      .highlight{font-size:1.2rem;font-weight:800;color:#1a1a2e}
+      .gold-bg{background:#fffbeb;border:1px solid #FBBF24;border-radius:10px;padding:12px 24px;display:inline-block;margin:10px 0}
+      .sigs{display:flex;justify-content:space-between;margin-top:28px;padding-top:16px;border-top:1px solid #e5e7eb}
+      .sig{text-align:center;font-size:0.78rem;color:#666}
+      .sig-line{border-top:1px solid #888;padding-top:8px;width:160px;margin:0 auto}
+      .footer{text-align:center;font-size:0.68rem;color:#aaa;margin-top:16px}
+    </style></head><body>
+    <div class="cert">
+      <div class="bg-deco">${t.icon}</div>
+      <div class="hdr">
+        <div style="display:flex;align-items:center;gap:14px">
+          <div class="logo-box">🎓</div>
+          <div><h1>مدرسة الجود</h1><div class="sub">رقم eSIS: 1705 | وزارة التربية والتعليم | منظومة EduOS</div></div>
+        </div>
+        <div style="text-align:left">
+          <div style="font-size:0.78rem;color:#888">العام الدراسي: 2025-2026</div>
+          <div style="font-size:0.78rem;color:#888">المستوى: ${levelAr}</div>
+        </div>
+      </div>
+      <div class="cert-type">${t.icon} شهادة ${t.label} ${levelAr}</div>
+      <div class="cert-title">🏆 ${a.title}</div>
+      <div class="cert-body">
+        <p>تُشهد إدارة مدرسة الجود بأن</p>
+        <div class="gold-bg"><span class="highlight">${a.student_name||'طالبات مدرسة الجود'}</span></div>
+        <p>قد حقق/ت هذا الإنجاز المتميز في مجال: <strong>${a.subject||t.label}</strong></p>
+        ${a.rank ? `<p>وقد حصل/ت على: <strong style="color:#FBBF24;font-size:1.1rem">${a.rank}</strong></p>` : ''}
+        ${a.organization ? `<p>بواسطة: <strong>${a.organization}</strong></p>` : ''}
+        ${d ? `<p>بتاريخ: <strong>${d}</strong></p>` : ''}
+        ${a.description ? `<p style="font-size:0.88rem;color:#555;margin-top:10px;max-width:500px;margin-inline:auto">${a.description}</p>` : ''}
+      </div>
+      <div class="sigs">
+        <div class="sig"><div class="sig-line">مدير/ة المدرسة</div></div>
+        <div class="sig" style="font-size:0.72rem;color:#aaa">تاريخ الإصدار: ${today}<br>شهادة رقم: ACH-${a.id||Date.now()}</div>
+        <div class="sig"><div class="sig-line">الطالب/ة أو الفريق</div></div>
+      </div>
+      <div class="footer">صادر من منظومة الجود الذكية (EduOS) — NAFAS FOR ARTIFICIAL INTELLIGENCE | CN-6573712 | أبوظبي</div>
+    </div>
+    <script>window.onload=()=>window.print();<\/script>
+    </body></html>`;
+
+  const win = window.open('','_blank','width=1000,height=650');
+  win.document.write(html);
+  win.document.close();
+}
+
+/* ── AI وصف لإنجاز محدد ── */
+async function aiDescribeCard(id) {
+  const ach = allAchievements.find(a => a.id === id);
+  if (!ach) return;
+  const btn = event.target;
+  if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
+
+  try {
+    const res = await fetch(`${SB_URL}/functions/v1/ai-assistant`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SB_KEY}` },
+      body: JSON.stringify({
+        message: `اكتب وصفاً احترافياً وملهماً (3-4 جمل) للإنجاز التالي لمدرسة الجود الإماراتية: "${ach.title}" — المشاركون: ${ach.student_name||'طالبات'} — المستوى: ${ach.level} — المادة: ${ach.subject||''}. اجعل الوصف فخوراً ومحفزاً.`
+      })
+    });
+    const data = await res.json();
+    const desc = data.reply || data.message || data.result || '';
+    if (desc) alert('📝 وصف AI:\n\n' + desc);
+  } catch(e) {
+    alert('⚠️ تعذّر الاتصال بالمساعد الذكي');
+  }
+  if (btn) { btn.textContent = '🤲 وصف AI'; btn.disabled = false; }
 }
 
 function hexToRgb(hex) {
@@ -556,5 +665,15 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 <script src="../platform-lang.js"></script>
+
+<!-- زر الطباعة العائم -->
+<button onclick="window.print()" class="print-fab no-print" title="طباعة / Print"
+  style="position:fixed;bottom:80px;left:20px;width:44px;height:44px;border-radius:50%;
+  background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;cursor:pointer;
+  font-size:20px;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 12px rgba(108,61,214,0.4);z-index:9000;transition:all .2s;"
+  onmouseover="this.style.transform='scale(1.15)'"
+  onmouseout="this.style.transform='scale(1)'">🖨️</button>
+
 </body>
 </html>

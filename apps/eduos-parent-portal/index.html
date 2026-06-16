@@ -497,6 +497,24 @@
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+
+  <script src="/apps/platform-splash.js" defer></script>
+
+<style>
+    @media print {
+      body { background: #fff !important; color: #000 !important; font-family: 'Tajawal', sans-serif; }
+      .nav, .bottom-nav, .btn-logout, #auto-logout-banner, .platform-tour-btn,
+      .no-print, button, .fab { display: none !important; }
+      .student-report, .grades-section { width: 100% !important; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #aaa !important; padding: 6px 8px; font-size: 10pt; }
+      th { background: #f0ebff !important; }
+      .card { background: #fff !important; border: 1px solid #ddd !important;
+        box-shadow: none !important; break-inside: avoid; }
+      .grade-badge { border: 1px solid #999 !important; }
+      @page { margin: 1.5cm; size: A4; }
+    }
+</style>
 </head>
 <body>
 
@@ -683,7 +701,10 @@
 
       <!-- ===== GRADES ===== -->
       <div class="view" id="view-grades">
-        <div class="section-title">📊 الدرجات التفصيلية</div>
+        <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <span>📊 الدرجات التفصيلية</span>
+          <button onclick="printReportCard()" style="background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-family:'Tajawal',sans-serif;font-size:0.82rem;cursor:pointer;display:flex;align-items:center;gap:6px">🖨️ طباعة كشف الدرجات</button>
+        </div>
         <div class="tabs">
           <button class="tab active" onclick="switchGradeTab('weekly')">📅 أسبوعية</button>
           <button class="tab" onclick="switchGradeTab('subjects')">📚 المواد</button>
@@ -1403,30 +1424,119 @@ function switchGradeTab(tab) {
 }
 
 async function loadWeekGrades() {
-  const week = document.getElementById('week-select').value;
+  const week = parseInt(document.getElementById('week-select').value);
   if (!currentStudent) return;
-  const res = await fetch(`${SB_URL}/rest/v1/student_grades?manhel_id=eq.${currentStudent.manhel_id}&week_number=eq.${week}&select=*`, {
+  const mid = currentStudent.manhel_id || currentStudent.student_id;
+  const tbody = document.getElementById('weekly-grades-body');
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">⏳ جارٍ التحميل...</td></tr>';
+
+  // dash_grades هي جدول الدرجات الحقيقي
+  const res = await fetch(`${SB_URL}/rest/v1/dash_grades?manhel_id=eq.${mid}&select=*`, {
     headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
   });
   const data = await res.json().catch(() => []);
-  const tbody = document.getElementById('weekly-grades-body');
+
   if (data && data.length > 0) {
+    const weekKey = `w${week}`;
     tbody.innerHTML = data.map(g => {
-      const total = parseFloat(g.total_score || 0);
+      const total = parseFloat(g[weekKey] || g[`week_${week}`] || 0);
+      const understand = parseFloat(g[`${weekKey}_u`] || g.understanding || total * 0.33 | 0);
+      const apply = parseFloat(g[`${weekKey}_a`] || g.application || total * 0.33 | 0);
+      const comm = parseFloat(g[`${weekKey}_c`] || g.communication || total - understand - apply);
       const cls = total >= 90 ? 'grade-a' : total >= 75 ? 'grade-b' : total >= 60 ? 'grade-c' : 'grade-d';
       const label = total >= 90 ? 'ممتاز' : total >= 75 ? 'جيد جداً' : total >= 60 ? 'جيد' : 'مقبول';
       return `<tr>
-        <td>${g.subject_name || g.subject || '—'}</td>
-        <td>${g.understanding_score || '—'}</td>
-        <td>${g.application_score || '—'}</td>
-        <td>${g.communication_score || '—'}</td>
-        <td><strong>${g.total_score || '—'}</strong></td>
+        <td>${g.subject_ar || g.subject || g.subject_name || '—'}</td>
+        <td>${understand||'—'}</td>
+        <td>${apply||'—'}</td>
+        <td>${comm||'—'}</td>
+        <td><strong style="color:var(--accent)">${total||'—'}</strong></td>
         <td><span class="grade-badge ${cls}">${label}</span></td>
       </tr>`;
     }).join('');
   } else {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">لا توجد درجات لهذا الأسبوع</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">لا توجد درجات مسجلة لهذا الطالب</td></tr>';
   }
+}
+
+/* ── طباعة كشف الدرجات ── */
+async function printReportCard() {
+  if (!currentStudent) { showToast('يرجى تسجيل الدخول أولاً'); return; }
+  const mid = currentStudent.manhel_id || currentStudent.student_id;
+  const res = await fetch(`${SB_URL}/rest/v1/dash_grades?manhel_id=eq.${mid}&select=*`, {
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
+  });
+  const grades = await res.json().catch(() => []);
+  const name = currentStudent.name || currentStudent.student_name || '—';
+  const cls = currentStudent.grade || currentStudent.class_name || '—';
+  const today = new Date().toLocaleDateString('ar-AE', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  const rows = grades.map(g => {
+    const tot = parseFloat(g.total_school || g.end_of_term || g.sb1 || 0);
+    const lbl = tot >= 90 ? 'ممتاز' : tot >= 75 ? 'جيد جداً' : tot >= 60 ? 'جيد' : tot >= 50 ? 'مقبول' : 'دون المستوى';
+    const clr = tot >= 90 ? '#10B981' : tot >= 75 ? '#3B82F6' : tot >= 60 ? '#F59E0B' : '#EF4444';
+    return `<tr style="border-bottom:1px solid #e5e7eb">
+      <td style="padding:10px 14px;font-weight:600">${g.subject_ar||g.subject||'—'}</td>
+      <td style="text-align:center;padding:10px">${g.sb1||'—'}</td>
+      <td style="text-align:center;padding:10px">${g.project||'—'}</td>
+      <td style="text-align:center;padding:10px">${g.sb2||'—'}</td>
+      <td style="text-align:center;padding:10px;font-weight:800;font-size:1.05rem;color:${clr}">${tot||'—'}</td>
+      <td style="text-align:center;padding:10px;font-weight:700;color:${clr}">${lbl}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html dir="rtl"><head>
+    <meta charset="UTF-8"><title>كشف درجات — ${name}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800;900&display=swap" rel="stylesheet">
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:'Tajawal',sans-serif;background:#fff;color:#1a1a2e;padding:30px}
+      @page{margin:1.5cm;size:A4}
+      .header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #4F46E5;padding-bottom:16px;margin-bottom:20px}
+      .logo-box{background:linear-gradient(135deg,#6C3DD6,#22D3EE);width:52px;height:52px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:26px}
+      .school-name{font-size:1.3rem;font-weight:900}
+      .subtitle{font-size:0.78rem;color:#6366F1}
+      .student-card{background:#f8f8ff;border:1px solid #e0e0f0;border-radius:10px;padding:16px;margin-bottom:20px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px}
+      .s-field span{display:block;font-size:0.7rem;color:#888}
+      .s-field strong{font-size:0.9rem;color:#1a1a2e}
+      table{width:100%;border-collapse:collapse;font-size:0.88rem}
+      thead tr{background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff}
+      th{padding:11px 14px;font-weight:700}
+      tr:hover{background:#f8f8ff}
+      .footer{margin-top:30px;display:flex;justify-content:space-between;font-size:0.78rem;color:#888;border-top:1px solid #e5e7eb;padding-top:14px}
+      .sig{text-align:center;border-top:1px solid #888;padding-top:8px;width:150px}
+    </style>
+    </head><body>
+    <div class="header">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div class="logo-box">🎓</div>
+        <div><div class="school-name">مدرسة الجود</div><div class="subtitle">منظومة EduOS | وزارة التربية والتعليم | رقم eSIS: 1705</div></div>
+      </div>
+      <div style="text-align:left"><div style="font-size:1rem;font-weight:800;color:#4F46E5">كشف الدرجات الرسمي</div><div style="font-size:0.75rem;color:#888">العام الدراسي 2025-2026</div></div>
+    </div>
+    <div class="student-card">
+      <div class="s-field"><span>اسم الطالب/ة</span><strong>${name}</strong></div>
+      <div class="s-field"><span>الصف / الفصل</span><strong>${cls}</strong></div>
+      <div class="s-field"><span>رقم الطالب (Manhel)</span><strong>${mid||'—'}</strong></div>
+      <div class="s-field"><span>تاريخ الإصدار</span><strong>${today}</strong></div>
+    </div>
+    <table>
+      <thead><tr>
+        <th>المادة</th><th>SB1 (40%)</th><th>المشروع</th><th>SB2 (20%)</th><th>الإجمالي</th><th>التقدير</th>
+      </tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#888">لا توجد درجات مسجلة</td></tr>'}</tbody>
+    </table>
+    <div class="footer">
+      <div><div class="sig">ولي الأمر</div></div>
+      <div style="text-align:center;font-size:0.72rem;color:#aaa">هذا الكشف صادر من منظومة الجود الذكية — EduOS<br>أي تعديل يُلغي صلاحيته</div>
+      <div><div class="sig">مدير/ة المدرسة</div></div>
+    </div>
+    <script>window.onload=()=>window.print();<\/script>
+    </body></html>`;
+
+  const win = window.open('', '_blank', 'width=900,height=700');
+  win.document.write(html);
+  win.document.close();
 }
 
 async function loadSubjectsSummary() {
@@ -1537,5 +1647,15 @@ function showToast(msg) {
 <script src="../platform-tour.js"></script>
 <!-- ملاحظة: platform-auth-guard غير مطلوب هنا — البوابة لها نظام مصادقة خاص بولي الأمر -->
 <script src="../platform-lang.js"></script>
+
+<!-- زر الطباعة العائم -->
+<button onclick="window.print()" class="print-fab no-print" title="طباعة / Print"
+  style="position:fixed;bottom:80px;left:20px;width:44px;height:44px;border-radius:50%;
+  background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;cursor:pointer;
+  font-size:20px;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 12px rgba(108,61,214,0.4);z-index:9000;transition:all .2s;"
+  onmouseover="this.style.transform='scale(1.15)'"
+  onmouseout="this.style.transform='scale(1)'">🖨️</button>
+
 </body>
 </html>
