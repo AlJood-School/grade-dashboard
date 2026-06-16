@@ -467,6 +467,8 @@ function renderMapper() {
 }
 
 // ─── Import ───
+const BULK_IMPORT_FN = `${SB_URL}/functions/v1/bulk-import`;
+
 async function startImport() {
   if (!parsedData.length) { showResult('لا توجد بيانات للاستيراد','error'); return; }
   if (!columnMapping[COLUMN_DEFS[currentType]?.[0]?.field]) {
@@ -501,23 +503,21 @@ async function startImport() {
     if (!mapped.length) { skipped += batch.length; continue; }
 
     try {
-      const res = await fetch(`${SB_URL}/rest/v1/${table}`, {
+      // 🔒 كل كتابة تمر عبر bulk-import Edge Function — لا كتابة مباشرة بـ anon key
+      const res = await fetch(BULK_IMPORT_FN, {
         method: 'POST',
-        headers: {
-          'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal,resolution=ignore-duplicates'
-        },
-        body: JSON.stringify(mapped)
+        headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
+        body: JSON.stringify({ table, records: mapped, import_type: currentType })
       });
-      if (res.ok || res.status === 201) success += mapped.length;
-      else { const err = await res.json(); console.warn('Batch error:', err); failed += mapped.length; }
+      const data = res.ok ? await res.json() : null;
+      if (data?.success) success += (data.count || mapped.length);
+      else { console.warn('Batch error:', data); failed += mapped.length; }
     } catch(e) { failed += mapped.length; }
 
     const pct = Math.round((i+BATCH) / parsedData.length * 100);
     document.getElementById('progressBar').style.width = Math.min(pct,100) + '%';
     document.getElementById('progressText').textContent = Math.min(pct,100) + '% — ' + (i+BATCH) + '/' + parsedData.length;
-    await new Promise(r => setTimeout(r, 50)); // تأخير بسيط
+    await new Promise(r => setTimeout(r, 50));
   }
 
   document.getElementById('progressBar').style.width = '100%';

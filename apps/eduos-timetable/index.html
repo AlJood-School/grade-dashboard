@@ -877,6 +877,18 @@ async function loadEducationPattern() {
 document.addEventListener('DOMContentLoaded', async () => {
   await loadEducationPattern();
   await loadRealTimetable();
+  // تحميل اسم المدرسة والمنطقة للطباعة
+  try {
+    const sRes = await fetch(`${SUPA_URL}/rest/v1/app_settings?key=in.(school_name,school_region)&select=key,value`,
+      {headers:{'apikey':AKEY,'Authorization':'Bearer '+AKEY}});
+    if (sRes.ok) {
+      const sData = await sRes.json();
+      sData.forEach(s => {
+        if (s.key==='school_name')   window._schoolName   = s.value;
+        if (s.key==='school_region') window._schoolRegion = s.value;
+      });
+    }
+  } catch(e){}
   initHeader();
   renderDashboard();
   renderPeriodTimeline();
@@ -912,7 +924,11 @@ function switchTab(tab) {
   const sb = document.getElementById('sb-' + tab);
   if (sb) sb.classList.add('active');
   window.location.hash = tab;
-  if (tab === 'weekly') renderWeeklyTable();
+  if (tab === 'weekly')    renderWeeklyTable();
+  if (tab === 'analysis')  { renderLoadAnalysis(); renderSubjectDistribution(); renderAITips(); }
+  if (tab === 'conflicts') renderConflicts();
+  if (tab === 'swap')      { renderSwapRequests(); renderAvailableTeachers(); }
+  if (tab === 'sub')       renderSubstitutes();
 }
 
 // ═══ DASHBOARD ═══
@@ -1705,7 +1721,121 @@ function exportTimetable() {
 }
 
 function printTimetable() {
-  window.print();
+  const cls = document.getElementById('classFilter')?.value || '3A';
+  const targetCls = cls === 'all' ? '3A' : cls;
+
+  const schoolName = window._schoolName || 'مدرسة الجود';
+  const regionName = window._schoolRegion || 'أبوظبي التعليمية';
+  const now = new Date();
+  const dateAr = now.toLocaleDateString('ar-AE', {year:'numeric',month:'long',day:'numeric'});
+
+  let rows = '';
+  DAYS_EN.forEach((day, di) => {
+    rows += `<tr><td style="font-weight:900;background:#f0f4ff;text-align:center;">${DAYS[di]}</td>`;
+    for (let p = 1; p <= 7; p++) {
+      const lesson = TIMETABLE[targetCls]?.[day]?.[p];
+      if (lesson) {
+        const subj = SUBJECTS[lesson.subject];
+        rows += `<td style="text-align:center;font-size:11px;background:${subj?.color||'#eee'}22;border:1px solid #e2e8f0;">
+          <div style="font-size:13px;">${subj?.icon||'📚'}</div>
+          <div style="font-weight:700;">${subj?.name||lesson.subject}</div>
+          <div style="color:#64748b;font-size:10px;">${lesson.teacher}</div>
+        </td>`;
+      } else {
+        rows += `<td style="text-align:center;color:#94a3b8;font-size:11px;">—</td>`;
+      }
+    }
+    rows += '</tr>';
+  });
+
+  const conflicts = detectConflictsData().length;
+  const html = `<!DOCTYPE html><html lang="ar" dir="rtl">
+<head><meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Tajawal',sans-serif;background:#fff;color:#0D1B2A;padding:20px;direction:rtl;}
+  .print-header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #6C3DD6;padding-bottom:12px;margin-bottom:16px;}
+  .logo-box{display:flex;align-items:center;gap:10px;}
+  .logo-sq{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);display:flex;align-items:center;justify-content:center;font-size:22px;}
+  .logo-text{font-weight:900;font-size:16px;color:#6C3DD6;}
+  .logo-sub{font-size:10px;color:#64748b;}
+  .region-logo{text-align:left;}
+  .region-logo .rl-icon{font-size:28px;}
+  .region-logo .rl-name{font-size:11px;font-weight:700;color:#1e40af;}
+  .title-box{text-align:center;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border-radius:10px;padding:12px;margin-bottom:16px;}
+  .title-box h1{font-size:18px;font-weight:900;}
+  .title-box p{font-size:11px;opacity:.85;}
+  .meta{display:flex;gap:20px;justify-content:center;margin-bottom:14px;font-size:11px;color:#64748b;}
+  table{width:100%;border-collapse:collapse;font-size:12px;}
+  th{background:#6C3DD6;color:#fff;padding:8px 6px;text-align:center;font-size:11px;}
+  td{padding:6px 4px;border:1px solid #e2e8f0;vertical-align:middle;}
+  .footer{margin-top:16px;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:10px;}
+  .sig-box{border:1px solid #e2e8f0;border-radius:6px;padding:10px;text-align:center;width:160px;}
+  .sig-lbl{font-size:10px;color:#64748b;margin-bottom:20px;}
+  .sig-line{border-top:1px solid #cbd5e1;padding-top:4px;font-size:10px;font-weight:700;}
+  @media print{body{padding:12px;}}
+</style>
+</head>
+<body>
+<div class="print-header">
+  <div class="logo-box">
+    <div class="logo-sq">🎓</div>
+    <div>
+      <div class="logo-text">EduOS — ${schoolName}</div>
+      <div class="logo-sub">NAFAS FOR ARTIFICIAL INTELLIGENCE | رقم: 1705</div>
+    </div>
+  </div>
+  <div class="region-logo">
+    <div class="rl-icon">📚</div>
+    <div class="rl-name">تربية وتعليم ${regionName}</div>
+  </div>
+</div>
+
+<div class="title-box">
+  <h1>📅 الجدول الدراسي — فصل ${targetCls}</h1>
+  <p>السنة الأكاديمية 2025-2026 | مدرسة الجود | ${dateAr}</p>
+</div>
+
+<div class="meta">
+  <span>📊 عدد الحصص: ${CLASSES.length * 7 * 5 / CLASSES.length} حصة/أسبوع</span>
+  <span>⚠️ تعارضات: ${conflicts}</span>
+  <span>👩‍🏫 عدد المعلمات: ${TEACHERS.length}</span>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:70px;">اليوم</th>
+      <th>الحصة ١</th><th>الحصة ٢</th><th>الحصة ٣</th><th>الحصة ٤</th>
+      <th>الحصة ٥</th><th>الحصة ٦</th><th>الحصة ٧</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>
+
+<div class="footer">
+  <div>
+    <div>صادر من نظام EduOS — NAFAS FOR ARTIFICIAL INTELLIGENCE</div>
+    <div>تاريخ الطباعة: ${dateAr}</div>
+  </div>
+  <div style="display:flex;gap:12px;">
+    <div class="sig-box">
+      <div class="sig-lbl">توقيع المدير</div>
+      <div class="sig-line">_______________</div>
+    </div>
+    <div class="sig-box">
+      <div class="sig-lbl">الختم الرسمي</div>
+      <div class="sig-line">_______________</div>
+    </div>
+  </div>
+</div>
+<script>window.onload=()=>window.print();<\/script>
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=1000,height=800');
+  win.document.write(html);
+  win.document.close();
 }
 
 // ═══ TOAST ═══
@@ -1730,6 +1860,7 @@ window.addEventListener('hashchange', () => {
 <!-- ═══ NEWS TICKER ═══ -->
 <div id="edu-news-bar-anchor"></div>
 
+<script src="../platform-lang.js"></script>
 <script src="../platform-tour.js"></script>
 </body>
 </html>

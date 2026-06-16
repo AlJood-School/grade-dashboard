@@ -1,270 +1,379 @@
 /**
- * platform-splash.js — EduOS Falcon Splash v3
- * الشعار يبدأ صغيراً → يكبر يكبر يكبر → يصغر ويطير لمكانه في اليمين
- * mix-blend-mode: screen لإخفاء الإطار المربع الداكن للـ PNG
+ * platform-splash.js v2.0
+ * EduOS Splash Screen — شاشة البداية
+ * الشعار الرسمي: مربع بنفسجي متدرج #6C3DD6→#22D3EE + أيقونة 🎓
+ * ثنائية اللغة: AR / EN
+ * خط: Tajawal
+ * تسلسل: ظهور → نبض → شريط تحميل → اختفاء
+ * NAFAS FOR ARTIFICIAL INTELLIGENCE — الجود EduOS
  */
 (function () {
+  'use strict';
 
+  /* ═══════════════════════════════════════
+     الثنائية
+  ═══════════════════════════════════════ */
+  const urlLang = new URLSearchParams(window.location.search).get('lang');
+  const storedLang = urlLang ||
+    (navigator.language && navigator.language.startsWith('ar') ? 'ar' : 'en');
+  const isAr = storedLang !== 'en';
+
+  const T = {
+    ar: {
+      subtitle: 'نظام إدارة التعليم الذكي',
+      company: 'نفس للذكاء الاصطناعي',
+      loading: 'جارٍ التحميل…',
+    },
+    en: {
+      subtitle: 'Smart Education Management System',
+      company: 'NAFAS FOR ARTIFICIAL INTELLIGENCE',
+      loading: 'Loading…',
+    }
+  };
+  const txt = isAr ? T.ar : T.en;
+
+  /* ═══════════════════════════════════════
+     الأنماط
+  ═══════════════════════════════════════ */
   const style = document.createElement('style');
   style.textContent = `
+    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap');
+
     #eduos-splash {
-      position: fixed; inset: 0;
+      position: fixed;
+      inset: 0;
       z-index: 999999;
-      background: radial-gradient(ellipse at 50% 40%, #050d1e 0%, #020610 60%, #000 100%);
+      background: #0D1B2A;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Tajawal', sans-serif;
+      overflow: hidden;
+      direction: ${isAr ? 'rtl' : 'ltr'};
+      opacity: 1;
+      transition: opacity 0.6s ease;
+    }
+    #eduos-splash.spl-fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* ── هالة خلفية ── */
+    #spl-glow {
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(
+        circle,
+        rgba(108,61,214,0.18) 0%,
+        rgba(34,211,238,0.10) 40%,
+        transparent 70%
+      );
+      border-radius: 50%;
+      animation: glowPulse 3s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes glowPulse {
+      0%, 100% { transform: scale(1);   opacity: 0.7; }
+      50%       { transform: scale(1.2); opacity: 1;   }
+    }
+
+    /* ── حاوية الشعار ── */
+    #spl-logo-wrap {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      opacity: 0;
+      transform: translateY(30px) scale(0.85);
+      transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.34,1.3,0.64,1);
+    }
+    #spl-logo-wrap.spl-visible {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    /* ── المربع البنفسجي ── */
+    #spl-icon {
+      width: 96px;
+      height: 96px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #6C3DD6 0%, #22D3EE 100%);
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: hidden;
-      transition: opacity 0.7s ease;
+      font-size: 48px;
+      line-height: 1;
+      box-shadow:
+        0 0 0 0 rgba(108,61,214,0.6),
+        0 8px 40px rgba(108,61,214,0.5),
+        0 4px 20px rgba(34,211,238,0.3);
+      animation: iconPulse 2.5s ease-in-out infinite 0.8s;
+      flex-shrink: 0;
     }
-    #eduos-splash.spl-out {
-      opacity: 0;
-      pointer-events: none;
+    @keyframes iconPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(108,61,214,0.5), 0 8px 40px rgba(108,61,214,0.5), 0 4px 20px rgba(34,211,238,0.3); }
+      50%       { box-shadow: 0 0 0 18px rgba(108,61,214,0), 0 8px 50px rgba(108,61,214,0.7), 0 4px 30px rgba(34,211,238,0.5); }
     }
 
-    /* ── الشعار الرئيسي ── */
-    #spl-logo {
+    /* ── نصوص ── */
+    #spl-title {
+      font-size: 2.4rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #a78bfa 0%, #22D3EE 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: ${isAr ? '0' : '2px'};
+      margin: 0;
+      line-height: 1.2;
+      text-align: center;
+    }
+    #spl-subtitle {
+      font-size: 1rem;
+      font-weight: 400;
+      color: rgba(255,255,255,0.6);
+      margin: 0;
+      text-align: center;
+      letter-spacing: ${isAr ? '0' : '0.5px'};
+    }
+
+    /* ── خط فاصل ── */
+    #spl-divider {
+      width: 60px;
+      height: 2px;
+      background: linear-gradient(90deg, #6C3DD6, #22D3EE);
+      border-radius: 2px;
+      margin: 4px 0;
+      opacity: 0.7;
+    }
+
+    /* ── شريط التحميل ── */
+    #spl-loader-wrap {
       position: relative;
-      z-index: 20;
-      transform: scale(0.03);
+      z-index: 10;
+      margin-top: 52px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
       opacity: 0;
-      will-change: transform, opacity, filter;
+      transition: opacity 0.5s ease 0.4s;
     }
-    #spl-logo img {
-      display: block;
-      width: 300px;
-      height: 300px;
-      object-fit: contain;
-      background: transparent !important;
-      /* توهج الأجنحة الإلكترونية */
-      filter:
-        drop-shadow(0 0 0px rgba(246,201,14,0))
-        drop-shadow(0 0 0px rgba(0,180,216,0));
+    #spl-loader-wrap.spl-visible {
+      opacity: 1;
+    }
+    #spl-progress-track {
+      width: 200px;
+      height: 3px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    #spl-progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #6C3DD6, #22D3EE);
+      border-radius: 99px;
+      transition: width 0.12s linear;
+      box-shadow: 0 0 10px rgba(108,61,214,0.8);
+    }
+    #spl-loading-text {
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.35);
+      font-weight: 300;
+      letter-spacing: 1px;
+      text-align: center;
     }
 
-    /* ── حلقات نبض ── */
+    /* ── شعار الشركة ── */
+    #spl-company {
+      position: absolute;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.68rem;
+      color: rgba(255,255,255,0.2);
+      white-space: nowrap;
+      font-weight: 300;
+      letter-spacing: 1px;
+      z-index: 10;
+    }
+
+    /* ── حلقات نبض عند الإغلاق ── */
     .spl-ring {
       position: absolute;
+      left: 50%;
+      top: 42%;
+      transform: translate(-50%, -50%) scale(0);
       border-radius: 50%;
       border: 1.5px solid;
-      transform: translate(-50%, -50%) scale(0);
-      left: 50%; top: 50%;
       pointer-events: none;
       opacity: 0;
     }
-    .spl-ring-1 { width: 380px; height: 380px; border-color: rgba(246,201,14,0.6); }
-    .spl-ring-2 { width: 560px; height: 560px; border-color: rgba(0,180,216,0.45); }
-    .spl-ring-3 { width: 740px; height: 740px; border-color: rgba(246,201,14,0.25); }
-    .spl-ring-4 { width: 920px; height: 920px; border-color: rgba(0,180,216,0.15); }
-
-    @keyframes ringPulse {
-      0%   { transform: translate(-50%,-50%) scale(0.15); opacity: 0.9; }
+    .spl-ring-1 { width: 160px; height: 160px; border-color: rgba(108,61,214,0.7); }
+    .spl-ring-2 { width: 300px; height: 300px; border-color: rgba(34,211,238,0.5); }
+    .spl-ring-3 { width: 500px; height: 500px; border-color: rgba(108,61,214,0.3); }
+    @keyframes spl-ring-out {
+      0%   { transform: translate(-50%,-50%) scale(0.1); opacity: 0.9; }
       100% { transform: translate(-50%,-50%) scale(1.8); opacity: 0; }
-    }
-
-    /* ── جسيمات الشرر ── */
-    .spl-spark {
-      position: absolute;
-      width: 4px; height: 4px;
-      border-radius: 50%;
-      pointer-events: none;
-      opacity: 0;
-    }
-    @keyframes sparkFly {
-      0%   { transform: translate(-50%,-50%) scale(0); opacity: 1; }
-      50%  { opacity: 1; }
-      100% { transform: translate(var(--tx), var(--ty)) scale(0.2); opacity: 0; }
-    }
-
-    /* ── جسيمات خلفية عائمة ── */
-    .spl-dot {
-      position: absolute;
-      border-radius: 50%;
-      opacity: 0;
-      animation: dotFloat var(--d) var(--delay) ease-in-out infinite;
-    }
-    @keyframes dotFloat {
-      0%,100% { opacity:0; transform: translateY(0) scale(1); }
-      30%     { opacity: var(--op); }
-      70%     { opacity: var(--op); transform: translateY(-40px) scale(1.4); }
-    }
-
-    /* ── وميض الذروة ── */
-    @keyframes peakFlash {
-      0%   { opacity: 0; }
-      15%  { opacity: 0.18; }
-      100% { opacity: 0; }
-    }
-    #spl-flash {
-      position: absolute; inset: 0;
-      background: radial-gradient(ellipse at 50% 50%, rgba(246,201,14,0.4) 0%, rgba(0,180,216,0.2) 40%, transparent 70%);
-      pointer-events: none;
-      opacity: 0;
     }
   `;
   document.head.appendChild(style);
 
-  /* ── جسيمات خلفية ── */
+  /* ═══════════════════════════════════════
+     بناء DOM
+  ═══════════════════════════════════════ */
   const splash = document.createElement('div');
   splash.id = 'eduos-splash';
 
-  for (let i = 0; i < 20; i++) {
-    const d = document.createElement('div');
-    d.className = 'spl-dot';
-    const sz = 2 + Math.random() * 5;
-    const c = Math.random() > 0.5 ? '#f6c90e' : '#00b4d8';
-    d.style.cssText = `left:${Math.random()*100}%;top:${Math.random()*100}%;
-      width:${sz}px;height:${sz}px;
-      background:${c};box-shadow:0 0 ${sz*4}px ${c};
-      --d:${2+Math.random()*3}s;
-      --delay:${Math.random()*3}s;
-      --op:${0.25+Math.random()*0.5}`;
-    splash.appendChild(d);
-  }
+  // هالة
+  const glow = document.createElement('div');
+  glow.id = 'spl-glow';
+  splash.appendChild(glow);
 
-  /* ── وميض الذروة ── */
-  const flash = document.createElement('div');
-  flash.id = 'spl-flash';
-  splash.appendChild(flash);
-
-  /* ── حلقات نبض ── */
-  const rings = [1,2,3,4].map(n => {
+  // حلقات النبض
+  [1,2,3].forEach(n => {
     const r = document.createElement('div');
     r.className = `spl-ring spl-ring-${n}`;
+    r.id = `spl-ring-${n}`;
     splash.appendChild(r);
-    return r;
   });
 
-  /* ── الشعار ── */
+  // حاوية الشعار
   const logoWrap = document.createElement('div');
-  logoWrap.id = 'spl-logo';
-  const img = document.createElement('img');
-  img.src = '/apps/eduos-logo-transparent.png';
-  img.alt = 'EduOS';
-  img.draggable = false;
-  logoWrap.appendChild(img);
+  logoWrap.id = 'spl-logo-wrap';
+
+  // المربع البنفسجي + 🎓
+  const icon = document.createElement('div');
+  icon.id = 'spl-icon';
+  icon.textContent = '🎓';
+
+  // النصوص
+  const title = document.createElement('p');
+  title.id = 'spl-title';
+  title.textContent = 'EduOS';
+
+  const divider = document.createElement('div');
+  divider.id = 'spl-divider';
+
+  const subtitle = document.createElement('p');
+  subtitle.id = 'spl-subtitle';
+  subtitle.textContent = txt.subtitle;
+
+  logoWrap.appendChild(icon);
+  logoWrap.appendChild(title);
+  logoWrap.appendChild(divider);
+  logoWrap.appendChild(subtitle);
   splash.appendChild(logoWrap);
+
+  // شريط التحميل
+  const loaderWrap = document.createElement('div');
+  loaderWrap.id = 'spl-loader-wrap';
+
+  const track = document.createElement('div');
+  track.id = 'spl-progress-track';
+
+  const bar = document.createElement('div');
+  bar.id = 'spl-progress-bar';
+  track.appendChild(bar);
+
+  const loadingText = document.createElement('div');
+  loadingText.id = 'spl-loading-text';
+  loadingText.textContent = txt.loading;
+
+  loaderWrap.appendChild(track);
+  loaderWrap.appendChild(loadingText);
+  splash.appendChild(loaderWrap);
+
+  // شعار الشركة
+  const company = document.createElement('div');
+  company.id = 'spl-company';
+  company.textContent = txt.company;
+  splash.appendChild(company);
 
   document.body.prepend(splash);
 
-  /* ════════════════════════════════════
-     تسلسل الحركة — v3
-     0ms       : يظهر من نقطة ضئيلة جداً scale(0.03)
-     0→500ms   : يكبر سريع → scale(0.6)
-     500→1200ms: يكبر ببطء جميل → scale(1.5)
-     1200→2200ms: يكبر يكبر يكبر → scale(5) — الذروة الكاملة
-     2200ms    : حلقات نبض + شرر + وميض
-     2200ms    (hold لـ 400ms عند الذروة)
-     2600→3300ms: يصغر ويطير لأعلى اليمين
-     3400ms    : overlay يختفي
-  ════════════════════════════════════ */
+  /* ═══════════════════════════════════════
+     تسلسل الحركة
+     0ms      → يُضاف للـ DOM
+     100ms    → ظهور الشعار (opacity + translateY)
+     500ms    → ظهور شريط التحميل
+     600ms    → بدء شريط التحميل 0%→100% (1800ms)
+     2400ms   → اكتمل الشريط
+     2600ms   → حلقات نبض
+     2800ms   → اختفاء تدريجي
+     3400ms   → إزالة من DOM
+  ═══════════════════════════════════════ */
 
-  const logo = document.getElementById('spl-logo');
-  const logoImg = logo.querySelector('img');
-
-  // المرحلة ١: من نقطة → متوسط
-  requestAnimationFrame(() => {
-    logo.style.transition = 'transform 0.5s cubic-bezier(0.34,1.3,0.64,1), opacity 0.3s ease';
-    logo.style.transform = 'scale(0.6)';
-    logo.style.opacity = '1';
-    logoImg.style.transition = 'filter 0.5s ease';
-    logoImg.style.filter = `
-      drop-shadow(0 0 10px rgba(246,201,14,0.6))
-      drop-shadow(0 0 25px rgba(246,201,14,0.3))`;
-  });
-
-  // المرحلة ٢: نمو جميل هادئ
+  // ظهور الشعار
   setTimeout(() => {
-    logo.style.transition = 'transform 0.8s cubic-bezier(0.25,0.46,0.45,0.94)';
-    logo.style.transform = 'scale(1.5)';
-    logoImg.style.transition = 'filter 0.8s ease';
-    logoImg.style.filter = `
-      drop-shadow(0 0 25px rgba(246,201,14,0.9))
-      drop-shadow(0 0 55px rgba(246,201,14,0.6))
-      drop-shadow(0 0 90px rgba(0,180,216,0.4))`;
-  }, 500);
+    logoWrap.classList.add('spl-visible');
+    loaderWrap.classList.add('spl-visible');
+  }, 100);
 
-  // المرحلة ٣: يكبر يكبر يكبر → الذروة الكاملة
+  // شريط التحميل
+  let progress = 0;
+  const totalDuration = 1800; // ms
+  const steps = 60;
+  const stepTime = totalDuration / steps;
+
+  // منحنى تقدم غير خطي — يبدأ سريع ثم يتباطأ ثم يتسارع
+  function easeProgress(t) {
+    // t من 0 إلى 1
+    if (t < 0.7) return t * 1.1;
+    if (t < 0.9) return 0.77 + (t - 0.7) * 0.8;
+    return 0.93 + (t - 0.9) * 0.7;
+  }
+
+  let step = 0;
+  const progressInterval = setInterval(() => {
+    step++;
+    const t = Math.min(step / steps, 1);
+    progress = Math.min(easeProgress(t) * 100, 100);
+    bar.style.width = progress + '%';
+    if (step >= steps) clearInterval(progressInterval);
+  }, stepTime);
+
   setTimeout(() => {
-    logo.style.transition = 'transform 1.1s cubic-bezier(0.22,1,0.36,1)';
-    logo.style.transform = 'scale(5)';
-    logoImg.style.transition = 'filter 1.1s ease';
-    // توهج الأجنحة في الذروة — قوي جداً
-    logoImg.style.filter = `
-      drop-shadow(0 0 40px rgba(246,201,14,1))
-      drop-shadow(0 0 80px rgba(246,201,14,0.9))
-      drop-shadow(0 0 140px rgba(0,180,216,0.7))
-      drop-shadow(0 0 200px rgba(246,201,14,0.5))
-      brightness(1.2)
-      contrast(1.1)`;
-  }, 1200);
+    bar.style.width = '100%';
+  }, 600 + totalDuration);
 
-  // المرحلة ٣.٥: وميض + حلقات النبض + شرر عند الذروة
+  // حلقات النبض عند الإغلاق
   setTimeout(() => {
-    // وميض ذهبي
-    flash.style.animation = 'peakFlash 0.8s ease-out forwards';
-
-    // حلقات النبض
-    const delays = [0, 180, 380, 580];
-    rings.forEach((r, i) => {
-      setTimeout(() => {
-        r.style.animation = `ringPulse 1.4s ease-out forwards`;
-      }, delays[i]);
+    [1,2,3].forEach((n, i) => {
+      const ring = document.getElementById(`spl-ring-${n}`);
+      if (ring) {
+        setTimeout(() => {
+          ring.style.animation = `spl-ring-out 1s ease-out forwards`;
+        }, i * 150);
+      }
     });
-
-    // شرر الأجنحة
-    const sparkColors = ['#f6c90e','#00b4d8','#ffffff','#f6c90e','#00b4d8','#ffd700'];
-    for (let i = 0; i < 28; i++) {
-      const spark = document.createElement('div');
-      spark.className = 'spl-spark';
-      const angle = (Math.PI * 2 * i) / 28;
-      const dist = 150 + Math.random() * 250;
-      const tx = Math.cos(angle) * dist;
-      const ty = Math.sin(angle) * dist;
-      const c = sparkColors[i % sparkColors.length];
-      const sz = 3 + Math.random() * 4;
-      spark.style.cssText = `
-        left:50%; top:50%;
-        width:${sz}px; height:${sz}px;
-        background:${c};
-        box-shadow:0 0 8px ${c}, 0 0 16px ${c};
-        --tx:${tx}px; --ty:${ty}px;
-        animation: sparkFly ${0.7+Math.random()*0.5}s ${Math.random()*0.3}s ease-out forwards;
-      `;
-      splash.appendChild(spark);
-    }
-  }, 2200);
-
-  // المرحلة ٤: يصغر ويطير لأعلى اليمين (بعد hold عند الذروة)
-  setTimeout(() => {
-    // حاول تحديد موضع الشعار في الـ nav
-    const navLogo = document.querySelector(
-      '.nav-logo img, .nav-brand img, header img[src*="eduos-logo"], .logo img, nav img'
-    );
-    let targetX = '44vw', targetY = '-46vh';
-
-    if (navLogo) {
-      const rect = navLogo.getBoundingClientRect();
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
-      targetX = (rect.left + rect.width / 2 - cx) + 'px';
-      targetY = (rect.top + rect.height / 2 - cy) + 'px';
-    }
-
-    logo.style.transition = 'transform 0.75s cubic-bezier(0.55,0,1,0.45), opacity 0.6s ease';
-    logo.style.transform = `scale(0.07) translate(${targetX}, ${targetY})`;
-    logo.style.opacity = '0';
-
-    logoImg.style.transition = 'filter 0.5s ease';
-    logoImg.style.filter = `
-      drop-shadow(0 0 6px rgba(246,201,14,0.5))
-      drop-shadow(0 0 14px rgba(0,180,216,0.3))`;
   }, 2600);
 
-  // المرحلة ٥: إخفاء الـ overlay
+  // اختفاء
   setTimeout(() => {
-    splash.classList.add('spl-out');
-    setTimeout(() => { try { splash.remove(); } catch(e){} }, 750);
-  }, 3300);
+    splash.classList.add('spl-fade-out');
+  }, 2800);
+
+  // إزالة من DOM
+  setTimeout(() => {
+    try { splash.remove(); } catch(e) {}
+  }, 3500);
+
+  /* ═══════════════════════════════════════
+     API عام
+  ═══════════════════════════════════════ */
+  window.EduSplash = {
+    dismiss: function(delay) {
+      setTimeout(() => {
+        splash.classList.add('spl-fade-out');
+        setTimeout(() => { try { splash.remove(); } catch(e) {} }, 700);
+      }, delay || 0);
+    }
+  };
 
 })();
