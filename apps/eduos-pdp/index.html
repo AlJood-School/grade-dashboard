@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EduOS — خطة التطوير المهني</title>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+<script src="../platform-lang.js"></script>
+<script src="../platform-week.js"></script>
 <style>
 :root{
   --bg:#0D1B2A;--bg2:#0f1525;--bg3:#141b2d;
@@ -118,6 +120,8 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
     <button class="tab active" onclick="switchTab('plans')">📋 خطط التطوير</button>
     <button class="tab" onclick="switchTab('new')">➕ إضافة هدف</button>
     <button class="tab" onclick="switchTab('reports')">📊 التقارير</button>
+    <button class="tab" onclick="switchTab('team')">🏆 لوحة الفريق</button>
+    <button class="tab" onclick="switchTab('competency')">🗺️ خريطة الكفايات</button>
   </div>
 
   <!-- PLANS -->
@@ -230,6 +234,46 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
     </div>
   </div>
 </div>
+
+  <!-- TEAM OVERVIEW -->
+  <div id="pane-team" class="pane">
+    <div class="card">
+      <div class="card-title">🏆 نظرة عامة على تطوير الفريق</div>
+      <div id="teamOverviewStats" class="stat-row" style="margin-bottom:20px;">
+        <div class="stat-card"><div class="stat-num" style="color:var(--gold)" id="tStaff">—</div><div class="stat-label">موظف</div></div>
+        <div class="stat-card"><div class="stat-num" style="color:var(--emerald)" id="tAvg">—</div><div class="stat-label">متوسط الإنجاز %</div></div>
+        <div class="stat-card"><div class="stat-num" style="color:var(--coral)" id="tAtRisk">—</div><div class="stat-label">يحتاج دعماً</div></div>
+      </div>
+      <div id="teamProgressList"></div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <div class="card-title">⚠️ أهداف متأخرة تحتاج تدخلاً</div>
+      <div id="overdueList"></div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <div class="card-title">🤲 تقرير AI شامل للفريق</div>
+      <div class="btn-row"><button class="btn btn-ai" onclick="aiTeamReport()">🤲 توليد تقرير شامل</button></div>
+      <div class="ai-box" id="aiTeamBox"></div>
+    </div>
+  </div>
+
+  <!-- COMPETENCY MAP -->
+  <div id="pane-competency" class="pane">
+    <div class="card">
+      <div class="card-title">🗺️ خريطة الكفايات المهنية — إطار MOE 2025</div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:16px;">
+        يوضح هذا العرض توزيع أهداف التطوير على الكفايات المهنية الأربع وفق إطار وزارة التربية والتعليم
+      </p>
+      <!-- الكفايات الأربع -->
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;" id="competencyGrid">
+        <!-- تُبنى ديناميكياً -->
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <div class="card-title">📊 توزيع الأهداف على الكفايات</div>
+      <div id="competencyChart"></div>
+    </div>
+  </div>
 
 <!-- PROGRESS MODAL -->
 <div class="overlay" id="progressOverlay">
@@ -520,13 +564,220 @@ function renderReports(){
     </div>`).join('')||'<p style="color:var(--text2)">لا توجد بيانات</p>';
 }
 
+// ── خريطة الكفايات MOE ─────────────────────────────────────────────────
+const MOE_COMPETENCIES = [
+  {
+    id: 'teaching',
+    icon: '📚',
+    ar: 'التعلم والتعليم',
+    en: 'Teaching & Learning',
+    color: '#6C3DD6',
+    cats: ['teaching','assessment'],
+    desc: 'تحسين ممارسات التدريس، التقييم، والتغذية الراجعة'
+  },
+  {
+    id: 'leadership',
+    icon: '🏆',
+    ar: 'القيادة والمبادرة',
+    en: 'Leadership & Initiative',
+    color: '#10b981',
+    cats: ['leadership','community'],
+    desc: 'قيادة المبادرات وتعزيز الثقافة المدرسية'
+  },
+  {
+    id: 'technology',
+    icon: '💡',
+    ar: 'الابتكار والتقنية',
+    en: 'Innovation & Technology',
+    color: '#22D3EE',
+    cats: ['technology','research'],
+    desc: 'التحول الرقمي، البحث التربوي، والابتكار'
+  },
+  {
+    id: 'wellbeing',
+    icon: '❤️',
+    ar: 'الرفاهية والنمو المهني',
+    en: 'Wellbeing & Growth',
+    color: '#f59e0b',
+    cats: ['wellbeing','other'],
+    desc: 'التوازن المهني، الصحة النفسية، والنمو الذاتي'
+  }
+];
+
+function renderCompetencyMap() {
+  const grid = document.getElementById('competencyGrid');
+  const chartEl = document.getElementById('competencyChart');
+  if (!grid) return;
+
+  grid.innerHTML = MOE_COMPETENCIES.map(comp => {
+    const goals = pdpData.filter(p => comp.cats.includes(p.category || 'other'));
+    const done = goals.filter(p => p.status === 'completed').length;
+    const pct = goals.length ? Math.round(done / goals.length * 100) : 0;
+    const staffCovered = [...new Set(goals.map(p => p.staff_id))].length;
+    return `
+      <div style="background:${comp.color}12;border:1px solid ${comp.color}30;border-radius:14px;padding:18px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+          <span style="font-size:26px;">${comp.icon}</span>
+          <div>
+            <div style="font-size:14px;font-weight:800;color:${comp.color}">${comp.ar}</div>
+            <div style="font-size:11px;color:var(--text2)">${comp.desc}</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+          <div style="text-align:center;background:rgba(0,0,0,0.2);border-radius:8px;padding:8px;">
+            <div style="font-size:22px;font-weight:900;color:${comp.color}">${goals.length}</div>
+            <div style="font-size:11px;color:var(--text2)">هدف</div>
+          </div>
+          <div style="text-align:center;background:rgba(0,0,0,0.2);border-radius:8px;padding:8px;">
+            <div style="font-size:22px;font-weight:900;color:var(--emerald)">${done}</div>
+            <div style="font-size:11px;color:var(--text2)">مكتمل</div>
+          </div>
+        </div>
+        <div style="margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:4px;">
+            <span>الإنجاز</span><span style="color:${comp.color}">${pct}%</span>
+          </div>
+          <div class="progress-bar" style="height:8px;">
+            <div class="progress-fill" style="width:${pct}%;background:${comp.color};"></div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text2);">
+          ${staffCovered} موظف مشمول
+        </div>
+      </div>`;
+  }).join('');
+
+  // الرسم البياني
+  if (chartEl) {
+    chartEl.innerHTML = MOE_COMPETENCIES.map(comp => {
+      const goals = pdpData.filter(p => comp.cats.includes(p.category || 'other'));
+      const pct = goals.length ? Math.round((pdpData.length > 0 ? goals.length / pdpData.length : 0) * 100) : 0;
+      return `
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+          <span style="font-size:18px;width:24px;">${comp.icon}</span>
+          <div style="flex:1;">
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+              <span style="color:var(--text2)">${comp.ar}</span>
+              <span style="font-weight:700;color:${comp.color}">${goals.length} هدف (${pct}%)</span>
+            </div>
+            <div class="progress-bar" style="height:10px;">
+              <div class="progress-fill" style="width:${pct}%;background:${comp.color};"></div>
+            </div>
+          </div>
+        </div>`;
+    }).join('') || '<p style="color:var(--text2)">لا توجد أهداف مسجَّلة</p>';
+  }
+}
+
+// ── لوحة الفريق ─────────────────────────────────────────────────────────
+function renderTeamView() {
+  const total = staffData.length;
+  document.getElementById('tStaff').textContent = total;
+
+  const staffProgress = staffData.map(s => {
+    const goals = pdpData.filter(p => p.staff_id === s.id);
+    const done = goals.filter(p => p.status === 'completed').length;
+    const overdue = goals.filter(p => p.status === 'overdue').length;
+    const pct = goals.length ? Math.round(done / goals.length * 100) : 0;
+    const avgPct = goals.length ? Math.round(goals.reduce((a,g)=>a+(g.progress_pct||0),0) / goals.length) : 0;
+    return { ...s, goals: goals.length, done, overdue, pct, avgPct };
+  });
+
+  const avgCompletion = staffProgress.length
+    ? Math.round(staffProgress.reduce((a,s)=>a+s.avgPct,0)/staffProgress.length)
+    : 0;
+  const atRisk = staffProgress.filter(s => s.overdue > 0 || s.avgPct < 30).length;
+
+  document.getElementById('tAvg').textContent = avgCompletion + '%';
+  document.getElementById('tAtRisk').textContent = atRisk;
+
+  // قائمة الموظفين
+  const listEl = document.getElementById('teamProgressList');
+  if (listEl) {
+    listEl.innerHTML = staffProgress
+      .sort((a,b) => b.avgPct - a.avgPct)
+      .map(s => {
+        const color = s.avgPct >= 70 ? '#10b981' : s.avgPct >= 40 ? '#22D3EE' : '#f59e0b';
+        const atRiskFlag = (s.overdue > 0 || s.avgPct < 30);
+        return `
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
+            <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#6C3DD6,#22D3EE);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">👤</div>
+            <div style="flex:1;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                <span style="font-size:13px;font-weight:700;">${s.full_name||'—'}
+                  ${atRiskFlag ? `<span style="font-size:10px;background:rgba(252,129,129,0.2);color:#fc8181;border-radius:6px;padding:1px 7px;margin-right:6px;">⚠️ يحتاج دعماً</span>` : ''}
+                </span>
+                <span style="font-size:13px;font-weight:800;color:${color}">${s.avgPct}%</span>
+              </div>
+              <div style="font-size:11px;color:var(--text2);margin-bottom:5px;">${s.role||''} | ${s.goals} هدف | ${s.done} مكتمل | ${s.overdue} متأخر</div>
+              <div class="progress-bar" style="height:6px;">
+                <div class="progress-fill" style="width:${s.avgPct}%;background:${color};"></div>
+              </div>
+            </div>
+          </div>`;
+      }).join('') || '<p style="color:var(--text2);text-align:center;padding:20px;">لا توجد بيانات</p>';
+  }
+
+  // الأهداف المتأخرة
+  const overdueEl = document.getElementById('overdueList');
+  const overdueGoals = pdpData.filter(p => p.status === 'overdue');
+  if (overdueEl) {
+    if (!overdueGoals.length) {
+      overdueEl.innerHTML = '<p style="color:var(--emerald);text-align:center;padding:16px;">✅ لا توجد أهداف متأخرة</p>';
+    } else {
+      overdueEl.innerHTML = overdueGoals.map(g => {
+        const s = staffData.find(x => x.id === g.staff_id);
+        return `
+          <div style="background:rgba(252,129,129,0.08);border:1px solid rgba(252,129,129,0.2);border-radius:10px;padding:12px;margin-bottom:8px;">
+            <div style="font-size:13px;font-weight:700;">${g.goal_text||'—'}</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:4px;">${s?.full_name||'—'} | الاستحقاق: ${g.deadline?new Date(g.deadline).toLocaleDateString('ar-AE'):'—'}</div>
+            <div style="margin-top:6px;">
+              <button class="btn btn-sm" style="background:rgba(252,129,129,0.2);color:#fc8181;border:1px solid rgba(252,129,129,0.3);" onclick="openProgress('${g.id}',${g.progress_pct||0},'${g.status}')">📈 تحديث</button>
+            </div>
+          </div>`;
+      }).join('');
+    }
+  }
+}
+
+async function aiTeamReport() {
+  const box = document.getElementById('aiTeamBox');
+  if (!box) return;
+  box.style.display = 'block';
+  box.classList.add('show');
+  box.innerHTML = '<div style="color:var(--purple);font-size:11px;font-weight:700;margin-bottom:8px;">🤲 جارٍ توليد التقرير...</div>';
+
+  const summary = staffData.map(s => {
+    const goals = pdpData.filter(p => p.staff_id === s.id);
+    const done = goals.filter(p => p.status === 'completed').length;
+    const avg = goals.length ? Math.round(goals.reduce((a,g)=>a+(g.progress_pct||0),0)/goals.length) : 0;
+    return `${s.full_name} (${s.role}): ${goals.length} هدف، إنجاز ${avg}%، مكتمل: ${done}`;
+  }).join('\n');
+
+  const prompt = `أنت مشرف تربوي. بناءً على بيانات خطط التطوير المهني للفريق:
+${summary}
+قدِّم:
+1. تقييم عام لمستوى التطوير المهني في المدرسة
+2. الموظفون الأكثر تميزاً في الإنجاز
+3. الموظفون الذين يحتاجون دعماً فورياً
+4. توصيتان مهمتان للإدارة للفصل القادم
+بلغة عربية فصيحة، مختصرة ومهنية.`;
+
+  const reply = await callAI(prompt);
+  box.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:var(--purple);margin-bottom:8px;">🤲 تقرير AI للفريق</div>
+    <div style="font-size:13px;line-height:1.8;white-space:pre-line;">${reply || 'تعذَّر الاتصال بالمساعد الذكي.'}</div>`;
+}
+
 function switchTab(t){
   document.querySelectorAll('.tab').forEach((b,i)=>{
-    const ids=['plans','new','reports'];
+    const ids=['plans','new','reports','team','competency'];
     b.classList.toggle('active',ids[i]===t);
   });
   document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('pane-'+t).classList.add('active');
+  if (t === 'team') renderTeamView();
+  if (t === 'competency') renderCompetencyMap();
 }
 function logout(){sessionStorage.clear();location.href='../eduos-login/';}
 if(typeof getPlatformWeek==='function'){

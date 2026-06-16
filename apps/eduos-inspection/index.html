@@ -258,6 +258,8 @@
     .hero-text h2 { font-size: 18px; }
   }
 </style>
+
+  <script src="/apps/platform-splash.js" defer></script>
 </head>
 <body>
 
@@ -288,6 +290,62 @@
   <div class="hero-meta">
     <span class="hero-badge" data-i18n="insp.ready">✅ جاهز للتفتيش</span>
     <span class="hero-date" id="report-date"></span>
+  </div>
+</div>
+
+<!-- ══ SCHOOL SCORE HERO ══ -->
+<div id="school-score-hero" style="
+  padding:36px 24px; text-align:center;
+  border-bottom:1px solid var(--card-border);
+  background:linear-gradient(180deg, rgba(108,61,214,0.07) 0%, transparent 100%);
+">
+  <div style="font-size:13px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:20px;" data-i18n="insp.score.title">
+    نتيجة المدرسة الإجمالية — School Performance Score
+  </div>
+  <div style="display:flex;align-items:center;justify-content:center;gap:48px;flex-wrap:wrap;">
+    <!-- دائرة النتيجة -->
+    <div style="position:relative;display:inline-block;">
+      <svg viewBox="0 0 200 200" width="190" height="190">
+        <defs>
+          <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#6C3DD6"/>
+            <stop offset="100%" stop-color="#22D3EE"/>
+          </linearGradient>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+            <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <!-- خلفية -->
+        <circle cx="100" cy="100" r="82" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="18"/>
+        <!-- قوس النتيجة -->
+        <circle id="scoreArc" cx="100" cy="100" r="82" fill="none"
+          stroke="url(#scoreGrad)" stroke-width="18" stroke-linecap="round"
+          stroke-dasharray="515" stroke-dashoffset="515"
+          transform="rotate(-90 100 100)"
+          filter="url(#glow)"
+          style="transition:stroke-dashoffset 1.8s cubic-bezier(0.34,1.56,0.64,1);"/>
+        <!-- الرقم -->
+        <text x="100" y="92" text-anchor="middle" fill="#F0F4FF"
+          font-size="40" font-weight="900" font-family="Tajawal" id="scoreNum">—</text>
+        <text x="100" y="116" text-anchor="middle" fill="rgba(240,244,255,0.45)"
+          font-size="14" font-family="Tajawal" id="scoreLabel">جارٍ الحساب...</text>
+      </svg>
+    </div>
+    <!-- تفاصيل المؤشرات -->
+    <div style="display:flex;flex-direction:column;gap:14px;min-width:260px;" id="scoreBreakdown">
+      <div class="loading-shimmer" style="width:100%;height:16px;border-radius:8px;"></div>
+      <div class="loading-shimmer" style="width:80%;height:16px;border-radius:8px;"></div>
+      <div class="loading-shimmer" style="width:90%;height:16px;border-radius:8px;"></div>
+      <div class="loading-shimmer" style="width:70%;height:16px;border-radius:8px;"></div>
+    </div>
+  </div>
+  <!-- التصنيف -->
+  <div id="scoreRating" style="margin-top:20px;display:none;">
+    <span id="scoreRatingBadge" style="
+      display:inline-block;padding:8px 28px;border-radius:30px;
+      font-size:16px;font-weight:800;letter-spacing:0.5px;
+    "></span>
   </div>
 </div>
 
@@ -654,6 +712,13 @@ async function loadAll() {
           `${Math.round((activePDP/staffData.length)*100)}% of staff have active PDP`}
        </p>`;
 
+    // ── نتيجة المدرسة الإجمالية ──────────────────────────────────────────
+    const _passRate   = grades.length > 0 ? Math.round((grades.filter(g=>(g.final_grade||0)>=50).length/grades.length)*100) : 80;
+    const _attendRate = attData.length > 0 ? Math.round((attData.filter(a=>a.status==='present').length/attData.length)*100) : 95;
+    const _inclPct    = Math.min(Math.round((inclCount / 120) * 100), 100);
+    const _pdpPct     = staffData.length > 0 ? Math.round((activePDP / staffData.length) * 100) : 83;
+    renderSchoolScore(_passRate, _attendRate, _inclPct, _pdpPct);
+
   } catch (err) {
     console.error('Inspection load error:', err);
     // Show static data on error
@@ -718,6 +783,76 @@ function loadStaticFallback() {
     makeBar(t('insp.pdp.active'), 10, 12, 'green') +
     `<p style="font-size:12px;color:var(--text-muted);margin-top:8px">
       ${lang === 'ar' ? '83% من الكوادر لديها خطة تطوير نشطة' : '83% of staff have active PDP'}</p>`;
+
+  // نتيجة المدرسة — بيانات افتراضية
+  renderSchoolScore(82, 95, 89, 83);
+}
+
+// ── School Score ───────────────────────────────────────────────────────────
+function renderSchoolScore(academicAvg, attendRate, inclPct, pdpPct) {
+  const lang = EduLang?.current || 'ar';
+  // وزن كل محور
+  const score = Math.round(
+    (academicAvg  * 0.40) +
+    (attendRate   * 0.25) +
+    (inclPct      * 0.15) +
+    (pdpPct       * 0.20)
+  );
+
+  // تحريك القوس
+  const arc = document.getElementById('scoreArc');
+  const circ = 515;
+  const offset = circ - (score / 100) * circ;
+  setTimeout(() => { if (arc) arc.style.strokeDashoffset = offset; }, 100);
+
+  // الرقم والتصنيف
+  const numEl = document.getElementById('scoreNum');
+  const lblEl = document.getElementById('scoreLabel');
+  if (numEl) numEl.textContent = score;
+
+  let rating = '', ratingAr = '', ratingEn = '', ratingColor = '';
+  if      (score >= 90) { ratingAr='ممتاز'; ratingEn='Outstanding'; ratingColor='#10B981'; }
+  else if (score >= 80) { ratingAr='جيد جداً'; ratingEn='Good'; ratingColor='#6C3DD6'; }
+  else if (score >= 70) { ratingAr='جيد'; ratingEn='Acceptable'; ratingColor='#F59E0B'; }
+  else                  { ratingAr='يحتاج تحسين'; ratingEn='Needs Improvement'; ratingColor='#EF4444'; }
+  rating = lang === 'ar' ? ratingAr : ratingEn;
+  if (lblEl) lblEl.textContent = rating;
+
+  // تفاصيل المحاور
+  const breakdown = document.getElementById('scoreBreakdown');
+  if (breakdown) {
+    const mkRow = (icon, labelAr, labelEn, val, weight) => `
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:18px;">${icon}</span>
+        <div style="flex:1;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+            <span style="color:var(--text-muted)">${lang==='ar'?labelAr:labelEn} <small style="opacity:0.5">(${weight}%)</small></span>
+            <span style="font-weight:700;color:${val>=80?'#10B981':val>=60?'#22D3EE':'#F59E0B'}">${Math.round(val)}%</span>
+          </div>
+          <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;">
+            <div style="height:100%;width:${Math.round(val)}%;background:${val>=80?'#10B981':val>=60?'linear-gradient(90deg,#6C3DD6,#22D3EE)':'#F59E0B'};border-radius:4px;transition:width 1s ease;"></div>
+          </div>
+        </div>
+      </div>`;
+    breakdown.innerHTML =
+      mkRow('📊','المستوى الأكاديمي','Academic Level', academicAvg, 40) +
+      mkRow('📋','نسبة الحضور','Attendance Rate', attendRate, 25) +
+      mkRow('♿','خطط الدمج','Inclusion Plans', inclPct, 15) +
+      mkRow('📈','التطوير المهني','Professional Dev.', pdpPct, 20);
+  }
+
+  // التصنيف النهائي
+  const ratingBadge = document.getElementById('scoreRatingBadge');
+  const ratingDiv   = document.getElementById('scoreRating');
+  if (ratingBadge) {
+    ratingBadge.textContent = `⭐ ${rating}`;
+    ratingBadge.style.cssText = `
+      display:inline-block;padding:8px 28px;border-radius:30px;
+      font-size:16px;font-weight:800;letter-spacing:0.5px;
+      background:${ratingColor}20;color:${ratingColor};
+      border:2px solid ${ratingColor}50;`;
+  }
+  if (ratingDiv) ratingDiv.style.display = 'block';
 }
 
 // ── Grade Chart ────────────────────────────────────────────────────────────
