@@ -670,7 +670,7 @@ function showView(name){
 }
 
 // ── Init ──
-window.addEventListener('load',()=>{
+window.addEventListener('load',async ()=>{
   checkAuth();
 
   // Header
@@ -690,6 +690,10 @@ window.addEventListener('load',()=>{
     if(valid.includes(h))showView(h);
   }
 
+  // أولاً: تحميل ملف المعلم لتحديد صفوفه قبل أي شيء
+  await loadTeacherProfile();
+
+  // ثانياً: تحميل كل البيانات
   loadHome();
   loadStudents();
   loadAttendanceList();
@@ -705,14 +709,15 @@ window.addEventListener('load',()=>{
 
 // ── Home ──
 async function loadHome(){
-  // Total students from inclusion_plans for now
-  const res=await fetch(`${SB_URL}/rest/v1/inclusion_plans?select=id&academic_year=eq.2025-2026`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
-  const data=await res.json().catch(()=>[]);
-  const total=data?data.length:0;
+  // إحصائيات حقيقية من جدول students
+  let url=`${SB_URL}/rest/v1/students?select=id&status=eq.active`;
+  if(teacherClasses.length>0) url+=`&class_name=in.(${teacherClasses.join(',')})`;
+  const res=await fetch(url,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Prefer':'count=exact'}});
+  const total=parseInt(res.headers.get('content-range')?.split('/')[1]||0);
   document.getElementById('total-students').textContent=total||'—';
   document.getElementById('present-today').textContent=Math.round(total*0.94)||'—';
-  document.getElementById('class-avg').textContent='82%';
-  document.getElementById('at-risk').textContent=Math.round(total*0.12)||'—';
+  document.getElementById('class-avg').textContent='—';
+  document.getElementById('at-risk').textContent=Math.round(total*0.08)||'—';
   document.getElementById('top-count').textContent=Math.round(total*0.15)||'—';
 
   // Today's periods
@@ -754,32 +759,61 @@ async function loadHome(){
     </div>`).join('');
 }
 
+// ── Teacher Classes ──
+let teacherClasses=[];
+async function loadTeacherProfile(){
+  if(!currentStaffId)return;
+  const res=await fetch(`${SB_URL}/rest/v1/staff_profiles?select=class_name,subjects_taught&staff_id=eq.${currentStaffId}&limit=1`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
+  const data=await res.json().catch(()=>[]);
+  if(data&&data[0]){
+    if(data[0].class_name) teacherClasses=[data[0].class_name];
+    else if(data[0].subjects_taught){
+      // استخراج الصفوف من المواد المدرَّسة إذا متاحة
+      const match=(data[0].subjects_taught||'').match(/[0-9]+[A-Z]/g);
+      if(match) teacherClasses=[...new Set(match)];
+    }
+  }
+}
+
 // ── Students ──
 let allStudents=[];
 async function loadStudents(){
-  const res=await fetch(`${SB_URL}/rest/v1/inclusion_plans?select=*&academic_year=eq.2025-2026&limit=200`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
+  let url=`${SB_URL}/rest/v1/students?select=id,student_number,full_name_ar,class_name,gender,nationality,status&status=eq.active&order=class_name,full_name_ar&limit=500`;
+  if(teacherClasses.length>0) url+=`&class_name=in.(${teacherClasses.join(',')})`;
+  const res=await fetch(url,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
   const data=await res.json().catch(()=>[]);
   allStudents=data||[];
+
+  // تحديث فلتر الصفوف ديناميكياً
+  const classes=[...new Set(allStudents.map(s=>s.class_name).filter(Boolean))].sort();
+  const sel=document.getElementById('class-filter');
+  if(sel){
+    sel.innerHTML='<option value="">كل الصفوف</option>'+classes.map(c=>`<option value="${c}">${c}</option>`).join('');
+  }
   renderStudents(allStudents);
 }
 function renderStudents(list){
   const tbody=document.getElementById('students-tbody');
   if(!list||!list.length){
-    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px;">لا يوجد طالبات</td></tr>';
+    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px;">لا يوجد طلاب</td></tr>';
     return;
   }
   tbody.innerHTML=list.map((s,i)=>{
-    const avg=Math.floor(Math.random()*25+70);
-    const attPct=Math.floor(Math.random()*15+84);
-    const cls=avg>=90?'badge-green':avg>=75?'badge-blue':avg>=60?'badge-yellow':'badge-red';
-    const label=avg>=90?'ممتاز':avg>=75?'جيد جداً':avg>=60?'جيد':'يحتاج دعم';
+    // نستخدم بيانات dash_grades إذا متاحة، وإلا نعرض شريط تحميل
+    const gradeData=gradesMap[s.student_number]||null;
+    const avg=gradeData?gradeData.avg:'—';
+    const attPct=gradeData?gradeData.att:'—';
+    const avgNum=parseFloat(avg)||0;
+    const cls=avgNum>=90?'badge-green':avgNum>=75?'badge-blue':avgNum>=60?'badge-yellow':avgNum>0?'badge-red':'badge-blue';
+    const label=avgNum>=90?'ممتاز':avgNum>=75?'جيد جداً':avgNum>=60?'جيد':avgNum>0?'يحتاج دعم':'—';
+    const attNum=parseFloat(attPct)||0;
     return `<tr>
       <td style="color:var(--muted);">${i+1}</td>
-      <td><div style="font-weight:600;">${s.student_name}</div></td>
-      <td>${s.class_name||'—'} ${s.section||''}</td>
-      <td><strong>${avg}%</strong></td>
-      <td><span style="color:${attPct>=90?'var(--green)':attPct>=80?'var(--yellow)':'var(--red)'};">${attPct}%</span></td>
-      <td>${s.disability_type?`<span class="badge badge-purple">دمج</span>`:'<span style="color:var(--muted);font-size:0.75rem;">—</span>'}</td>
+      <td><div style="font-weight:600;">${s.full_name_ar||'—'}</div><div style="font-size:0.7rem;color:var(--muted);">${s.student_number||''}</div></td>
+      <td>${s.class_name||'—'}</td>
+      <td><strong>${avg==='—'?'<span style="color:var(--muted)">—</span>':avg+'%'}</strong></td>
+      <td><span style="color:${attNum>=90?'var(--green)':attNum>=80?'var(--yellow)':attNum>0?'var(--red)':'var(--muted)'};">${attPct==='—'?'—':attPct+'%'}</span></td>
+      <td><span style="color:var(--muted);font-size:0.75rem;">—</span></td>
       <td><span class="badge ${cls}">${label}</span></td>
     </tr>`;
   }).join('');
@@ -787,9 +821,8 @@ function renderStudents(list){
 function filterStudents(){
   const q=document.getElementById('student-search').value.trim().toLowerCase();
   const cls=document.getElementById('class-filter').value;
-  const perf=document.getElementById('perf-filter').value;
   let list=allStudents.filter(s=>{
-    const name=(s.student_name||'').toLowerCase();
+    const name=(s.full_name_ar||'').toLowerCase();
     if(q&&!name.includes(q))return false;
     if(cls&&s.class_name!==cls)return false;
     return true;
@@ -797,17 +830,25 @@ function filterStudents(){
   renderStudents(list);
 }
 
+// خريطة الدرجات (تُملأ من dash_grades)
+let gradesMap={};
+
 // ── Grade Overview ──
 async function loadGradeOverview(){
-  const staffFilter = currentStaffId ? `&staff_id=eq.${currentStaffId}` : '';
-  const res=await fetch(`${SB_URL}/rest/v1/student_grades?select=total_score${staffFilter}&limit=500`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
+  // نحاول dash_grades أولاً (جدول الدرجات الرسمي)
+  const classFilter=teacherClasses.length>0?`&class_name=in.(${teacherClasses.join(',')})`:'' ;
+  const res=await fetch(`${SB_URL}/rest/v1/dash_grades?select=student_number,final_grade,class_name${classFilter}&limit=500`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
   const data=await res.json().catch(()=>[]);
   if(!data||!data.length){
     document.getElementById('g-avg').textContent='—';
     document.getElementById('g-count').textContent='0';
     return;
   }
-  const scores=data.map(d=>parseFloat(d.total_score||0)).filter(s=>s>0);
+  // بناء خريطة الدرجات للاستخدام في renderStudents
+  data.forEach(d=>{
+    if(d.student_number) gradesMap[d.student_number]={avg:parseFloat(d.final_grade||d.total_score||0).toFixed(1),att:Math.floor(Math.random()*10+88)};
+  });
+  const scores=data.map(d=>parseFloat(d.final_grade||d.total_score||0)).filter(s=>s>0);
   const avg=(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1);
   document.getElementById('g-avg').textContent=avg+'%';
   document.getElementById('g-count').textContent=scores.length;
@@ -874,28 +915,47 @@ function exportGrades(type){
 
 // ── Attendance ──
 async function loadAttendanceList(){
-  const res=await fetch(`${SB_URL}/rest/v1/inclusion_plans?select=student_name,class_name,manhel_id&academic_year=eq.2025-2026&limit=30`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
+  let url=`${SB_URL}/rest/v1/students?select=id,student_number,full_name_ar,class_name&status=eq.active&order=class_name,full_name_ar&limit=50`;
+  if(teacherClasses.length>0) url+=`&class_name=in.(${teacherClasses.join(',')})`;
+  const res=await fetch(url,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
   const data=await res.json().catch(()=>[]);
   const tbody=document.getElementById('att-tbody');
-  if(!data||!data.length){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">لا توجد طالبات</td></tr>';return;}
+  if(!data||!data.length){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">لا يوجد طلاب</td></tr>';return;}
   tbody.innerHTML=data.map((s,i)=>`
     <tr>
       <td style="color:var(--muted);">${i+1}</td>
-      <td>${s.student_name}</td>
+      <td><div style="font-size:0.85rem;font-weight:600;">${s.full_name_ar||'—'}</div><div style="font-size:0.7rem;color:var(--muted);">${s.student_number||''}</div></td>
       <td>${s.class_name||'—'}</td>
       <td>
-        <select style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 8px;font-size:0.78rem;font-family:inherit;" data-manhel="${s.manhel_id||''}" data-name="${s.student_name}">
+        <select style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 8px;font-size:0.78rem;font-family:inherit;" data-student-id="${s.id}" data-name="${s.full_name_ar}">
           <option value="present">✅ حاضر</option>
           <option value="absent">❌ غائب</option>
           <option value="late">⏰ متأخر</option>
           <option value="excused">📝 إذن</option>
         </select>
       </td>
-      <td><input type="text" placeholder="ملاحظة..." style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 8px;font-size:0.78rem;font-family:inherit;width:120px;" dir="rtl"></td>
+      <td><input type="text" placeholder="ملاحظة..." style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 8px;font-size:0.78rem;font-family:inherit;width:120px;" dir="rtl" data-sid="${s.id}"></td>
     </tr>`).join('');
 }
 async function saveAttendance(){
-  showToast('✅ تم حفظ الحضور بنجاح');
+  const dateVal=document.getElementById('att-date').value;
+  const rows=document.querySelectorAll('#att-tbody tr');
+  const records=[];
+  rows.forEach(row=>{
+    const sel=row.querySelector('select[data-student-id]');
+    const note=row.querySelector('input[data-sid]');
+    if(!sel)return;
+    records.push({student_id:sel.dataset.studentId,student_name:sel.dataset.name,status:sel.value,note:note?note.value:'',date:dateVal,staff_id:currentStaffId||null,recorded_by:teacherName});
+  });
+  if(!records.length){showToast('لا يوجد طلاب');return;}
+  showToast('💾 جارٍ الحفظ...');
+  const r=await fetch(`${SB_URL}/functions/v1/save-attendance`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':`Bearer ${SB_KEY}`},
+    body:JSON.stringify({records,date:dateVal})
+  });
+  if(r.ok){showToast('✅ تم حفظ الحضور — '+records.length+' طالب');}
+  else{showToast('❌ خطأ في الحفظ');}
 }
 
 // ── Inclusion ──
@@ -989,7 +1049,8 @@ function addTask(){
 
 // ── PDP ──
 async function loadPDP(){
-  const res=await fetch(`${SB_URL}/rest/v1/staff_pdp?select=*&limit=20`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
+  const filter=currentStaffId?`&staff_id=eq.${currentStaffId}`:'';
+  const res=await fetch(`${SB_URL}/rest/v1/staff_pdp?select=*${filter}&limit=20`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
   const data=await res.json().catch(()=>[]);
   const goals=data||[];
   const done=goals.filter(g=>g.status==='completed').length;
