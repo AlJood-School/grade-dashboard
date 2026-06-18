@@ -1044,12 +1044,29 @@ let currentClassStudents = [];
 let currentClassKey = '3B';
 let _allStudentsData = null;
 
+// ── Supabase helpers (متاحة قبل تعريف SUPA_URL — تُقرأ من window) ──
+function _getSB(){ return { url: window.SUPA_URL||'https://zuyizaiugpmhmeycqton.supabase.co', key: window.SUPA_KEY||'' }; }
+
 async function fetchAllStudents() {
   if (_allStudentsData) return _allStudentsData;
   try {
-    const r = await fetch('/data/students.json');
-    if (r.ok) { _allStudentsData = await r.json(); return _allStudentsData; }
-  } catch {}
+    const {url,key} = _getSB();
+    const r = await fetch(`${url}/rest/v1/students?select=student_number,full_name_ar,class_name,gender&status=eq.active&order=class_name,full_name_ar&limit=1500`, {
+      headers: { 'apikey': key, 'Authorization': 'Bearer ' + key }
+    });
+    if (r.ok) {
+      const rows = await r.json();
+      // تجميع حسب الصف
+      _allStudentsData = {};
+      rows.forEach(s => {
+        const k = s.class_name;
+        if (!_allStudentsData[k]) _allStudentsData[k] = [];
+        _allStudentsData[k].push(s);
+      });
+      return _allStudentsData;
+    }
+  } catch(e) {}
+  // Fallback: JSON من GitHub
   try {
     const r2 = await fetch('https://raw.githubusercontent.com/AlJood-School/grade-dashboard/main/data/students.json');
     _allStudentsData = await r2.json();
@@ -1060,29 +1077,29 @@ async function fetchAllStudents() {
 async function loadClassStudents(key) {
   const data = await fetchAllStudents();
   const list = data[key];
-  if (list && Array.isArray(list)) {
+  if (list && Array.isArray(list) && list.length) {
     currentClassStudents = list.map(s => ({
-      name: s.name_ar || s.name || s.name_en || 'طالبة',
-      vark: s.vark || '—'
+      name: s.full_name_ar || s.name_ar || s.name || s.student_number || 'طالب',
+      vark: s.vark_style || '—',
+      student_number: s.student_number || ''
     }));
   } else {
     currentClassStudents = students3b_fallback;
   }
-  for (const k in attStatus) delete attStatus[k]; // reset attendance
+  for (const k in attStatus) delete attStatus[k];
   buildAttGrid();
   updateAttStats();
   updateSummaryStats(data);
 }
 
 function updateSummaryStats(data) {
-  // حساب إجمالي الطلاب عبر صفوف المعلمة
-  const myClasses = ['3B','2A','4A','5B','6A'];
   let total = 0;
-  myClasses.forEach(k => { if(data[k]) total += data[k].length; });
+  Object.values(data).forEach(list => { if(Array.isArray(list)) total += list.length; });
   const el = document.querySelector('.card.emerald .card-value');
-  if (el) el.textContent = total;
+  if (el) el.textContent = total || '—';
   const sub = document.querySelector('.card.emerald .card-sub');
-  if (sub) sub.textContent = `عبر ${myClasses.length} صفوف`;
+  const classCount = Object.keys(data).length;
+  if (sub) sub.textContent = `عبر ${classCount} صفوف`;
 }
 
 const attStatus={};
@@ -1230,39 +1247,57 @@ async function saveAttendance(){
   }
 }
 
-// ── STUDENTS ──
-const allStudents=[
-  ...students3b_fallback.map(s=>({...s,cls:'3B',att:'94%'})),
-  {name:'علياء المطيري',vark:'V',cls:'4أ',att:'97%'},
-  {name:'بدور الظاهري',vark:'K',cls:'4أ',att:'89%'},
-  {name:'لمى الشمسي',vark:'A',cls:'4أ',att:'92%'},
-  {name:'هيا المنهالي',vark:'R',cls:'2أ',att:'95%'},
-  {name:'سلمى النقبي',vark:'V',cls:'2أ',att:'88%'},
-  {name:'جنا الغفلي',vark:'K',cls:'5ب',att:'91%'},
-  {name:'تالا الدوسري',vark:'A',cls:'5ب',att:'96%'},
-  {name:'نداء السعدي',vark:'R',cls:'6أ',att:'85%'},
-  {name:'إسراء الكندي',vark:'V',cls:'6أ',att:'93%'},
-];
+// ── STUDENTS — ديناميكي من Supabase ──
+let allStudentsFlat = []; // مسطّحة لشبكة الطلاب
+
+async function loadAllStudentsFlat() {
+  const data = await fetchAllStudents();
+  allStudentsFlat = [];
+  Object.entries(data).forEach(([cls, list]) => {
+    if (!Array.isArray(list)) return;
+    list.forEach(s => allStudentsFlat.push({
+      name: s.full_name_ar || s.name_ar || s.student_number || 'طالب',
+      cls: cls,
+      att: '—',
+      vark: s.vark_style || '—',
+      student_number: s.student_number || ''
+    }));
+  });
+  // تحديث فلتر الصفوف
+  const classes = [...new Set(allStudentsFlat.map(s=>s.cls))].sort();
+  const sel = document.getElementById('classFilter');
+  if (sel) {
+    sel.innerHTML = '<option value="">كل الصفوف</option>' + classes.map(c=>`<option value="${c}">${c}</option>`).join('');
+  }
+  buildStudentsGrid(allStudentsFlat);
+}
+
 function buildStudentsGrid(list){
   const grid=document.getElementById('studentsGrid');
+  if (!grid) return;
   grid.innerHTML='';
+  if (!list || !list.length) {
+    grid.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text2)">⏳ جارٍ تحميل بيانات الطلاب...</div>';
+    return;
+  }
   list.forEach((s,i)=>{
     const color=avatarColors[i%avatarColors.length];
-    const varkLabel={V:'بصري',A:'سمعي',R:'قرائي',K:'حركي'}[s.vark]||s.vark;
+    const varkLabel={V:'بصري',A:'سمعي',R:'قرائي',K:'حركي'}[s.vark]||'—';
+    const varkCls = ['V','A','R','K'].includes(s.vark) ? 'vark-'+s.vark : '';
     grid.innerHTML+=`
-    <div class="student-card" onclick="showToast('ملف الطالبة: ${s.name}')">
+    <div class="student-card" onclick="showToast('${s.name}')">
       <div class="stu-card-avatar" style="background:${color}22;color:${color};border-color:${color}">${s.name.charAt(0)}</div>
       <div class="stu-card-name">${s.name}</div>
-      <div class="stu-card-class">الصف ${s.cls} · حضور ${s.att}</div>
-      <span class="vark-badge vark-${s.vark}">🧠 ${s.vark} — ${varkLabel}</span>
+      <div class="stu-card-class">الصف ${s.cls}${s.att!=='—'?' · حضور '+s.att:''}</div>
+      <span class="vark-badge ${varkCls}">🧠 ${s.vark!=='—'?s.vark+'—'+varkLabel:'VARK لم يُحدَّد'}</span>
     </div>`;
   });
 }
 function filterStudents(q){
   const cls=document.getElementById('classFilter').value;
   const vk=document.getElementById('varkFilter').value;
-  let list=allStudents;
-  if(q) list=list.filter(s=>s.name.includes(q));
+  let list=allStudentsFlat.length ? allStudentsFlat : students3b_fallback.map(s=>({...s,cls:'3B',att:'—'}));
+  if(q) list=list.filter(s=>(s.name||'').includes(q));
   if(cls) list=list.filter(s=>s.cls===cls);
   if(vk) list=list.filter(s=>s.vark===vk.charAt(0));
   buildStudentsGrid(list);
@@ -2003,9 +2038,13 @@ async function sendGemini(){
 })();
 
 // ── INIT ──
-loadClassStudents('3B'); // تحميل الصف الافتراضي من students.json
-buildStudentsGrid(allStudents);
-buildGrades();
+// نعرض رسالة تحميل فورية ثم نجلب البيانات
+buildStudentsGrid([]); // placeholder فارغ
+(async function(){
+  await loadClassStudents('3B'); // الصف الافتراضي من Supabase
+  loadAllStudentsFlat();         // شبكة الطلاب الكاملة
+  buildGrades();
+})();
 
 /* ════════════════════════════════════════════════════════
    SUPABASE  —  Teacher OS
