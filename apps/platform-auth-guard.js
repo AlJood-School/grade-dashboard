@@ -56,14 +56,49 @@
     'eduos-broadcasting':['admin','principal','media'],
     'eduos-calendar':    ['admin','principal','teacher'],
     'eduos-kg':          ['admin','principal','teacher','kg'],
-    'eduos-timetable':   ['admin','principal','teacher'],
+    'eduos-timetable':   ['admin','principal','teacher','sub_teacher'],
     'eduos-inclusion':   ['admin','principal','special_ed','support'],
     'eduos-socialworker':['admin','principal','social_worker'],
     'eduos-checkin':     ['admin','principal','security','support'],
-    'eduos-hub':         ['admin','principal','teacher','support','special_ed','security','nurse','librarian'],
+    'eduos-hub':         ['admin','principal','teacher','support','special_ed','security','nurse','librarian','sub_teacher'],
     'eduos-onboarding':  ['admin','principal'],
-    'duty-os-vision':    ['admin','principal'],
+    'duty-os-vision':          ['admin','principal'],
+    'smart-school-blueprint':  ['admin','principal'],
+    'eduos-links':             ['admin','principal','teacher','support','special_ed','security','nurse','librarian','social_worker'],
+    'eduos-demo-portal':       ['admin','principal','teacher','support','special_ed','security','nurse'],
+    'eduos-drive':             ['admin','principal','teacher'],
+    'eduos-achievements':      ['admin','principal','teacher'],
+    'eduos-emiratization':     ['admin','principal'],
+    'eduos-exit-ticket':       ['admin','principal','teacher','sub_teacher'],
+    'eduos-teacher-dashboard': ['admin','principal','teacher','sub_teacher'],
   };
+
+  // ── تحقق إضافي: المعلم البديل — منع الوصول لصفحات حساسة ──
+  const SUB_TEACHER_BLOCKED = [
+    'eduos-grades','eduos-financial','eduos-analytics',
+    'eduos-principal','eduos-socialworker','eduos-inclusion',
+    'eduos-reports','eduos-staff','eduos-settings',
+    'eduos-welcome-link','eduos-inspection','eduos-emiratization',
+  ];
+  if (session.role === 'sub_teacher') {
+    const isBlocked = SUB_TEACHER_BLOCKED.some(b => currentPath.includes(b));
+    if (isBlocked) {
+      window.location.replace('/apps/eduos-hub/?err=unauthorized');
+      return;
+    }
+    // تحقق من انتهاء العقد (contract_end_date مخزَّن في الجلسة)
+    if (session.contract_end_date) {
+      const endDate = new Date(session.contract_end_date);
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      if (endDate < today) {
+        // العقد انتهى — إخراج فوري
+        sessionStorage.removeItem('edoos_user');
+        window.location.replace('/apps/eduos-login/?err=contract_expired');
+        return;
+      }
+    }
+  }
 
   // تحديد المنظومة الحالية
   const systemKey = Object.keys(ROLE_MAP).find(k => currentPath.includes(k));
