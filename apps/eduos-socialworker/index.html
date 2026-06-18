@@ -791,58 +791,89 @@ function initWeekInfo() {
 }
 
 async function loadDashboard() {
+  const set = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
   try {
-    const data = await fetch(`${SB_URL}/rest/v1/social_cases?select=*`, {
+    const data = await fetch(`${SB_URL}/rest/v1/social_cases?select=*&order=created_at.desc`, {
       headers: {'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY}
     }).then(r => r.json());
-    if (Array.isArray(data)) {
-      document.getElementById('d-cases').textContent = data.filter(c => c.status === 'open').length;
-      document.getElementById('d-urgent').textContent = data.filter(c => c.priority === 'urgent').length;
-      document.getElementById('d-resolved').textContent = data.filter(c => c.status === 'closed').length;
+    if (Array.isArray(data) && data.length) {
+      const open    = data.filter(c => c.status === 'open').length;
+      const urgent  = data.filter(c => c.priority === 'urgent').length;
+      const closed  = data.filter(c => c.status === 'closed').length;
+      const sessions= data.reduce((s,c) => s + (c.sessions_count||0), 0);
+      const monthly = data.filter(c => {
+        const d = new Date(c.created_at);
+        const now = new Date();
+        return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
+      }).length;
+      // أنواع الحالات
+      const types = {};
+      data.forEach(c => { const t=c.case_type||c.type||'أخرى'; types[t]=(types[t]||0)+1; });
+
+      set('d-cases',   open);
+      set('d-urgent',  urgent);
+      set('d-sessions',sessions);
+      set('d-resolved',closed);
+      set('urgCount',  urgent);
+      set('s-month',   monthly);
+      set('s-ind',     data.filter(c=>c.session_type==='individual').length || sessions);
+      set('s-grp',     data.filter(c=>c.session_type==='group').length || 0);
+
+      // أنواع الحالات الثلاث الأولى
+      const sortedTypes = Object.entries(types).sort((a,b)=>b[1]-a[1]);
+      const tIds = ['t-family','t-absent','t-anxiety'];
+      sortedTypes.slice(0,3).forEach(([k,v],i) => { set(tIds[i], v); });
+
+      // تحديث KPIs الرئيسية
+      buildKPIRow && buildKPIRow('dash-kpis', [
+        {val: open,        lbl:'حالات نشطة', color:'#8b5cf6'},
+        {val: urgent,      lbl:'طارئة',       color:'#f87171'},
+        {val: closed>0 ? Math.round(closed/(open+closed)*100)+'%' : '0%', lbl:'معدل الحل', color:'#34d399'},
+        {val: sessions,    lbl:'جلسات الفصل', color:'#60a5fa'},
+        {val: data.filter(c=>c.referred_to).length, lbl:'تحويلات', color:'#fbbf24'},
+        {val: data.length, lbl:'إجمالي الحالات', color:'#2dd4bf'},
+      ]);
     }
-  } catch {}
-  // Demo
-  document.getElementById('d-cases').textContent = '8';
-  document.getElementById('d-urgent').textContent = '2';
-  document.getElementById('d-sessions').textContent = '4';
-  document.getElementById('d-resolved').textContent = '12';
-  document.getElementById('urgCount').textContent = '2';
-  document.getElementById('t-family').textContent = '3';
-  document.getElementById('t-absent').textContent = '3';
-  document.getElementById('t-anxiety').textContent = '2';
-  document.getElementById('s-week').textContent = '4';
-  document.getElementById('s-month').textContent = '14';
-  document.getElementById('s-ind').textContent = '10';
-  document.getElementById('s-grp').textContent = '4';
+  } catch(e) { console.warn('loadDashboard:', e); }
   drawCasesTypeChart();
 }
 
 async function loadCases() {
-  document.getElementById('casesBody').innerHTML = '<tr><td colspan="8"><div class="spinner"></div></td></tr>';
-  await new Promise(r => setTimeout(r, 400));
-  const cases = [
-    {n:'طالبة — 4B', c:'4B', type:'إشكالية أسرية', p:'urgent', date:'الأسبوع 8', sessions:3, status:'open'},
-    {n:'طالبة — 3C', c:'3C', type:'غياب متكرر', p:'high', date:'الأسبوع 7', sessions:2, status:'follow'},
-    {n:'طالبة — 3E', c:'3E', type:'تنمر لفظي', p:'medium', date:'الأسبوع 9', sessions:1, status:'follow'},
-    {n:'طالبة — 4D', c:'4D', type:'قلق أكاديمي', p:'low', date:'الأسبوع 6', sessions:5, status:'closed'},
-    {n:'طالبة — 3A', c:'3A', type:'غياب متكرر', p:'medium', date:'الأسبوع 10', sessions:1, status:'open'},
-  ];
+  document.getElementById('casesBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text2)">⏳ جارٍ التحميل...</td></tr>';
   const pBadge = {urgent:'red', high:'amber', medium:'blue', low:'teal'};
   const pLabel = {urgent:'عاجلة', high:'عالية', medium:'متوسطة', low:'منخفضة'};
   const sBadge = {open:'violet', follow:'amber', closed:'green'};
   const sLabel = {open:'مفتوحة', follow:'متابعة', closed:'مُغلقة'};
-  document.getElementById('casesBody').innerHTML = cases.map(cs =>
-    `<tr>
-      <td style="font-weight:700;">${cs.n}</td>
-      <td>${cs.c}</td>
-      <td style="font-size:11px;">${cs.type}</td>
-      <td><span class="badge badge-${pBadge[cs.p]}">${pLabel[cs.p]}</span></td>
-      <td style="font-size:11px;">${cs.date}</td>
-      <td style="font-weight:700;color:var(--violet);">${cs.sessions}</td>
-      <td><span class="badge badge-${sBadge[cs.status]}">${sLabel[cs.status]}</span></td>
-      <td><button class="btn btn-secondary btn-sm" onclick="showTab('follow-up')">متابعة</button></td>
-    </tr>`
-  ).join('');
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/social_cases?select=*&order=created_at.desc&limit=100`, {
+      headers: {'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY}
+    });
+    const data = await r.json();
+    if (!Array.isArray(data) || !data.length) {
+      document.getElementById('casesBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text2)">لا توجد حالات مسجّلة بعد</td></tr>';
+      return;
+    }
+    document.getElementById('casesBody').innerHTML = data.map(cs => {
+      const pBadgeC = pBadge[cs.priority] || 'blue';
+      const pLabelT = pLabel[cs.priority] || cs.priority || '—';
+      const sBadgeC = sBadge[cs.status] || 'violet';
+      const sLabelT = sLabel[cs.status] || cs.status || '—';
+      const dateStr = cs.created_at ? new Date(cs.created_at).toLocaleDateString('ar-AE',{month:'short',day:'numeric'}) : '—';
+      const studentLabel = cs.student_name || (cs.class_name ? `طالب — ${cs.class_name}` : 'طالب');
+      return `<tr>
+        <td style="font-weight:700;">${studentLabel}</td>
+        <td>${cs.class_name||'—'}</td>
+        <td style="font-size:11px;">${cs.case_type||cs.type||'—'}</td>
+        <td><span class="badge badge-${pBadgeC}">${pLabelT}</span></td>
+        <td style="font-size:11px;">${dateStr}</td>
+        <td style="font-weight:700;color:var(--violet);">${cs.sessions_count||0}</td>
+        <td><span class="badge badge-${sBadgeC}">${sLabelT}</span></td>
+        <td><button class="btn btn-secondary btn-sm" onclick="showTab('follow-up')">متابعة</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('casesBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--coral)">⚠️ تعذّر التحميل — تحقق من الإنترنت</td></tr>';
+  }
 }
 
 function drawCasesTypeChart() {
