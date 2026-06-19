@@ -753,45 +753,35 @@
         const trimmed = orig.trim();
         if (!trimmed) return;
 
-        // Step 1: exact match
+        // Step 1: exact match (fastest)
         if (PHRASES_RAW[trimmed]) {
           if (!_originals.has(node)) _originals.set(node, orig);
-          node.textContent = orig.replace(trimmed, PHRASES_RAW[trimmed]);
+          node.textContent = PHRASES_RAW[trimmed];
           return;
         }
 
         let replaced = orig;
         let changed = false;
 
-        // Step 2: phrase partial match (longest first)
+        // Step 2: phrase partial match — longest first, simple indexOf
         for (const ar of this._phrasesSorted) {
           if (!replaced.includes(ar)) continue;
-          const escaped = ar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const B = '(^|[\\s،؛؟!.·|—\\-\\/\\(\\)\\[\\]:"\'،،]|(?<=[\\u0600-\\u06FF]))';
-          const E = '($|[\\s،؛؟!.·|—\\-\\/\\(\\)\\[\\]:"\'،،]|(?=[\\u0600-\\u06FF\\w]))';
-          try {
-            // Simple includes-based replacement for Arabic (boundary detection is tricky)
-            const idx = replaced.indexOf(ar);
-            if (idx !== -1) {
-              const before = idx === 0 ? '' : replaced[idx - 1];
-              const after  = idx + ar.length >= replaced.length ? '' : replaced[idx + ar.length];
-              // Allow replacement if surrounded by non-Arabic-word chars or string edges
-              const okBefore = idx === 0 || /[\s،؛؟!.·|—\-\/\(\)\[\]:"']/.test(before) || before === '';
-              const okAfter  = idx + ar.length >= replaced.length || /[\s،؛؟!.·|—\-\/\(\)\[\]:"']/.test(after) || after === '';
-              if (okBefore || okAfter) {
-                replaced = replaced.slice(0, idx) + PHRASES_RAW[ar] + replaced.slice(idx + ar.length);
-                changed = true;
-              }
-            }
-          } catch(e) {}
+          // Replace all occurrences of this phrase
+          let pos = 0;
+          let out = '';
+          let found = false;
+          while (true) {
+            const idx = replaced.indexOf(ar, pos);
+            if (idx === -1) { out += replaced.slice(pos); break; }
+            out += replaced.slice(pos, idx) + PHRASES_RAW[ar];
+            pos = idx + ar.length;
+            found = true;
+          }
+          if (found) { replaced = out; changed = true; }
         }
 
-        // Step 3: regex patterns
+        // Step 3: regex patterns for dynamic text
         for (const p of PATTERNS) {
-          if (!p.pattern.test(replaced)) {
-            p.pattern.lastIndex = 0;
-            continue;
-          }
           p.pattern.lastIndex = 0;
           const next = replaced.replace(p.pattern, p.replace);
           if (next !== replaced) { replaced = next; changed = true; }
