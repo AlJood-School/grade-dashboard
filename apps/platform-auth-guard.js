@@ -1,7 +1,8 @@
 /**
- * EduOS Auth Guard v1.0
+ * EduOS Auth Guard v1.1
  * يُضمَّن في كل منظومة — يمنع الوصول بدون جلسة صحيحة
  * لا localStorage | sessionStorage للجلسة فقط (مسموح)
+ * v1.1 — يُحقن platform-lang.js تلقائياً في كل صفحة
  */
 (function() {
   'use strict';
@@ -17,6 +18,14 @@
 
   const currentPath = window.location.pathname;
   const isPublic = PUBLIC_PAGES.some(p => currentPath.includes(p));
+
+  // ── Auto-inject platform-lang.js في كل صفحة (عامة أو محمية) ──
+  if (!document.getElementById('eduos-lang-script')) {
+    const langScript = document.createElement('script');
+    langScript.id = 'eduos-lang-script';
+    langScript.src = '/apps/platform-lang.js';
+    document.head.appendChild(langScript);
+  }
 
   if (isPublic) return; // صفحة عامة — لا حاجة للحماية
 
