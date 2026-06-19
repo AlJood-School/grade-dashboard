@@ -602,6 +602,7 @@
     'تجربة الزائر':            'Visitor Experience',
     'مسمى وظيفي':              'Job Title',
     'تسجيل ذاتي':              'Self Registration',
+    'تفاعلي':                  'Interactive',
     'معسكر صندوق خليفة':       'Khalifa Fund Bootcamp',
     'بوابة الزائر':            'Visitor Portal',
 
