@@ -1,8 +1,8 @@
 // ============================================================
-// EduOS Edge Function: admin-operations v2
-// الهدف: عمليات المدير الحساسة — تغيير إعدادات، حذف بيانات، نسخ احتياطية
+// EduOS Edge Function: admin-operations v3
+// الهدف: عمليات المدير الحساسة — تغيير إعدادات، حذف بيانات، نسخ احتياطية، معلمون بدلاء
 // المسار: /functions/v1/admin-operations
-// تحديث: npm: بدلاً من esm.sh | CORS متعدد الدومينات
+// تحديث: npm: بدلاً من esm.sh | CORS متعدد الدومينات | add_sub_teacher
 // ============================================================
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -10,6 +10,7 @@ const ALLOWED_ORIGINS = [
   "https://eduos.ae",
   "https://aljood.eduos.ae",
   "https://grade-dashboard-ruby.vercel.app",
+  "https://demo.eduos.ae",
 ];
 
 function getCors(origin: string) {
@@ -68,6 +69,8 @@ Deno.serve(async (req) => {
     let result: Record<string, unknown> = {};
 
     switch (action) {
+
+      // ─── إعدادات النظام ───
       case "update_settings": {
         if (!payload.key || payload.value === undefined) {
           return new Response(JSON.stringify({ error: "key and value required" }), {
@@ -81,6 +84,8 @@ Deno.serve(async (req) => {
         result = { updated: !settErr, key: payload.key };
         break;
       }
+
+      // ─── نسخة احتياطية ───
       case "trigger_backup": {
         const { error: backErr } = await serviceClient
           .from("backup_requests")
@@ -91,6 +96,8 @@ Deno.serve(async (req) => {
         result = { backup_requested: !backErr };
         break;
       }
+
+      // ─── سجل التدقيق ───
       case "get_audit_log": {
         const { data: logs } = await serviceClient
           .from("notification_log")
@@ -100,6 +107,8 @@ Deno.serve(async (req) => {
         result = { logs: logs || [] };
         break;
       }
+
+      // ─── إعادة ضبط درجات طالب ───
       case "reset_student_grades": {
         if (!payload.student_id) {
           return new Response(JSON.stringify({ error: "student_id required" }), {
@@ -116,6 +125,94 @@ Deno.serve(async (req) => {
         result = { reset: !delErr, student_id: payload.student_id };
         break;
       }
+
+      // ─── إضافة معلم بديل ───
+      case "add_sub_teacher": {
+        const { full_name, username, subject, class_name, contract_start_date, contract_end_date } = payload || {};
+        if (!full_name || !username || !contract_start_date || !contract_end_date) {
+          return new Response(JSON.stringify({ error: "full_name, username, contract_start_date, contract_end_date مطلوبة" }), {
+            status: 400, headers: { ...cors, "Content-Type": "application/json" },
+          });
+        }
+        // إنشاء حساب Auth
+        const { data: authData, error: authErr } = await serviceClient.auth.admin.createUser({
+          email: `${username}@aljood.edu.ae`,
+          password: "AlJood@2026",
+          email_confirm: true,
+          user_metadata: { role: "sub_teacher", full_name, username },
+        });
+        if (authErr) {
+          return new Response(JSON.stringify({ error: authErr.message }), {
+            status: 400, headers: { ...cors, "Content-Type": "application/json" },
+          });
+        }
+        // إضافة في staff_profiles
+        const { error: profErr } = await serviceClient.from("staff_profiles").insert({
+          id: authData.user.id,
+          full_name,
+          username,
+          email: `${username}@aljood.edu.ae`,
+          role: "sub_teacher",
+          subject: subject || null,
+          class_name: class_name || null,
+          is_sub_teacher: true,
+          contract_start_date,
+          contract_end_date,
+          force_password_change: true,
+          created_at: new Date().toISOString(),
+        });
+        if (profErr) {
+          // حذف حساب Auth إذا فشل الإدخال
+          await serviceClient.auth.admin.deleteUser(authData.user.id);
+          return new Response(JSON.stringify({ error: profErr.message }), {
+            status: 400, headers: { ...cors, "Content-Type": "application/json" },
+          });
+        }
+        // تسجيل في notification_log
+        await serviceClient.from("notification_log").insert({
+          type: "sub_teacher_added", actor: user.email, actor_role: userRole,
+          action: "add_sub_teacher", target: username,
+          created_at: new Date().toISOString(),
+        });
+        result = { added: true, user_id: authData.user.id, username, temp_password: "AlJood@2026" };
+        break;
+      }
+
+      // ─── تمديد عقد معلم بديل ───
+      case "extend_sub_teacher": {
+        const { staff_id, new_end_date } = payload || {};
+        if (!staff_id || !new_end_date) {
+          return new Response(JSON.stringify({ error: "staff_id و new_end_date مطلوبان" }), {
+            status: 400, headers: { ...cors, "Content-Type": "application/json" },
+          });
+        }
+        const { error: extErr } = await serviceClient
+          .from("staff_profiles")
+          .update({ contract_end_date: new_end_date })
+          .eq("id", staff_id)
+          .eq("is_sub_teacher", true);
+        result = { extended: !extErr, staff_id, new_end_date };
+        break;
+      }
+
+      // ─── حذف معلم بديل ───
+      case "delete_sub_teacher": {
+        const { staff_id } = payload || {};
+        if (!staff_id) {
+          return new Response(JSON.stringify({ error: "staff_id مطلوب" }), {
+            status: 400, headers: { ...cors, "Content-Type": "application/json" },
+          });
+        }
+        // حذف من staff_profiles أولاً
+        const { error: delProfErr } = await serviceClient
+          .from("staff_profiles").delete()
+          .eq("id", staff_id).eq("is_sub_teacher", true);
+        // حذف من Auth
+        const { error: delAuthErr } = await serviceClient.auth.admin.deleteUser(staff_id);
+        result = { deleted: !delProfErr && !delAuthErr, staff_id };
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: "Unknown action" }), {
           status: 400, headers: { ...cors, "Content-Type": "application/json" },
