@@ -865,6 +865,25 @@
       return btn;
     },
 
+    // ─── Update all internal links to preserve ?lang=en ──────────────────
+    _updateLinks() {
+      if (this.current !== 'en') return;
+      const host = window.location.hostname;
+      document.querySelectorAll('a[href]').forEach(a => {
+        const href = a.getAttribute('href');
+        if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+        try {
+          const url = new URL(href, window.location.origin);
+          // Only update internal links (same host or relative)
+          if (url.hostname !== host && url.hostname !== '') return;
+          if (!url.searchParams.has('lang')) {
+            url.searchParams.set('lang', 'en');
+            a.setAttribute('href', url.pathname + '?' + url.searchParams.toString() + url.hash);
+          }
+        } catch(e) {}
+      });
+    },
+
     autoInjectToggle() {
       if (document.getElementById('eduos-lang-float') || document.getElementById('eduos-lang-toggle')) {
         this._updateToggleBtn();
@@ -895,8 +914,11 @@
       const run = () => {
         this._applyDictKeys();
         this._applyDataPairs();
-        if (this.current === 'en') this._applyPhrases();
-        if (this.current === 'en') this._applyAttrs();
+        if (this.current === 'en') {
+          this._applyPhrases();
+          this._applyAttrs();
+          this._updateLinks();
+        }
         this.autoInjectToggle();
       };
 
@@ -909,10 +931,10 @@
       // Re-apply after dynamic content loads (Supabase data, etc.)
       if (this.current === 'en') {
         setTimeout(() => {
-          if (this.current === 'en') this._applyPhrases();
+          if (this.current === 'en') { this._applyPhrases(); this._updateLinks(); }
         }, 1500);
         setTimeout(() => {
-          if (this.current === 'en') this._applyPhrases();
+          if (this.current === 'en') { this._applyPhrases(); this._updateLinks(); }
         }, 3500);
       }
     },
