@@ -23,7 +23,7 @@
   if (!document.getElementById('eduos-lang-script')) {
     const langScript = document.createElement('script');
     langScript.id = 'eduos-lang-script';
-    langScript.src = '/apps/platform-lang.js';
+    langScript.src = '/apps/platform-lang.js?v=44';
     document.head.appendChild(langScript);
   }
 
