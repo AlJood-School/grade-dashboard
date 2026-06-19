@@ -12,6 +12,7 @@
     '/apps/eduos-login/',
     '/apps/eduos-showcase/',
     '/apps/eduos-attendance-gate/', // شاشة تابلت عامة
+    '/apps/eduos-change-password/', // تغيير كلمة المرور الإجباري
   ];
 
   const currentPath = window.location.pathname;
@@ -32,6 +33,12 @@
     // لا جلسة — إعادة توجيه لصفحة الدخول
     const loginUrl = '/apps/eduos-login/?redirect=' + encodeURIComponent(window.location.pathname);
     window.location.replace(loginUrl);
+    return;
+  }
+
+  // تغيير كلمة المرور الإجباري — يُحوَّل قبل أي تحقق آخر
+  if (session.force_password_change === true) {
+    window.location.replace('/apps/eduos-change-password/');
     return;
   }
 
