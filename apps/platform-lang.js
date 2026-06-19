@@ -1,29 +1,28 @@
 /**
- * platform-lang.js v3.1
- * EduOS Bilingual Engine — Arabic / English
+ * platform-lang.js v4.0
+ * EduOS Bilingual Engine — Arabic / English — COMPLETE COVERAGE
  * NAFAS FOR ARTIFICIAL INTELLIGENCE © 2026
  *
- * Three translation layers:
- *   1. data-i18n="key"  →  dictionary lookup (structured pages)
- *   2. data-ar / data-en →  inline text pairs  (semi-structured)
- *   3. DOM text scan    →  phrase dictionary   (any page, zero HTML changes)
+ * Four translation layers:
+ *   1. data-i18n="key"    →  dictionary lookup
+ *   2. data-ar / data-en  →  inline text pairs
+ *   3. DOM text scan      →  phrase dictionary (static)
+ *   4. PATTERNS           →  regex replacements (dynamic text)
  *
- * Button position: bottom-right corner — never overlaps header/logo
+ * Button position: floating bottom-left corner
  */
 
 (function () {
   'use strict';
 
-  // ─── Language Detection ──────────────────────────────────────────────────
+  // ─── Language Detection ────────────────────────────────────────────────
   function detectLang() {
     const p = new URLSearchParams(window.location.search).get('lang');
     if (p === 'en' || p === 'ar') return p;
-    const stored = window.__eduLangCurrent; // set by previous page if needed
-    if (stored) return stored;
-    return 'ar'; // default Arabic
+    return 'ar';
   }
 
-  // ─── Key Dictionary (data-i18n) ──────────────────────────────────────────
+  // ─── Key Dictionary (data-i18n) ────────────────────────────────────────
   const DICT = {
     'app.name':            { ar: 'الجود',                         en: 'AlJood' },
     'app.subtitle':        { ar: 'منصة الإدارة التعليمية الذكية', en: 'Smart Educational Management Platform' },
@@ -58,11 +57,6 @@
     'lbl.time':            { ar: 'الوقت',                         en: 'Time' },
     'lbl.notes':           { ar: 'ملاحظات',                       en: 'Notes' },
     'lbl.actions':         { ar: 'الإجراءات',                     en: 'Actions' },
-    'lbl.type':            { ar: 'النوع',                         en: 'Type' },
-    'lbl.gender':          { ar: 'الجنس',                         en: 'Gender' },
-    'lbl.nationality':     { ar: 'الجنسية',                       en: 'Nationality' },
-    'lbl.phone':           { ar: 'الهاتف',                        en: 'Phone' },
-    'lbl.email':           { ar: 'البريد الإلكتروني',             en: 'Email' },
     'lbl.all':             { ar: 'الكل',                          en: 'All' },
     'lbl.yes':             { ar: 'نعم',                           en: 'Yes' },
     'lbl.no':              { ar: 'لا',                            en: 'No' },
@@ -87,35 +81,128 @@
     'nav.messages':        { ar: 'الرسائل',                       en: 'Messages' },
     'nav.schedule':        { ar: 'الجدول',                        en: 'Schedule' },
     'nav.analytics':       { ar: 'التحليلات',                     en: 'Analytics' },
-    'sys.eduos':           { ar: 'منظومة التعليم الذكي',           en: 'Smart Education System' },
     'sys.hub':             { ar: 'مركز المنظومات',                 en: 'System Hub' },
     'sys.login':           { ar: 'تسجيل الدخول',                  en: 'Login' },
     'sys.logout.confirm':  { ar: 'هل تريد تسجيل الخروج؟',         en: 'Are you sure you want to logout?' },
-    'insp.title':          { ar: 'بوابة التفتيش المدرسي',          en: 'School Inspection Portal' },
-    'insp.school_info':    { ar: 'بطاقة المدرسة',                  en: 'School Card' },
-    'insp.academic':       { ar: 'الأداء الأكاديمي',               en: 'Academic Performance' },
-    'insp.attendance':     { ar: 'الحضور والانتظام',               en: 'Attendance & Regularity' },
-    'insp.inclusion':      { ar: 'الدمج وذوو الاحتياجات',          en: 'Inclusion & Special Needs' },
-    'insp.pdp':            { ar: 'التطوير المهني',                 en: 'Professional Development' },
-    'insp.safety':         { ar: 'السلامة والبيئة',               en: 'Safety & Environment' },
-    'insp.schedule':       { ar: 'الجدول الدراسي',                 en: 'Timetable' },
-    'insp.export':         { ar: 'تصدير التقرير',                  en: 'Export Report' },
-    'insp.generated':      { ar: 'تم إنشاء التقرير',               en: 'Report Generated' },
-    'insp.inspector':      { ar: 'المفتش',                         en: 'Inspector' },
-    'insp.visit_date':     { ar: 'تاريخ الزيارة',                  en: 'Visit Date' },
-    'insp.school_name':    { ar: 'اسم المدرسة',                    en: 'School Name' },
-    'insp.adek_no':        { ar: 'رقم eSIS',                       en: 'eSIS Number' },
-    'insp.level':          { ar: 'المراحل',                        en: 'Levels' },
-    'insp.students_count': { ar: 'عدد الطلاب',                     en: 'Student Count' },
-    'insp.staff_count':    { ar: 'عدد الكوادر',                    en: 'Staff Count' },
-    'insp.overall':        { ar: 'التقييم الإجمالي',               en: 'Overall Rating' },
   };
 
-  // ─── Phrase Dictionary (DOM text scan — Layer 3) ──────────────────────────
-  // Maps exact Arabic UI phrases to English. Only visible text nodes are scanned.
-  // Keys are trimmed Arabic strings. Add more as needed.
-  const PHRASES = {
-    // Navigation & Hub
+  // ─── Phrase Dictionary (DOM text scan) ────────────────────────────────
+  // Sorted by length descending for correct partial matching
+  const PHRASES_RAW = {
+
+    // ══ Hub Sections ══
+    'مركز المنظومات المدرسية':                    'School System Hub',
+    'الإدارة والتخطيط':                            'Administration & Planning',
+    'الأكاديمي والتعليم':                          'Academic & Education',
+    'الموارد البشرية والتطوير المهني':              'HR & Professional Development',
+    'الخدمات والمرافق':                            'Services & Facilities',
+    'الطالبة وولي الأمر':                          'Student & Parent',
+    'الطالب وولي الأمر':                           'Student & Parent',
+    'أدوات التعلم والتواصل':                       'Learning & Communication Tools',
+    'الشؤون الإدارية والتوطين':                    'Administrative Affairs & Emiratisation',
+    'الحضور الذكي':                                'Smart Attendance',
+    'الإنجازات والمكافآت':                         'Achievements & Rewards',
+    'وصول سريع':                                   'Quick Access',
+    'أثير — الرصد الذكي الصامت':                  'Atheer — Silent Smart Monitoring',
+
+    // ══ Hub Stats ══
+    'منظومة نشطة':                                 'Active Module',
+    'منظومتان':                                    '2 Modules',
+    'موظفة حضرت اليوم':                            'Staff Present Today',
+    'موظف حضر اليوم':                              'Staff Present Today',
+    'طالبة مسجّلة':                                'Enrolled Student',
+    'طالب مسجّل':                                  'Enrolled Student',
+    'طلب معلّق':                                   'Pending Request',
+    'تنبيه نشط':                                   'Active Alert',
+
+    // ══ Hub App Descriptions ══
+    'لوحة المدير العامة والتحليلات':               'Principal Dashboard & Analytics',
+    'مركز التحليلات والذكاء الاصطناعي':            'Analytics & AI Center',
+    'إدارة الميزانية والمصروفات':                  'Budget & Expenses Management',
+    'التقويم والفعاليات المدرسية':                 'Calendar & School Events',
+    'الجدول الأسبوعي وتوزيع الحصص':               'Weekly Timetable & Period Distribution',
+    'خارطة التحول الرقمي — 6 ركائز + KPIs + خارطة الطريق': 'Digital Transformation Roadmap — 6 Pillars + KPIs + Roadmap',
+    'إعدادات المدرسة والنظام والنسخ الاحتياطية':  'School, System & Backup Settings',
+    'لوحة المعلمة والدرجات والحصص':               'Teacher Dashboard — Grades & Periods',
+    'لوحة المعلم والدرجات والحصص':                'Teacher Dashboard — Grades & Periods',
+    'رئيسية المعلمة — طالباتي، جدول، مهام، AI':   'Teacher Home — My Students, Schedule, Tasks, AI',
+    'رئيسية المعلم — طلابي، جدول، مهام، AI':      'Teacher Home — My Students, Schedule, Tasks, AI',
+    'جدول الاختبارات وتوزيع القاعات':             'Exam Schedule & Hall Distribution',
+    'المكتبة والمختبر والموارد':                   'Library, Lab & Resources',
+    'رياض الأطفال وأنشطة الأطفال':                'Kindergarten & Children\'s Activities',
+    'ذوو الاحتياجات الخاصة والدمج':               'Special Needs & Inclusion',
+    'الإذاعة المدرسية والمحتوى':                   'School Broadcasting & Content',
+    'طلبات الصيانة والمرافق':                      'Maintenance & Facilities Requests',
+    'الحافلات والطرق والمسارات':                   'Buses, Routes & Paths',
+    'قائمة الطعام والطلبات اليومية':               'Cafeteria Menu & Daily Orders',
+    'حجز الفضاءات والمرافق':                       'Space & Facility Booking',
+    'الأمن والسلامة والحوادث':                     'Security, Safety & Incidents',
+    'العيادة المدرسية والصحة':                     'School Clinic & Health',
+    'جداول الواجب والإشراف':                       'Duty & Supervision Schedules',
+    'بوابة الطالبة والدرجات والحضور':             'Student Portal — Grades & Attendance',
+    'بوابة الطالب والدرجات والحضور':              'Student Portal — Grades & Attendance',
+    'متابعة الأداء الأكاديمي والسلوك':            'Tracking Academic Performance & Behaviour',
+    'درجات، حضور، رسائل، IEP، المساعد الذكي':     'Grades, Attendance, Messages, IEP, AI Assistant',
+    'الأخصائية الاجتماعية والحالات':              'Social Worker & Cases',
+    'الأخصائي الاجتماعي والحالات':               'Social Worker & Cases',
+    'الملف الشامل للطالبة — درجات، حضور، IEP':   'Full Student Profile — Grades, Attendance, IEP',
+    'الملف الشامل للطالب — درجات، حضور، IEP':    'Full Student Profile — Grades, Attendance, IEP',
+    'بطاقة الطالبة الرقمية QR — طباعة وتصدير':   'Student Digital QR Card — Print & Export',
+    'بطاقة الطالب الرقمي QR — طباعة وتصدير':     'Student Digital QR Card — Print & Export',
+    'محفظة الإنجاز KG→G12 — الأعمال والشهادات':  'Achievement Portfolio KG→G12 — Works & Certificates',
+    'بطاقة الخروج الرقمية — تقييم فهم الدرس':    'Digital Exit Ticket — Lesson Comprehension',
+    'الرسائل الداخلية — كادر المدرسة':            'Internal Messages — School Staff',
+    'إعدادات المدرسة — الأمان والنسخ والثيم':     'School Settings — Security, Backup & Theme',
+    'الملاحظة الصفية وتحليل الحصص بالذكاء الاصطناعي': 'Classroom Observation & AI Lesson Analysis',
+    'خطة التطوير المهني — أهداف وتقدم ومتابعة':  'Professional Development Plan — Goals, Progress & Follow-up',
+    'مستودع الوثائق المدرسي المشترك — خطط ومصادر وتقارير': 'Shared School Document Repository — Plans, Resources & Reports',
+    'التقييم الوظيفي السنوي — 6 معايير MOE':      'Annual Staff Appraisal — 6 MOE Criteria',
+    'إنشاء اجتماعات — تأكيد / اعتذار / تجاهل + تذكير ذكي': 'Create Meetings — Confirm / Decline / Ignore + Smart Reminder',
+    'تحديد أسلوب التعلم — للطلاب والموظفين + تحليل AI': 'Learning Style Assessment — Students & Staff + AI Analysis',
+    'الجاهزية الرقمية — معلمين + فريق الدعم والتربية الخاصة': 'Digital Readiness — Teachers + Support Team & Special Ed',
+    'النماذج الرقمية المدرسية — طلبات، إذنيات، استئذانات': 'School Digital Forms — Requests, Permits & Permissions',
+    'إجازات الكادر — رصيد MOE، حاسبة ذكية، شهادة طبية': 'Staff Leaves — MOE Balance, Smart Calculator, Medical Certificate',
+    'إدارة التوطين — ملفات الكادر وطلبات التصاريح': 'Emiratisation Management — Staff Files & Permit Requests',
+    'استيراد بيانات الطلاب من Excel — AI تحقق ذكي': 'Import Student Data from Excel — AI Smart Verification',
+    'إعداد المدرسة للتفتيش — تقرير شامل بـ AI':   'School Inspection Preparation — Comprehensive AI Report',
+    'إدارة المعلمين البدلاء — عقود مؤقتة + حذف تلقائي بعد انتهاء العقد': 'Sub Teacher Management — Temporary Contracts + Auto-Delete After Expiry',
+    'رابط ترحيب ذكي للموظف الجديد — واتساب / نسخ / QR': 'Smart Welcome Link for New Staff — WhatsApp / Copy / QR',
+    'شاشة البوابة — رمز QR يتجدد كل 60 ثانية':   'Gate Screen — QR Code Refreshes Every 60 Seconds',
+    'تسجيل حضور الموظفين — GPS + مسح QR من الموبايل': 'Staff Attendance Registration — GPS + Mobile QR Scan',
+    'شاشة التابلت — رمز QR يفتح رحلة الزائر مباشرة': 'Tablet Screen — QR Opens Visitor Journey Directly',
+    'بوابة الزائر — تسجيل ذاتي + تعيين مسمى وظيفي + دخول': 'Visitor Portal — Self Registration + Role Assignment + Entry',
+    'رصد سلوكي صامت — إشارات تلقائية — الطالب لا يعلم أبداً': 'Silent Behavioural Monitoring — Automatic Signals — Student Never Knows',
+    'جاهزية استقبال المفتش — تقرير شامل بـ AI — للمدير والمفتش': 'Inspector Readiness — Comprehensive AI Report — For Principal & Inspector',
+    'إنجازات الطلاب والموظفين — شهادات بالذكاء الاصطناعي': 'Student & Staff Achievements — AI-Generated Certificates',
+    '6 أنواع — PDF مولَّد + ختم + QR للتحقق + سجل رقمي': '6 Types — Generated PDF + Stamp + Verification QR + Digital Record',
+    '107 طالبة أصحاب همم | IEP حي | AI':          '107 Students of Determination | Live IEP | AI',
+
+    // ══ Hub Quick Access ══
+    'بوابة الحضور':                                'Attendance Gate',
+    'الاستقبال':                                   'Onboarding',
+    'المخطط الذكي':                               'Smart Blueprint',
+    'قناة تيليجرام':                               'Telegram Channel',
+    'رابط مخصص':                                  'Custom Link',
+
+    // ══ Idle Overlay ══
+    'ستُسجَّل خارجاً تلقائياً بسبب عدم النشاط':  'You will be logged out automatically due to inactivity',
+    'سيُسجَّل خارجاً تلقائياً بسبب عدم النشاط':  'You will be logged out automatically due to inactivity',
+    'أنا هنا — تابع':                             'I\'m here — Continue',
+
+    // ══ School Identity Banner ══
+    'هوية المدرسة:':                               'School Identity:',
+    'هوية المدرسة':                                'School Identity',
+
+    // ══ Footer ══
+    'منظومة الجود التعليمية الذكية':               'AlJood Smart Educational System',
+    'جميع الحقوق محفوظة':                         'All rights reserved',
+    'شهادة ملكية فكرية رقم':                       'Intellectual Property Certificate No.',
+
+    // ══ Badges ══
+    '🔒 مدير + أخصائي':                           '🔒 Principal + Specialist',
+    'معسكر':                                       'Bootcamp',
+
+    // ══ Navigation & Common ══
     'الكل':                   'All',
     'إدارة':                  'Admin',
     'أكاديمي':                'Academic',
@@ -124,9 +211,9 @@
     'مركز المنظومات':          'System Hub',
     'ابحث عن منظومة...':      'Search for a module...',
     'نشط':                    'Active',
-    'مدير':                   'Principal',
     'جديد':                   'New',
-    // Roles
+
+    // ══ Roles ══
     'معلم':                   'Teacher',
     'معلمة':                  'Teacher',
     'طالب':                   'Student',
@@ -139,7 +226,15 @@
     'موظف':                   'Staff',
     'موظفة':                  'Staff',
     'مراقب':                  'Supervisor',
-    // Common actions
+    'نائب المدير':            'Vice Principal',
+    'مفتش':                   'Inspector',
+    'ممرض':                   'Nurse',
+    'ممرضة':                  'Nurse',
+    'حارس أمن':               'Security Guard',
+    'معلم بديل':              'Substitute Teacher',
+    'معلمة بديلة':            'Substitute Teacher',
+
+    // ══ Common Actions ══
     'دخول المنصة':            'Enter Platform',
     'تسجيل الدخول':           'Login',
     'تسجيل الخروج':           'Logout',
@@ -161,9 +256,29 @@
     'إرسال':                  'Send',
     'تحميل':                  'Download',
     'رفع':                    'Upload',
-    // Status
+    'تسجيل وصولي':            'Check In',
+    'حضور الطلاب':            'Student Attendance',
+    'بدء الحصة الحية':        'Start Live Lesson',
+    'إرسال ملخص':             'Send Summary',
+    'اسأل AI':                'Ask AI',
+    'جولة':                   'Tour',
+    'دخول ذكي':               'Smart Login',
+    'مرحباً':                 'Welcome',
+    'إنشاء طلب':              'Create Request',
+    'تحديث البيانات':          'Refresh Data',
+    'فلترة':                  'Filter',
+    'تصفية':                  'Filter',
+    'عرض التفاصيل':           'View Details',
+    'إغلاق التفاصيل':         'Close Details',
+    'تصدير إلى Excel':        'Export to Excel',
+    'تصدير إلى PDF':          'Export to PDF',
+    'تصدير PDF':              'Export PDF',
+
+    // ══ Status ══
     'جارٍ التحميل...':        'Loading...',
+    'جارٍ التحميل':           'Loading…',
     'لا توجد بيانات':         'No data available',
+    'لا يوجد بيانات':         'No data available',
     'تم بنجاح':               'Done successfully',
     'خطأ':                    'Error',
     'تنبيه':                  'Alert',
@@ -172,17 +287,41 @@
     'غائب':                   'Absent',
     'متأخر':                  'Late',
     'مُعفى':                  'Excused',
-    // Time
+    'مقبول':                  'Accepted',
+    'مرفوض':                  'Rejected',
+    'قيد المراجعة':           'Under Review',
+    'مكتمل':                  'Completed',
+    'منتهي':                  'Expired',
+    'نشطة':                   'Active',
+    'موافق':                  'Approved',
+    'ممتاز':                  'Excellent',
+    'جيد جداً':               'Very Good',
+    'جيد':                    'Good',
+    'ضعيف':                   'Weak',
+
+    // ══ Time ══
     'اليوم':                  'Today',
     'أمس':                    'Yesterday',
     'الآن':                   'Now',
     'الأسبوع الأول':          'Week 1',
     'الأسبوع الثاني':         'Week 2',
     'الأسبوع الثالث':         'Week 3',
+    'الأسبوع الرابع':         'Week 4',
+    'الأسبوع الخامس':         'Week 5',
     'الفصل الأول':            'Semester 1',
     'الفصل الثاني':           'Semester 2',
     'الفصل الثالث':           'Semester 3',
-    // Academics
+    'الأحد':                  'Sunday',
+    'الاثنين':                'Monday',
+    'الثلاثاء':               'Tuesday',
+    'الأربعاء':               'Wednesday',
+    'الخميس':                 'Thursday',
+    'الجمعة':                 'Friday',
+    'السبت':                  'Saturday',
+    'صباحاً':                 'AM',
+    'مساءً':                  'PM',
+
+    // ══ Academics ══
     'الدرجات':                'Grades',
     'الحضور':                 'Attendance',
     'الجدول':                 'Schedule',
@@ -201,28 +340,44 @@
     'المجموع':                'Total',
     'الحد الأقصى':            'Maximum',
     'الحد الأدنى':            'Minimum',
-    'ممتاز':                  'Excellent',
-    'جيد جداً':               'Very Good',
-    'جيد':                    'Good',
-    'مقبول':                  'Acceptable',
-    'ضعيف':                   'Weak',
-    // Modules
+    'إجمالي':                 'Total',
+    'المجموع الكلي':          'Grand Total',
+    'النسبة المئوية':         'Percentage',
+    'معدل':                   'Average',
+    'أعلى':                   'Highest',
+    'أدنى':                   'Lowest',
+    'مقارنة':                 'Comparison',
+    'نمو':                    'Growth',
+    'تراجع':                  'Decline',
+    'ثابت':                   'Stable',
+    'بحسب الصف':              'by Grade',
+    'بحسب المادة':            'by Subject',
+    'بحسب المعلمة':           'by Teacher',
+    'بحسب المعلم':            'by Teacher',
+    'منذ الأسبوع الماضي':     'since last week',
+    'منذ الفصل الماضي':       'since last semester',
+    'مقارنةً بالعام الماضي':  'vs. last year',
+
+    // ══ Modules ══
     'لوحة المعلم':            'Teacher Dashboard',
+    'لوحة المعلمة':           'Teacher Dashboard',
     'لوحة المدير':            'Principal Dashboard',
     'بوابة ولي الأمر':        'Parent Portal',
     'بوابة الطالب':           'Student Portal',
+    'بوابة الطالبة':          'Student Portal',
     'نظام الحضور':            'Attendance System',
     'الجدول الدراسي':         'Timetable',
     'الميزانية':              'Budget',
     'المكتبة':                'Library',
     'رياض الأطفال':           'Kindergarten',
     'الدمج':                  'Inclusion',
+    'الدمج الذكي':            'Smart Inclusion',
     'التفتيش':                'Inspection',
     'الإذاعة':                'Broadcasting',
     'المنظومات':              'Modules',
     'المنظومة':               'Module',
-    // Inspection specific
     'بوابة التفتيش المدرسي':  'School Inspection Portal',
+    'بوابة التفتيش':          'Inspection Portal',
     'بطاقة المدرسة':          'School Card',
     'الأداء الأكاديمي':       'Academic Performance',
     'الحضور والانتظام':       'Attendance & Regularity',
@@ -236,7 +391,8 @@
     'عدد الطلاب':             'Student Count',
     'عدد الكوادر':            'Staff Count',
     'التقييم الإجمالي':       'Overall Rating',
-    // Staff & People
+
+    // ══ Staff & People ══
     'الاسم':                  'Name',
     'رقم الهوية':             'ID Number',
     'الجنسية':                'Nationality',
@@ -248,196 +404,271 @@
     'الوقت':                  'Time',
     'ملاحظات':                'Notes',
     'الإجراءات':              'Actions',
-    // School info
+    'النوع':                  'Type',
+    'الجنس':                  'Gender',
+    'الهاتف':                 'Phone',
+    'البريد الإلكتروني':      'Email',
+
+    // ══ School Info ══
     'روضة ومدرسة الجود':      'AlJood School',
     'مدرسة الجود':            'AlJood School',
     'أبوظبي':                 'Abu Dhabi',
-    'مدينة العين':            'Al Ain',
     'الإمارات':               'UAE',
-    // Buttons with icons (trim emoji, match text part)
-    'تسجيل وصولي':            'Check In',
-    'حضور الطلاب':            'Student Attendance',
-    'بدء الحصة الحية':        'Start Live Lesson',
-    'إرسال ملخص':             'Send Summary',
-    'اسأل AI':                'Ask AI',
-    'المزيد من AI':           'More AI',
-    'جولة':                   'Tour',
-    'دخول ذكي':               'Smart Login',
-    'مرحباً':                 'Welcome',
-    // Footer
-    'جميع الحقوق محفوظة':     'All rights reserved',
-    'منيرة علي محمد سعيد المري': 'Munira Ali Mohamed Al Marri',
-    'حقوق التأليف':           'Copyright',
-    // Parent portal
+
+    // ══ Attendance ══
+    'تسجيل الحضور':           'Attendance Registration',
+    'سجل الحضور':             'Attendance Record',
+    'الحضور والغياب':         'Attendance & Absence',
+    'الكوادر التعليمية':      'Teaching Staff',
+    'طلبات الإجازة':          'Leave Requests',
+    'إجازة اعتيادية':         'Annual Leave',
+    'إجازة مرضية':            'Sick Leave',
+    'غياب بعذر':              'Excused Absence',
+    'غياب بدون عذر':          'Unexcused Absence',
+
+    // ══ Parent Portal ══
     'بيانات الابن':           'Child Information',
     'بيانات الطالب':          'Student Information',
+    'بيانات الطالبة':         'Student Information',
     'نتائج الطالب':           'Student Results',
+    'نتائج الطالبة':          'Student Results',
     'التقرير الأكاديمي':      'Academic Report',
     'تواصل مع المدرسة':       'Contact School',
-    // With definite article 'ال' — common in descriptions
-    'الأكاديمي':              'Academic',
-    'الأكاديمية':             'Academic',
-    'الإدارة':                'Administration',
-    'المدير':                 'Principal',
-    'المديرة':                'Principal',
-    'المعلم':                 'Teacher',
-    'المعلمة':                'Teacher',
-    'الطالب':                 'Student',
-    'الطالبة':                'Student',
-    'الطلاب':                 'Students',
-    'الطلبة':                 'Students',
-    'الحضور':                 'Attendance',
-    'الدرجات':                'Grades',
-    'الجدول':                 'Schedule',
-    'التحليلات':              'Analytics',
-    'التقارير':               'Reports',
-    'الميزانية':              'Budget',
-    'المكتبة':                'Library',
-    'الإذاعة':                'Broadcasting',
-    'المنظومة':               'Module',
-    'المنظومات':              'Modules',
-    'المهام':                 'Tasks',
-    'الاختبارات':             'Exams',
-    'الرسائل':                'Messages',
-    'الإعدادات':              'Settings',
-    // Misc
-    'نعم':                    'Yes',
-    'لا':                     'No',
-    // News ticker / broadcasts
-    'أخبار EduOS':            'EduOS News',
-    'إعلان':                  'Announcement',
-    'تذكير':                  'Reminder',
 
-    // ── Hub card descriptions (long) ──────────────────────────────────────
-    'لوحة المدير العامة والتحليلات':               'Principal General Dashboard & Analytics',
-    'مركز التحليلات والذكاء الاصطناعي':            'Analytics & AI Center',
-    'إدارة الميزانية والمصروفات':                  'Budget & Expenses Management',
-    'التقويم والفعاليات المدرسية':                 'Calendar & School Events',
-    'الجدول الأسبوعي وتوزيع الحصص':               'Weekly Timetable & Period Distribution',
-    'لوحة المعلمة والدرجات والحصص':               'Teacher Dashboard — Grades & Periods',
-    'رئيسية المعلمة — طالباتي، جدول، مهام، AI':   'Teacher Home — My Students, Schedule, Tasks, AI',
-    'جدول الاختبارات وتوزيع القاعات':             'Exam Schedule & Room Assignment',
-    'المكتبة والمختبر والموارد':                   'Library, Lab & Resources',
-    'رياض الأطفال وأنشطة الأطفال':                'Kindergarten & Children\'s Activities',
-    'ذوو الاحتياجات الخاصة والدمج':               'Special Needs & Inclusion',
-    '107 طالبة أصحاب همم | IEP حي | AI':          '107 Students of Determination | Live IEP | AI',
-    'الإذاعة المدرسية والمحتوى':                   'School Broadcasting & Content',
-    'طلبات الصيانة والمرافق':                      'Maintenance & Facilities Requests',
-    'الحافلات والطرق والمسارات':                   'Buses, Routes & Paths',
-    'قائمة الطعام والطلبات اليومية':               'Cafeteria Menu & Daily Orders',
-    'حجز الفضاءات والمرافق':                       'Space & Facility Booking',
-    'الأمن والسلامة والحوادث':                     'Security, Safety & Incidents',
-    'العيادة المدرسية والصحة':                     'School Clinic & Health',
-    'جداول الواجب والإشراف':                       'Duty & Supervision Schedules',
-    'بوابة الطالبة والدرجات والحضور':             'Student Portal — Grades & Attendance',
-    'بوابة الطالب والدرجات والحضور':              'Student Portal — Grades & Attendance',
-    'متابعة الأداء الأكاديمي والسلوك':            'Tracking Academic Performance & Behaviour',
-    'درجات، حضور، رسائل، IEP، المساعد الذكي':     'Grades, Attendance, Messages, IEP, AI Assistant',
-    'الأخصائية الاجتماعية والحالات':              'Social Worker & Cases',
-    'الأخصائي الاجتماعي والحالات':               'Social Worker & Cases',
-    'الملف الشامل للطالبة — درجات، حضور، IEP':   'Full Student Profile — Grades, Attendance, IEP',
-    'الملف الشامل للطالب — درجات، حضور، IEP':    'Full Student Profile — Grades, Attendance, IEP',
-    'بطاقة الطالبة الرقمية QR — طباعة وتصدير':   'Student Digital QR Card — Print & Export',
-    'بطاقة الطالب الرقمية QR — طباعة وتصدير':    'Student Digital QR Card — Print & Export',
-    'محفظة الإنجاز KG→G12 — الأعمال والشهادات':  'Achievement Portfolio KG→G12 — Works & Certificates',
-    'بطاقة الخروج الرقمية — تقييم فهم الدرس':    'Digital Exit Ticket — Lesson Comprehension',
-    'الرسائل الداخلية — كادر المدرسة':            'Internal Messages — School Staff',
-    'إعدادات المدرسة — الأمان والنسخ والثيم':     'School Settings — Security, Backup & Theme',
-    'رابط مخصص':                                  'Custom Link',
+    // ══ Emiratisation ══
+    'نسبة التوطين الفعلية':    'Actual Emiratisation Rate',
+    'الكادر المواطن':          'National Staff',
+    'الكادر غير المواطن':      'Non-National Staff',
+    'الكادر الكلي':            'Total Staff',
+    'نسبة التوطين':            'Emiratisation Rate',
+    'عدد المواطنين':           'National Count',
+    'التوطين':                 'Emiratisation',
+    'طلب تعيين كادر':          'Staff Appointment Request',
+    'طلب إعفاء من التوطين':    'Emiratisation Exemption Request',
+    'تقرير التوطين':           'Emiratisation Report',
+    'حاسبة Nafis':             'Nafis Calculator',
+    'الطاقة القصوى':           'Maximum Capacity',
+    'الهدف السنوي':            'Annual Target',
+    'المدفوع فعلياً':          'Actually Paid',
+    'الغرامة الشهرية':         'Monthly Penalty',
+    'الغرامة السنوية المتوقعة': 'Expected Annual Penalty',
+    'التواصل الرسمي':          'Official Communication',
+    'بريد رسمي':               'Official Email',
+    'تاريخ الطلب':             'Request Date',
+    'حالة الطلب':              'Request Status',
+    'الجهة المعنية':           'Relevant Authority',
+    'الجهة المستلمة':          'Receiving Authority',
 
-    // ── Emiratisation page ────────────────────────────────────────────────
-    'نسبة التوطين الفعلية':                        'Actual Emiratisation Rate',
-    'الكادر المواطن':                              'National Staff',
-    'الكادر غير المواطن':                          'Non-National Staff',
-    'الكادر الكلي':                                'Total Staff',
-    'نسبة التوطين':                                'Emiratisation Rate',
-    'كادر الإمارات':                               'UAE National Staff',
-    'عدد المواطنين':                               'National Count',
-    'التوطين':                                     'Emiratisation',
-    'طلب تعيين كادر':                              'Staff Appointment Request',
-    'طلب إعفاء من التوطين':                        'Emiratisation Exemption Request',
-    'تقرير التوطين':                               'Emiratisation Report',
-    'حاسبة Nafis':                                 'Nafis Calculator',
-    'الطاقة القصوى':                               'Maximum Capacity',
-    'الهدف السنوي':                                'Annual Target',
-    'المدفوع فعلياً':                              'Actually Paid',
-    'الغرامة الشهرية':                             'Monthly Penalty',
-    'الغرامة السنوية المتوقعة':                    'Expected Annual Penalty',
-    'تربية وطنية':                                 'National Education',
-    'التواصل الرسمي':                              'Official Communication',
-    'بريد رسمي':                                   'Official Email',
-    'إنشاء طلب':                                   'Create Request',
-    'تاريخ الطلب':                                 'Request Date',
-    'حالة الطلب':                                  'Request Status',
-    'الجهة المعنية':                               'Relevant Authority',
-    'الجهة المستلمة':                              'Receiving Authority',
+    // ══ Smart Import ══
+    'استيراد ذكي':             'Smart Import',
+    'استيراد البيانات':        'Data Import',
+    'تحميل ملف':               'Upload File',
+    'معاينة البيانات':         'Data Preview',
+    'تأكيد الاستيراد':         'Confirm Import',
+    'خطأ في الاستيراد':        'Import Error',
+    'تم الاستيراد بنجاح':      'Import Successful',
 
-    // ── Inspection page ────────────────────────────────────────────────────
-    'بوابة التفتيش المدرسي':                       'School Inspection Portal',
-    'تقرير التفتيش':                               'Inspection Report',
-    'مؤشرات الأداء':                               'Performance Indicators',
-    'درجة المؤشر':                                 'Indicator Score',
-    'مستوى الأداء':                                'Performance Level',
+    // ══ Common UI ══
+    'السنة الأكاديمية':        'Academic Year',
+    'الفصل الدراسي':           'Semester',
+    'الأسبوع الدراسي':         'Academic Week',
+    'فلتر':                    'Filter',
+    'إجمالي':                  'Total',
+    'تحديث البيانات':          'Refresh Data',
+    'نعم':                     'Yes',
+    'لا':                      'No',
 
-    // ── Staff & attendance ────────────────────────────────────────────────
-    'تسجيل الحضور':                                'Attendance Registration',
-    'سجل الحضور':                                  'Attendance Record',
-    'الحضور والغياب':                              'Attendance & Absence',
-    'الكوادر التعليمية':                           'Teaching Staff',
-    'طلبات الإجازة':                               'Leave Requests',
-    'إجازة اعتيادية':                              'Annual Leave',
-    'إجازة مرضية':                                 'Sick Leave',
-    'غياب بعذر':                                   'Excused Absence',
-    'غياب بدون عذر':                               'Unexcused Absence',
+    // ══ News/Broadcasts ══
+    'أخبار EduOS':             'EduOS News',
+    'إعلان':                   'Announcement',
+    'تذكير':                   'Reminder',
+    'رسالة':                   'Message',
+    'إشعار':                   'Notification',
 
-    // ── Smart import ──────────────────────────────────────────────────────
-    'استيراد ذكي':                                 'Smart Import',
-    'استيراد البيانات':                            'Data Import',
-    'تحميل ملف':                                   'Upload File',
-    'معاينة البيانات':                             'Data Preview',
-    'تأكيد الاستيراد':                             'Confirm Import',
-    'خطأ في الاستيراد':                            'Import Error',
-    'تم الاستيراد بنجاح':                          'Import Successful',
+    // ══ With definite article ══
+    'الأكاديمي':               'Academic',
+    'الأكاديمية':              'Academic',
+    'الإدارة':                 'Administration',
+    'المدير':                  'Principal',
+    'المديرة':                 'Principal',
+    'المعلم':                  'Teacher',
+    'المعلمة':                 'Teacher',
+    'الطالب':                  'Student',
+    'الطالبة':                 'Student',
+    'الطلاب':                  'Students',
+    'الطلبة':                  'Students',
+    'المنظومة':                'Module',
+    'المنظومات':               'Modules',
+    'المهام':                  'Tasks',
+    'الاختبارات':              'Exams',
+    'الميزانية':               'Budget',
+    'المكتبة':                 'Library',
+    'الإذاعة':                 'Broadcasting',
 
-    // ── Common UI phrases ─────────────────────────────────────────────────
-    'السنة الأكاديمية':                            'Academic Year',
-    'الفصل الدراسي':                               'Semester',
-    'الأسبوع الدراسي':                             'Academic Week',
-    'لا يوجد بيانات':                             'No data available',
-    'جارٍ التحميل':                               'Loading…',
-    'تحديث البيانات':                              'Refresh Data',
-    'فلترة':                                       'Filter',
-    'تصفية':                                       'Filter',
-    'الكل':                                        'All',
-    'إجمالي':                                      'Total',
-    'المجموع الكلي':                               'Grand Total',
-    'النسبة المئوية':                              'Percentage',
-    'معدل':                                        'Average',
-    'أعلى':                                        'Highest',
-    'أدنى':                                        'Lowest',
-    'مقارنة':                                      'Comparison',
-    'نمو':                                         'Growth',
-    'تراجع':                                       'Decline',
-    'ثابت':                                        'Stable',
-    'منذ الأسبوع الماضي':                         'since last week',
-    'منذ الفصل الماضي':                           'since last semester',
-    'مقارنةً بالعام الماضي':                      'vs. last year',
-    'بحسب الصف':                                   'by Grade',
-    'بحسب المادة':                                 'by Subject',
-    'بحسب المعلمة':                               'by Teacher',
-    'بحسب المعلم':                                'by Teacher',
-    'عرض التفاصيل':                               'View Details',
-    'إغلاق التفاصيل':                             'Close Details',
-    'طباعة':                                       'Print',
-    'تصدير إلى Excel':                            'Export to Excel',
-    'تصدير إلى PDF':                              'Export to PDF',
+    // ══ Principal OS ══
+    'ملخص اليوم':              'Day Summary',
+    'حالات حرجة':              'Critical Cases',
+    'طلبات معلقة':             'Pending Requests',
+    'نسبة الحضور':             'Attendance Rate',
+    'متوسط الدرجات':           'Grades Average',
+    'تقرير يومي':              'Daily Report',
+    'تقرير أسبوعي':            'Weekly Report',
+    'تقرير شهري':              'Monthly Report',
+    'تنبيهات ذكية':            'Smart Alerts',
+    'رؤية المدرسة':            'School Vision',
+    'خطة التحسين':             'Improvement Plan',
+    'مؤشرات الأداء':           'Performance Indicators',
+
+    // ══ Teacher OS ══
+    'طالباتي':                 'My Students',
+    'طلابي':                   'My Students',
+    'حصصي':                   'My Periods',
+    'جدولي':                   'My Schedule',
+    'رصد الدرجات':             'Grade Entry',
+    'تحضير الطلاب':            'Student Attendance',
+    'بطاقات الخروج':           'Exit Tickets',
+    'أسلوب التعلم':            'Learning Style',
+    'الحصة الذكية':            'Smart Lesson',
+    'الذكاء الاصطناعي':        'Artificial Intelligence',
+    'مساعد AI':               'AI Assistant',
+    'المساعد الذكي':           'AI Assistant',
+    'تحليل AI':               'AI Analysis',
+
+    // ══ Student OS ══
+    'درجاتي':                  'My Grades',
+    'حضوري':                   'My Attendance',
+    'جدولي':                   'My Schedule',
+    'إنجازاتي':                'My Achievements',
+    'رسائلي':                  'My Messages',
+    'محفظتي':                  'My Portfolio',
+
+    // ══ Social Worker OS ══
+    'الحالات الاجتماعية':      'Social Cases',
+    'حالة جديدة':              'New Case',
+    'متابعة الحالات':          'Case Follow-up',
+    'تقرير الحالة':            'Case Report',
+    'خطة التدخل':              'Intervention Plan',
+
+    // ══ Messages ══
+    'إرسال رسالة':             'Send Message',
+    'رسائل واردة':             'Inbox',
+    'رسائل صادرة':             'Sent',
+    'مسودات':                  'Drafts',
+    'أولوية عالية':            'High Priority',
+    'أولوية عادية':            'Normal Priority',
+    'غير مقروءة':              'Unread',
+
+    // ══ Settings ══
+    'إعدادات عامة':            'General Settings',
+    'الأمان':                  'Security',
+    'النسخ الاحتياطي':         'Backup',
+    'تغيير كلمة المرور':       'Change Password',
+    'كلمة المرور الحالية':     'Current Password',
+    'كلمة المرور الجديدة':     'New Password',
+    'تأكيد كلمة المرور':       'Confirm Password',
+    'الثيم':                   'Theme',
+    'اللغة':                   'Language',
+    'الإشعارات':               'Notifications',
+    'حفظ الإعدادات':           'Save Settings',
+
+    // ══ Inspection ══
+    'تقرير التفتيش':           'Inspection Report',
+    'درجة المؤشر':             'Indicator Score',
+    'مستوى الأداء':            'Performance Level',
+    'جاهزية المدرسة':          'School Readiness',
+    'ملاحظات المفتش':          'Inspector Notes',
+
+    // ══ Financial ══
+    'الميزانية الكلية':        'Total Budget',
+    'المصروفات':               'Expenses',
+    'الرصيد المتبقي':          'Remaining Balance',
+    'فئة المصروف':             'Expense Category',
+    'تقرير مالي':              'Financial Report',
+    'إضافة مصروف':             'Add Expense',
+
+    // ══ Atheer ══
+    'أثير':                    'Atheer',
+    'إشارات سلوكية':           'Behavioural Signals',
+    'نمط سلوكي':               'Behavioural Pattern',
+    'خطر منخفض':               'Low Risk',
+    'خطر متوسط':               'Medium Risk',
+    'خطر مرتفع':               'High Risk',
+    'يحتاج متابعة':            'Needs Follow-up',
+
+    // ══ Demo / Bootcamp ══
+    'تجربة الزائر':            'Visitor Experience',
+    'مسمى وظيفي':              'Job Title',
+    'تسجيل ذاتي':              'Self Registration',
+    'معسكر صندوق خليفة':       'Khalifa Fund Bootcamp',
+    'بوابة الزائر':            'Visitor Portal',
+
+    // ══ Sub Teacher ══
+    'معلم بديل':               'Substitute Teacher',
+    'تاريخ بداية العقد':       'Contract Start Date',
+    'تاريخ نهاية العقد':       'Contract End Date',
+    'تمديد العقد':             'Extend Contract',
+    'إنشاء حساب':              'Create Account',
+    'رابط الترحيب':            'Welcome Link',
+
+    // ══ General Misc ══
+    'تربية وطنية':             'National Education',
+    'نعم':                     'Yes',
+    'لا':                      'No',
+    'منذ':                     'since',
+    'حتى':                     'until',
+    'من':                      'from',
+    'إلى':                     'to',
+    'في':                      'in',
+    'خلال':                    'during',
+    'بواسطة':                  'by',
+    'مع':                      'with',
+    'بدون':                    'without',
+    'كل':                      'all',
+    'هذا':                     'this',
+    'هذه':                     'this',
+    'الكل':                    'All',
+    'المزيد':                  'More',
+    'تعلم المزيد':             'Learn More',
   };
 
-  // ─── Store original text nodes for restoration ───────────────────────────
-  const _originals = new WeakMap();   // node → original textContent
-  const _attrOriginals = new WeakMap(); // element → {attr: original}
+  // ─── Regex Patterns for dynamic text ──────────────────────────────────
+  // Each: { pattern: RegExp, replace: string | function }
+  const PATTERNS = [
+    // "الأسبوع 3" → "Week 3"
+    { pattern: /الأسبوع\s+(\d+)/g, replace: (m, n) => `Week ${n}` },
+    // "الفصل الأول/الثاني/الثالث" handled in PHRASES above
+    // "X منظومة" / "X منظومات"
+    { pattern: /(\d+)\s+منظومات/g, replace: (m, n) => `${n} Modules` },
+    { pattern: /(\d+)\s+منظومة/g,  replace: (m, n) => `${n} Module` },
+    // "منظومتان"
+    { pattern: /منظومتان/g, replace: '2 Modules' },
+    // "X طالبة/طالب"
+    { pattern: /(\d+)\s+طالبة/g, replace: (m, n) => `${n} Students` },
+    { pattern: /(\d+)\s+طالب/g,  replace: (m, n) => `${n} Students` },
+    // "X موظف/موظفة"
+    { pattern: /(\d+)\s+موظفة/g, replace: (m, n) => `${n} Staff` },
+    { pattern: /(\d+)\s+موظف/g,  replace: (m, n) => `${n} Staff` },
+    // "X تنبيه/تنبيهات"
+    { pattern: /(\d+)\s+تنبيهات/g, replace: (m, n) => `${n} Alerts` },
+    { pattern: /(\d+)\s+تنبيه/g,   replace: (m, n) => `${n} Alert` },
+    // "العام الدراسي 2025-2026" → "Academic Year 2025-2026"
+    { pattern: /العام الدراسي\s+([\d\-\/]+)/g, replace: (m, y) => `Academic Year ${y}` },
+    // "الفصل X — YYYY-YYYY"
+    { pattern: /الفصل\s+(الأول|الثاني|الثالث)\s*[—–-]\s*([\d\-\/]+)/g,
+      replace: (m, s, y) => {
+        const sm = {الأول:'1', الثاني:'2', الثالث:'3'};
+        return `Semester ${sm[s]||s} — ${y}`;
+      }
+    },
+    // "الأسبوع X" in header badge
+    { pattern: /الأسبوع\s+([\u0660-\u0669\d]+)/g, replace: (m, n) => `Week ${n}` },
+  ];
 
-  // ─── Core Engine ─────────────────────────────────────────────────────────
+  // ─── Store originals ────────────────────────────────────────────────────
+  const _originals = new WeakMap();
+  const _attrOriginals = new WeakMap();
+
+  // ─── Core Engine ───────────────────────────────────────────────────────
   const EduLang = {
     current: 'ar',
 
@@ -451,12 +682,10 @@
       if (lang !== 'ar' && lang !== 'en') return;
       this.current = lang;
 
-      // Update URL param without reload
       const url = new URL(window.location.href);
       url.searchParams.set('lang', lang);
       window.history.replaceState({}, '', url.toString());
 
-      // Apply
       document.documentElement.lang = lang;
       document.documentElement.dir  = lang === 'ar' ? 'rtl' : 'ltr';
       this._applyDictKeys();
@@ -465,7 +694,6 @@
       this._applyAttrs();
       this._updateToggleBtn();
 
-      // Dispatch event for app-specific handlers
       window.dispatchEvent(new CustomEvent('eduos-lang-change', { detail: { lang } }));
     },
 
@@ -487,12 +715,15 @@
       });
     },
 
-    // Layer 3: phrase scan — replaces text nodes containing known Arabic phrases
+    // Layer 3+4: phrase scan + regex patterns
     _applyPhrases() {
       if (this.current === 'ar') {
         this._restoreOriginals();
         return;
       }
+      // Sort phrases by length descending (longest first = more specific)
+      this._phrasesSorted = this._phrasesSorted ||
+        Object.keys(PHRASES_RAW).sort((a, b) => b.length - a.length);
       this._scanAndReplace(document.body);
     },
 
@@ -502,12 +733,12 @@
         NodeFilter.SHOW_TEXT,
         {
           acceptNode(node) {
-            // Skip script, style, noscript
             const tag = node.parentElement && node.parentElement.tagName;
             if (!tag) return NodeFilter.FILTER_REJECT;
             if (['SCRIPT','STYLE','NOSCRIPT'].includes(tag)) return NodeFilter.FILTER_REJECT;
-            // Skip nodes in the lang button itself
-            if (node.parentElement && node.parentElement.closest('#eduos-lang-toggle,#eduos-lang-float,#eduos-lang-btn')) return NodeFilter.FILTER_REJECT;
+            if (node.parentElement && node.parentElement.closest(
+              '#eduos-lang-toggle,#eduos-lang-float,#eduos-lang-btn'
+            )) return NodeFilter.FILTER_REJECT;
             return NodeFilter.FILTER_ACCEPT;
           }
         }
@@ -522,33 +753,50 @@
         const trimmed = orig.trim();
         if (!trimmed) return;
 
-        // Exact match
-        if (PHRASES[trimmed]) {
+        // Step 1: exact match
+        if (PHRASES_RAW[trimmed]) {
           if (!_originals.has(node)) _originals.set(node, orig);
-          node.textContent = orig.replace(trimmed, PHRASES[trimmed]);
+          node.textContent = orig.replace(trimmed, PHRASES_RAW[trimmed]);
           return;
         }
 
-        // Partial match — space-boundary aware replacement
-        // Only replaces phrases that are whole words (surrounded by whitespace or string edges)
         let replaced = orig;
         let changed = false;
-        const sortedKeys = Object.keys(PHRASES).sort((a,b) => b.length - a.length);
-        for (const ar of sortedKeys) {
+
+        // Step 2: phrase partial match (longest first)
+        for (const ar of this._phrasesSorted) {
           if (!replaced.includes(ar)) continue;
           const escaped = ar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          // Boundary = whitespace, punctuation, Arabic punctuation, or string edge
-          const B = '(^|[\\s،؛؟!.·|—\\-\\/\\(\\)\\[\\]:])';
-          const E = '($|[\\s،؛؟!.·|—\\-\\/\\(\\)\\[\\]:])';
+          const B = '(^|[\\s،؛؟!.·|—\\-\\/\\(\\)\\[\\]:"\'،،]|(?<=[\\u0600-\\u06FF]))';
+          const E = '($|[\\s،؛؟!.·|—\\-\\/\\(\\)\\[\\]:"\'،،]|(?=[\\u0600-\\u06FF\\w]))';
           try {
-            const regex = new RegExp(B + escaped + E, 'g');
-            const next = replaced.replace(regex, (m, pre, post) => {
-              if (post === undefined) return (pre || '') + PHRASES[ar];
-              return (pre || '') + PHRASES[ar] + (post || '');
-            });
-            if (next !== replaced) { replaced = next; changed = true; }
+            // Simple includes-based replacement for Arabic (boundary detection is tricky)
+            const idx = replaced.indexOf(ar);
+            if (idx !== -1) {
+              const before = idx === 0 ? '' : replaced[idx - 1];
+              const after  = idx + ar.length >= replaced.length ? '' : replaced[idx + ar.length];
+              // Allow replacement if surrounded by non-Arabic-word chars or string edges
+              const okBefore = idx === 0 || /[\s،؛؟!.·|—\-\/\(\)\[\]:"']/.test(before) || before === '';
+              const okAfter  = idx + ar.length >= replaced.length || /[\s،؛؟!.·|—\-\/\(\)\[\]:"']/.test(after) || after === '';
+              if (okBefore || okAfter) {
+                replaced = replaced.slice(0, idx) + PHRASES_RAW[ar] + replaced.slice(idx + ar.length);
+                changed = true;
+              }
+            }
           } catch(e) {}
         }
+
+        // Step 3: regex patterns
+        for (const p of PATTERNS) {
+          if (!p.pattern.test(replaced)) {
+            p.pattern.lastIndex = 0;
+            continue;
+          }
+          p.pattern.lastIndex = 0;
+          const next = replaced.replace(p.pattern, p.replace);
+          if (next !== replaced) { replaced = next; changed = true; }
+        }
+
         if (changed) {
           if (!_originals.has(node)) _originals.set(node, orig);
           node.textContent = replaced;
@@ -557,25 +805,32 @@
     },
 
     _restoreOriginals() {
-      // Walk all text nodes and restore saved originals
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       let n;
       while ((n = walker.nextNode())) {
-        if (_originals.has(n)) {
-          n.textContent = _originals.get(n);
-        }
+        if (_originals.has(n)) n.textContent = _originals.get(n);
       }
     },
 
-    // Translate placeholder / title / alt / aria-label attributes
+    // Translate placeholder / title / alt / aria-label
     _applyAttrs() {
       const attrMap = {
-        'ابحث عن منظومة...':              'Search for a module...',
-        'اسم المستخدم أو البريد الإلكتروني': 'Username or email',
-        'كلمة المرور':                    'Password',
-        'بحث...':                         'Search...',
-        'أدخل ملاحظاتك...':               'Enter your notes...',
-        'أدخل...':                        'Enter...',
+        'ابحث عن منظومة...':                   'Search for a module...',
+        'اسم المستخدم أو البريد الإلكتروني':   'Username or email',
+        'كلمة المرور':                          'Password',
+        'بحث...':                               'Search...',
+        'أدخل ملاحظاتك...':                    'Enter your notes...',
+        'أدخل...':                              'Enter...',
+        'تسجيل الخروج':                         'Logout',
+        'أضف تعليقاً...':                       'Add a comment...',
+        'اكتب رسالتك...':                       'Write your message...',
+        'ابحث...':                              'Search...',
+        'اختر...':                              'Select...',
+        'أدخل اسم المستخدم':                    'Enter username',
+        'أدخل كلمة المرور':                     'Enter password',
+        'ابحث عن طالب...':                      'Search for a student...',
+        'ابحث عن موظف...':                      'Search for a staff member...',
+        'اكتب هنا...':                          'Write here...',
       };
 
       ['placeholder', 'title', 'alt', 'aria-label'].forEach(attr => {
@@ -597,7 +852,7 @@
       });
     },
 
-    // ─── Toggle Button ──────────────────────────────────────────────────────
+    // ─── Toggle Button ────────────────────────────────────────────────────
     _updateToggleBtn() {
       const btn = document.getElementById('eduos-lang-float') ||
                   document.getElementById('eduos-lang-toggle');
@@ -620,15 +875,11 @@
       return btn;
     },
 
-    // Inject into known header slot OR floating bottom-left corner
     autoInjectToggle() {
-      // Already exists? Just update text
       if (document.getElementById('eduos-lang-float') || document.getElementById('eduos-lang-toggle')) {
         this._updateToggleBtn();
         return;
       }
-
-      // Try header slot first
       const slots = ['eduos-header-actions', 'eduos-lang-container', 'header-actions', 'header-right'];
       for (const id of slots) {
         const el = document.getElementById(id);
@@ -640,14 +891,11 @@
           return;
         }
       }
-
-      // Fallback: floating button — bottom-left (won't overlap logo/header)
       const btn = this._createToggleBtn();
       btn.id = 'eduos-lang-float';
       document.body.appendChild(btn);
     },
 
-    // Initialize
     init() {
       this._injectStyles();
       this.current = detectLang();
@@ -667,15 +915,23 @@
       } else {
         run();
       }
+
+      // Re-apply after dynamic content loads (Supabase data, etc.)
+      if (this.current === 'en') {
+        setTimeout(() => {
+          if (this.current === 'en') this._applyPhrases();
+        }, 1500);
+        setTimeout(() => {
+          if (this.current === 'en') this._applyPhrases();
+        }, 3500);
+      }
     },
 
-    // ─── Styles ─────────────────────────────────────────────────────────────
     _injectStyles() {
       if (document.getElementById('eduos-lang-styles')) return;
       const style = document.createElement('style');
       style.id = 'eduos-lang-styles';
       style.textContent = `
-        /* ── Inline header button ─────────────────────────────── */
         .eduos-lang-btn {
           background: rgba(108,61,214,0.18);
           color: #e2d9ff;
@@ -695,8 +951,6 @@
           border-color: #6C3DD6;
           color: #fff;
         }
-
-        /* ── Floating button — bottom-left corner ─────────────── */
         #eduos-lang-float {
           position: fixed;
           bottom: 72px;
@@ -726,8 +980,6 @@
           color: #fff;
           transform: scale(1.08);
         }
-
-        /* LTR override — move float to bottom-right */
         [dir="ltr"] #eduos-lang-float {
           left: auto;
           right: 16px;
@@ -737,11 +989,9 @@
     }
   };
 
-  // ─── Global API ───────────────────────────────────────────────────────────
   window.EduLang = EduLang;
   window.t = (key, fallback) => EduLang.t(key, fallback);
 
-  // Auto-start
   EduLang.init();
 
 })();
