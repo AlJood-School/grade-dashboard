@@ -866,22 +866,38 @@
     },
 
     // ─── Update all internal links to preserve ?lang=en ──────────────────
+    _patchLink(a) {
+      const host = window.location.hostname;
+      const href = a.getAttribute('href');
+      if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+      try {
+        const url = new URL(href, window.location.origin);
+        if (url.hostname !== host && url.hostname !== '') return;
+        if (!url.searchParams.has('lang')) {
+          url.searchParams.set('lang', 'en');
+          a.setAttribute('href', url.pathname + '?' + url.searchParams.toString() + (url.hash || ''));
+        }
+      } catch(e) {}
+    },
+
     _updateLinks() {
       if (this.current !== 'en') return;
-      const host = window.location.hostname;
-      document.querySelectorAll('a[href]').forEach(a => {
-        const href = a.getAttribute('href');
-        if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
-        try {
-          const url = new URL(href, window.location.origin);
-          // Only update internal links (same host or relative)
-          if (url.hostname !== host && url.hostname !== '') return;
-          if (!url.searchParams.has('lang')) {
-            url.searchParams.set('lang', 'en');
-            a.setAttribute('href', url.pathname + '?' + url.searchParams.toString() + url.hash);
-          }
-        } catch(e) {}
+      document.querySelectorAll('a[href]').forEach(a => this._patchLink(a));
+    },
+
+    _startLinkObserver() {
+      if (this.current !== 'en') return;
+      if (this._linkObserver) return; // already running
+      this._linkObserver = new MutationObserver(mutations => {
+        mutations.forEach(m => {
+          m.addedNodes.forEach(node => {
+            if (node.nodeType !== 1) return;
+            if (node.tagName === 'A') this._patchLink(node);
+            node.querySelectorAll && node.querySelectorAll('a[href]').forEach(a => this._patchLink(a));
+          });
+        });
       });
+      this._linkObserver.observe(document.body, { childList: true, subtree: true });
     },
 
     autoInjectToggle() {
