@@ -905,6 +905,10 @@
     },
 
     autoInjectToggle() {
+      // لا زر لغة في صفحة Login أو أي صفحة تحمل data-no-lang-btn
+      if (document.body && (document.body.dataset.noLangBtn !== undefined ||
+          window.location.pathname.includes('eduos-login'))) return;
+
       if (document.getElementById('eduos-lang-float') || document.getElementById('eduos-lang-toggle')) {
         this._updateToggleBtn();
         return;
