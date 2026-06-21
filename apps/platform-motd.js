@@ -1,42 +1,148 @@
 /**
  * ═══════════════════════════════════════════════════════════
- *  EduOS Platform MOTD  v4
+ *  EduOS Platform MOTD  v5  — Bilingual (AR/EN)
  *  ─────────────────────────────────────────────────────────
  *  ① أذكار / آيات / أحاديث → تظهر في مركز الشاشة
  *     بتأثير ضبابي هادئ (backdrop blur + fade) — 8 ثوانٍ
  *  ② شريط أخبار إداري/وزاري → أسفل الشاشة مثل التلفاز
  *  ③ تذكير التنفس والحركة → بعد 30 دقيقة نشاط
+ *
+ *  ترجمات القرآن: Saheeh International (معتمدة دولياً)
+ *  ترجمات الأحاديث: sunnah.com (موثَّقة)
+ *  النص العربي الأصلي يظهر دائماً — الترجمة للفهم فقط
  * ═══════════════════════════════════════════════════════════
  */
 
-/* ── محتوى إسلامي محقَّق ───────────────────────────────── */
+/* ── محتوى إسلامي محقَّق — ثنائي اللغة ────────────────── */
 const MOTD_ITEMS = [
-  { type:'quran',   text:'﴿ وَقُل رَّبِّ زِدْنِي عِلْمًا ﴾', ref:'سورة طه: ١١٤' },
-  { type:'quran',   text:'﴿ إِنَّ اللَّهَ لَا يُضِيعُ أَجْرَ الْمُحْسِنِينَ ﴾', ref:'سورة التوبة: ١٢٠' },
-  { type:'quran',   text:'﴿ وَعَلَّمَكَ مَا لَمْ تَكُن تَعْلَمُ ۚ وَكَانَ فَضْلُ اللَّهِ عَلَيْكَ عَظِيمًا ﴾', ref:'سورة النساء: ١١٣' },
-  { type:'quran',   text:'﴿ فَإِنَّ مَعَ الْعُسْرِ يُسْرًا ۞ إِنَّ مَعَ الْعُسْرِ يُسْرًا ﴾', ref:'سورة الشرح: ٥–٦' },
-  { type:'quran',   text:'﴿ وَتَوَاصَوْا بِالْحَقِّ وَتَوَاصَوْا بِالصَّبْرِ ﴾', ref:'سورة العصر: ٣' },
-  { type:'hadith',  text:'« مَن سَلَكَ طريقًا يلتمسُ فيه علمًا سهَّلَ اللهُ له طريقًا إلى الجنَّة »', ref:'رواه مسلم' },
-  { type:'hadith',  text:'« خيركم مَن تعلَّم القرآنَ وعلَّمه »', ref:'رواه البخاري' },
-  { type:'hadith',  text:'« المؤمن القويُّ خيرٌ وأحبُّ إلى اللهِ من المؤمن الضعيف، وفي كلٍّ خير »', ref:'رواه مسلم' },
-  { type:'hadith',  text:'« إنَّ اللهَ يُحبُّ إذا عَمِلَ أحدُكم عملاً أن يُتقِنَه »', ref:'رواه الطبراني — حسن' },
-  { type:'dhikr',   text:'سبحانَ اللهِ وبحمدِه، سبحانَ اللهِ العظيم', ref:'ذكر صباحي ومسائي' },
-  { type:'dhikr',   text:'اللَّهمَّ إنِّي أسألُكَ علمًا نافعًا، ورزقًا طيِّبًا، وعملاً مُتقبَّلاً', ref:'دعاء صباح' },
-  { type:'dhikr',   text:'رَبِّ اشْرَحْ لِي صَدْرِي وَيَسِّرْ لِي أَمْرِي', ref:'سورة طه: ٢٥–٢٦' },
-  { type:'wisdom',  text:'العلمُ نورٌ يهدي صاحبَه، والجهلُ ظلامٌ يُضلُّ مَن وقعَ فيه', ref:'الإمام الشافعي' },
-  { type:'wisdom',  text:'لن ترتقيَ الأممُ إلَّا بتربيةِ أبنائها تربيةً صالحة', ref:'الشيخ محمد الغزالي' },
-  { type:'wisdom',  text:'المعلِّمُ الحقيقيُّ مَن يُشعلُ في قلبِ الطالبِ شوقًا لا ينطفئ', ref:'حكمة تربوية' },
-  { type:'poetry',  text:'إنَّ المعلِّمَ والطبيبَ كلاهُما\nلا ينصحانِ إذا هُمَا لم يُكرَما', ref:'أحمد شوقي' },
-  { type:'poetry',  text:'قُم للمعلِّمِ وَفِّهِ التبجيلا\nكادَ المعلِّمُ أن يكونَ رسولا', ref:'أحمد شوقي' },
+  {
+    type:'quran',
+    text:'﴿ وَقُل رَّبِّ زِدْنِي عِلْمًا ﴾',
+    ref:'سورة طه: ١١٤',
+    textEn:'"And say: My Lord, increase me in knowledge."',
+    refEn:'Surah Ta-Ha (20:114) — Saheeh International'
+  },
+  {
+    type:'quran',
+    text:'﴿ إِنَّ اللَّهَ لَا يُضِيعُ أَجْرَ الْمُحْسِنِينَ ﴾',
+    ref:'سورة التوبة: ١٢٠',
+    textEn:'"Indeed, Allah does not allow to be lost the reward of the doers of good."',
+    refEn:'Surah At-Tawbah (9:120) — Saheeh International'
+  },
+  {
+    type:'quran',
+    text:'﴿ وَعَلَّمَكَ مَا لَمْ تَكُن تَعْلَمُ ۚ وَكَانَ فَضْلُ اللَّهِ عَلَيْكَ عَظِيمًا ﴾',
+    ref:'سورة النساء: ١١٣',
+    textEn:'"And He taught you that which you did not know. And ever has the favor of Allah upon you been great."',
+    refEn:'Surah An-Nisa (4:113) — Saheeh International'
+  },
+  {
+    type:'quran',
+    text:'﴿ فَإِنَّ مَعَ الْعُسْرِ يُسْرًا ۞ إِنَّ مَعَ الْعُسْرِ يُسْرًا ﴾',
+    ref:'سورة الشرح: ٥–٦',
+    textEn:'"For indeed, with hardship will be ease. Indeed, with hardship will be ease."',
+    refEn:'Surah Ash-Sharh (94:5–6) — Saheeh International'
+  },
+  {
+    type:'quran',
+    text:'﴿ وَتَوَاصَوْا بِالْحَقِّ وَتَوَاصَوْا بِالصَّبْرِ ﴾',
+    ref:'سورة العصر: ٣',
+    textEn:'"And advised each other to truth and advised each other to patience."',
+    refEn:'Surah Al-\'Asr (103:3) — Saheeh International'
+  },
+  {
+    type:'hadith',
+    text:'« مَن سَلَكَ طريقًا يلتمسُ فيه علمًا سهَّلَ اللهُ له طريقًا إلى الجنَّة »',
+    ref:'رواه مسلم',
+    textEn:'"Whoever travels a path seeking knowledge, Allah will make easy for him a path to Paradise."',
+    refEn:'Narrated by Muslim (2699)'
+  },
+  {
+    type:'hadith',
+    text:'« خيركم مَن تعلَّم القرآنَ وعلَّمه »',
+    ref:'رواه البخاري',
+    textEn:'"The best of you are those who learn the Quran and teach it."',
+    refEn:'Narrated by Al-Bukhari (5027)'
+  },
+  {
+    type:'hadith',
+    text:'« المؤمن القويُّ خيرٌ وأحبُّ إلى اللهِ من المؤمن الضعيف، وفي كلٍّ خير »',
+    ref:'رواه مسلم',
+    textEn:'"The strong believer is better and more beloved to Allah than the weak believer, though there is good in both."',
+    refEn:'Narrated by Muslim (2664)'
+  },
+  {
+    type:'hadith',
+    text:'« إنَّ اللهَ يُحبُّ إذا عَمِلَ أحدُكم عملاً أن يُتقِنَه »',
+    ref:'رواه الطبراني — حسن',
+    textEn:'"Indeed, Allah loves that when one of you performs a deed, they do it with excellence."',
+    refEn:'Al-Tabarani — Hasan (authenticated)'
+  },
+  {
+    type:'dhikr',
+    text:'سبحانَ اللهِ وبحمدِه، سبحانَ اللهِ العظيم',
+    ref:'ذكر صباحي ومسائي',
+    textEn:'"Glory be to Allah and His praise; Glory be to Allah the Magnificent."\n(Meaning of the morning & evening remembrance)',
+    refEn:'Morning & Evening Remembrance — Al-Bukhari & Muslim'
+  },
+  {
+    type:'dhikr',
+    text:'اللَّهمَّ إنِّي أسألُكَ علمًا نافعًا، ورزقًا طيِّبًا، وعملاً مُتقبَّلاً',
+    ref:'دعاء صباح',
+    textEn:'"O Allah, I ask You for beneficial knowledge, good provision, and accepted deeds."\n(Morning supplication)',
+    refEn:'Narrated by Ibn Majah (925) — Authenticated'
+  },
+  {
+    type:'dhikr',
+    text:'رَبِّ اشْرَحْ لِي صَدْرِي وَيَسِّرْ لِي أَمْرِي',
+    ref:'سورة طه: ٢٥–٢٦',
+    textEn:'"My Lord, expand for me my breast and ease for me my task."',
+    refEn:'Surah Ta-Ha (20:25–26) — Saheeh International'
+  },
+  {
+    type:'wisdom',
+    text:'العلمُ نورٌ يهدي صاحبَه، والجهلُ ظلامٌ يُضلُّ مَن وقعَ فيه',
+    ref:'الإمام الشافعي',
+    textEn:'"Knowledge is a light that guides its bearer; ignorance is a darkness that leads astray those who fall into it."',
+    refEn:'Imam Al-Shafi\'i (767–820 CE)'
+  },
+  {
+    type:'wisdom',
+    text:'لن ترتقيَ الأممُ إلَّا بتربيةِ أبنائها تربيةً صالحة',
+    ref:'الشيخ محمد الغزالي',
+    textEn:'"Nations cannot rise except through the righteous upbringing of their children."',
+    refEn:'Sheikh Muhammad Al-Ghazali (1917–1996)'
+  },
+  {
+    type:'wisdom',
+    text:'المعلِّمُ الحقيقيُّ مَن يُشعلُ في قلبِ الطالبِ شوقًا لا ينطفئ',
+    ref:'حكمة تربوية',
+    textEn:'"The true teacher is one who ignites in the student\'s heart a longing that never extinguishes."',
+    refEn:'Educational Wisdom'
+  },
+  {
+    type:'poetry',
+    text:'إنَّ المعلِّمَ والطبيبَ كلاهُما\nلا ينصحانِ إذا هُمَا لم يُكرَما',
+    ref:'أحمد شوقي',
+    textEn:'"The teacher and the doctor alike —\nneither shall give sincere counsel if they are not honored."',
+    refEn:'Ahmad Shawqi — Prince of Poets (1868–1932)'
+  },
+  {
+    type:'poetry',
+    text:'قُم للمعلِّمِ وَفِّهِ التبجيلا\nكادَ المعلِّمُ أن يكونَ رسولا',
+    ref:'أحمد شوقي',
+    textEn:'"Rise and honor the teacher with full reverence —\nfor the teacher is nearly a messenger."',
+    refEn:'Ahmad Shawqi — Prince of Poets (1868–1932)'
+  },
 ];
 
-/* ── ألوان النوع ─────────────────────────────────────────── */
+/* ── ألوان النوع — ثنائي اللغة ──────────────────────────── */
 const TYPE_META = {
-  quran:   { icon:'📖', label:'آية كريمة',    color:'#10b981', glow:'rgba(16,185,129,0.25)' },
-  hadith:  { icon:'🕌', label:'حديث شريف',   color:'#6366f1', glow:'rgba(99,102,241,0.25)' },
-  dhikr:   { icon:'🤲', label:'ذكر ودعاء',    color:'#f59e0b', glow:'rgba(245,158,11,0.25)' },
-  wisdom:  { icon:'💡', label:'حكمة',         color:'#0ea5e9', glow:'rgba(14,165,233,0.25)' },
-  poetry:  { icon:'✨', label:'شعر',           color:'#ec4899', glow:'rgba(236,72,153,0.25)' },
+  quran:   { icon:'📖', label:'آية كريمة',  labelEn:'Quranic Verse',        color:'#10b981', glow:'rgba(16,185,129,0.25)' },
+  hadith:  { icon:'🕌', label:'حديث شريف', labelEn:'Noble Hadith',          color:'#6366f1', glow:'rgba(99,102,241,0.25)' },
+  dhikr:   { icon:'🤲', label:'ذكر ودعاء', labelEn:'Remembrance & Prayer',  color:'#f59e0b', glow:'rgba(245,158,11,0.25)' },
+  wisdom:  { icon:'💡', label:'حكمة',       labelEn:'Wisdom',                color:'#0ea5e9', glow:'rgba(14,165,233,0.25)' },
+  poetry:  { icon:'✨', label:'شعر',         labelEn:'Poetry',               color:'#ec4899', glow:'rgba(236,72,153,0.25)' },
 };
 
 /* ── نوافذ أذكار مركزية ──────────────────────────────────── */
@@ -58,10 +164,18 @@ const TYPE_META = {
     document.body.appendChild(overlay);
   }
 
+  function getCurrentLang() {
+    // يكتشف اللغة الحالية من EduLang أو URL
+    if (window.EduLang && window.EduLang.current) return window.EduLang.current;
+    return new URLSearchParams(window.location.search).get('lang') === 'en' ? 'en' : 'ar';
+  }
+
   function showNext() {
     const item = MOTD_ITEMS[idx % MOTD_ITEMS.length];
     idx++;
     const meta = TYPE_META[item.type] || TYPE_META.wisdom;
+    const lang = getCurrentLang();
+    const isEn = lang === 'en';
 
     if (!overlay) createOverlay();
 
@@ -71,10 +185,10 @@ const TYPE_META = {
       border:1px solid ${meta.color}44;
       border-radius:24px;
       padding:36px 44px;
-      max-width:540px;
+      max-width:580px;
       width:90%;
       text-align:center;
-      direction:rtl;
+      direction:${isEn ? 'ltr' : 'rtl'};
       font-family:'Tajawal',sans-serif;
       box-shadow:0 0 80px ${meta.glow},0 24px 64px rgba(0,0,0,.5);
       transform:scale(.88) translateY(16px);
@@ -83,12 +197,30 @@ const TYPE_META = {
       pointer-events:none;
     `;
 
-    card.innerHTML = `
-      <div style="font-size:42px;margin-bottom:12px;filter:drop-shadow(0 0 12px ${meta.color})">${meta.icon}</div>
-      <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;color:${meta.color};opacity:.9;margin-bottom:14px;text-transform:uppercase">${meta.label}</div>
-      <div style="font-size:20px;font-weight:700;color:#fff;line-height:1.75;margin-bottom:14px;text-shadow:0 2px 12px rgba(0,0,0,.6)">${item.text.replace(/\n/g,'<br>')}</div>
-      <div style="font-size:12px;color:${meta.color};opacity:.8;font-style:italic">${item.ref}</div>
-    `;
+    if (isEn && item.textEn) {
+      // وضع إنجليزي: النص العربي الأصلي أعلى (مصغَّر + محجَّم) + الترجمة أدناه
+      card.innerHTML = `
+        <div style="font-size:42px;margin-bottom:12px;filter:drop-shadow(0 0 12px ${meta.color})">${meta.icon}</div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;color:${meta.color};opacity:.9;margin-bottom:14px;text-transform:uppercase">${meta.labelEn || meta.label}</div>
+
+        <!-- النص العربي الأصلي — دائماً موجود للحفاظ على الأصالة -->
+        <div style="direction:rtl;font-size:15px;font-weight:600;color:rgba(255,255,255,.45);line-height:1.8;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)">${item.text.replace(/\n/g,'<br>')}</div>
+
+        <!-- الترجمة الإنجليزية المعتمدة — رئيسية -->
+        <div style="font-size:19px;font-weight:700;color:#fff;line-height:1.75;margin-bottom:14px;text-shadow:0 2px 12px rgba(0,0,0,.6);font-style:italic">${(item.textEn||'').replace(/\n/g,'<br>')}</div>
+
+        <div style="font-size:11px;color:${meta.color};opacity:.85;margin-top:4px">${item.refEn || item.ref}</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.3);margin-top:6px">Arabic text preserved as original • Translation for understanding only</div>
+      `;
+    } else {
+      // وضع عربي: العرض الكلاسيكي
+      card.innerHTML = `
+        <div style="font-size:42px;margin-bottom:12px;filter:drop-shadow(0 0 12px ${meta.color})">${meta.icon}</div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;color:${meta.color};opacity:.9;margin-bottom:14px;text-transform:uppercase">${meta.label}</div>
+        <div style="font-size:20px;font-weight:700;color:#fff;line-height:1.75;margin-bottom:14px;text-shadow:0 2px 12px rgba(0,0,0,.6)">${item.text.replace(/\n/g,'<br>')}</div>
+        <div style="font-size:12px;color:${meta.color};opacity:.8;font-style:italic">${item.ref}</div>
+      `;
+    }
 
     overlay.innerHTML = '';
     overlay.appendChild(card);
@@ -127,14 +259,14 @@ const TYPE_META = {
 (function initNewsBar() {
   // ── آخر تحديث: 16 يونيو 2026 (06:00 GMT+4) ──
   const NEWS = [
-    { type:'ministry', icon:'🔴', text:'حضور مرن للطلاب 16–23 يونيو — وزارة التربية والتعليم' },
-    { type:'ministry', icon:'🔵', text:'جدول الامتحانات النهائية للصفوف 5–12 معتمد رسمياً' },
-    { type:'official', icon:'🟢', text:'نهاية العام الدراسي 2025–2026: 3 يوليو 2026' },
-    { type:'ministry', icon:'🔵', text:'التقويم الأكاديمي 2026–2027 — بداية العام الجامعي: 31 أغسطس 2026' },
-    { type:'ai',       icon:'🤖', text:'سوق الذكاء الاصطناعي في التعليم يرتفع إلى 57 مليار دولار بحلول 2033' },
-    { type:'official', icon:'🟢', text:'الإمارات تتصدر دمج الذكاء الاصطناعي في التعليم على مستوى المنطقة' },
-    { type:'admin',    icon:'🟡', text:'تذكير: مراجعة بيانات الحضور قبل نهاية الفصل الدراسي' },
-    { type:'ministry', icon:'🔵', text:'برنامج تطوير المعلم المهني — التسجيل مفتوح حتى نهاية الشهر' },
+    { type:'ministry', icon:'🔴', text:'حضور مرن للطلاب 16–23 يونيو — وزارة التربية والتعليم',                           textEn:'Flexible attendance for students Jun 16–23 — Ministry of Education' },
+    { type:'ministry', icon:'🔵', text:'جدول الامتحانات النهائية للصفوف 5–12 معتمد رسمياً',                               textEn:'Final exam schedule for Grades 5–12 officially approved' },
+    { type:'official', icon:'🟢', text:'نهاية العام الدراسي 2025–2026: 3 يوليو 2026',                                      textEn:'End of Academic Year 2025–2026: July 3, 2026' },
+    { type:'ministry', icon:'🔵', text:'التقويم الأكاديمي 2026–2027 — بداية العام الجامعي: 31 أغسطس 2026',                textEn:'Academic Calendar 2026–2027 — New year starts: August 31, 2026' },
+    { type:'ai',       icon:'🤖', text:'سوق الذكاء الاصطناعي في التعليم يرتفع إلى 57 مليار دولار بحلول 2033',            textEn:'AI in Education market projected to reach $57B by 2033' },
+    { type:'official', icon:'🟢', text:'الإمارات تتصدر دمج الذكاء الاصطناعي في التعليم على مستوى المنطقة',               textEn:'UAE leads AI integration in education across the region' },
+    { type:'admin',    icon:'🟡', text:'تذكير: مراجعة بيانات الحضور قبل نهاية الفصل الدراسي',                            textEn:'Reminder: Review attendance records before end of term' },
+    { type:'ministry', icon:'🔵', text:'برنامج تطوير المعلم المهني — التسجيل مفتوح حتى نهاية الشهر',                     textEn:'Professional Teacher Development Program — Registration open until end of month' },
   ];
 
   const bar = document.createElement('div');
@@ -148,13 +280,15 @@ const TYPE_META = {
     font-family:'Tajawal',sans-serif;direction:rtl;
   `;
 
+  const newsLang = () => (window.EduLang?.current) || (new URLSearchParams(window.location.search).get('lang') === 'en' ? 'en' : 'ar');
+
   const label = document.createElement('div');
   label.style.cssText = `
     flex-shrink:0;padding:0 14px;font-size:11px;font-weight:800;
     color:#6366f1;letter-spacing:1px;border-left:1px solid rgba(99,102,241,.3);
     height:100%;display:flex;align-items:center;gap:6px;white-space:nowrap;
   `;
-  label.innerHTML = '📡 <span>أخبار EduOS</span>';
+  label.innerHTML = '📡 <span id="edu-news-label">أخبار EduOS</span>';
 
   const track = document.createElement('div');
   track.style.cssText = `
@@ -162,20 +296,33 @@ const TYPE_META = {
   `;
 
   const ticker = document.createElement('div');
+  ticker.id = 'edu-news-ticker';
   ticker.style.cssText = `
     display:flex;align-items:center;gap:48px;
     white-space:nowrap;
     animation:eduNewsTicker 45s linear infinite;
   `;
 
-  const allNews = [...NEWS, ...NEWS]; // loop
-  ticker.innerHTML = allNews.map(n =>
-    `<span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:rgba(255,255,255,.85)">
-      <span>${n.icon}</span>
-      <span>${n.text}</span>
-      <span style="color:rgba(99,102,241,.4);margin:0 16px">◆</span>
-    </span>`
-  ).join('');
+  function buildTicker(lang) {
+    const isEn = lang === 'en';
+    const allNews = [...NEWS, ...NEWS]; // loop
+    ticker.style.direction = isEn ? 'ltr' : 'rtl';
+    document.getElementById('edu-news-label') && (document.getElementById('edu-news-label').textContent = isEn ? 'EduOS News' : 'أخبار EduOS');
+    ticker.innerHTML = allNews.map(n =>
+      `<span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:rgba(255,255,255,.85)">
+        <span>${n.icon}</span>
+        <span>${isEn && n.textEn ? n.textEn : n.text}</span>
+        <span style="color:rgba(99,102,241,.4);margin:0 16px">◆</span>
+      </span>`
+    ).join('');
+  }
+
+  buildTicker(newsLang());
+
+  // تحديث شريط الأخبار عند تغيير اللغة
+  window.addEventListener('eduos-lang-change', (e) => {
+    buildTicker(e.detail?.lang || newsLang());
+  });
 
   track.appendChild(ticker);
   bar.appendChild(label);
