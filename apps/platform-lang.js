@@ -907,12 +907,14 @@
     autoInjectToggle() {
       // لا زر لغة في صفحة Login أو أي صفحة تحمل data-no-lang-btn
       if (document.body && (document.body.dataset.noLangBtn !== undefined ||
-          window.location.pathname.includes('eduos-login'))) return;
+          window.location.pathname.includes('eduos-login') ||
+          window.location.pathname.includes('eduos-parent-portal'))) return;
 
       if (document.getElementById('eduos-lang-float') || document.getElementById('eduos-lang-toggle')) {
         this._updateToggleBtn();
         return;
       }
+      // 1) أولاً: IDs محددة في الهيدر
       const slots = ['eduos-header-actions', 'eduos-lang-container', 'header-actions', 'header-right'];
       for (const id of slots) {
         const el = document.getElementById(id);
@@ -924,6 +926,17 @@
           return;
         }
       }
+      // 2) ثانياً: أي عنصر <header> في الصفحة — أفضل من floating
+      const headerEl = document.querySelector('header');
+      if (headerEl) {
+        const btn = this._createToggleBtn();
+        btn.id = 'eduos-lang-toggle';
+        btn.className = 'eduos-lang-btn';
+        btn.style.cssText = 'margin-inline-start:auto;';
+        headerEl.appendChild(btn);
+        return;
+      }
+      // 3) أخيراً: floating فقط إذا لا يوجد header
       const btn = this._createToggleBtn();
       btn.id = 'eduos-lang-float';
       document.body.appendChild(btn);
