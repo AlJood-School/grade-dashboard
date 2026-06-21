@@ -1016,6 +1016,27 @@ body {
     <span><strong style="color:#C4B5FD;">أثير</strong> و<strong style="color:#C4B5FD;">بوابة التفتيش</strong> منظومتان منفصلتان تماماً — أثير: رصد سلوكي صامت للمسؤول عن الطالب (المدير + الأخصائي) — الطالب لا يعلم أبداً | التفتيش: جاهزية المدرسة للمفتش الخارجي</span>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════
+       SECTION: منتجات NAFAS — الوحدات المشتركة
+       تُعرض/تُخفى بناءً على الوحدات المفعَّلة في app_settings
+  ════════════════════════════════════════════════════ -->
+  <div class="section-header" id="nafas-products-header" style="margin-top:8px;">
+    <span>🌐</span>
+    <span class="section-title" style="background:linear-gradient(135deg,#6C3DD6,#22D3EE);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">منتجات NAFAS المتكاملة</span>
+    <div class="section-line"></div>
+    <span class="section-count" id="nafas-modules-count">3 وحدات</span>
+  </div>
+
+  <!-- شرح مختصر -->
+  <div style="background:linear-gradient(135deg,rgba(108,61,214,0.07),rgba(34,211,238,0.04));border:1px solid rgba(108,61,214,0.18);border-radius:12px;padding:12px 18px;margin-bottom:16px;font-size:0.8rem;color:#94A3B8;display:flex;align-items:center;gap:10px;">
+    <span style="font-size:1.1rem;">🔗</span>
+    <span>المنتجات المُفعَّلة تعمل بنفس حساب EduOS — انتقال سلس بدون تسجيل دخول جديد.
+    <strong style="color:#C4B5FD;">المنتجات المقفلة</strong> تحتاج ترخيصاً منفصلاً من NAFAS — تواصل معنا للتفعيل.</span>
+  </div>
+
+  <!-- بطاقات الوحدات — تُولَّد بـ JS -->
+  <div class="apps-grid" id="grid-nafas-modules" style="margin-bottom:20px;"></div>
+
   <!-- SECTION: الإنجازات -->
   <div class="section-header">
     <span>🏆</span>
@@ -1080,6 +1101,7 @@ body {
 <script src="/apps/platform-week.js"></script>
 <script src="/apps/platform-autologout.js"></script>
 <script src="/apps/platform-motd.js"></script>
+<script src="/apps/platform-modules.js"></script>
 <script>
 // ─── CONSTANTS ───
 const SUPABASE_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
@@ -1261,6 +1283,95 @@ async function loadStats() {
 }
 loadStats();
 loadSchoolIdentity();
+
+// ─── منتجات NAFAS — توليد البطاقات ───
+function renderNafasModules() {
+  const grid = document.getElementById('grid-nafas-modules');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const defs = window.NAFAS_MODULE_DEFS || {};
+  const enabled = window.EDUOS_MODULES || {};
+  const session = (() => { try { return JSON.parse(sessionStorage.getItem('edoos_user') || '{}'); } catch { return {}; } })();
+  const userRole = session.role || '';
+
+  const moduleOrder = ['nafas', 'midad', 'umq'];
+  let shownCount = 0;
+
+  moduleOrder.forEach(id => {
+    const mod = defs[id];
+    if (!mod) return;
+
+    // إخفاء الوحدة إذا كان دور المستخدم لا يرى هذه الوحدة
+    const canSee = !mod.whoSees || mod.whoSees.includes(userRole) || userRole === 'admin' || userRole === 'principal';
+    if (!canSee) return;
+
+    const isEnabled = !!enabled[id];
+    shownCount++;
+
+    const card = document.createElement('div');
+    card.className = 'app-card';
+    card.setAttribute('data-cat', 'admin');
+    card.setAttribute('data-name', mod.name + ' ' + mod.nameEn);
+    card.style.cssText = isEnabled
+      ? `border-color:${mod.color}33;background:linear-gradient(135deg,${mod.color}12,${mod.color}06);cursor:pointer;`
+      : `border-color:rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);cursor:pointer;opacity:0.85;`;
+
+    card.innerHTML = `
+      <div class="app-icon-wrap" style="background:${isEnabled ? mod.color + '22' : 'rgba(255,255,255,0.04)'};font-size:1.8rem;position:relative;">
+        ${mod.icon}
+        ${isEnabled ? '' : '<span style="position:absolute;top:-4px;right:-4px;font-size:0.75rem;background:#1e3a5f;border-radius:50%;padding:2px;">🔒</span>'}
+      </div>
+      <div class="app-name" style="${isEnabled ? `background:${mod.gradient};-webkit-background-clip:text;-webkit-text-fill-color:transparent;` : 'color:#64748B;'}">${mod.name}</div>
+      <div class="app-desc" style="font-size:0.7rem;color:${isEnabled ? '#94A3B8' : '#475569'};line-height:1.4;">${mod.desc}</div>
+      <span class="app-badge" style="
+        background:${isEnabled ? mod.color + '22' : 'rgba(255,255,255,0.04)'};
+        color:${isEnabled ? mod.color : '#475569'};
+        border:1px solid ${isEnabled ? mod.color + '44' : 'rgba(255,255,255,0.06)'};
+        font-size:0.65rem;padding:3px 10px;border-radius:8px;font-weight:600;
+      ">${isEnabled ? '✅ ' + mod.badge : '🔒 غير مُفعَّل'}</span>
+    `;
+
+    card.addEventListener('click', () => {
+      if (typeof window.openNafasModule === 'function') {
+        window.openNafasModule(id);
+      }
+    });
+
+    // تأثير hover للبطاقات المفعَّلة
+    if (isEnabled) {
+      card.addEventListener('mouseenter', () => {
+        card.style.transform = 'translateY(-4px)';
+        card.style.boxShadow = `0 8px 30px ${mod.color}33`;
+        card.style.borderColor = mod.color + '66';
+      });
+      card.addEventListener('mouseleave', () => {
+        card.style.transform = '';
+        card.style.boxShadow = '';
+        card.style.borderColor = mod.color + '33';
+      });
+    }
+
+    grid.appendChild(card);
+  });
+
+  // تحديث العدد
+  const countEl = document.getElementById('nafas-modules-count');
+  if (countEl) {
+    const enabledCount = moduleOrder.filter(id => !!enabled[id]).length;
+    countEl.textContent = `${enabledCount} مُفعَّل / ${shownCount} وحدات`;
+    countEl.style.color = enabledCount > 0 ? '#10B981' : '#94A3B8';
+  }
+}
+
+// تشغيل عند جهوزية الوحدات
+window.addEventListener('eduos-modules-ready', renderNafasModules);
+// تشغيل فوري (قد يكون EDUOS_MODULES محمَّلاً بالفعل)
+if (document.readyState !== 'loading') {
+  setTimeout(renderNafasModules, 300);
+} else {
+  document.addEventListener('DOMContentLoaded', () => setTimeout(renderNafasModules, 300));
+}
 // (loadSchoolIdentity uses SB_URL/SB_KEY defined above)
 
 // ─── SEARCH + FILTER ───
