@@ -926,15 +926,18 @@
           return;
         }
       }
-      // 2) ثانياً: أي عنصر <header> في الصفحة — أفضل من floating
-      const headerEl = document.querySelector('header');
-      if (headerEl) {
-        const btn = this._createToggleBtn();
-        btn.id = 'eduos-lang-toggle';
-        btn.className = 'eduos-lang-btn';
-        btn.style.cssText = 'margin-inline-start:auto;';
-        headerEl.appendChild(btn);
-        return;
+      // 2) ثانياً: classes شائعة للهيدر في EduOS
+      const headerSelectors = ['.topbar-right', '.header-right', '.header-actions', 'header', '.topbar', '.top-bar'];
+      for (const sel of headerSelectors) {
+        const el = document.querySelector(sel);
+        if (el) {
+          const btn = this._createToggleBtn();
+          btn.id = 'eduos-lang-toggle';
+          btn.className = 'eduos-lang-btn';
+          btn.style.cssText = 'flex-shrink:0;';
+          el.appendChild(btn);
+          return;
+        }
       }
       // 3) أخيراً: floating فقط إذا لا يوجد header
       const btn = this._createToggleBtn();
