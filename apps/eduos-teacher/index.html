@@ -559,8 +559,8 @@ body[data-theme="remote"] .brand-title { background:none; -webkit-text-fill-colo
   <div class="tab-panel" id="panel-attendance">
     <div class="section-title">📋 تسجيل الحضور اليومي</div>
 
-    <!-- Class Selector -->
-    <div class="att-class-selector">
+    <!-- Class Selector — يُملأ ديناميكياً من jدول المعلم -->
+    <div class="att-class-selector" id="att-class-selector">
       <button class="att-class-btn active" onclick="selectClass(this,'3B')">3B</button>
       <button class="att-class-btn" onclick="selectClass(this,'2A')">2A</button>
       <button class="att-class-btn" onclick="selectClass(this,'4A')">4A</button>
@@ -971,9 +971,10 @@ async function askAI(prompt,systemPrompt=''){
 
 
 
-// ── PARTICLES ──
+// ── PARTICLES — محذوفة نهائياً ── (null-safe guard)
 (function(){
   const container=document.getElementById('particles');
+  if(!container) return; // ← لا particles div → تخطّ آمن
   const colors=['#6366f1','#10b981','#f6c90e','#8b5cf6','#0ea5e9'];
   for(let i=0;i<20;i++){
     const el=document.createElement('div');
@@ -1008,8 +1009,24 @@ function switchTab(name,btn){
   document.getElementById('panel-'+name).classList.add('active');
   history.replaceState(null, '', '#' + name);
   // تهيئة التبويبات الفرعية عند الحاجة
-  if(name==='grades'){ buildGrades(); }
-  if(name==='attendance'){ buildAttGrid(); }
+  if(name==='grades'){
+    buildGrades();
+  }
+  if(name==='attendance'){
+    // إذا لم تُحمَّل الطلاب بعد → حمِّل الصف الحالي أولاً ثم ارسم
+    if(currentClassStudents.length === 0){
+      loadClassStudents(currentClassKey || '3B').then(()=>buildAttGrid());
+    } else {
+      buildAttGrid();
+    }
+  }
+  if(name==='students'){
+    // حمِّل كل الطلاب إذا لم يُحمَّلوا بعد
+    loadAllStudentsFlat();
+  }
+  if(name==='messages'){
+    loadBroadcasts();
+  }
 }
 
 // استعادة التبويب من hash عند التحميل
@@ -1668,22 +1685,6 @@ async function confirmAddCol() {
   renderGradesTable();
   updateGradesStats();
 }
-async function confirmAddCol() {
-  const name   = (document.getElementById('col-name-in').value||'').trim();
-  const type   = document.getElementById('col-type-in').value;
-  const max    = parseFloat(document.getElementById('col-max-in').value)||100;
-  const weight = parseFloat(document.getElementById('col-weight-in').value)||100;
-  if (!name) { alert('أدخلي اسم التقييم'); return; }
-  const SB_URL = window.SUPA_URL; const SB_KEY = window.SUPA_KEY;
-  const r = await fetch(`${SB_URL}/rest/v1/grade_assessment_defs`, {
-    method:'POST',
-    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
-    body:JSON.stringify({ name, type, max_score:max, weight, semester:gradesSemester, academic_year:gradesYear, subject:'CCDI', sort_order:gradeAssessments.length })
-  });
-  if (r.ok) { document.getElementById('add-col-modal').style.display='none'; await buildGrades(); }
-  else alert('خطأ في الحفظ');
-}
-
 // ─── Delete Assessment ────────────────────────────────────────────
 function askDeleteAssessment(id) {
   const a = gradeAssessments.find(x => x.id===id);
@@ -2015,6 +2016,41 @@ function printGradesSheet() {
   win.document.close();
 }
 
+// ── BROADCASTS / MESSAGES ──
+async function loadBroadcasts() {
+  const inboxEl = document.getElementById('inbox-dynamic');
+  if (!inboxEl) return;
+  inboxEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text2);font-size:12px">⏳ جارٍ التحميل...</div>';
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/broadcasts?select=id,content,broadcast_type,created_at&order=created_at.desc&limit=10`, {
+      headers: { apikey: _K, Authorization: 'Bearer ' + _K }
+    });
+    const rows = r.ok ? await r.json() : [];
+    if (!rows.length) {
+      inboxEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text2);font-size:12px">📭 لا توجد رسائل</div>';
+      return;
+    }
+    inboxEl.innerHTML = rows.map(m => {
+      const date = new Date(m.created_at).toLocaleDateString('ar-AE', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+      const icon = m.broadcast_type==='alert'?'🔴':m.broadcast_type==='weekly_report'?'📊':'📢';
+      return `<div class="msg-item" style="cursor:pointer">
+        <div class="msg-header">
+          <span class="msg-from">${icon} ${m.broadcast_type||'رسالة'}</span>
+          <span class="msg-time">${date}</span>
+        </div>
+        <div class="msg-body">${(m.content||'').substring(0,120)}${(m.content||'').length>120?'...':''}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    inboxEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--rose);font-size:12px">⚠️ خطأ في التحميل</div>';
+  }
+}
+
+async function loadInboxMessages() {
+  await loadBroadcasts();
+  showToast('✅ تم تحديث الصندوق');
+}
+
 // ── GEMINI ──
 function geminiPrompt(txt){
   document.getElementById('geminiInput').value=txt;
@@ -2058,17 +2094,8 @@ async function sendGemini(){
   else setWeekBadge();
 })();
 
-// ── INIT ──
-// نعرض رسالة تحميل فورية ثم نجلب البيانات
-buildStudentsGrid([]); // placeholder فارغ
-(async function(){
-  await loadClassStudents('3B'); // الصف الافتراضي من Supabase
-  loadAllStudentsFlat();         // شبكة الطلاب الكاملة
-  buildGrades();
-})();
-
 /* ════════════════════════════════════════════════════════
-   SUPABASE  —  Teacher OS
+   SUPABASE  —  Teacher OS  (مُعرَّف أولاً قبل أي init)
    ════════════════════════════════════════════════════════ */
 const SUPA_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
 const _K = ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
@@ -2077,9 +2104,17 @@ const _K = ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
 let sb2 = null;
 try { sb2 = supabase.createClient(SUPA_URL, _K); } catch(e) {}
 
-// ─── expose for sub-functions that use window.SUPA_URL/SUPA_KEY ───
+// ─── expose globally (يجب أن يكون قبل INIT IIFE) ───
 window.SUPA_URL = SUPA_URL;
 window.SUPA_KEY = _K;
+
+// ── INIT ──
+buildStudentsGrid([]); // placeholder فارغ
+(async function(){
+  await loadClassStudents('3B'); // الصف الافتراضي من Supabase
+  loadAllStudentsFlat();         // شبكة الطلاب الكاملة
+  buildGrades();
+})();
 
 // ════════════════════════════════════════════════════════
 // STAFF IDENTITY — ربط المعلمة بـ staff_profiles
@@ -2142,16 +2177,34 @@ async function loadTeacherTimetableSlots(staffId) {
     if (!Array.isArray(slots) || !slots.length) return;
 
     // استخرج الصفوف الفريدة لهذه المعلمة
-    const classes = [...new Set(slots.map(s => s.class_name))].filter(Boolean);
+    const classes = [...new Set(slots.map(s => s.class_name))].filter(Boolean).sort();
     window.TEACHER_CLASSES = classes;
 
-    // تحديث filter الصفوف إذا وُجد
-    const sel = document.getElementById('class-select') || document.getElementById('wk-class-filter');
+    // ─── تحديث أزرار الحضور ───
+    const attSel = document.getElementById('att-class-selector');
+    if (attSel && classes.length) {
+      attSel.innerHTML = classes.map((c, i) =>
+        `<button class="att-class-btn${i===0?' active':''}" onclick="selectClass(this,'${c}')">${c}</button>`
+      ).join('');
+      currentClassKey = classes[0];
+    }
+
+    // ─── تحديث filter طلابي ───
+    const sel = document.getElementById('classFilter') || document.getElementById('wk-class-filter');
     if (sel && classes.length) {
       const currentVal = sel.value;
-      sel.innerHTML = classes.map(c => `<option value="${c}">${c}</option>`).join('');
+      sel.innerHTML = '<option value="">كل الصفوف</option>' + classes.map(c => `<option value="${c}">${c}</option>`).join('');
       if (classes.includes(currentVal)) sel.value = currentVal;
-      else sel.value = classes[0];
+    }
+
+    // ─── حصة اليوم الحالية ───
+    const now = new Date();
+    const todayDay = now.getDay(); // 0=Sun, 4=Thu
+    const dayMap = {0:'Sun',1:'Mon',2:'Tue',3:'Wed',4:'Thu',5:'Fri',6:'Sat'};
+    const todaySlots = slots.filter(s => s.day === dayMap[todayDay]);
+    if (todaySlots.length) {
+      const el = document.getElementById('greetingSub');
+      if (el) el.innerHTML = `لديكِ <strong>${todaySlots.length} حصص</strong> اليوم · <span style="color:var(--emerald2)">كل طلابكِ في انتظاركِ</span>`;
     }
 
     // badge يظهر عدد حصص المعلمة
