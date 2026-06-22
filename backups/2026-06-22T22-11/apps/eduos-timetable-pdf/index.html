@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>جدول الصف — EduOS</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet"/>
+<script src="../platform-config.js"></script>
+<script src="../platform-auth-guard.js" defer></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0D1B2A;--surface:#111827;--surface2:#1a2235;--surface3:#1f2d44;
+  --brand1:#6C3DD6;--brand2:#22D3EE;--indigo2:#818cf8;--emerald:#10b981;
+  --emerald2:#34d399;--gold:#f6c90e;--rose:#f43f5e;--text:#f1f5f9;
+  --text2:rgba(241,245,249,.65);--text3:rgba(241,245,249,.35);
+  --border:rgba(255,255,255,.07);
+}
+body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+.header{position:sticky;top:0;z-index:100;background:rgba(10,14,26,.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 24px;height:64px;display:flex;align-items:center;justify-content:space-between}
+.header-brand{display:flex;align-items:center;gap:12px}
+.brand-logo{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--brand1),var(--brand2));display:flex;align-items:center;justify-content:center;font-size:20px}
+.brand-title{font-size:15px;font-weight:800;background:linear-gradient(90deg,var(--indigo2),var(--emerald2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.brand-sub{font-size:11px;color:var(--text2)}
+.btn-logout{width:36px;height:36px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all .2s;color:var(--text2)}
+.btn-logout:hover{background:rgba(244,63,94,.15);border-color:var(--rose);color:var(--rose)}
+
+.main{max-width:900px;margin:0 auto;padding:24px 20px 60px}
+.page-title{font-size:22px;font-weight:900;margin-bottom:4px}
+.page-sub{font-size:13px;color:var(--text2);margin-bottom:24px}
+
+/* CONTROLS */
+.controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 20px}
+.ctrl-group{display:flex;flex-direction:column;gap:4px}
+.ctrl-label{font-size:11px;color:var(--text3);font-weight:700}
+.ctrl-select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-family:'Tajawal',sans-serif;font-size:13px;color:var(--text);outline:none;cursor:pointer;transition:border-color .2s}
+.ctrl-select:focus{border-color:var(--brand1)}
+.btn-load{padding:9px 22px;border-radius:10px;background:linear-gradient(135deg,var(--brand1),var(--brand2));border:none;color:#fff;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:800;cursor:pointer;transition:all .2s;margin-top:auto}
+.btn-load:hover{transform:translateY(-1px)}
+.btn-pdf{padding:9px 22px;border-radius:10px;background:rgba(16,185,129,.15);border:1px solid var(--emerald);color:var(--emerald2);font-family:'Tajawal',sans-serif;font-size:13px;font-weight:800;cursor:pointer;transition:all .2s;margin-top:auto;display:flex;align-items:center;gap:6px}
+.btn-pdf:hover{background:rgba(16,185,129,.25)}
+.btn-pdf:disabled{opacity:.4;cursor:not-allowed}
+.btn-print{padding:9px 22px;border-radius:10px;background:rgba(99,102,241,.15);border:1px solid var(--indigo2);color:var(--indigo2);font-family:'Tajawal',sans-serif;font-size:13px;font-weight:800;cursor:pointer;transition:all .2s;margin-top:auto;display:flex;align-items:center;gap:6px}
+.btn-print:hover{background:rgba(99,102,241,.25)}
+
+/* INFO BAR */
+.info-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;padding:12px 16px;background:rgba(108,61,214,.08);border:1px solid rgba(108,61,214,.2);border-radius:10px;font-size:12px;color:var(--text2)}
+.info-bar strong{color:var(--brand2)}
+.info-sep{opacity:.3}
+
+/* TIMETABLE */
+.timetable-wrap{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.timetable-scroll{overflow-x:auto}
+
+table.tt{width:100%;border-collapse:collapse;min-width:600px}
+table.tt th{background:linear-gradient(135deg,var(--brand1),rgba(34,211,238,.7));color:#fff;font-size:12px;font-weight:800;padding:12px 10px;text-align:center;border-bottom:2px solid rgba(255,255,255,.1)}
+table.tt td{padding:8px 10px;text-align:center;border-bottom:1px solid var(--border);font-size:12px;vertical-align:middle}
+table.tt tr:hover td{background:rgba(255,255,255,.02)}
+table.tt .period-cell{background:rgba(108,61,214,.08);font-weight:800;color:var(--indigo2);font-size:11px;min-width:60px}
+table.tt .period-time{font-size:10px;color:var(--text3);display:block;font-weight:400}
+
+.subject-pill{display:inline-block;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap}
+.sub-ar{background:rgba(108,61,214,.15);color:#a78bfa;border:1px solid rgba(108,61,214,.2)}
+.sub-math{background:rgba(16,185,129,.12);color:#6ee7b7;border:1px solid rgba(16,185,129,.2)}
+.sub-sci{background:rgba(14,165,233,.12);color:#7dd3fc;border:1px solid rgba(14,165,233,.2)}
+.sub-en{background:rgba(245,158,11,.12);color:#fcd34d;border:1px solid rgba(245,158,11,.2)}
+.sub-is{background:rgba(34,197,94,.12);color:#86efac;border:1px solid rgba(34,197,94,.2)}
+.sub-ss{background:rgba(239,68,68,.12);color:#fca5a5;border:1px solid rgba(239,68,68,.2)}
+.sub-pe{background:rgba(236,72,153,.12);color:#f9a8d4;border:1px solid rgba(236,72,153,.2)}
+.sub-art{background:rgba(251,146,60,.12);color:#fdba74;border:1px solid rgba(251,146,60,.2)}
+.sub-break{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border);font-style:italic}
+
+.empty-state{padding:60px;text-align:center;color:var(--text2)}
+.empty-icon{font-size:40px;margin-bottom:12px}
+.empty-title{font-size:16px;font-weight:700;margin-bottom:4px}
+
+/* LOADING */
+#loadingOverlay{position:fixed;inset:0;background:rgba(13,27,42,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:12px}
+.spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--brand2);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-size:14px;color:var(--text2)}
+
+/* ────────────────────────────────────────────────
+   PRINT STYLES — الجدول عند الطباعة / PDF
+──────────────────────────────────────────────── */
+@media print {
+  body{background:#fff!important;color:#000!important;font-family:'Tajawal',sans-serif}
+  .header,.controls,.info-bar,.btn-pdf,.btn-print,.btn-logout{display:none!important}
+  .main{padding:0!important;max-width:100%!important}
+  .timetable-wrap{border:1.5px solid #ddd!important;border-radius:0!important}
+  .print-header{display:block!important}
+  table.tt th{background:#6C3DD6!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  table.tt td{border-bottom:1px solid #eee!important}
+  .subject-pill{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+
+/* Print Header (hidden on screen) */
+.print-header{display:none;text-align:center;padding:20px;border-bottom:2px solid #6C3DD6;margin-bottom:16px}
+.print-header .ph-logo{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:8px}
+.print-header .ph-logo-box{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff}
+.print-header h1{font-size:18px;font-weight:900;color:#6C3DD6}
+.print-header p{font-size:12px;color:#666;margin-top:4px}
+.print-header .ph-meta{font-size:11px;color:#888;margin-top:8px;display:flex;justify-content:center;gap:20px}
+.print-footer{display:none;text-align:center;padding:12px;border-top:1px solid #ddd;margin-top:16px;font-size:10px;color:#aaa}
+@media print{.print-header{display:block!important}.print-footer{display:block!important}}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 20px;font-size:13px;font-weight:700;box-shadow:0 8px 32px rgba(0,0,0,.4);transition:all .3s;z-index:9999;min-width:220px;text-align:center}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.success{border-color:var(--emerald);color:var(--emerald)}
+.toast.error{border-color:var(--rose);color:var(--rose)}
+</style>
+</head>
+<body>
+
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">جارٍ التحميل…</div>
+</div>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-brand">
+    <div class="brand-logo">🎓</div>
+    <div>
+      <div class="brand-title">بوابة الجود الذكية</div>
+      <div class="brand-sub">Powered by EduOS</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div style="text-align:right;margin-left:8px">
+      <div style="font-size:13px;font-weight:700" id="hUserName">—</div>
+      <div style="font-size:11px;color:var(--text2)" id="hUserRole">—</div>
+    </div>
+    <button class="btn-logout" onclick="doLogout()">⏻</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="page-title">📅 جدول الصف</div>
+  <div class="page-sub">عرض جدول حصص أي صف وتصديره بصيغة PDF جاهز للطباعة</div>
+
+  <!-- CONTROLS -->
+  <div class="controls">
+    <div class="ctrl-group">
+      <div class="ctrl-label">المرحلة</div>
+      <select class="ctrl-select" id="selStage" onchange="populateClasses()">
+        <option value="">— اختر —</option>
+        <option value="KG">الروضة (KG)</option>
+        <option value="Primary1">ابتدائي أول (1–3)</option>
+        <option value="Primary2">ابتدائي ثاني (4–6)</option>
+        <option value="Middle">إعدادي (7–9)</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <div class="ctrl-label">الصف</div>
+      <select class="ctrl-select" id="selGrade" onchange="populateSections()">
+        <option value="">— اختر —</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <div class="ctrl-label">الفصل</div>
+      <select class="ctrl-select" id="selSection">
+        <option value="">— اختر —</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <div class="ctrl-label">نوع الجدول</div>
+      <select class="ctrl-select" id="selScheduleType">
+        <option value="normal">اعتيادي</option>
+        <option value="ramadan">رمضان</option>
+        <option value="distance">عن بُعد</option>
+      </select>
+    </div>
+    <button class="btn-load" onclick="loadTimetable()">عرض الجدول</button>
+    <button class="btn-pdf" id="btnPdf" disabled onclick="exportPDF()">
+      <span>📄</span> تصدير PDF
+    </button>
+    <button class="btn-print" onclick="window.print()">
+      <span>🖨️</span> طباعة
+    </button>
+  </div>
+
+  <!-- TIMETABLE AREA -->
+  <div id="timetableArea">
+    <!-- Print Header -->
+    <div class="print-header" id="printHeader">
+      <div class="ph-logo">
+        <div class="ph-logo-box">🎓</div>
+        <div>
+          <h1>بوابة الجود الذكية — Powered by EduOS</h1>
+          <p>مدرسة الجود — تربية وتعليم أبوظبي — MOE</p>
+        </div>
+      </div>
+      <p id="phTitle" style="font-size:16px;font-weight:900;color:#6C3DD6;margin-top:8px">جدول الحصص</p>
+      <div class="ph-meta">
+        <span id="phYear">—</span>
+        <span>|</span>
+        <span id="phDate">—</span>
+      </div>
+    </div>
+
+    <div class="timetable-wrap" id="timetableWrap">
+      <div class="empty-state">
+        <div class="empty-icon">📅</div>
+        <div class="empty-title">اختر الصف وانقر "عرض الجدول"</div>
+        <div style="font-size:12px;margin-top:4px">سيظهر الجدول هنا جاهزاً للطباعة والتصدير</div>
+      </div>
+    </div>
+
+    <div class="print-footer">
+      © 2026 NAFAS FOR ARTIFICIAL INTELLIGENCE — شهادة الملكية الفكرية 1614-2026 — جميع الحقوق محفوظة
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════
+//  EduOS — eduos-timetable-pdf
+//  © 2026 NAFAS FOR ARTIFICIAL INTELLIGENCE
+// ══════════════════════════════════════════════════
+
+let SB, USER, currentData = null;
+
+// Timetable structure
+const GRADES = {
+  KG: ['KG1','KG2'],
+  Primary1: ['1','2','3'],
+  Primary2: ['4','5','6'],
+  Middle: ['7','8'],
+};
+
+const SECTIONS_MAP = {
+  KG1:['A','B','C'], KG2:['A','B','C'],
+  1:['A','B','C','D','E','F'],
+  2:['A','B','C','D','E','F'],
+  3:['A','B','C','D','E'],
+  4:['A','B','C','D','E','F'],
+  5:['A','B','C','D'],
+  6:['A','B','C'],
+  7:['A','B','C'],
+  8:['A','B','C'],
+};
+
+const DAYS = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس'];
+
+const PERIODS_NORMAL = [
+  {num:'1', time:'07:30–08:15'},
+  {num:'2', time:'08:15–09:00'},
+  {num:'3', time:'09:00–09:45'},
+  {num:'استراحة', time:'09:45–10:00', isBreak:true},
+  {num:'4', time:'10:00–10:45'},
+  {num:'5', time:'10:45–11:30'},
+  {num:'6', time:'11:30–12:15'},
+  {num:'7', time:'12:15–13:00'},
+];
+
+const PERIODS_RAMADAN = [
+  {num:'1', time:'08:00–08:30'},
+  {num:'2', time:'08:30–09:00'},
+  {num:'3', time:'09:00–09:30'},
+  {num:'4', time:'09:30–10:00'},
+  {num:'5', time:'10:00–10:30'},
+  {num:'6', time:'10:30–11:00'},
+];
+
+// Subject → style mapping
+const SUBJECT_STYLES = {
+  'اللغة العربية':'sub-ar','لغة عربية':'sub-ar','عربي':'sub-ar',
+  'الرياضيات':'sub-math','رياضيات':'sub-math',
+  'العلوم':'sub-sci','علوم':'sub-sci',
+  'اللغة الإنجليزية':'sub-en','إنجليزي':'sub-en','English':'sub-en',
+  'التربية الإسلامية':'sub-is','إسلامية':'sub-is','تربية إسلامية':'sub-is',
+  'الدراسات الاجتماعية':'sub-ss','اجتماعيات':'sub-ss','دراسات':'sub-ss',
+  'التربية البدنية':'sub-pe','رياضة':'sub-pe','بدنية':'sub-pe',
+  'التربية الفنية':'sub-art','فنون':'sub-art','فن':'sub-art',
+  'استراحة':'sub-break','فرصة':'sub-break','فراغ':'sub-break',
+};
+
+// ── INIT ──
+window.addEventListener('DOMContentLoaded', async () => {
+  const cfg = window.EDUOS_CONFIG;
+  if (!cfg) return;
+
+  SB = supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+
+  const raw = sessionStorage.getItem('edoos_user');
+  if (!raw) { location.href = '../eduos-login/'; return; }
+
+  try { USER = JSON.parse(raw); } catch { location.href = '../eduos-login/'; return; }
+
+  document.getElementById('hUserName').textContent = USER.name || USER.username || '—';
+  document.getElementById('hUserRole').textContent = USER.role_label || USER.role || '—';
+
+  // Pre-select if teacher logged in
+  if (USER.role === 'teacher' && USER.class_name) {
+    // Try to auto-detect grade/section from class_name like "5B"
+    const match = USER.class_name.match(/^(\d+|KG\d)([A-F])$/i);
+    if (match) {
+      // TODO: auto-select
+    }
+  }
+
+  // Read active_schedule from app_settings
+  const { data: settings } = await SB.from('app_settings').select('active_schedule').single();
+  if (settings?.active_schedule) {
+    document.getElementById('selScheduleType').value = settings.active_schedule;
+  }
+
+  document.getElementById('loadingOverlay').style.display = 'none';
+});
+
+// ── POPULATE GRADES ──
+function populateClasses() {
+  const stage = document.getElementById('selStage').value;
+  const sel = document.getElementById('selGrade');
+  sel.innerHTML = '<option value="">— اختر —</option>';
+  document.getElementById('selSection').innerHTML = '<option value="">— اختر —</option>';
+
+  if (!stage) return;
+  (GRADES[stage] || []).forEach(g => {
+    const opt = document.createElement('option');
+    opt.value = g;
+    opt.textContent = `الصف ${g}`;
+    sel.appendChild(opt);
+  });
+}
+
+function populateSections() {
+  const grade = document.getElementById('selGrade').value;
+  const sel = document.getElementById('selSection');
+  sel.innerHTML = '<option value="">— اختر —</option>';
+  if (!grade) return;
+  (SECTIONS_MAP[grade] || ['A','B','C']).forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s;
+    opt.textContent = `الفصل ${s}`;
+    sel.appendChild(opt);
+  });
+}
+
+// ── LOAD TIMETABLE ──
+async function loadTimetable() {
+  const grade = document.getElementById('selGrade').value;
+  const section = document.getElementById('selSection').value;
+  const schedType = document.getElementById('selScheduleType').value;
+
+  if (!grade || !section) { showToast('اختر الصف والفصل أولاً', 'error'); return; }
+
+  const classId = `${grade}${section}`;
+  showLoading(true);
+
+  // Fetch from timetable_slots
+  const { data, error } = await SB
+    .from('timetable_slots')
+    .select('day_of_week, period_number, subject, teacher_name, room')
+    .eq('class_id', classId)
+    .eq('schedule_type', schedType)
+    .order('day_of_week')
+    .order('period_number');
+
+  showLoading(false);
+
+  if (error) { showToast('خطأ في جلب البيانات', 'error'); console.error(error); return; }
+
+  currentData = { data, grade, section, classId, schedType };
+  renderTimetable(data, grade, section, schedType);
+  updatePrintHeader(grade, section, schedType);
+  document.getElementById('btnPdf').disabled = false;
+}
+
+// ── RENDER ──
+function renderTimetable(data, grade, section, schedType) {
+  const periods = schedType === 'ramadan' ? PERIODS_RAMADAN : PERIODS_NORMAL;
+
+  // Build map: day → period → {subject, teacher, room}
+  const map = {};
+  DAYS.forEach((d, i) => { map[i+1] = {}; });
+  (data || []).forEach(row => {
+    if (!map[row.day_of_week]) map[row.day_of_week] = {};
+    map[row.day_of_week][row.period_number] = row;
+  });
+
+  let html = `
+  <div class="info-bar">
+    <strong>الصف ${grade}${section}</strong>
+    <span class="info-sep">|</span>
+    <span>الجدول ${schedType === 'ramadan' ? 'الرمضاني' : schedType === 'distance' ? 'التعلم عن بُعد' : 'الاعتيادي'}</span>
+    <span class="info-sep">|</span>
+    <span>${DAYS.length} أيام × ${periods.filter(p=>!p.isBreak).length} حصص</span>
+    <span class="info-sep">|</span>
+    <span style="color:var(--brand2)">${data?.length || 0} حصة مجدوَلة</span>
+  </div>
+  <div class="timetable-scroll">
+  <table class="tt">
+    <thead>
+      <tr>
+        <th>الحصة</th>
+        ${DAYS.map(d => `<th>${d}</th>`).join('')}
+      </tr>
+    </thead>
+    <tbody>`;
+
+  periods.forEach(p => {
+    html += '<tr>';
+    if (p.isBreak) {
+      html += `<td class="period-cell">☕ استراحة<span class="period-time">${p.time}</span></td>`;
+      DAYS.forEach(() => {
+        html += `<td><span class="subject-pill sub-break">— فرصة —</span></td>`;
+      });
+    } else {
+      html += `<td class="period-cell">ح${p.num}<span class="period-time">${p.time}</span></td>`;
+      DAYS.forEach((_, di) => {
+        const dayNum = di + 1;
+        const cell = map[dayNum]?.[parseInt(p.num)];
+        if (cell?.subject) {
+          const style = getSubjectStyle(cell.subject);
+          const teacher = cell.teacher_name ? `<div style="font-size:10px;color:var(--text3);margin-top:2px">${cell.teacher_name}</div>` : '';
+          html += `<td><span class="subject-pill ${style}">${cell.subject}</span>${teacher}</td>`;
+        } else {
+          html += `<td><span style="color:var(--text3);font-size:11px">—</span></td>`;
+        }
+      });
+    }
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+
+  const wrap = document.getElementById('timetableWrap');
+  wrap.innerHTML = html;
+  showToast(`✅ جدول الصف ${grade}${section} جاهز`, 'success');
+}
+
+function getSubjectStyle(subject) {
+  for (const [key, cls] of Object.entries(SUBJECT_STYLES)) {
+    if (subject.includes(key)) return cls;
+  }
+  return 'sub-ar';
+}
+
+function updatePrintHeader(grade, section, schedType) {
+  document.getElementById('phTitle').textContent = `جدول حصص — الصف ${grade} الفصل ${section}`;
+  document.getElementById('phYear').textContent = `العام الدراسي 2025–2026`;
+  document.getElementById('phDate').textContent = `طُبع بتاريخ: ${new Date().toLocaleDateString('ar-AE')}`;
+}
+
+// ── EXPORT PDF ──
+async function exportPDF() {
+  if (!currentData) return;
+  const btn = document.getElementById('btnPdf');
+  btn.disabled = true;
+  btn.innerHTML = '<span>⏳</span> جارٍ التصدير…';
+
+  // Show print header temporarily
+  document.getElementById('printHeader').style.display = 'block';
+
+  const element = document.getElementById('timetableArea');
+  const fname = `جدول-${currentData.grade}${currentData.section}-EduOS.pdf`;
+
+  const opt = {
+    margin: [8, 8, 8, 8],
+    filename: fname,
+    image: { type: 'jpeg', quality: 0.95 },
+    html2canvas: { scale: 2, useCORS: true, allowTaint: true },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+  };
+
+  try {
+    await html2pdf().set(opt).from(element).save();
+    showToast(`✅ تم تصدير ${fname}`, 'success');
+  } catch(e) {
+    showToast('خطأ أثناء التصدير — جرّب الطباعة', 'error');
+  }
+
+  document.getElementById('printHeader').style.display = 'none';
+  btn.disabled = false;
+  btn.innerHTML = '<span>📄</span> تصدير PDF';
+}
+
+// ── HELPERS ──
+function showLoading(v) {
+  document.getElementById('loadingOverlay').style.display = v ? 'flex' : 'none';
+}
+
+function doLogout() {
+  sessionStorage.removeItem('edoos_user');
+  location.href = '../eduos-login/';
+}
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = `toast ${type} show`;
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
