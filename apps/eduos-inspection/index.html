@@ -599,34 +599,37 @@ async function loadAll() {
     const staffData = await dbFetch('staff_profiles?select=id,role,gender');
     document.getElementById('kpi-staff').textContent = staffData.length;
 
-    // 3. Academic data from dash_grades
-    const grades = await dbFetch('dash_grades?select=subject,final_grade,grade_level&limit=3000');
+    // 3. Academic data from student_grades
+    const grades = await dbFetch('student_grades?select=grade,section,term1_total&limit=3000');
     if (grades.length > 0) {
-      const passing = grades.filter(g => (g.final_grade || 0) >= 50);
+      const passing = grades.filter(g => (parseFloat(g.term1_total) || 0) >= 50);
       const passRate = Math.round((passing.length / grades.length) * 100);
       document.getElementById('kpi-pass').textContent = passRate + '%';
 
-      // Subject averages
-      const subjects = {};
+      // Grade-level averages
+      const gradeGroups = {};
       grades.forEach(g => {
-        if (!g.subject) return;
-        if (!subjects[g.subject]) subjects[g.subject] = { sum: 0, count: 0 };
-        subjects[g.subject].sum += (g.final_grade || 0);
-        subjects[g.subject].count++;
+        const key = lang === 'ar' ? `الصف ${g.grade||''}` : `Grade ${g.grade||''}`;
+        if (!gradeGroups[key]) gradeGroups[key] = { sum: 0, count: 0 };
+        gradeGroups[key].sum += (parseFloat(g.term1_total) || 0);
+        gradeGroups[key].count++;
       });
 
-      // Academic bars
-      let acadHTML = '';
-      const subjectKeys = Object.keys(subjects).slice(0, 6);
-      subjectKeys.forEach(sub => {
-        const avg = Math.round(subjects[sub].sum / subjects[sub].count);
+      // Academic bars (per grade)
+      const gradeKeys = Object.keys(gradeGroups).slice(0, 8);
+      let acadHTML = gradeKeys.length ? '' : `<p style="color:var(--text-muted)">${t('lbl.nodata')}</p>`;
+      gradeKeys.forEach(gradeKey => {
+        const avg = Math.round(gradeGroups[gradeKey].sum / gradeGroups[gradeKey].count);
         const color = avg >= 80 ? 'green' : avg >= 60 ? '' : 'red';
-        acadHTML += makeBar(sub, avg, 100, color);
+        acadHTML += makeBar(gradeKey, avg, 100, color);
       });
-      document.getElementById('acad-bars').innerHTML = acadHTML || `<p style="color:var(--text-muted)" data-i18n="lbl.nodata">${t('lbl.nodata')}</p>`;
+      document.getElementById('acad-bars').innerHTML = acadHTML;
 
       // Grade chart
-      renderGradeChart(subjects);
+      renderGradeChart(gradeGroups);
+    } else {
+      document.getElementById('kpi-pass').textContent = '—';
+      document.getElementById('acad-bars').innerHTML = `<p style="color:var(--text-muted);font-size:13px;">${lang==='ar'?'لا توجد بيانات درجات محقونة بعد':'No grade data injected yet'}</p>`;
     }
 
     // 4. Attendance
@@ -714,7 +717,7 @@ async function loadAll() {
        </p>`;
 
     // ── نتيجة المدرسة الإجمالية ──────────────────────────────────────────
-    const _passRate   = grades.length > 0 ? Math.round((grades.filter(g=>(g.final_grade||0)>=50).length/grades.length)*100) : 80;
+    const _passRate   = grades.length > 0 ? Math.round((grades.filter(g=>(parseFloat(g.term1_total)||0)>=50).length/grades.length)*100) : 80;
     const _attendRate = attData.length > 0 ? Math.round((attData.filter(a=>a.status==='present').length/attData.length)*100) : 95;
     const _inclPct    = Math.min(Math.round((inclCount / 120) * 100), 100);
     const _pdpPct     = staffData.length > 0 ? Math.round((activePDP / staffData.length) * 100) : 83;
