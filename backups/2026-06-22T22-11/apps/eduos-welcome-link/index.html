@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>رابط الترحيب الذكي — EduOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="../platform-config.js"></script>
+<script src="../platform-week.js"></script>
+<script src="../platform-autologout.js"></script>
+<script src="../platform-auth-guard.js"></script>
+<style>
+:root{--bg:#0D1B2A;--surface:rgba(255,255,255,0.04);--border:rgba(255,255,255,0.08);
+  --accent:#6C3DD6;--accent2:#22D3EE;--gold:#FFD700;--text:#E8EDF2;--muted:#8899AA;
+  --card:rgba(255,255,255,0.06);--r:16px;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+/* ── Header ── */
+.hdr{background:linear-gradient(135deg,#1a0533,#0D1B2A);border-bottom:1px solid var(--border);
+  padding:12px 24px;display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;}
+.hdr-logo{display:flex;align-items:center;gap:12px;}
+.hdr-logo .icon{width:42px;height:42px;border-radius:10px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  display:flex;align-items:center;justify-content:center;font-size:1.3rem;}
+.hdr h1{font-size:1rem;font-weight:700;}
+.hdr-sub{font-size:.72rem;color:var(--muted);}
+.hdr-meta{display:flex;align-items:center;gap:10px;}
+.week-badge{background:rgba(108,61,214,.2);border:1px solid rgba(108,61,214,.4);
+  border-radius:20px;padding:5px 14px;font-size:.78rem;color:var(--accent2);}
+.btn-exit{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.07);
+  border:1px solid var(--border);color:var(--text);cursor:pointer;display:flex;
+  align-items:center;justify-content:center;text-decoration:none;font-size:.9rem;transition:.2s;}
+.btn-exit:hover{background:rgba(220,53,69,.3);border-color:#dc3545;color:#ff6b6b;}
+
+/* ── Main ── */
+.main{max-width:1000px;margin:0 auto;padding:24px 16px;}
+
+/* ── Hero ── */
+.hero{background:linear-gradient(135deg,rgba(108,61,214,.12),rgba(34,211,238,.08));
+  border:1px solid rgba(108,61,214,.25);border-radius:24px;padding:28px;margin-bottom:24px;text-align:center;}
+.hero-icon{font-size:3rem;margin-bottom:12px;}
+.hero h2{font-size:1.6rem;font-weight:900;
+  background:linear-gradient(90deg,var(--accent2),var(--accent));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px;}
+.hero p{color:var(--muted);font-size:.9rem;line-height:1.7;}
+
+/* ── Generator Card ── */
+.gen-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:24px;margin-bottom:20px;}
+.gen-card h3{font-size:1rem;font-weight:700;margin-bottom:20px;
+  display:flex;align-items:center;gap:8px;color:var(--accent2);}
+
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+@media(max-width:640px){.form-grid{grid-template-columns:1fr;}}
+.form-group label{display:block;font-size:.82rem;color:var(--muted);margin-bottom:6px;font-weight:600;}
+.form-group input,.form-group select,.form-group textarea{
+  width:100%;background:rgba(255,255,255,.06);border:1px solid var(--border);
+  border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Tajawal';
+  font-size:.9rem;outline:none;transition:.2s;}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--accent);}
+.form-group select option{background:#1a2840;color:var(--text);}
+.form-group textarea{resize:vertical;min-height:80px;}
+.full{grid-column:1/-1;}
+
+/* ── Staff Search ── */
+.search-results{position:absolute;top:100%;right:0;left:0;background:#1e2f46;
+  border:1px solid var(--border);border-radius:10px;z-index:50;max-height:240px;overflow-y:auto;
+  box-shadow:0 8px 32px rgba(0,0,0,.5);}
+.sr-item{padding:10px 14px;cursor:pointer;transition:.15s;display:flex;align-items:center;gap:10px;font-size:.88rem;}
+.sr-item:hover{background:rgba(108,61,214,.15);}
+.sr-item .sr-name{font-weight:600;}
+.sr-item .sr-meta{font-size:.75rem;color:var(--muted);}
+.sr-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(108,61,214,.2);
+  border:1px solid rgba(108,61,214,.4);border-radius:20px;padding:4px 12px;font-size:.82rem;
+  margin-top:8px;}
+.sr-chip button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;line-height:1;}
+.search-wrap{position:relative;}
+
+/* ── Duration ── */
+.dur-options{display:flex;gap:10px;flex-wrap:wrap;}
+.dur-btn{background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;
+  padding:8px 18px;cursor:pointer;font-family:'Tajawal';font-size:.85rem;color:var(--muted);transition:.2s;}
+.dur-btn.active,.dur-btn:hover{background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:white;border-color:transparent;}
+
+/* ── Generate Button ── */
+.btn-gen{width:100%;background:linear-gradient(135deg,var(--accent),var(--accent2));
+  border:none;border-radius:14px;padding:14px;color:white;font-family:'Tajawal';
+  font-size:1rem;font-weight:700;cursor:pointer;transition:.2s;display:flex;
+  align-items:center;justify-content:center;gap:8px;}
+.btn-gen:hover{opacity:.9;transform:translateY(-1px);}
+.btn-gen:disabled{opacity:.5;cursor:not-allowed;transform:none;}
+
+/* ── Result Card ── */
+.result-card{background:linear-gradient(135deg,rgba(34,211,238,.08),rgba(108,61,214,.06));
+  border:1px solid rgba(34,211,238,.25);border-radius:var(--r);padding:28px;
+  display:none;text-align:center;}
+.result-card.show{display:block;}
+.result-title{font-size:1.2rem;font-weight:800;color:var(--accent2);margin-bottom:6px;}
+.result-sub{font-size:.85rem;color:var(--muted);margin-bottom:24px;}
+
+.qr-wrap{background:white;border-radius:16px;padding:20px;
+  display:inline-block;margin-bottom:20px;}
+.qr-wrap canvas{display:block;}
+
+.link-box{background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:10px;
+  padding:12px 16px;font-family:monospace;font-size:.78rem;color:var(--accent2);
+  word-break:break-all;text-align:right;margin-bottom:16px;}
+
+.expiry-badge{display:inline-flex;align-items:center;gap:6px;
+  background:rgba(255,165,0,.15);border:1px solid rgba(255,165,0,.3);
+  border-radius:20px;padding:6px 16px;font-size:.82rem;color:#FFB74D;margin-bottom:20px;}
+
+.actions-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+.btn-action{display:flex;align-items:center;gap:6px;padding:10px 20px;border-radius:10px;
+  cursor:pointer;font-family:'Tajawal';font-size:.88rem;font-weight:600;border:none;transition:.2s;}
+.btn-copy-link{background:linear-gradient(135deg,var(--accent),#8B5CF6);color:white;}
+.btn-whatsapp{background:linear-gradient(135deg,#25D366,#128C7E);color:white;}
+.btn-download-qr{background:rgba(255,255,255,.08);border:1px solid var(--border)!important;
+  color:var(--text);border:none;}
+.btn-action:hover{opacity:.9;transform:translateY(-1px);}
+
+/* ── History Table ── */
+.hist-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);
+  padding:24px;margin-top:28px;}
+.hist-card h3{font-size:1rem;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+.hist-table{width:100%;border-collapse:collapse;font-size:.82rem;}
+.hist-table th{background:rgba(255,255,255,.04);padding:10px 12px;text-align:right;
+  font-weight:600;color:var(--muted);border-bottom:1px solid var(--border);}
+.hist-table td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle;}
+.hist-table tr:hover td{background:rgba(255,255,255,.03);}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:.75rem;font-weight:600;}
+.badge-active{background:rgba(34,197,94,.15);color:#4ADE80;border:1px solid rgba(34,197,94,.3);}
+.badge-used{background:rgba(148,163,184,.1);color:var(--muted);border:1px solid var(--border);}
+.badge-expired{background:rgba(239,68,68,.1);color:#F87171;border:1px solid rgba(239,68,68,.25);}
+
+/* ── Loading ── */
+.spinner{width:20px;height:20px;border:2px solid rgba(255,255,255,.2);
+  border-top-color:white;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:rgba(34,211,238,.9);color:white;padding:10px 24px;border-radius:12px;
+  font-size:.88rem;font-weight:600;opacity:0;transition:.3s;pointer-events:none;z-index:9999;}
+.toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-logo">
+    <div class="icon">🔗</div>
+    <div>
+      <div class="hdr h1">رابط الترحيب الذكي</div>
+      <div class="hdr-sub">إنشاء روابط ترحيب آمنة لأعضاء الفريق</div>
+    </div>
+  </div>
+  <div class="hdr-meta">
+    <span class="week-badge" id="week-label">الأسبوع —</span>
+    <a class="btn-exit" href="../eduos-hub/">⌂</a>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-icon">🤝</div>
+    <h2>رابط الترحيب الذكي</h2>
+    <p>أنشئ رابطاً آمناً مُخصصاً لأي موظف أو طالب — صالح لمدة 48 ساعة.<br>
+    يحتوي على رمز QR جاهز للمشاركة عبر واتساب أو طباعة ورقة ترحيب.</p>
+  </div>
+
+  <!-- Generator Form -->
+  <div class="gen-card">
+    <h3>✨ إنشاء رابط جديد</h3>
+    <div class="form-grid">
+
+      <!-- البحث عن الموظف/الطالب -->
+      <div class="form-group full">
+        <label>الشخص المستهدَف</label>
+        <div class="search-wrap">
+          <input type="text" id="search-inp" placeholder="ابحث باسم الموظف أو رقم الطالب..." autocomplete="off"
+            oninput="onSearchInput(this.value)">
+          <div class="search-results" id="search-results" style="display:none"></div>
+        </div>
+        <div id="selected-chip" style="display:none"></div>
+      </div>
+
+      <!-- الدور يُملأ تلقائياً -->
+      <div class="form-group">
+        <label>الدور</label>
+        <input type="text" id="target-role" readonly placeholder="يُملأ تلقائياً بعد الاختيار" style="opacity:.7">
+      </div>
+
+      <!-- مدة الصلاحية -->
+      <div class="form-group">
+        <label>مدة الصلاحية</label>
+        <div class="dur-options">
+          <button class="dur-btn active" onclick="setDur(this,48)">48 ساعة</button>
+          <button class="dur-btn" onclick="setDur(this,24)">24 ساعة</button>
+          <button class="dur-btn" onclick="setDur(this,72)">72 ساعة</button>
+          <button class="dur-btn" onclick="setDur(this,168)">أسبوع</button>
+        </div>
+        <input type="hidden" id="dur-val" value="48">
+      </div>
+
+      <!-- رسالة مخصصة -->
+      <div class="form-group full">
+        <label>رسالة ترحيب مخصصة (اختياري)</label>
+        <textarea id="custom-msg" placeholder="مثال: أهلاً بك في مدرسة الجود! يُرجى إكمال ملفك الشخصي..."></textarea>
+      </div>
+
+    </div>
+    <br>
+    <button class="btn-gen" id="gen-btn" onclick="generateLink()">
+      ✨ إنشاء رابط الترحيب
+    </button>
+  </div>
+
+  <!-- Result -->
+  <div class="result-card" id="result-card">
+    <div class="result-title" id="res-name">✅ تم إنشاء رابط لـ —</div>
+    <div class="result-sub">شارك الرابط أو رمز QR مع الشخص المعني</div>
+
+    <div class="expiry-badge" id="res-expiry">
+      ⏰ صالح حتى —
+    </div>
+    <br>
+
+    <!-- QR Code -->
+    <div class="qr-wrap">
+      <canvas id="qr-canvas"></canvas>
+    </div>
+
+    <div class="link-box" id="res-link">—</div>
+
+    <div class="actions-row">
+      <button class="btn-action btn-copy-link" onclick="copyLink()">📋 نسخ الرابط</button>
+      <button class="btn-action btn-whatsapp" onclick="shareWhatsApp()">💬 واتساب</button>
+      <button class="btn-action btn-download-qr" onclick="downloadQR()">⬇️ تحميل QR</button>
+      <button class="btn-action" style="background:rgba(255,255,255,.08);border:1px solid var(--border);color:var(--text)"
+        onclick="printWelcome()">🖨️ طباعة ترحيب</button>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="hist-card">
+    <h3>📜 آخر الروابط المُنشأة</h3>
+    <div style="overflow-x:auto">
+      <table class="hist-table" id="hist-table">
+        <thead><tr>
+          <th>الاسم</th><th>الدور</th><th>الصلاحية</th><th>الحالة</th><th>إجراء</th>
+        </tr></thead>
+        <tbody id="hist-tbody"><tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">
+          جاري التحميل...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Config (من platform-config.js) ──────────────────────────────
+const CFG = window.EDUOS_CONFIG || {};
+const SB_URL  = CFG.supabaseUrl  || 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SB_ANON = CFG.supabaseKey  || '';
+const BASE_URL = window.location.origin + '/apps/eduos-welcome/';
+
+let sb;
+try { sb = supabase.createClient(SB_URL, SB_ANON); } catch(e) {}
+
+let selectedTarget = null;
+let DURATION_HRS = 48;
+
+// ── Week label ───────────────────────────────────────────────────
+if(window.getCurrentWeekLabel) document.getElementById('week-label').textContent = getCurrentWeekLabel();
+
+// ── البحث ────────────────────────────────────────────────────────
+let searchTimer;
+function onSearchInput(val) {
+  clearTimeout(searchTimer);
+  if(val.trim().length < 2) { hideResults(); return; }
+  searchTimer = setTimeout(() => doSearch(val.trim()), 300);
+}
+async function doSearch(q) {
+  if(!sb) return;
+  const { data } = await sb.from('staff_profiles')
+    .select('id,full_name,role,job_title')
+    .or(`full_name.ilike.%${q}%,job_title.ilike.%${q}%`)
+    .limit(10);
+  const { data: studs } = await sb.from('students')
+    .select('id,name_ar,grade_class,student_number')
+    .or(`name_ar.ilike.%${q}%,student_number.eq.${q}`)
+    .limit(8);
+  showResults([
+    ...(data||[]).map(s=>({id:s.id,name:s.full_name,meta:s.job_title||s.role,type:'staff',role:s.role})),
+    ...(studs||[]).map(s=>({id:s.id,name:s.name_ar,meta:'طالب/ة — '+s.grade_class,type:'student',role:'student'}))
+  ]);
+}
+function showResults(items) {
+  const el = document.getElementById('search-results');
+  if(!items.length){el.style.display='none';return;}
+  el.innerHTML = items.map(i=>`
+    <div class="sr-item" onclick="selectTarget(${JSON.stringify(i).replace(/"/g,'&quot;')})">
+      <span style="font-size:1.1rem">${i.type==='staff'?'👤':'🎒'}</span>
+      <div><div class="sr-name">${i.name}</div><div class="sr-meta">${i.meta}</div></div>
+    </div>`).join('');
+  el.style.display = 'block';
+}
+function hideResults() { document.getElementById('search-results').style.display='none'; }
+function selectTarget(t) {
+  selectedTarget = t;
+  hideResults();
+  document.getElementById('search-inp').value = t.name;
+  document.getElementById('target-role').value = t.role||t.meta;
+  const chip = document.getElementById('selected-chip');
+  chip.innerHTML = `<div class="sr-chip">
+    <span>${t.type==='staff'?'👤':'🎒'} ${t.name}</span>
+    <button onclick="clearTarget()">✕</button>
+  </div>`;
+  chip.style.display='block';
+}
+function clearTarget() {
+  selectedTarget=null;
+  document.getElementById('search-inp').value='';
+  document.getElementById('target-role').value='';
+  document.getElementById('selected-chip').style.display='none';
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.search-wrap')) hideResults();
+});
+
+// ── مدة الصلاحية ──────────────────────────────────────────────────
+function setDur(btn, hrs) {
+  document.querySelectorAll('.dur-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  DURATION_HRS = hrs;
+  document.getElementById('dur-val').value = hrs;
+}
+
+// ── إنشاء الرابط ──────────────────────────────────────────────────
+async function generateLink() {
+  if(!selectedTarget) { showToast('اختر شخصاً أولاً'); return; }
+  if(!sb) { showToast('تعذَّر الاتصال بقاعدة البيانات'); return; }
+
+  const btn = document.getElementById('gen-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> جاري الإنشاء...';
+
+  const msg = document.getElementById('custom-msg').value.trim();
+  const expiresAt = new Date(Date.now() + DURATION_HRS * 3600 * 1000).toISOString();
+
+  // إنشاء توكن عشوائي
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(24)))
+    .map(b=>b.toString(16).padStart(2,'0')).join('');
+
+  const { data, error } = await sb.from('welcome_links').insert({
+    token,
+    target_type: selectedTarget.type,
+    target_id: selectedTarget.id,
+    target_name: selectedTarget.name,
+    target_role: selectedTarget.role || selectedTarget.meta,
+    created_by: window.CURRENT_USER || 'admin',
+    expires_at: expiresAt,
+    custom_msg: msg || null,
+    is_used: false
+  }).select().single();
+
+  btn.disabled = false;
+  btn.innerHTML = '✨ إنشاء رابط الترحيب';
+
+  if(error) { showToast('❌ ' + error.message); return; }
+
+  // عرض النتيجة
+  const url = BASE_URL + '?token=' + token;
+  showResult(selectedTarget.name, url, expiresAt);
+  loadHistory();
+}
+
+function showResult(name, url, expiresAt) {
+  const card = document.getElementById('result-card');
+  card.classList.add('show');
+  card.scrollIntoView({behavior:'smooth',block:'center'});
+
+  document.getElementById('res-name').textContent = `✅ تم إنشاء رابط لـ ${name}`;
+
+  const exp = new Date(expiresAt);
+  document.getElementById('res-expiry').textContent =
+    `⏰ صالح حتى: ${exp.toLocaleDateString('ar-AE',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'})}`;
+
+  document.getElementById('res-link').textContent = url;
+
+  // QR Code
+  const canvas = document.getElementById('qr-canvas');
+  QRCode.toCanvas(canvas, url, {
+    width: 200, margin: 2,
+    color: { dark: '#0D1B2A', light: '#FFFFFF' }
+  });
+
+  // حفظ URL للأزرار
+  card.dataset.url = url;
+  card.dataset.name = name;
+}
+
+// ── أزرار الإجراءات ───────────────────────────────────────────────
+function copyLink() {
+  const url = document.getElementById('result-card').dataset.url;
+  navigator.clipboard.writeText(url).then(()=>showToast('✅ تم النسخ!'));
+}
+function shareWhatsApp() {
+  const url = document.getElementById('result-card').dataset.url;
+  const name = document.getElementById('result-card').dataset.name;
+  const msg = encodeURIComponent(
+    `🏫 مدرسة الجود — رابط ترحيبك الشخصي\nالسلام عليكم ${name}،\nأهلاً وسهلاً بك في منظومة EduOS!\nيُرجى إكمال ملفك الشخصي عبر الرابط (صالح 48 ساعة):\n${url}`
+  );
+  window.open('https://wa.me/?text='+msg, '_blank');
+}
+function downloadQR() {
+  const canvas = document.getElementById('qr-canvas');
+  const name = document.getElementById('result-card').dataset.name.replace(/ /g,'_');
+  const a = document.createElement('a');
+  a.download = `welcome_qr_${name}.png`;
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+}
+function printWelcome() {
+  const url = document.getElementById('result-card').dataset.url;
+  const name = document.getElementById('result-card').dataset.name;
+  const canvas = document.getElementById('qr-canvas');
+  const qrData = canvas.toDataURL('image/png');
+  const exp = document.getElementById('res-expiry').textContent;
+  const w = window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+    <title>رابط ترحيب — ${name}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+    body{font-family:'Tajawal',sans-serif;direction:rtl;padding:30mm 20mm;text-align:center;background:#fff;}
+    h1{color:#6C3DD6;font-size:1.6rem;margin-bottom:8px;}
+    .school{font-size:.9rem;color:#666;margin-bottom:24px;}
+    .name{font-size:1.3rem;font-weight:700;color:#0D1B2A;margin-bottom:20px;}
+    .qr{display:block;margin:0 auto 20px;width:180px;height:180px;}
+    .url{font-family:monospace;font-size:.7rem;color:#6C3DD6;word-break:break-all;
+      border:1px solid #e0e0e0;border-radius:8px;padding:10px;margin:0 auto 16px;max-width:360px;}
+    .expiry{font-size:.82rem;color:#E07B39;margin-bottom:24px;}
+    .footer{font-size:.72rem;color:#aaa;margin-top:30px;}
+    @media print{@page{size:A5;margin:10mm}}
+    </style></head><body>
+    <h1>🏫 مدرسة الجود — رابط الترحيب الشخصي</h1>
+    <div class="school">منظومة EduOS — بوابة الجود الذكية</div>
+    <div class="name">أهلاً بك، ${name}</div>
+    <img class="qr" src="${qrData}" alt="QR">
+    <div class="url">${url}</div>
+    <div class="expiry">${exp}</div>
+    <p style="font-size:.85rem;color:#444;line-height:1.7">
+      امسح رمز QR بكاميرا هاتفك أو انسخ الرابط أعلاه.<br>
+      يُرجى إكمال ملفك الشخصي خلال مدة الصلاحية.
+    </p>
+    <div class="footer">Powered by EduOS — NAFAS For Artificial Intelligence</div>
+    </body></html>`);
+  w.document.close();
+  setTimeout(()=>{w.focus();w.print();},600);
+}
+
+// ── سجل الروابط ───────────────────────────────────────────────────
+async function loadHistory() {
+  if(!sb) return;
+  const { data } = await sb.from('welcome_links')
+    .select('*').order('created_at',{ascending:false}).limit(20);
+  const now = new Date();
+  const tbody = document.getElementById('hist-tbody');
+  if(!data||!data.length){
+    tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">لا توجد روابط بعد</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(r=>{
+    const exp = new Date(r.expires_at);
+    const expired = exp < now;
+    const status = r.is_used ? 'used' : expired ? 'expired' : 'active';
+    const badge = {
+      active:'<span class="badge badge-active">🟢 نشط</span>',
+      used:'<span class="badge badge-used">✅ مستخدَم</span>',
+      expired:'<span class="badge badge-expired">⏰ منتهي</span>'
+    }[status];
+    const expStr = exp.toLocaleDateString('ar-AE',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    return `<tr>
+      <td><b>${r.target_name}</b></td>
+      <td style="color:var(--muted)">${r.target_role||'—'}</td>
+      <td style="font-size:.78rem;color:var(--muted)">${expStr}</td>
+      <td>${badge}</td>
+      <td>${status==='active'?`<button onclick="reCopy('${r.token}')" style="background:rgba(108,61,214,.2);border:1px solid rgba(108,61,214,.4);border-radius:6px;padding:4px 10px;color:var(--accent2);cursor:pointer;font-family:'Tajawal';font-size:.78rem">نسخ</button>`:'—'}</td>
+    </tr>`;
+  }).join('');
+}
+function reCopy(token) {
+  const url = BASE_URL + '?token=' + token;
+  navigator.clipboard.writeText(url).then(()=>showToast('✅ تم النسخ!'));
+}
+
+// ── Toast ─────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', loadHistory);
+</script>
+</body>
+</html>
