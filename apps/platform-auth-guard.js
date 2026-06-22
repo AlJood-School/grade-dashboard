@@ -133,4 +133,15 @@
   // تصدير بيانات المستخدم عالمياً للاستخدام في المنظومات
   window.EDOOS_USER = session;
 
+  // 🛡️ تحميل EduOS Shield تلقائياً في كل صفحة محمية
+  if (!document.querySelector('script[src*="platform-shield"]')) {
+    const shieldScript = document.createElement('script');
+    // حساب المسار النسبي بناءً على عمق المسار الحالي
+    const depth = (window.location.pathname.match(/\//g) || []).length - 1;
+    const prefix = depth <= 2 ? '../' : '../../';
+    shieldScript.src = prefix + 'platform-shield.js';
+    shieldScript.defer = true;
+    document.head.appendChild(shieldScript);
+  }
+
 })();
