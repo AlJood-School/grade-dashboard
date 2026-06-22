@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>النماذج الرقمية — EduOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="../platform-config.js"></script>
+<script src="../platform-week.js"></script>
+<script src="../platform-motd.js"></script>
+<script src="../platform-autologout.js"></script>
+<script src="../platform-auth-guard.js"></script>
+<style>
+:root{--bg:#0D1B2A;--surface:rgba(255,255,255,0.04);--border:rgba(255,255,255,0.08);
+  --accent:#6C3DD6;--accent2:#22D3EE;--gold:#FFD700;--text:#E8EDF2;--muted:#8899AA;
+  --card:rgba(255,255,255,0.06);--r:16px;--success:#4ADE80;--danger:#F87171;--warn:#FFB74D;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+/* ── Header ── */
+.hdr{background:linear-gradient(135deg,#1a0533,#0D1B2A);border-bottom:1px solid var(--border);
+  padding:12px 24px;display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;}
+.hdr-left{display:flex;align-items:center;gap:12px;}
+.hdr-icon{width:42px;height:42px;border-radius:10px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  display:flex;align-items:center;justify-content:center;font-size:1.3rem;}
+.hdr h1{font-size:1rem;font-weight:700;}
+.hdr-sub{font-size:.72rem;color:var(--muted);}
+.hdr-right{display:flex;align-items:center;gap:10px;}
+.week-badge{background:rgba(108,61,214,.2);border:1px solid rgba(108,61,214,.4);
+  border-radius:20px;padding:5px 14px;font-size:.78rem;color:var(--accent2);}
+.btn-exit{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.07);
+  border:1px solid var(--border);color:var(--text);cursor:pointer;display:flex;
+  align-items:center;justify-content:center;text-decoration:none;font-size:.9rem;transition:.2s;}
+.btn-exit:hover{background:rgba(220,53,69,.3);border-color:#dc3545;color:#ff6b6b;}
+
+/* ── Main ── */
+.main{max-width:1200px;margin:0 auto;padding:24px 16px;}
+
+/* ── Hero ── */
+.hero{background:linear-gradient(135deg,rgba(108,61,214,.12),rgba(34,211,238,.06));
+  border:1px solid rgba(108,61,214,.25);border-radius:24px;padding:24px 32px;
+  margin-bottom:24px;display:flex;align-items:center;gap:24px;}
+.hero-icon{font-size:3.5rem;flex-shrink:0;}
+.hero-text h2{font-size:1.4rem;font-weight:900;margin-bottom:6px;}
+.hero-text p{font-size:.88rem;color:var(--muted);line-height:1.7;}
+.hero-stats{margin-right:auto;text-align:center;flex-shrink:0;}
+.hero-num{font-size:2rem;font-weight:900;color:var(--accent2);}
+.hero-lbl{font-size:.72rem;color:var(--muted);}
+
+/* ── Filter tabs ── */
+.filter-bar{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap;}
+.f-btn{background:var(--surface);border:1px solid var(--border);border-radius:20px;
+  padding:8px 18px;font-family:'Tajawal';font-size:.84rem;color:var(--muted);
+  cursor:pointer;transition:.2s;white-space:nowrap;}
+.f-btn.active,.f-btn:hover{background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:white;border-color:transparent;}
+
+/* ── Forms Grid ── */
+.forms-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
+
+/* ── Form Card ── */
+.form-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);
+  padding:22px;cursor:pointer;transition:all .25s;position:relative;overflow:hidden;}
+.form-card::before{content:'';position:absolute;top:0;right:0;width:4px;height:100%;
+  background:var(--card-color,var(--accent));}
+.form-card:hover{border-color:var(--card-color,var(--accent));transform:translateY(-3px);
+  box-shadow:0 10px 40px rgba(0,0,0,.3);}
+.card-icon{font-size:2.2rem;margin-bottom:12px;}
+.card-title{font-size:1rem;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px;}
+.card-desc{font-size:.82rem;color:var(--muted);line-height:1.6;margin-bottom:14px;}
+.card-footer{display:flex;align-items:center;justify-content:space-between;}
+.card-roles{display:flex;gap:4px;flex-wrap:wrap;}
+.role-tag{background:rgba(255,255,255,.06);border-radius:20px;padding:2px 8px;
+  font-size:.68rem;color:var(--muted);}
+.card-count{font-size:.75rem;color:var(--accent2);}
+.open-btn{background:linear-gradient(135deg,var(--card-color,var(--accent)),var(--accent2));
+  color:white;border:none;border-radius:8px;padding:6px 16px;font-family:'Tajawal';
+  font-size:.82rem;font-weight:600;cursor:pointer;}
+
+/* ── Recent submissions ── */
+.recent-section{margin-top:36px;}
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.sec-title{font-size:1rem;font-weight:700;display:flex;align-items:center;gap:8px;}
+.tbl{width:100%;border-collapse:collapse;font-size:.83rem;}
+.tbl th{background:rgba(255,255,255,.04);padding:10px 12px;text-align:right;
+  font-weight:600;color:var(--muted);border-bottom:1px solid var(--border);}
+.tbl td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle;}
+.tbl tr:hover td{background:rgba(255,255,255,.025);}
+.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:.73rem;font-weight:600;}
+.badge-pending{background:rgba(255,183,77,.15);color:var(--warn);border:1px solid rgba(255,183,77,.3);}
+.badge-approved{background:rgba(74,222,128,.1);color:var(--success);border:1px solid rgba(74,222,128,.25);}
+.badge-rejected{background:rgba(248,113,113,.1);color:var(--danger);border:1px solid rgba(248,113,113,.25);}
+
+/* ── Modal ── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);
+  z-index:1000;display:flex;align-items:center;justify-content:center;
+  padding:20px;opacity:0;pointer-events:none;transition:.25s;}
+.modal-bg.open{opacity:1;pointer-events:all;}
+.modal{background:#132033;border:1px solid var(--border);border-radius:24px;
+  width:100%;max-width:560px;max-height:90vh;overflow-y:auto;
+  transform:scale(.96);transition:.25s;}
+.modal-bg.open .modal{transform:scale(1);}
+.modal-hdr{padding:20px 24px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px;}
+.modal-title{font-size:1rem;font-weight:700;}
+.modal-close{margin-right:auto;background:none;border:none;color:var(--muted);
+  cursor:pointer;font-size:1.2rem;}
+.modal-body{padding:24px;}
+.modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end;}
+
+/* ── Form elements inside modal ── */
+.f-group{margin-bottom:14px;}
+.f-group label{display:block;font-size:.82rem;color:var(--muted);margin-bottom:6px;font-weight:600;}
+.f-group input,.f-group select,.f-group textarea{
+  width:100%;background:rgba(255,255,255,.06);border:1px solid var(--border);
+  border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Tajawal';
+  font-size:.9rem;outline:none;transition:.2s;}
+.f-group input:focus,.f-group select:focus,.f-group textarea:focus{border-color:var(--accent);}
+.f-group select option{background:#1a2840;}
+.f-group textarea{resize:vertical;min-height:90px;}
+.f-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+@media(max-width:480px){.f-grid{grid-template-columns:1fr;}}
+.f-divider{border:none;border-top:1px solid var(--border);margin:18px 0;}
+
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:white;border:none;border-radius:10px;padding:10px 24px;
+  font-family:'Tajawal';font-size:.9rem;font-weight:700;cursor:pointer;transition:.2s;}
+.btn-primary:hover{opacity:.9;}
+.btn-cancel{background:rgba(255,255,255,.06);border:1px solid var(--border);
+  color:var(--muted);border-radius:10px;padding:10px 20px;
+  font-family:'Tajawal';font-size:.9rem;cursor:pointer;transition:.2s;}
+.btn-cancel:hover{border-color:var(--accent);color:var(--text);}
+
+/* ── Success toast ── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  padding:12px 28px;border-radius:12px;font-size:.9rem;font-weight:600;
+  opacity:0;transition:.3s;pointer-events:none;z-index:9999;color:white;}
+.toast.show{opacity:1;}
+.toast.success{background:rgba(34,197,94,.9);}
+.toast.error{background:rgba(239,68,68,.85);}
+
+/* ── MOTD ── */
+#motd-bar{position:fixed;bottom:0;left:0;right:0;z-index:200;}
+
+@media(max-width:600px){
+  .hero{flex-direction:column;text-align:center;}
+  .hero-stats{margin:0 auto;}
+  .forms-grid{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="hdr">
+  <div class="hdr-left">
+    <div class="hdr-icon">📋</div>
+    <div>
+      <div class="hdr h1">النماذج الرقمية</div>
+      <div class="hdr-sub">طلبات وإجراءات المدرسة بلا ورق</div>
+    </div>
+  </div>
+  <div class="hdr-right">
+    <span class="week-badge" id="week-label">الأسبوع —</span>
+    <a class="btn-exit" href="../eduos-hub/">⌂</a>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-icon">📋</div>
+    <div class="hero-text">
+      <h2>النماذج الرقمية الموحَّدة</h2>
+      <p>جميع طلبات المدرسة في مكان واحد — مُعبَّأة رقمياً، محفوظة تلقائياً، مُتابَعة فورياً.</p>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-num" id="stat-total">—</div>
+      <div class="hero-lbl">طلب مُقدَّم</div>
+    </div>
+  </div>
+
+  <!-- Filter -->
+  <div class="filter-bar">
+    <button class="f-btn active" onclick="filterForms(this,'all')">🗂️ الكل</button>
+    <button class="f-btn" onclick="filterForms(this,'staff')">👤 الموظفون</button>
+    <button class="f-btn" onclick="filterForms(this,'student')">🎒 الطلاب</button>
+    <button class="f-btn" onclick="filterForms(this,'parent')">👨‍👩‍👧 أولياء الأمور</button>
+    <button class="f-btn" onclick="filterForms(this,'admin')">🏫 إدارية</button>
+  </div>
+
+  <!-- Forms Grid -->
+  <div class="forms-grid" id="forms-grid"></div>
+
+  <!-- Recent Submissions -->
+  <div class="recent-section">
+    <div class="sec-hdr">
+      <div class="sec-title">🕐 آخر الطلبات</div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+      <div style="overflow-x:auto">
+        <table class="tbl" id="recent-tbl">
+          <thead><tr><th>النموذج</th><th>مقدِّم الطلب</th><th>التاريخ</th><th>الحالة</th></tr></thead>
+          <tbody id="recent-body"><tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">جاري التحميل...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- ══ MODAL ══ -->
+<div class="modal-bg" id="modal-bg" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-hdr">
+      <span id="modal-icon" style="font-size:1.4rem"></span>
+      <div class="modal-title" id="modal-title"></div>
+      <button class="modal-close" onclick="closeModalForce()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer">
+      <button class="btn-cancel" onclick="closeModalForce()">إلغاء</button>
+      <button class="btn-primary" id="modal-submit" onclick="submitForm()">✅ إرسال الطلب</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div id="motd-bar"></div>
+
+<script>
+// ── Config ──────────────────────────────────────────────────────
+const CFG = window.EDUOS_CONFIG || {};
+const SB_URL  = CFG.supabaseUrl  || 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SB_ANON = CFG.supabaseKey  || '';
+let sb;
+try{ sb = supabase.createClient(SB_URL, SB_ANON); }catch(e){}
+
+if(window.getCurrentWeekLabel) document.getElementById('week-label').textContent = getCurrentWeekLabel();
+
+// ── Form definitions ─────────────────────────────────────────────
+const FORMS = [
+  {
+    id:'leave_request',
+    icon:'🌴',color:'#22D3EE',
+    title:'طلب إجازة',
+    desc:'تقديم طلب إجازة اعتيادية أو مرضية أو طارئة لموظفي المدرسة',
+    roles:['معلم','موظف','إداري'],
+    cat:'staff',
+    table:'staff_leaves',
+    fields:[
+      {id:'leave_type',label:'نوع الإجازة',type:'select',req:true,
+        options:['اعتيادية','مرضية','طارئة','أمومة','بدون راتب','أخرى']},
+      {id:'start_date',label:'تاريخ البداية',type:'date',req:true},
+      {id:'end_date',label:'تاريخ النهاية',type:'date',req:true},
+      {id:'days_count',label:'عدد الأيام',type:'number',req:true,placeholder:'تلقائي'},
+      {id:'reason',label:'سبب الإجازة',type:'textarea',req:true,placeholder:'اشرح السبب بإيجاز...'},
+      {id:'cover_teacher',label:'المعلم البديل (إن وجد)',type:'text',req:false}
+    ]
+  },
+  {
+    id:'maintenance_request',
+    icon:'🔧',color:'#F59E0B',
+    title:'طلب صيانة',
+    desc:'الإبلاغ عن عطل أو طلب إصلاح في مرافق المدرسة',
+    roles:['معلم','إداري','مدير'],
+    cat:'admin',
+    table:'maintenance_requests',
+    fields:[
+      {id:'location',label:'الموقع/الغرفة',type:'text',req:true,placeholder:'مثال: فصل 3أ / المختبر'},
+      {id:'category',label:'فئة العطل',type:'select',req:true,
+        options:['كهرباء','سباكة','تكييف','أجهزة إلكترونية','أثاث','باب/نافذة','أخرى']},
+      {id:'priority',label:'الأولوية',type:'select',req:true,options:['عادية','عاجلة','طارئة']},
+      {id:'description',label:'وصف المشكلة',type:'textarea',req:true,placeholder:'صِف المشكلة بتفصيل...'},
+      {id:'reported_by',label:'اسم المُبلِّغ',type:'text',req:true}
+    ]
+  },
+  {
+    id:'student_exit',
+    icon:'🚗',color:'#8B5CF6',
+    title:'إذن خروج طالب',
+    desc:'طلب الإذن بخروج طالب مبكراً من المدرسة',
+    roles:['ولي أمر','إداري','سكرتيرة'],
+    cat:'student',
+    table:'student_exit_requests',
+    fields:[
+      {id:'student_name',label:'اسم الطالب/ة',type:'text',req:true},
+      {id:'student_class',label:'الصف',type:'text',req:true,placeholder:'مثال: 4ب'},
+      {id:'parent_name',label:'اسم ولي الأمر',type:'text',req:true},
+      {id:'parent_phone',label:'رقم الهاتف',type:'tel',req:true},
+      {id:'exit_time',label:'وقت الخروج',type:'time',req:true},
+      {id:'reason',label:'سبب الخروج',type:'select',req:true,
+        options:['موعد طبي','ظرف عائلي','طارئ','أخرى']},
+      {id:'notes',label:'ملاحظات إضافية',type:'textarea',req:false}
+    ]
+  },
+  {
+    id:'social_referral',
+    icon:'💚',color:'#4ADE80',
+    title:'إحالة أخصائية اجتماعية',
+    desc:'إحالة طالب/ة للأخصائية الاجتماعية لمتابعة حالة تربوية أو اجتماعية',
+    roles:['معلم','إداري','مدير'],
+    cat:'student',
+    table:'social_cases',
+    fields:[
+      {id:'student_name',label:'اسم الطالب/ة',type:'text',req:true},
+      {id:'student_class',label:'الصف',type:'text',req:true},
+      {id:'category',label:'تصنيف الحالة',type:'select',req:true,
+        options:['انضباطية','تحصيلية','أسرية','نفسية/اجتماعية','تغيب متكرر','أخرى']},
+      {id:'urgency',label:'درجة الأهمية',type:'select',req:true,options:['عادية','متوسطة','عاجلة']},
+      {id:'description',label:'وصف الحالة',type:'textarea',req:true,placeholder:'اشرح الحالة بتفصيل...'},
+      {id:'referred_by',label:'اسم المُحيل',type:'text',req:true}
+    ]
+  },
+  {
+    id:'facility_booking',
+    icon:'🏟️',color:'#EC4899',
+    title:'حجز مرفق',
+    desc:'حجز قاعة أو ملعب أو مختبر لنشاط أو فعالية مدرسية',
+    roles:['معلم','إداري','مدير'],
+    cat:'admin',
+    table:'facility_bookings',
+    fields:[
+      {id:'facility_name',label:'المرفق',type:'select',req:true,
+        options:['قاعة الاجتماعات','المسرح','الملعب الرئيسي','مختبر العلوم','مختبر الحاسب','المصلى','أخرى']},
+      {id:'booking_date',label:'التاريخ',type:'date',req:true},
+      {id:'start_time',label:'وقت البداية',type:'time',req:true},
+      {id:'end_time',label:'وقت النهاية',type:'time',req:true},
+      {id:'purpose',label:'الغرض من الحجز',type:'text',req:true,placeholder:'مثال: اجتماع أولياء أمور'},
+      {id:'expected_attendees',label:'العدد المتوقع',type:'number',req:false},
+      {id:'requested_by',label:'الطالب/ة بالحجز',type:'text',req:true}
+    ]
+  },
+  {
+    id:'document_request',
+    icon:'📄',color:'#22D3EE',
+    title:'طلب وثيقة',
+    desc:'طلب شهادة أو وثيقة رسمية من المدرسة (شهادة قيد، شهادة تخرج، خطاب...)',
+    roles:['ولي أمر','طالب','موظف'],
+    cat:'parent',
+    table:'document_requests',
+    fields:[
+      {id:'requester_name',label:'اسم مقدم الطلب',type:'text',req:true},
+      {id:'student_name',label:'اسم الطالب/ة',type:'text',req:false,placeholder:'إن وُجد'},
+      {id:'doc_type',label:'نوع الوثيقة',type:'select',req:true,
+        options:['شهادة قيد','شهادة أداء','خطاب للجهات','شهادة سلوك','شهادة إتمام المرحلة','أخرى']},
+      {id:'purpose',label:'الغرض',type:'text',req:true,placeholder:'مثال: للسفر، للبنك...'},
+      {id:'copies',label:'عدد النسخ',type:'number',req:true},
+      {id:'urgency',label:'الاستعجال',type:'select',req:true,options:['عادي (3 أيام عمل)','عاجل (يوم عمل)','طارئ']}
+    ]
+  },
+  {
+    id:'parent_visit',
+    icon:'👨‍👩‍👧',color:'#F97316',
+    title:'زيارة ولي الأمر',
+    desc:'تسجيل زيارة ولي أمر للمدرسة أو تحديد موعد لمقابلة',
+    roles:['سكرتيرة','إداري'],
+    cat:'parent',
+    table:'parent_visits',
+    fields:[
+      {id:'parent_name',label:'اسم ولي الأمر',type:'text',req:true},
+      {id:'parent_phone',label:'رقم الهاتف',type:'tel',req:true},
+      {id:'student_name',label:'اسم الطالب/ة',type:'text',req:true},
+      {id:'student_class',label:'الصف',type:'text',req:true},
+      {id:'visit_date',label:'تاريخ الزيارة',type:'date',req:true},
+      {id:'visit_time',label:'وقت الزيارة',type:'time',req:true},
+      {id:'purpose',label:'الغرض من الزيارة',type:'select',req:true,
+        options:['استفسار أكاديمي','متابعة انضباطية','استلام وثيقة','اجتماع مع المعلمة','أخرى']},
+      {id:'notes',label:'ملاحظات',type:'textarea',req:false}
+    ]
+  },
+  {
+    id:'incident_report',
+    icon:'⚠️',color:'#EF4444',
+    title:'تقرير حادثة',
+    desc:'تسجيل حادثة أو مشكلة أمنية داخل المدرسة',
+    roles:['أمن','إداري','مدير'],
+    cat:'admin',
+    table:'security_incidents',
+    fields:[
+      {id:'incident_type',label:'نوع الحادثة',type:'select',req:true,
+        options:['مشادة بين طلاب','شخص غير مصرح','فقدان ممتلكات','أذى جسدي','حريق صغير','أخرى']},
+      {id:'location',label:'موقع الحادثة',type:'text',req:true},
+      {id:'incident_time',label:'وقت الحادثة',type:'datetime-local',req:true},
+      {id:'persons_involved',label:'الأشخاص المتورطون',type:'text',req:true},
+      {id:'description',label:'وصف تفصيلي',type:'textarea',req:true},
+      {id:'action_taken',label:'الإجراء المُتخذ',type:'textarea',req:false},
+      {id:'reported_by',label:'اسم المُبلِّغ',type:'text',req:true}
+    ]
+  }
+];
+
+let currentForm = null;
+let activeFilter = 'all';
+
+// ── Render Grid ──────────────────────────────────────────────────
+function renderGrid(filter='all') {
+  const grid = document.getElementById('forms-grid');
+  const items = filter==='all' ? FORMS : FORMS.filter(f=>f.cat===filter);
+  grid.innerHTML = items.map(f=>`
+    <div class="form-card" style="--card-color:${f.color}" onclick="openForm('${f.id}')">
+      <div class="card-icon">${f.icon}</div>
+      <div class="card-title">${f.title}</div>
+      <div class="card-desc">${f.desc}</div>
+      <div class="card-footer">
+        <div class="card-roles">${f.roles.map(r=>`<span class="role-tag">${r}</span>`).join('')}</div>
+        <button class="open-btn" style="background:linear-gradient(135deg,${f.color}99,${f.color})">
+          فتح النموذج ←
+        </button>
+      </div>
+    </div>`).join('');
+}
+
+function filterForms(btn, cat) {
+  document.querySelectorAll('.f-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  activeFilter = cat;
+  renderGrid(cat);
+}
+
+// ── Open Modal ───────────────────────────────────────────────────
+function openForm(id) {
+  const f = FORMS.find(x=>x.id===id);
+  if(!f) return;
+  currentForm = f;
+
+  document.getElementById('modal-icon').textContent = f.icon;
+  document.getElementById('modal-title').textContent = f.title;
+
+  // Build form fields
+  let html = `<div style="font-size:.82rem;color:var(--muted);margin-bottom:18px">${f.desc}</div>`;
+  const pairs = [];
+  f.fields.forEach((field,i)=>{
+    const req = field.req ? '<span style="color:var(--danger)"> *</span>' : '';
+    let input = '';
+    if(field.type==='select'){
+      input = `<select id="ff_${field.id}">
+        <option value="">— اختر —</option>
+        ${field.options.map(o=>`<option value="${o}">${o}</option>`).join('')}
+      </select>`;
+    } else if(field.type==='textarea'){
+      input = `<textarea id="ff_${field.id}" placeholder="${field.placeholder||''}" rows="3"></textarea>`;
+    } else {
+      input = `<input type="${field.type}" id="ff_${field.id}" placeholder="${field.placeholder||''}" ${field.type==='number'?'min="0"':''}>`;
+    }
+    pairs.push(`<div class="f-group"><label>${field.label}${req}</label>${input}</div>`);
+  });
+
+  // 2-column grid for short fields
+  html += `<div class="f-grid" style="grid-template-columns:${f.fields.length>4?'1fr 1fr':'1fr'}">`;
+  html += pairs.join('');
+  html += '</div>';
+
+  document.getElementById('modal-body').innerHTML = html;
+
+  // Pre-fill today's date
+  f.fields.forEach(field=>{
+    if(field.type==='date'){
+      const el = document.getElementById('ff_'+field.id);
+      if(el) el.value = new Date().toISOString().split('T')[0];
+    }
+  });
+
+  document.getElementById('modal-bg').classList.add('open');
+}
+function closeModal(e){if(e.target===document.getElementById('modal-bg'))closeModalForce();}
+function closeModalForce(){document.getElementById('modal-bg').classList.remove('open');}
+
+// ── Submit Form ──────────────────────────────────────────────────
+async function submitForm() {
+  if(!currentForm) return;
+  if(!sb){ showToast('تعذَّر الاتصال بقاعدة البيانات','error'); return; }
+
+  const f = currentForm;
+  const row = { form_type: f.id, status:'pending', submitted_at: new Date().toISOString() };
+
+  // Validate & collect
+  for(const field of f.fields){
+    const el = document.getElementById('ff_'+field.id);
+    const val = el ? el.value.trim() : '';
+    if(field.req && !val){
+      el && el.focus();
+      showToast(`يُرجى ملء حقل: ${field.label}`,'error');
+      return;
+    }
+    row[field.id] = val || null;
+  }
+
+  const btn = document.getElementById('modal-submit');
+  btn.disabled = true;
+  btn.textContent = '⏳ جاري الإرسال...';
+
+  // Insert to the target table or a generic forms table
+  let err = null;
+  try {
+    // Try inserting to the specific table
+    const { error } = await sb.from(f.table).insert(row);
+    err = error;
+    if(error && error.code==='42P01'){
+      // Table doesn't exist — fallback to generic forms table
+      const { error:e2 } = await sb.from('form_submissions').insert({
+        form_type: f.id,
+        form_title: f.title,
+        data: JSON.stringify(row),
+        status: 'pending',
+        submitted_at: row.submitted_at
+      });
+      err = e2;
+    }
+  } catch(e){ err = e; }
+
+  btn.disabled = false;
+  btn.textContent = '✅ إرسال الطلب';
+
+  if(err){ showToast('❌ ' + (err.message||'خطأ في الإرسال'),'error'); return; }
+
+  closeModalForce();
+  showToast('✅ تم إرسال الطلب بنجاح!','success');
+  loadRecentSubmissions();
+  loadStats();
+}
+
+// ── Recent Submissions ───────────────────────────────────────────
+async function loadRecentSubmissions() {
+  if(!sb) return;
+  // Try to get from a generic submissions view or table
+  const allPromises = [
+    sb.from('staff_leaves').select('id,leave_type,reported_by,created_at,status').order('created_at',{ascending:false}).limit(5),
+    sb.from('maintenance_requests').select('id,category,reported_by,created_at,status').order('created_at',{ascending:false}).limit(5),
+    sb.from('social_cases').select('id,category,referred_by,created_at,status').order('created_at',{ascending:false}).limit(5),
+  ];
+  const results = await Promise.allSettled(allPromises);
+  const FORM_LABELS = {
+    'staff_leaves':'طلب إجازة',
+    'maintenance_requests':'طلب صيانة',
+    'social_cases':'إحالة اجتماعية'
+  };
+  const TABLES = ['staff_leaves','maintenance_requests','social_cases'];
+  let rows = [];
+  results.forEach((r,i)=>{
+    if(r.status==='fulfilled' && r.value.data){
+      r.value.data.forEach(item=>{
+        rows.push({
+          form: FORM_LABELS[TABLES[i]],
+          by: item.reported_by || item.referred_by || '—',
+          date: new Date(item.created_at||item.submitted_at).toLocaleDateString('ar-AE'),
+          status: item.status || 'pending'
+        });
+      });
+    }
+  });
+  rows.sort((a,b)=>b.date.localeCompare(a.date));
+  const tbody = document.getElementById('recent-body');
+  if(!rows.length){
+    tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">لا توجد طلبات بعد</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.slice(0,10).map(r=>`<tr>
+    <td><b>${r.form}</b></td>
+    <td style="color:var(--muted)">${r.by}</td>
+    <td style="font-size:.78rem;color:var(--muted)">${r.date}</td>
+    <td><span class="badge badge-${r.status==='approved'?'approved':r.status==='rejected'?'rejected':'pending'}">
+      ${r.status==='approved'?'✅ مقبول':r.status==='rejected'?'❌ مرفوض':'⏳ قيد المراجعة'}
+    </span></td>
+  </tr>`).join('');
+}
+
+async function loadStats() {
+  if(!sb) return;
+  const { count } = await sb.from('staff_leaves').select('*',{count:'exact',head:true});
+  document.getElementById('stat-total').textContent = (count||0) + '+';
+}
+
+// ── Toast ─────────────────────────────────────────────────────────
+function showToast(msg,type='success'){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className=`toast ${type} show`;
+  setTimeout(()=>t.classList.remove('show'),3500);
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded',()=>{
+  renderGrid();
+  loadRecentSubmissions();
+  loadStats();
+});
+</script>
+</body>
+</html>
