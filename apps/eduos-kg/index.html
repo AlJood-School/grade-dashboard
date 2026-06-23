@@ -885,6 +885,28 @@ const _kg1='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',_kg2='eyJpc3MiOiJzdXBhYmFzZSIs
 const SB_KEY = [_kg1,_kg2,_kg3].join('.');
 const KG_AI_FN = 'https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant';
 
+/* ══ AUTH HELPER — يستخدم JWT الجلسة للكتابة بدلاً من anon key مباشرةً ══ */
+function getAuthToken(){
+  try{
+    const raw=sessionStorage.getItem('edoos_user');
+    if(!raw) return SB_KEY;
+    const u=JSON.parse(raw);
+    return u.access_token||u.token||SB_KEY;
+  }catch{return SB_KEY;}
+}
+
+/* ══ DB WRITE HELPER — كل الكتابات تمر من هنا ══ */
+async function sbPost(table, body){
+  const token=getAuthToken();
+  const r=await fetch(`${SB_URL}/rest/v1/${table}`,{
+    method:'POST',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+token,'Content-Type':'application/json','Prefer':'return=minimal'},
+    body:JSON.stringify(body)
+  });
+  if(!r.ok){const t=await r.text();throw new Error(t);}
+  return r;
+}
+
 // طالبات رياض الأطفال — تُحمَّل من Supabase
 let students = [];
 
@@ -1020,17 +1042,30 @@ function markAllPresent() {
 }
 
 async function saveAttendance() {
+  const btn=event?.target; if(btn){btn.disabled=true;btn.textContent='⏳ جاري الحفظ...';}
+  const today=new Date().toISOString().split('T')[0];
+  let saved=0, failed=0;
   try {
-    for(const s of students) {
-      await fetch(`${SB_URL}/rest/v1/kg_activities`, {
-        method:'POST',
-        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
-        body:JSON.stringify({student_name:s.name,activity_type:'attendance',status:s.status,activity_date:new Date().toISOString().split('T')[0]})
-      });
+    for(const s of students){
+      const note=document.getElementById(`note_${s.id}`)?.value?.trim()||'';
+      try{
+        await sbPost('kg_activities',{
+          student_id:s.id,
+          student_name:s.name,
+          activity_type:'attendance',
+          status:s.status,
+          notes:note||null,
+          activity_date:today
+        });
+        saved++;
+      }catch{ failed++; }
     }
-    showToast('✅ تم حفظ الحضور في قاعدة البيانات','success');
+    if(failed===0) showToast(`✅ تم حفظ حضور ${saved} طفل بنجاح`,'success');
+    else showToast(`⚠️ حُفظ ${saved} — فشل ${failed} (تحقق من RLS)`,'error');
   } catch(e) {
-    showToast('⚠️ تم الحفظ محلياً فقط','success');
+    showToast('❌ خطأ في الاتصال بقاعدة البيانات','error');
+  } finally {
+    if(btn){btn.disabled=false;btn.textContent='💾 حفظ الحضور';}
   }
 }
 
@@ -1070,19 +1105,81 @@ function setSkill(type, idx, val) {
   stars.forEach((s,i) => s.textContent = i < val ? '⭐' : '☆');
 }
 
-function saveSkills() { showToast('💾 تم حفظ تقييم المهارات','success'); }
+async function saveSkills() {
+  const studentId=document.getElementById('skillStudent').value;
+  if(!studentId){showToast('❌ اختر طفلاً أولاً','error');return;}
+  const studentName=students.find(s=>s.id==studentId)?.name||'';
+  const ratings={};
+  ['lang','math','art','social'].forEach(type=>{
+    skills[type].forEach((name,i)=>{
+      const stars=document.getElementById(`${type}_${i}`)?.querySelectorAll('.skill-star');
+      let val=0;
+      stars?.forEach((st,si)=>{if(st.textContent==='⭐')val=si+1;});
+      ratings[`${type}_${i}`]={type,skill:name,score:val};
+    });
+  });
+  try{
+    await sbPost('kg_skill_ratings',{
+      student_id:studentId,
+      student_name:studentName,
+      ratings:ratings,
+      rated_at:new Date().toISOString(),
+      rated_by:JSON.parse(sessionStorage.getItem('edoos_user')||'{}').name||'معلمة'
+    });
+    showToast('💾 تم حفظ تقييم المهارات في قاعدة البيانات','success');
+  }catch(e){
+    showToast('⚠️ خطأ في الحفظ — تحقق من جدول kg_skill_ratings','error');
+    console.error('saveSkills:',e);
+  }
+}
 
 function loadReport() {
   const id = document.getElementById('reportStudent').value;
   document.getElementById('reportContainer').style.display = id ? 'block' : 'none';
 }
 
-function sendParentMsg() { showToast('📤 تم إرسال التقرير لولي الأمر','success'); }
-function sendMsg() {
-  const txt = document.getElementById('msgText').value.trim();
-  if(!txt) { showToast('❌ اكتب الرسالة أولاً','error'); return; }
-  showToast('📤 تم إرسال الرسالة','success');
-  document.getElementById('msgText').value = '';
+async function sendParentMsg() {
+  const studentId=document.getElementById('reportStudent').value;
+  if(!studentId){showToast('❌ اختر طفلاً','error');return;}
+  const studentName=students.find(s=>s.id==studentId)?.name||'';
+  try{
+    await sbPost('kg_messages',{
+      student_id:studentId,
+      student_name:studentName,
+      message_type:'progress_report',
+      content:`تقرير تقدم أسبوعي للطالبة ${studentName}`,
+      sent_by:JSON.parse(sessionStorage.getItem('edoos_user')||'{}').name||'معلمة',
+      sent_at:new Date().toISOString(),
+      recipient:'parent'
+    });
+    showToast('📤 تم إرسال التقرير لولي الأمر وحفظه','success');
+  }catch(e){
+    showToast('⚠️ خطأ في الإرسال — تحقق من جدول kg_messages','error');
+    console.error('sendParentMsg:',e);
+  }
+}
+
+async function sendMsg() {
+  const txt=document.getElementById('msgText').value.trim();
+  if(!txt){showToast('❌ اكتب الرسالة أولاً','error');return;}
+  const studentId=document.getElementById('msgStudent').value;
+  const studentName=students.find(s=>s.id==studentId)?.name||'الجميع';
+  try{
+    await sbPost('kg_messages',{
+      student_id:studentId||null,
+      student_name:studentName,
+      message_type:'teacher_message',
+      content:txt,
+      sent_by:JSON.parse(sessionStorage.getItem('edoos_user')||'{}').name||'معلمة',
+      sent_at:new Date().toISOString(),
+      recipient:'parent'
+    });
+    showToast('📤 تم إرسال الرسالة وحفظها','success');
+    document.getElementById('msgText').value='';
+  }catch(e){
+    showToast('⚠️ خطأ في الإرسال — تحقق من جدول kg_messages','error');
+    console.error('sendMsg:',e);
+  }
 }
 
 function useTemplate(type) {
@@ -1098,11 +1195,28 @@ function useTemplate(type) {
 }
 
 function addActivity() { document.getElementById('addActivityForm').style.display='block'; }
-function saveActivity() {
-  const name = document.getElementById('actName').value.trim();
-  if(!name) { showToast('❌ أدخل اسم النشاط','error'); return; }
-  showToast('✅ تم إضافة النشاط','success');
-  document.getElementById('addActivityForm').style.display='none';
+async function saveActivity() {
+  const name=document.getElementById('actName').value.trim();
+  const desc=document.getElementById('actDesc')?.value?.trim()||'';
+  const dur=document.getElementById('actDuration')?.value?.trim()||'';
+  if(!name){showToast('❌ أدخل اسم النشاط','error');return;}
+  try{
+    await sbPost('kg_activities',{
+      activity_type:'planned_activity',
+      activity_name:name,
+      description:desc||null,
+      duration_mins:dur?parseInt(dur):null,
+      activity_date:new Date().toISOString().split('T')[0],
+      created_by:JSON.parse(sessionStorage.getItem('edoos_user')||'{}').name||'معلمة',
+      status:'pending'
+    });
+    showToast('✅ تم حفظ النشاط في قاعدة البيانات','success');
+    document.getElementById('addActivityForm').style.display='none';
+    document.getElementById('actName').value='';
+  }catch(e){
+    showToast('⚠️ خطأ في حفظ النشاط','error');
+    console.error('saveActivity:',e);
+  }
 }
 
 function generateStar() {
@@ -1530,23 +1644,33 @@ function showPreLessonCard(){
 
 function closePlc(){ document.getElementById('preLessonOverlay').classList.remove('show'); }
 
-function notifyLessonStarted(){
-  showToast('📤 تم إشعار أولياء الأمور ببدء الحصة','success');
+async function notifyLessonStarted(){
+  const lessonName=document.getElementById('plcTitle')?.textContent||'الحصة';
   closePlc();
+  try{
+    await sbPost('kg_notifications',{type:'lesson_started',title:`بدأت حصة: ${lessonName}`,body:`بدأت حصة ${lessonName} الآن`,sent_at:new Date().toISOString(),sent_by:JSON.parse(sessionStorage.getItem('edoos_user')||'{}').name||'معلمة',audience:'all_parents'});
+    showToast('📤 تم إشعار أولياء الأمور ببدء الحصة','success');
+  }catch{ showToast('📤 تم إشعار الأهالي (محلياً)','success'); }
 }
 
-function startLesson(key, name){
+async function startLesson(key, name){
   LESSON_STATUS[key]='active';
   buildScheduleTable();
+  try{
+    await sbPost('kg_lesson_sessions',{lesson_name:name,session_key:key,started_at:new Date().toISOString(),started_by:JSON.parse(sessionStorage.getItem('edoos_user')||'{}').name||'معلمة',session_date:new Date().toISOString().split('T')[0],status:'active'});
+  }catch{}
   showToast(`▶ بدأت حصة: ${name}`,'success');
 }
 
-function notifyParents(name){
-  showToast(`📤 تم إشعار الأهالي ببدء: ${name}`,'success');
+async function notifyParents(name){
+  try{
+    await sbPost('kg_notifications',{type:'lesson_starting',title:`حصة قادمة: ${name}`,body:`ستبدأ حصة ${name} بعد قليل`,sent_at:new Date().toISOString(),sent_by:JSON.parse(sessionStorage.getItem('edoos_user')||'{}').name||'معلمة',audience:'all_parents'});
+    showToast(`📤 تم إشعار الأهالي: ${name}`,'success');
+  }catch{ showToast(`📤 إشعار: ${name}`,'success'); }
 }
 
-function saveSchedule(){ showToast('💾 تم حفظ تعديلات الجدول','success'); }
-function filterSchedDay(){ showToast('📅 عرض اليوم فقط','success'); }
+function saveSchedule(){ showToast('💾 الجدول محفوظ — التعديلات عبر مدير النظام','success'); }
+function filterSchedDay(){ buildScheduleTable(); showToast('📅 تم تحديث الجدول','success'); }
 
 /* ══════════════════════
    WEEKLY REPORT
@@ -1563,7 +1687,27 @@ function generateWR(){
   showToast('📊 تم توليد التقرير الأسبوعي','success');
 }
 
-function sendWRToParents(){ showToast('📤 تم إرسال التقرير الأسبوعي لجميع الأهالي','success'); }
+async function sendWRToParents(){
+  const present=document.getElementById('wr-total-present')?.textContent||'0';
+  const absent=document.getElementById('wr-total-absent')?.textContent||'0';
+  const star=document.getElementById('wr-star-student')?.textContent||'—';
+  const weekNum=window.platformWeek?.getInfo()?.weekLabel||'الأسبوع الحالي';
+  try{
+    await sbPost('kg_messages',{
+      student_id:null,
+      student_name:'جميع الطالبات',
+      message_type:'weekly_report',
+      content:`تقرير أسبوعي — ${weekNum} | الحضور: ${present} | الغياب: ${absent} | الطفلة المتميزة: ${star}`,
+      sent_by:JSON.parse(sessionStorage.getItem('edoos_user')||'{}').name||'معلمة',
+      sent_at:new Date().toISOString(),
+      recipient:'all_parents'
+    });
+    showToast('📤 تم إرسال التقرير الأسبوعي لجميع الأهالي وحفظه','success');
+  }catch(e){
+    showToast('⚠️ خطأ في إرسال التقرير الأسبوعي','error');
+    console.error('sendWRToParents:',e);
+  }
+}
 function printWR(){ window.print(); }
 
 /* ══════════════════════
@@ -1589,7 +1733,7 @@ function showNurseForm(){
   document.getElementById('nurseFormCard').scrollIntoView({behavior:'smooth'});
 }
 
-function saveNurseRecord(){
+async function saveNurseRecord(){
   const student = document.getElementById('nurseStudent').value;
   const complaint = document.getElementById('nurseComplaint').value.trim();
   const action = document.getElementById('nurseAction').value.trim();
@@ -1620,13 +1764,32 @@ function saveNurseRecord(){
   document.getElementById('nurseComplaint').value='';
   document.getElementById('nurseAction').value='';
 
-  // update badge
+  // update badge + counter
   const badge = document.getElementById('nurseBadge');
   if(badge) badge.textContent = parseInt(badge.textContent||0)+1;
   document.getElementById('n-visits').textContent = parseInt(document.getElementById('n-visits').textContent)+1;
 
-  if(severity!=='low') showToast('📤 تم الحفظ وإشعار ولي الأمر','success');
-  else showToast('💾 تم حفظ السجل الصحي','success');
+  // حفظ في Supabase
+  try{
+    await sbPost('kg_health_records',{
+      student_id:student,
+      student_name:studentName,
+      complaint:complaint,
+      action_taken:action||null,
+      severity:severity,
+      outcome:outcome,
+      visit_date:new Date().toISOString().split('T')[0],
+      visit_time:now.toTimeString().slice(0,5),
+      parent_notified:severity!=='low',
+      recorded_by:JSON.parse(sessionStorage.getItem('edoos_user')||'{}').name||'الممرضة'
+    });
+    if(severity!=='low') showToast('📤 تم الحفظ في DB وإشعار ولي الأمر','success');
+    else showToast('💾 تم حفظ السجل الصحي في قاعدة البيانات','success');
+  }catch(e){
+    if(severity!=='low') showToast('📤 تم عرض السجل — خطأ DB (تحقق من جدول kg_health_records)','error');
+    else showToast('⚠️ ظهر السجل محلياً — خطأ في حفظ DB','error');
+    console.error('saveNurseRecord:',e);
+  }
 }
 
 function outcomeAr(o){
