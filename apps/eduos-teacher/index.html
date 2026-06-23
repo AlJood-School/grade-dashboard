@@ -2816,7 +2816,7 @@ async function loadWeeklySchedule() {
     if (!slots.length) {
       _weeklyData = buildFallbackWeekly();
     } else {
-      _weeklyData = groupByDay(slots);
+      _weeklyData = groupByDay(slots) || buildFallbackWeekly();
     }
 
     const todayKey = TODAY_MAP[new Date().getDay()];
@@ -2835,13 +2835,32 @@ async function loadWeeklySchedule() {
   }
 }
 
+const DAY_INT_MAP = { 0:'sun', 1:'mon', 2:'tue', 3:'wed', 4:'thu', 5:'fri', 6:'sat' };
+const DAY_NAME_MAP = { sunday:'sun', monday:'mon', tuesday:'tue', wednesday:'wed', thursday:'thu', friday:'fri', saturday:'sat' };
+
+function normDay(d) {
+  if (d === null || d === undefined) return null;
+  if (typeof d === 'number') return DAY_INT_MAP[d] || null;
+  if (typeof d === 'string') {
+    const lower = d.toLowerCase().trim();
+    if (DAY_KEYS.includes(lower)) return lower;
+    if (DAY_NAME_MAP[lower]) return DAY_NAME_MAP[lower];
+    const abbr = lower.substring(0, 3);
+    if (DAY_KEYS.includes(abbr)) return abbr;
+  }
+  return null;
+}
+
 function groupByDay(slots) {
   const map = {};
   DAY_KEYS.forEach(d => map[d] = []);
   slots.forEach(s => {
-    const d = s.day_of_week; // 'sun','mon',...
-    if (map[d]) map[d].push(s);
+    const d = normDay(s.day_of_week);
+    if (d && map[d]) map[d].push(s);
   });
+  // إذا كل الأيام فارغة → استخدم Fallback
+  const total = DAY_KEYS.reduce((a,k) => a + map[k].length, 0);
+  if (!total) return null;
   return map;
 }
 
