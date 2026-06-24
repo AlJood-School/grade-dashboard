@@ -87,6 +87,29 @@
     'eduos-emiratization':     ['admin','principal'],
     'eduos-exit-ticket':       ['admin','principal','teacher','sub_teacher'],
     'eduos-teacher-dashboard': ['admin','principal','teacher','sub_teacher'],
+
+    // ── إضافات الفحص الأمني 24 يونيو 2026 ──
+    'eduos-appraisal':     ['admin','principal'],
+    'eduos-broadcasting':  ['admin','principal','media'],
+    'eduos-calendar':      ['admin','principal','teacher','sub_teacher','support'],
+    'eduos-news':          ['admin','principal','media','teacher'],
+    'eduos-observation':   ['admin','principal','teacher'],
+    'eduos-certificates':  ['admin','principal','teacher'],
+    'eduos-class-session': ['admin','principal','teacher','sub_teacher'],
+    'eduos-store':         ['admin','principal','teacher','student','parent'],
+    'eduos-student-portal':['admin','principal','student','parent'],
+    'eduos-vark':          ['admin','principal','teacher','student'],
+    'eduos-survey':        ['admin','principal','teacher'],
+    'eduos-timetable-gen': ['admin','principal'],
+    'eduos-inspection':    ['admin','principal'],
+    'eduos-welcome':       ['admin','principal'],
+    'eduos-atheer':        ['admin','principal','teacher','social_worker','support','special_ed'],
+    'eduos-pdp':           ['admin','principal','teacher','support','special_ed'],
+    'eduos-meetings':      ['admin','principal','teacher'],
+    'eduos-forms':         ['admin','principal','teacher','support'],
+    'eduos-staff-leaves':  ['admin','principal','teacher','support','special_ed','security','nurse','librarian'],
+    'eduos-portfolio':     ['admin','principal','teacher','student'],
+    'eduos-student-profile':['admin','principal','teacher'],
   };
 
   // ── تحقق إضافي: المعلم البديل — منع الوصول لصفحات حساسة ──
