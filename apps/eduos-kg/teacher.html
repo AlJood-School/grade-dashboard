@@ -629,11 +629,8 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
       <span class="nav-icon">🧠</span> توصيات الذكاء
     </div>
     <div class="nav-label">الأدوات</div>
-    <div class="nav-item" onclick="showCurriculumSwitcher()">
-      <span class="nav-icon">⚙️</span> نوع المنهج
-    </div>
-    <div class="nav-item" onclick="openAddStudent()">
-      <span class="nav-icon">➕</span> إضافة طالب
+    <div class="nav-item" onclick="showCurriculumInfo()">
+      <span class="nav-icon">📌</span> معلومات المنهج
     </div>
   </nav>
 
@@ -811,71 +808,21 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
   </main>
 </div>
 
-<!-- MODAL: Add Student -->
-<div class="modal-overlay" id="addStudentModal">
+<!-- MODAL: Curriculum Info (read-only) -->
+<div class="modal-overlay" id="currInfoModal">
   <div class="modal">
-    <div class="modal-title">➕ إضافة طالب / Add Student</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">الاسم بالعربية *</label>
-        <input class="form-input" id="newNameAr" placeholder="مثال: لانا أحمد">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Name in English *</label>
-        <input class="form-input" id="newNameEn" placeholder="e.g. Lana Ahmed">
-      </div>
+    <div class="modal-title">📌 المنهج المعتمد / Active Curriculum</div>
+    <div style="background:linear-gradient(135deg,rgba(108,61,214,0.1),rgba(34,211,238,0.05));border:1px solid rgba(108,61,214,0.2);border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">المنهج المعتمد في مدرستك · يُحدَّد عند إنشاء البوابة من قِبل الإدارة</div>
+      <div id="currInfoDisplay" style="font-size:16px;font-weight:700;"></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;">🔒 غير قابل للتعديل من واجهة المعلمة · لتغييره تواصل مع إدارة المدرسة</div>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">الجنس / Gender</label>
-        <select class="form-select" id="newGender">
-          <option value="f">أنثى / Female</option>
-          <option value="m">ذكر / Male</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">المنهج / Curriculum</label>
-        <select class="form-select" id="newCurr">
-          <option value="moe">وزارة التربية / MoE</option>
-          <option value="british">بريطاني / British</option>
-          <option value="american">أمريكي / American</option>
-          <option value="ib">IB (PYP)</option>
-          <option value="cbse">هندي / CBSE</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">المستوى / Level</label>
-        <select class="form-select" id="newLevel">
-          <option value="PreKG">Pre-KG (ما قبل الروضة)</option>
-          <option value="KG1" selected>KG1 (الروضة الأولى)</option>
-          <option value="KG2">KG2 (الروضة الثانية)</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">اللغة الأم / Mother Tongue</label>
-        <select class="form-select" id="newLang">
-          <option value="ar">عربية — Native Arabic</option>
-          <option value="other">أخرى — Non-Native (Arabic track B)</option>
-        </select>
-      </div>
+    <div style="font-size:12px;color:var(--muted);line-height:1.8;">
+      <strong style="color:var(--text);">المواد الإلزامية لجميع المناهج في الإمارات:</strong><br>
+      🌙 العربية · 📖 التربية الإسلامية · 🕌 الدراسات الاجتماعية · 💎 التربية الأخلاقية
     </div>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal('addStudentModal')">إلغاء / Cancel</button>
-      <button class="btn btn-primary" onclick="addStudent()">إضافة / Add</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL: Curriculum Switcher -->
-<div class="modal-overlay" id="currModal">
-  <div class="modal">
-    <div class="modal-title">⚙️ نوع المنهج / Curriculum Type</div>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:16px;">اختر المنهج المعتمد في مدرستك — يؤثر على المواد والتقييم والمصطلحات</p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;" id="currOptions"></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal('currModal')">إغلاق / Close</button>
+      <button class="btn btn-primary" onclick="closeModal('currInfoModal')">حسناً / OK</button>
     </div>
   </div>
 </div>
@@ -1012,19 +959,33 @@ const SUBJECTS = {
 };
 
 // Sample students — in production from Supabase student_grades / profiles table
+// prevSkills = last month's fixed ratings (read-only, stored in DB separately)
+// guardianType: 'mother'|'father'|'guardian' — comes from profiles.guardian_type
 let students = [
-  { id:'s001', nameAr:'لانا سلطان', nameEn:'Lana Sultan', gender:'f', emoji:'👧', level:'KG2', arabicTrack:'native', attendance:'present', mood:'😊', skills:{} },
-  { id:'s002', nameAr:'يوسف أحمد', nameEn:'Yousef Ahmed', gender:'m', emoji:'👦', level:'KG2', arabicTrack:'native', attendance:'present', mood:'😐', skills:{} },
-  { id:'s003', nameAr:'مريم خالد', nameEn:'Mariam Khalid', gender:'f', emoji:'👧', level:'KG2', arabicTrack:'native', attendance:'absent', mood:'🤕', skills:{} },
-  { id:'s004', nameAr:'نوح ويليامز', nameEn:'Noah Williams', gender:'m', emoji:'👦', level:'KG2', arabicTrack:'non-native', attendance:'present', mood:'😊', skills:{} },
-  { id:'s005', nameAr:'آنا ميتال', nameEn:'Aanya Mittal', gender:'f', emoji:'👧', level:'KG2', arabicTrack:'non-native', attendance:'present', mood:'🌟', skills:{} },
-  { id:'s006', nameAr:'خالد راشد', nameEn:'Khalid Rashid', gender:'m', emoji:'👦', level:'KG2', arabicTrack:'native', attendance:'late', mood:'😄', skills:{} },
-  { id:'s007', nameAr:'سارة محمد', nameEn:'Sara Mohammed', gender:'f', emoji:'👧', level:'KG2', arabicTrack:'native', attendance:'present', mood:'😊', skills:{} },
-  { id:'s008', nameAr:'ليام أوبراين', nameEn:'Liam O\'Brien', gender:'m', emoji:'👦', level:'KG2', arabicTrack:'non-native', attendance:'present', mood:'😁', skills:{} },
-  { id:'s009', nameAr:'فاطمة علي', nameEn:'Fatima Ali', gender:'f', emoji:'👧', level:'KG2', arabicTrack:'native', attendance:'present', mood:'🌟', skills:{} },
-  { id:'s010', nameAr:'دانيال كيم', nameEn:'Daniel Kim', gender:'m', emoji:'👦', level:'KG2', arabicTrack:'non-native', attendance:'absent', mood:'😶', skills:{} },
-  { id:'s011', nameAr:'نورة سعيد', nameEn:'Noura Saeed', gender:'f', emoji:'👧', level:'KG2', arabicTrack:'native', attendance:'present', mood:'😊', skills:{} },
-  { id:'s012', nameAr:'عمر سلمان', nameEn:'Omar Salman', gender:'m', emoji:'👦', level:'KG2', arabicTrack:'native', attendance:'present', mood:'😄', skills:{} },
+  { id:'s001', nameAr:'لانا سلطان', nameEn:'Lana Sultan', gender:'f', emoji:'👧', level:'KG2', arabicTrack:'native', attendance:'present', mood:'😊', guardianType:'mother',
+    skills:{}, prevSkills:{'arabic_ar1':3,'arabic_ar2':2,'arabic_ar3':3,'arabic_ar4':2,'arabic_ar5':2,'islamic_is1':4,'math_ma1':3,'math_ma2':3} },
+  { id:'s002', nameAr:'يوسف أحمد', nameEn:'Yousef Ahmed', gender:'m', emoji:'👦', level:'KG2', arabicTrack:'native', attendance:'present', mood:'😐', guardianType:'father',
+    skills:{}, prevSkills:{'arabic_ar1':2,'arabic_ar2':2,'arabic_ar3':2,'arabic_ar4':2,'arabic_ar5':1,'islamic_is1':3,'math_ma1':2,'math_ma2':2} },
+  { id:'s003', nameAr:'مريم خالد', nameEn:'Mariam Khalid', gender:'f', emoji:'👧', level:'KG2', arabicTrack:'native', attendance:'absent', mood:'🤕', guardianType:'mother',
+    skills:{}, prevSkills:{'arabic_ar1':4,'arabic_ar2':3,'arabic_ar3':4,'arabic_ar4':3,'arabic_ar5':3,'islamic_is1':5,'math_ma1':4,'math_ma2':4} },
+  { id:'s004', nameAr:'نوح ويليامز', nameEn:'Noah Williams', gender:'m', emoji:'👦', level:'KG2', arabicTrack:'non-native', attendance:'present', mood:'😊', guardianType:'father',
+    skills:{}, prevSkills:{'arabic_ar1':2,'arabic_ar2':1,'arabic_ar3':2,'arabic_ar4':1,'arabic_ar5':1,'english_en1':4,'math_ma1':3} },
+  { id:'s005', nameAr:'آنا ميتال', nameEn:'Aanya Mittal', gender:'f', emoji:'👧', level:'KG2', arabicTrack:'non-native', attendance:'present', mood:'🌟', guardianType:'guardian',
+    skills:{}, prevSkills:{'arabic_ar1':3,'arabic_ar2':2,'arabic_ar3':3,'arabic_ar4':2,'arabic_ar5':2,'english_en1':5,'math_ma1':4} },
+  { id:'s006', nameAr:'خالد راشد', nameEn:'Khalid Rashid', gender:'m', emoji:'👦', level:'KG2', arabicTrack:'native', attendance:'late', mood:'😄', guardianType:'father',
+    skills:{}, prevSkills:{'arabic_ar1':3,'arabic_ar2':3,'arabic_ar3':3,'arabic_ar4':3,'arabic_ar5':2,'islamic_is1':4,'math_ma1':3} },
+  { id:'s007', nameAr:'سارة محمد', nameEn:'Sara Mohammed', gender:'f', emoji:'👧', level:'KG2', arabicTrack:'native', attendance:'present', mood:'😊', guardianType:'mother',
+    skills:{}, prevSkills:{'arabic_ar1':3,'arabic_ar2':3,'arabic_ar3':4,'arabic_ar4':3,'arabic_ar5':3,'islamic_is1':4,'math_ma1':4} },
+  { id:'s008', nameAr:'ليام أوبراين', nameEn:'Liam O\'Brien', gender:'m', emoji:'👦', level:'KG2', arabicTrack:'non-native', attendance:'present', mood:'😁', guardianType:'father',
+    skills:{}, prevSkills:{'arabic_ar1':2,'arabic_ar2':2,'arabic_ar3':2,'arabic_ar4':1,'arabic_ar5':1,'english_en1':4,'math_ma1':3} },
+  { id:'s009', nameAr:'فاطمة علي', nameEn:'Fatima Ali', gender:'f', emoji:'👧', level:'KG2', arabicTrack:'native', attendance:'present', mood:'🌟', guardianType:'mother',
+    skills:{}, prevSkills:{'arabic_ar1':4,'arabic_ar2':4,'arabic_ar3':4,'arabic_ar4':4,'arabic_ar5':3,'islamic_is1':5,'math_ma1':5} },
+  { id:'s010', nameAr:'دانيال كيم', nameEn:'Daniel Kim', gender:'m', emoji:'👦', level:'KG2', arabicTrack:'non-native', attendance:'absent', mood:'😶', guardianType:'father',
+    skills:{}, prevSkills:{'arabic_ar1':1,'arabic_ar2':1,'arabic_ar3':1,'arabic_ar4':1,'arabic_ar5':0,'english_en1':3,'math_ma1':2} },
+  { id:'s011', nameAr:'نورة سعيد', nameEn:'Noura Saeed', gender:'f', emoji:'👧', level:'KG2', arabicTrack:'native', attendance:'present', mood:'😊', guardianType:'mother',
+    skills:{}, prevSkills:{'arabic_ar1':3,'arabic_ar2':3,'arabic_ar3':3,'arabic_ar4':3,'arabic_ar5':3,'islamic_is1':4,'math_ma1':3} },
+  { id:'s012', nameAr:'عمر سلمان', nameEn:'Omar Salman', gender:'m', emoji:'👦', level:'KG2', arabicTrack:'native', attendance:'present', mood:'😄', guardianType:'father',
+    skills:{}, prevSkills:{'arabic_ar1':3,'arabic_ar2':2,'arabic_ar3':3,'arabic_ar4':3,'arabic_ar5':2,'islamic_is1':3,'math_ma1':3} },
 ];
 
 let currentCurriculum = 'moe';
@@ -1034,17 +995,22 @@ let selectedStudentId = students[0].id;
 let activeMsgIndex = 0;
 
 // Sample messages
+// parentName is derived from student.guardianType + child name (in production: from profiles table)
+// guardianType: 'mother' → 'والدة', 'father' → 'والد', 'guardian' → 'ولي أمر'
+function guardianLabel(type) {
+  return type === 'mother' ? 'والدة' : type === 'father' ? 'والد' : 'ولي أمر';
+}
 const messages = [
-  { parentName:'والدة لانا', childName:'لانا سلطان', msgs:[
+  { studentId:'s001', guardianType:'mother', childName:'لانا سلطان', msgs:[
     { from:'parent', text:'السلام عليكم، كيف حال لانا هذا الأسبوع؟', time:'8:32 ص' },
     { from:'teacher', text:'وعليكم السلام، لانا متألقة! تقدمت جداً في القراءة العربية 🌟', time:'9:15 ص' },
     { from:'parent', text:'الحمد لله! شكراً جزيلاً معلمتنا 💚', time:'9:20 ص' },
   ]},
-  { parentName:'والد يوسف', childName:'يوسف أحمد', msgs:[
+  { studentId:'s002', guardianType:'father', childName:'يوسف أحمد', msgs:[
     { from:'parent', text:'Good morning! Is Yousef eating well at school?', time:'7:50 AM' },
     { from:'teacher', text:'Good morning! Yes, he\'s doing great. Very social this week 😊', time:'8:10 AM' },
   ]},
-  { parentName:'والدة مريم', childName:'مريم خالد', msgs:[
+  { studentId:'s003', guardianType:'mother', childName:'مريم خالد', msgs:[
     { from:'parent', text:'مريم ستتغيب اليوم بسبب المرض، عندها حمى', time:'6:45 ص' },
     { from:'teacher', text:'شفاها الله، نتمنى لها السلامة ❤️ سنرسل لكم مواد الأسبوع', time:'7:00 ص' },
   ]},
@@ -1155,8 +1121,10 @@ function renderSkillsTable() {
   const skills = subj.skills_moe;
   const tbody = document.getElementById('skillsTbody');
   tbody.innerHTML = skills.map(skill => {
-    const savedRating = student?.skills[`${currentSubject}_${skill.id}`] || 0;
-    const prevRating = Math.max(0, savedRating - Math.floor(Math.random() * 2));
+    const key = `${currentSubject}_${skill.id}`;
+    const savedRating = student?.skills[key] || 0;
+    // prevRating: fixed from last month's DB record — NOT derived from current
+    const prevRating = student?.prevSkills?.[key] ?? null;
     return `
       <tr>
         <td>
@@ -1173,7 +1141,7 @@ function renderSkillsTable() {
           </div>
         </td>
         <td style="color:var(--muted);font-size:12px;">
-          ${prevRating > 0 ? '⭐'.repeat(prevRating) + '☆'.repeat(5-prevRating) : '— لم يُقيَّم'}
+          ${prevRating !== null && prevRating > 0 ? '⭐'.repeat(prevRating) + '☆'.repeat(5-prevRating) : '<span style="opacity:0.4;">— لم يُقيَّم</span>'}
         </td>
         <td class="skill-notes">
           <input type="text" placeholder="ملاحظة…" id="note_${skill.id}">
@@ -1204,19 +1172,24 @@ function renderAttendanceGrid() {
 
 function renderMessages() {
   const list = document.getElementById('msgList');
-  list.innerHTML = messages.map((m, i) => `
-    <div class="msg-item ${i===activeMsgIndex?'active':''}" onclick="selectMsg(${i})">
-      <div class="msg-parent">${m.parentName}</div>
-      <div class="msg-child">👦 ${m.childName}</div>
-      <div class="msg-preview">${m.msgs[m.msgs.length-1].text}</div>
-    </div>
-  `).join('');
+  list.innerHTML = messages.map((m, i) => {
+    const label = `${guardianLabel(m.guardianType)} ${m.childName.split(' ')[0]}`;
+    const studentEmoji = students.find(s=>s.id===m.studentId)?.emoji || '👤';
+    return `
+      <div class="msg-item ${i===activeMsgIndex?'active':''}" onclick="selectMsg(${i})">
+        <div class="msg-parent">${label}</div>
+        <div class="msg-child">${studentEmoji} ${m.childName}</div>
+        <div class="msg-preview">${m.msgs[m.msgs.length-1].text}</div>
+      </div>
+    `;
+  }).join('');
   renderMsgBody();
 }
 
 function renderMsgBody() {
   const m = messages[activeMsgIndex];
-  document.getElementById('activeMsgName').textContent = m.parentName;
+  const label = `${guardianLabel(m.guardianType)} ${m.childName.split(' ')[0]}`;
+  document.getElementById('activeMsgName').textContent = label;
   document.getElementById('activeMsgChild').textContent = m.childName;
   document.getElementById('msgBody').innerHTML = m.msgs.map(msg => `
     <div class="bubble ${msg.from==='parent'?'bubble-in':'bubble-out'}">
@@ -1346,10 +1319,14 @@ function selectSubject(id) {
 function setRating(skillId, val) {
   const student = students.find(s => s.id === selectedStudentId);
   if (!student) return;
-  student.skills[`${currentSubject}_${skillId}`] = val;
+  const key = `${currentSubject}_${skillId}`;
+  // Toggle: clicking same star again → reset to 0
+  const current = student.skills[key] || 0;
+  const newVal = (current === val) ? 0 : val;
+  student.skills[key] = newVal;
   for (let i = 1; i <= 5; i++) {
     const star = document.getElementById(`star_${skillId}_${i}`);
-    if (star) star.textContent = i <= val ? '⭐' : '☆';
+    if (star) star.textContent = i <= newVal ? '⭐' : '☆';
   }
 }
 
@@ -1404,39 +1381,11 @@ function sendMsg() {
   toast('✉️ تم إرسال الرسالة · Message sent');
 }
 
-function setCurriculum(id) {
-  currentCurriculum = id;
-  const c = CURRICULUM_TYPES.find(ct => ct.id === id);
-  document.getElementById('currLabel').textContent = c.label;
-  renderCurrOptions();
-  toast(`📚 تم تغيير المنهج إلى ${c.label}`);
+function showCurriculumInfo() {
+  const c = CURRICULUM_TYPES.find(ct => ct.id === currentCurriculum);
+  document.getElementById('currInfoDisplay').innerHTML = `${c.icon} ${c.label} — ${c.labelEn} <span style="font-size:11px;color:var(--muted);">(${c.desc})</span>`;
+  openModal('currInfoModal');
 }
-
-function openAddStudent() { openModal('addStudentModal'); }
-
-function addStudent() {
-  const nameAr = document.getElementById('newNameAr').value.trim();
-  const nameEn = document.getElementById('newNameEn').value.trim();
-  if (!nameAr || !nameEn) { toast('⚠️ الاسم مطلوب / Name required'); return; }
-  const gender = document.getElementById('newGender').value;
-  const level = document.getElementById('newLevel').value;
-  const arabicTrack = document.getElementById('newLang').value;
-  students.push({
-    id: 's' + Date.now(),
-    nameAr, nameEn, gender,
-    emoji: gender==='f'?'👧':'👦',
-    level, arabicTrack,
-    attendance: 'present',
-    mood: '😊',
-    skills: {}
-  });
-  document.getElementById('statTotal').textContent = students.length;
-  renderStudentGrid();
-  closeModal('addStudentModal');
-  toast(`✅ تمت إضافة ${nameAr} بنجاح`);
-}
-
-function showCurriculumSwitcher() { renderCurrOptions(); openModal('currModal'); }
 
 function switchToSkillsForStudent() {
   closeModal('studentModal');
