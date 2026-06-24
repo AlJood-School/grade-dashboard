@@ -439,9 +439,42 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 // DATA — In production: from Supabase via student_grades + profiles
 // ═══════════════════════════════════════════════
 
+// Guardian data — in production from Supabase profiles table
+// guardianType: 'mother' | 'father' | 'guardian'
+const guardian = {
+  nameAr: 'سلطان أحمد',
+  nameEn: 'Sultan Ahmed',
+  type: 'father',   // from profiles.guardian_type
+  emoji: '👨',
+};
+
 const children = [
-  { id:'c001', nameAr:'لانا سلطان', nameEn:'Lana Sultan', emoji:'👧', level:'KG2-A', curriculum:'moe', arabicTrack:'native', attendance:'present', stars:5, skillsAvg:91 },
-  { id:'c002', nameAr:'فهد سلطان', nameEn:'Fahad Sultan', emoji:'👦', level:'KG1-B', curriculum:'american', arabicTrack:'non-native', attendance:'present', stars:3, skillsAvg:76 },
+  {
+    id:'c001', nameAr:'لانا سلطان', nameEn:'Lana Sultan', emoji:'👧',
+    level:'KG2-A', curriculum:'moe', arabicTrack:'native', attendance:'present', stars:5, skillsAvg:91,
+    // Per-child skill scores — in production from student_grades table
+    skillScores: {
+      arabic:  [90, 85, 95, 88, 80],
+      islamic: [100, 95, 90, 92],
+      social:  [85, 90],
+      math:    [88, 92, 78, 84],
+      english: [95, 90],
+      sel:     [92, 85, 88],
+    }
+  },
+  {
+    id:'c002', nameAr:'فهد سلطان', nameEn:'Fahad Sultan', emoji:'👦',
+    level:'KG1-B', curriculum:'american', arabicTrack:'non-native', attendance:'present', stars:3, skillsAvg:76,
+    // Per-child skill scores (non-native Arabic track — lower Arabic, stronger English)
+    skillScores: {
+      arabic:  [62, 55, 65, 58, 50],
+      islamic: [80, 75, 70, 72],
+      social:  [75, 78],
+      math:    [82, 88, 70, 76],
+      english: [92, 90, 88, 84],
+      sel:     [78, 72, 68],
+    }
+  },
 ];
 let activeChild = 0;
 
@@ -516,8 +549,12 @@ function renderHero() {
 }
 
 function renderSkillsOverview() {
+  const child = children[activeChild];
+  // Use per-child skill scores — each child owns their own data
   document.getElementById('skillsOverview').innerHTML = SKILLS_DATA.map(group => {
-    const avg = Math.round(group.skills.reduce((s,sk)=>s+sk.score,0)/group.skills.length);
+    const scores = (child.skillScores && child.skillScores[group.id]) || group.skills.map(s => s.score);
+    const avg = Math.round(scores.reduce((a,b)=>a+b,0) / scores.length);
+    const skillsWithScores = group.skills.map((skill, i) => ({ ...skill, score: scores[i] ?? skill.score }));
     return `
       <div class="skill-group">
         <div class="sg-header">
@@ -528,7 +565,7 @@ function renderSkillsOverview() {
           </div>
           ${group.mandatory ? '<span class="sg-badge">إلزامي</span>' : `<span style="margin-right:auto;font-size:10px;color:var(--muted);">${avg}%</span>`}
         </div>
-        ${group.skills.map(skill => `
+        ${skillsWithScores.map(skill => `
           <div class="skill-bar-item">
             <div class="sb-row">
               <span class="sb-name">${skill.name}</span>
@@ -620,8 +657,41 @@ function toast(msg) {
 }
 
 // ═══════════════════════════════════════════════
+// AUTO LOGOUT — 15 minutes idle
+// ═══════════════════════════════════════════════
+(function() {
+  let idleTimer;
+  function resetIdle() {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0D1B2A;font-family:Tajawal,sans-serif;color:#F0F4FF;text-align:center;padding:24px;">
+        <div>
+          <div style="font-size:48px;margin-bottom:16px;">🔒</div>
+          <div style="font-size:20px;font-weight:700;margin-bottom:8px;">انتهت الجلسة بسبب عدم النشاط</div>
+          <div style="font-size:14px;color:rgba(240,244,255,0.5);margin-bottom:24px;">Session expired due to inactivity · 15 minutes</div>
+          <button onclick="window.location.reload()" style="padding:10px 28px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);border:none;border-radius:12px;color:#fff;font-family:Tajawal,sans-serif;font-size:14px;font-weight:700;cursor:pointer;">تسجيل الدخول مجدداً · Log In Again</button>
+        </div>
+      </div>`;
+    }, 15 * 60 * 1000);
+  }
+  ['click','keydown','scroll','mousemove','touchstart'].forEach(e =>
+    document.addEventListener(e, resetIdle, { passive: true })
+  );
+  resetIdle();
+})();
+
+// ═══════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════
+
+// Bind guardian info from data (not hardcoded HTML)
+document.getElementById('guardianName').textContent = guardian.nameAr;
+document.getElementById('guardianAvatar').textContent = guardian.emoji;
+const guardianRoleLabel = guardian.type === 'mother' ? 'والدة · Mother'
+  : guardian.type === 'father' ? 'والد · Father'
+  : 'ولي أمر · Guardian';
+document.getElementById('guardianRole').textContent = guardianRoleLabel;
+
 renderChildCards();
 renderHero();
 renderSkillsOverview();

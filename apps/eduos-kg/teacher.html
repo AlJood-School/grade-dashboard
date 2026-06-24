@@ -1038,6 +1038,19 @@ const aiInsights = {
 };
 
 // ═══════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════
+
+// Calculate real skill average (0-100%) from student.skills (current month) or prevSkills fallback
+function calcSkillAvg(student) {
+  const cur = Object.values(student.skills || {}).filter(v => v > 0);
+  const prev = Object.values(student.prevSkills || {}).filter(v => v > 0);
+  const all = cur.length > 0 ? cur : prev;
+  if (!all.length) return 0;
+  return Math.round((all.reduce((a, b) => a + b, 0) / all.length / 5) * 100);
+}
+
+// ═══════════════════════════════════════════════
 // RENDER FUNCTIONS
 // ═══════════════════════════════════════════════
 
@@ -1237,21 +1250,7 @@ function renderAI() {
   `).join('');
 }
 
-function renderCurrOptions() {
-  const wrap = document.getElementById('currOptions');
-  wrap.innerHTML = CURRICULUM_TYPES.map(c => `
-    <div onclick="setCurriculum('${c.id}')" style="
-      background:${currentCurriculum===c.id?`rgba(108,61,214,0.2)`:'var(--card)'};
-      border:1px solid ${currentCurriculum===c.id?'rgba(108,61,214,0.5)':'var(--border)'};
-      border-radius:12px; padding:14px; cursor:pointer; transition:all 0.2s;
-    ">
-      <div style="font-size:22px;margin-bottom:6px;">${c.icon}</div>
-      <div style="font-size:13px;font-weight:700;">${c.label}</div>
-      <div style="font-size:11px;color:var(--muted);">${c.labelEn}</div>
-      <div style="font-size:10px;color:var(--muted);margin-top:4px;">${c.desc}</div>
-    </div>
-  `).join('');
-}
+// renderCurrOptions removed — curriculum is set by admin at school creation, not by teacher
 
 // ═══════════════════════════════════════════════
 // ACTIONS
@@ -1277,7 +1276,7 @@ function selectStudent(id) {
 }
 
 function showStudentModal(s) {
-  const skillScore = Math.floor(Math.random() * 40) + 60;
+  const skillScore = calcSkillAvg(s); // computed from real student data
   document.getElementById('studentModalContent').innerHTML = `
     <div style="text-align:center;margin-bottom:20px;">
       <div style="font-size:52px;margin-bottom:8px;">${s.emoji}</div>
@@ -1410,8 +1409,38 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 });
 
 // ═══════════════════════════════════════════════
+// AUTO LOGOUT — 15 minutes idle
+// ═══════════════════════════════════════════════
+(function() {
+  let idleTimer;
+  function resetIdle() {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      // In production: clear session + redirect to login
+      // sessionStorage.removeItem('edoos_user');
+      // window.location.href = '/apps/eduos-login/';
+      document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0D1B2A;font-family:Tajawal,sans-serif;color:#F0F4FF;text-align:center;padding:24px;">
+        <div>
+          <div style="font-size:48px;margin-bottom:16px;">🔒</div>
+          <div style="font-size:20px;font-weight:700;margin-bottom:8px;">انتهت الجلسة بسبب عدم النشاط</div>
+          <div style="font-size:14px;color:rgba(240,244,255,0.5);margin-bottom:24px;">Session expired due to inactivity · 15 minutes</div>
+          <button onclick="window.location.reload()" style="padding:10px 28px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);border:none;border-radius:12px;color:#fff;font-family:Tajawal,sans-serif;font-size:14px;font-weight:700;cursor:pointer;">تسجيل الدخول مجدداً · Log In Again</button>
+        </div>
+      </div>`;
+    }, 15 * 60 * 1000); // 15 minutes
+  }
+  ['click','keydown','scroll','mousemove','touchstart'].forEach(e =>
+    document.addEventListener(e, resetIdle, { passive: true })
+  );
+  resetIdle();
+})();
+
+// ═══════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════
+// Stats strip: compute from data (not hardcoded)
+document.getElementById('statTotal').textContent = students.length;
+
 renderStudentGrid();
 updateAbsentBadge();
 </script>
