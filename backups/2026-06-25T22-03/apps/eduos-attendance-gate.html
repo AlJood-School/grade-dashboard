@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>بوابة الجود — تسجيل الحضور الذكي</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --gold: #f6c90e;
+  --emerald: #10d9a0;
+  --blue: #63b3ed;
+  --rose: #fc8181;
+  --amber: #f6ad55;
+  --bg: #0D1B2A;
+  --card: rgba(255,255,255,0.04);
+  --card-border: rgba(99,179,237,0.15);
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --radius: 16px;
+}
+body {
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  overflow-x: hidden;
+}
+
+/* ─── HEADER ─── */
+.gate-header {
+  position: fixed; top: 0; left: 0; right: 0;
+  background: linear-gradient(135deg, #0d1b2a 0%, #111f35 100%);
+  border-bottom: 1px solid var(--card-border);
+  padding: 10px 24px;
+  display: flex; align-items: center; justify-content: space-between;
+  z-index: 100;
+  gap: 16px;
+}
+.header-brand { display: flex; align-items: center; gap: 12px; }
+.header-brand img { width: 42px; height: 42px; border-radius: 10px; object-fit: cover; }
+.brand-info h1 { font-size: 16px; font-weight: 800; }
+.brand-info h1 span { color: var(--gold); }
+.brand-info p { font-size: 11px; color: var(--text2); }
+.header-meta { text-align: center; }
+.meta-clock { font-size: 28px; font-weight: 900; color: var(--emerald); font-variant-numeric: tabular-nums; letter-spacing: 2px; }
+.meta-date { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.meta-week { font-size: 11px; color: var(--gold); margin-top: 2px; }
+.header-status { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.status-chip {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 20px;
+  font-size: 11px; font-weight: 700;
+}
+.chip-active { background: rgba(16,217,160,0.12); border: 1px solid rgba(16,217,160,0.3); color: var(--emerald); }
+.chip-warn   { background: rgba(246,173,85,0.12);  border: 1px solid rgba(246,173,85,0.3);  color: var(--amber); }
+.chip-error  { background: rgba(252,129,129,0.12); border: 1px solid rgba(252,129,129,0.3); color: var(--rose); }
+.dot-pulse { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: dp 1.8s infinite; }
+@keyframes dp { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
+
+/* ─── TABS ─── */
+.tabs-bar {
+  position: fixed; top: 70px; left: 0; right: 0;
+  background: #0a1520;
+  border-bottom: 1px solid var(--card-border);
+  display: flex; z-index: 90;
+  overflow-x: auto;
+}
+.tab-btn {
+  flex: 1; padding: 10px 16px;
+  background: none; border: none; color: var(--text2);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  border-bottom: 3px solid transparent;
+  white-space: nowrap; transition: all .2s;
+  font-family: inherit;
+}
+.tab-btn.active { color: var(--emerald); border-bottom-color: var(--emerald); }
+.tab-btn:hover:not(.active) { color: var(--text); }
+
+/* ─── PANELS ─── */
+.panel { display: none; padding: 128px 20px 80px; width: 100%; max-width: 1200px; }
+.panel.active { display: block; }
+
+/* ─── CARDS ─── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 20px;
+  backdrop-filter: blur(10px);
+}
+.card-title {
+  font-size: 14px; font-weight: 700; color: var(--text2);
+  margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+  text-transform: uppercase; letter-spacing: 1px;
+}
+
+/* ─── QR PANEL ─── */
+.qr-layout { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+.qr-box {
+  background: white; border-radius: 20px; padding: 18px;
+  box-shadow: 0 0 80px rgba(99,179,237,0.15), 0 0 40px rgba(246,201,14,0.08);
+  position: relative;
+}
+.qr-box canvas { display: block; border-radius: 8px; }
+.qr-corner { position: absolute; width: 26px; height: 26px; border-style: solid; border-color: var(--gold); border-width: 0; }
+.qr-corner.tl { top:-2px; right:-2px; border-top-width:4px; border-right-width:4px; border-radius:0 8px 0 0; }
+.qr-corner.tr { top:-2px; left:-2px;  border-top-width:4px; border-left-width:4px;  border-radius:8px 0 0 0; }
+.qr-corner.bl { bottom:-2px; right:-2px; border-bottom-width:4px; border-right-width:4px; border-radius:0 0 0 8px; }
+.qr-corner.br { bottom:-2px; left:-2px;  border-bottom-width:4px; border-left-width:4px;  border-radius:0 0 8px 0; }
+
+.qr-side { display: flex; flex-direction: column; gap: 16px; align-items: center; min-width: 200px; }
+
+/* ─── COUNTDOWN RING ─── */
+.countdown-ring { position: relative; width: 100px; height: 100px; }
+.countdown-ring svg { transform: rotate(-90deg); }
+.ring-bg  { fill:none; stroke:rgba(99,179,237,0.1); stroke-width:7; }
+.ring-fg  { fill:none; stroke:url(#cg); stroke-width:7; stroke-linecap:round; transition: stroke-dashoffset 1s linear; }
+.cd-center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.cd-num { font-size:26px; font-weight:900; color: var(--emerald); }
+.cd-lbl { font-size:9px; color: var(--text2); }
+
+.qr-hint { text-align: center; }
+.qr-hint h2 {
+  font-size: 20px; font-weight: 800;
+  background: linear-gradient(135deg, var(--gold), var(--emerald));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  margin-bottom: 6px;
+}
+.qr-hint p { font-size: 13px; color: var(--text2); line-height: 1.7; }
+.qr-id { font-size: 11px; color: var(--text2); font-family: monospace; }
+
+/* ─── STAT CARDS ─── */
+.stats-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.stat-card {
+  background: var(--card); border: 1px solid var(--card-border);
+  border-radius: 12px; padding: 14px 22px; text-align: center;
+  min-width: 90px;
+}
+.stat-num { font-size: 30px; font-weight: 900; }
+.stat-lbl { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.stat-present .stat-num { color: var(--emerald); }
+.stat-late    .stat-num { color: var(--amber); }
+.stat-absent  .stat-num { color: var(--rose); }
+.stat-total   .stat-num { color: var(--blue); }
+
+/* ─── RECENT CHECKINS ─── */
+.recent-wrap { position: fixed; bottom: 56px; right: 16px; z-index: 50; width: 230px; }
+.recent-title { font-size: 11px; color: var(--text2); margin-bottom: 6px; text-align: center; }
+.recent-list { display: flex; flex-direction: column; gap: 5px; max-height: 220px; overflow-y: auto; }
+.ri {
+  background: var(--card); border: 1px solid var(--card-border);
+  border-radius: 10px; padding: 7px 10px;
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; animation: slideIn .3s ease;
+  border-right: 3px solid transparent;
+}
+.ri.ok   { border-right-color: var(--emerald); }
+.ri.late { border-right-color: var(--amber); }
+.ri.sus  { border-right-color: var(--rose); }
+.ri-name { flex: 1; font-weight: 700; }
+.ri-time { font-size: 10px; color: var(--text2); }
+@keyframes slideIn { from{opacity:0;transform:translateX(20px)} to{opacity:1} }
+
+/* ─── AI PANEL ─── */
+.ai-panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media(max-width:700px) { .ai-panel-grid { grid-template-columns: 1fr; } }
+.alert-list { display: flex; flex-direction: column; gap: 8px; }
+.alert-item {
+  padding: 10px 14px; border-radius: 10px;
+  font-size: 13px; border-right: 3px solid;
+  background: rgba(255,255,255,0.03);
+}
+.alert-critical { border-color: var(--rose); }
+.alert-warn     { border-color: var(--amber); }
+.alert-info     { border-color: var(--blue); }
+.alert-ok       { border-color: var(--emerald); }
+.alert-title { font-weight: 700; margin-bottom: 3px; }
+.alert-sub { font-size: 11px; color: var(--text2); }
+.ai-chat { display: flex; flex-direction: column; gap: 8px; }
+.ai-msg { padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.6; max-width: 90%; }
+.ai-msg.ai   { background: rgba(99,179,237,0.08); border: 1px solid rgba(99,179,237,0.2); align-self: flex-start; }
+.ai-msg.user { background: rgba(16,217,160,0.08); border: 1px solid rgba(16,217,160,0.2); align-self: flex-end; text-align: right; }
+.ai-input-row { display: flex; gap: 8px; margin-top: 8px; }
+.ai-input {
+  flex: 1; padding: 10px 14px;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--card-border);
+  border-radius: 10px; color: var(--text); font-size: 13px; font-family: inherit;
+}
+.ai-input:focus { outline: none; border-color: var(--blue); }
+.ai-send {
+  padding: 10px 16px; background: var(--blue); border: none; border-radius: 10px;
+  color: #000; font-weight: 700; cursor: pointer; font-family: inherit;
+}
+
+/* ─── SETTINGS PANEL ─── */
+.settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media(max-width:700px) { .settings-grid { grid-template-columns: 1fr; } }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-label { font-size: 12px; color: var(--text2); font-weight: 600; }
+.form-input {
+  padding: 10px 14px; background: rgba(255,255,255,0.05);
+  border: 1px solid var(--card-border); border-radius: 10px;
+  color: var(--text); font-size: 14px; font-family: inherit;
+}
+.form-input:focus { outline: none; border-color: var(--gold); }
+.btn-save {
+  padding: 12px 28px; background: linear-gradient(135deg, var(--gold), #ff8c00);
+  border: none; border-radius: 10px; color: #000; font-size: 14px;
+  font-weight: 800; cursor: pointer; font-family: inherit;
+}
+.btn-save:hover { opacity: .9; transform: translateY(-1px); }
+.btn-danger {
+  padding: 12px 28px; background: rgba(252,129,129,0.15);
+  border: 1px solid rgba(252,129,129,0.3); border-radius: 10px;
+  color: var(--rose); font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
+}
+
+/* ─── LOG PANEL ─── */
+.log-table-wrap { overflow-x: auto; }
+.log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.log-table th { background: rgba(255,255,255,0.05); padding: 10px 14px; text-align: right; color: var(--text2); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+.log-table td { padding: 9px 14px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.log-table tr:hover td { background: rgba(255,255,255,0.03); }
+.badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.badge-ok    { background: rgba(16,217,160,0.15); color: var(--emerald); }
+.badge-late  { background: rgba(246,173,85,0.15);  color: var(--amber); }
+.badge-sus   { background: rgba(252,129,129,0.15); color: var(--rose); }
+
+/* ─── FOOTER ─── */
+.gate-footer {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: #0a1520; border-top: 1px solid var(--card-border);
+  padding: 8px 24px; display: flex; align-items: center; justify-content: space-between;
+  z-index: 100; font-size: 12px; color: var(--text2);
+}
+.footer-pills { display: flex; gap: 16px; }
+.footer-pills span { display: flex; align-items: center; gap: 5px; }
+.save-ok  { color: var(--emerald); }
+.save-err { color: var(--rose); }
+
+/* ─── LOGIN OVERLAY ─── */
+.overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(5,10,20,0.97); backdrop-filter: blur(20px);
+  display: flex; align-items: center; justify-content: center;
+}
+.login-card {
+  background: rgba(13,27,42,0.95); border: 1px solid var(--card-border);
+  border-radius: 24px; padding: 48px 40px; width: 380px; text-align: center;
+  box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+}
+.login-logo { width: 70px; height: 70px; border-radius: 18px; object-fit: cover; margin: 0 auto 16px; }
+.login-card h2 { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+.login-card p { font-size: 13px; color: var(--text2); margin-bottom: 28px; }
+.pin-input {
+  width: 100%; padding: 14px; background: rgba(255,255,255,0.05);
+  border: 1px solid var(--card-border); border-radius: 12px;
+  color: var(--text); font-size: 22px; text-align: center;
+  letter-spacing: 10px; font-family: monospace; margin-bottom: 16px;
+}
+.pin-input:focus { outline: none; border-color: var(--gold); }
+.pin-btn {
+  width: 100%; padding: 14px; background: linear-gradient(135deg, var(--gold), #ff8c00);
+  border: none; border-radius: 12px; color: #000; font-size: 16px; font-weight: 800;
+  cursor: pointer; font-family: inherit;
+}
+.pin-err { color: var(--rose); font-size: 13px; margin-top: 10px; }
+
+/* ─── MOTD BAR ─── */
+.motd-bar {
+  position: fixed; bottom: 40px; left: 0; right: 230px;
+  background: rgba(10,21,32,0.9); border-top: 1px solid var(--card-border);
+  padding: 6px 16px; font-size: 12px; color: var(--text2);
+  overflow: hidden; white-space: nowrap;
+  z-index: 40;
+}
+.motd-bar .motd-inner { display: inline-block; animation: marquee 30s linear infinite; }
+@keyframes marquee { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+
+/* ─── GEOFENCE STATUS ─── */
+.geo-status {
+  display: flex; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.geo-card {
+  flex: 1; min-width: 140px;
+  background: var(--card); border: 1px solid var(--card-border);
+  border-radius: 12px; padding: 14px;
+  display: flex; align-items: center; gap: 10px;
+}
+.geo-icon { font-size: 22px; }
+.geo-info { flex: 1; }
+.geo-label { font-size: 11px; color: var(--text2); }
+.geo-val { font-size: 14px; font-weight: 700; }
+
+/* ─── EXIT BTN ─── */
+.exit-btn {
+  position: fixed; top: 12px; left: 12px;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+  color: var(--text2); font-size: 16px; cursor: pointer; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .2s;
+}
+.exit-btn:hover { background: rgba(239,68,68,0.2); border-color: rgba(239,68,68,0.5); color: #ef4444; }
+
+/* ─── PULSE ANIMATION ─── */
+.qr-fresh { animation: qrPulse .5s ease; }
+@keyframes qrPulse { 0%{transform:scale(1)} 50%{transform:scale(1.03)} 100%{transform:scale(1)} }
+</style>
+</head>
+<body>
+
+<!-- Exit Button -->
+<button class="exit-btn" onclick="window.location.href='../eduos-landing/'" title="خروج">✕</button>
+
+<!-- Login Overlay -->
+<div class="overlay" id="loginOverlay">
+  <div class="login-card">
+    <div style="width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;box-shadow:0 0 20px rgba(108,61,214,0.35);">🎓</div>
+    <h2>بوابة الجود الذكية</h2>
+    <p>أدخل رمز تفعيل شاشة البوابة</p>
+    <input class="pin-input" type="password" id="gatePin" maxlength="4" placeholder="● ● ● ●"
+           onkeydown="if(event.key==='Enter')checkPin()">
+    <button class="pin-btn" onclick="checkPin()">🔐 تفعيل الشاشة</button>
+    <div class="pin-err" id="pinErr"></div>
+  </div>
+</div>
+
+<!-- Header -->
+<header class="gate-header">
+  <div class="header-brand">
+    <div style="width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;box-shadow:0 0 20px rgba(108,61,214,0.35);">🎓</div>
+    <div class="brand-info">
+      <h1>مدرسة <span>الجود</span></h1>
+      <p id="hdrSemester">السنة الأكاديمية — الفصل الدراسي</p>
+    </div>
+  </div>
+  <div class="header-meta">
+    <div class="meta-clock" id="clockTime">--:--:--</div>
+    <div class="meta-date" id="clockDate">--</div>
+    <div class="meta-week" id="weekLabel">الأسبوع --</div>
+  </div>
+  <div class="header-status">
+    <div class="status-chip chip-active" id="statusChip">
+      <div class="dot-pulse"></div>
+      <span id="statusText">النظام نشط</span>
+    </div>
+    <div style="font-size:11px;color:var(--text2)" id="qrSeqLabel">QR رقم: ---</div>
+    <div style="font-size:11px;color:var(--text2)" id="geoStatusText">📍 التحقق من الموقع...</div>
+  </div>
+</header>
+
+<!-- Tabs -->
+<nav class="tabs-bar" id="tabsBar">
+  <button class="tab-btn active" onclick="showPanel('qrPanel','qrTab')" id="qrTab">📱 QR الحضور</button>
+  <button class="tab-btn" onclick="showPanel('statsPanel','statsTab')" id="statsTab">📊 إحصائيات اليوم</button>
+  <button class="tab-btn" onclick="showPanel('aiPanel','aiTab')" id="aiTab">🤖 مراقبة AI</button>
+  <button class="tab-btn" onclick="showPanel('logPanel','logTab')" id="logTab">📋 سجل الدخول</button>
+  <button class="tab-btn" onclick="showPanel('settingsPanel','settingsTab')" id="settingsTab">⚙️ الإعدادات</button>
+</nav>
+
+<!-- ══════════════════════════════
+     PANEL 1: QR
+══════════════════════════════ -->
+<div class="panel active" id="qrPanel">
+  <!-- Geo Status Row -->
+  <div class="geo-status">
+    <div class="geo-card">
+      <div class="geo-icon">📍</div>
+      <div class="geo-info">
+        <div class="geo-label">نطاق الجيوفنس</div>
+        <div class="geo-val" id="geoRange">150 متر</div>
+      </div>
+    </div>
+    <div class="geo-card">
+      <div class="geo-icon">🕐</div>
+      <div class="geo-info">
+        <div class="geo-label">نافذة التسجيل</div>
+        <div class="geo-val" id="attendWindow">06:30 – 08:00</div>
+      </div>
+    </div>
+    <div class="geo-card">
+      <div class="geo-icon">🔄</div>
+      <div class="geo-info">
+        <div class="geo-label">تجديد QR</div>
+        <div class="geo-val">كل 60 ثانية</div>
+      </div>
+    </div>
+    <div class="geo-card">
+      <div class="geo-icon">✅</div>
+      <div class="geo-info">
+        <div class="geo-label">حضور اليوم</div>
+        <div class="geo-val" id="geoTotal">0 موظف</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR Main Area -->
+  <div class="qr-layout">
+    <!-- QR Code -->
+    <div>
+      <div class="qr-box" id="qrWrapper">
+        <canvas id="qrCanvas"></canvas>
+        <div class="qr-corner tl"></div>
+        <div class="qr-corner tr"></div>
+        <div class="qr-corner bl"></div>
+        <div class="qr-corner br"></div>
+      </div>
+      <div style="text-align:center;margin-top:10px;">
+        <div class="qr-id" id="qrCodeDisplay">---</div>
+        <div style="font-size:10px;color:var(--text2);margin-top:3px" id="qrValidTime">صالح حتى: ---</div>
+      </div>
+    </div>
+
+    <!-- Side: countdown + hint + stats -->
+    <div class="qr-side">
+      <!-- Countdown -->
+      <div class="countdown-ring">
+        <svg width="100" height="100" viewBox="0 0 100 100">
+          <defs>
+            <linearGradient id="cg" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#10d9a0"/>
+              <stop offset="100%" stop-color="#63b3ed"/>
+            </linearGradient>
+          </defs>
+          <circle class="ring-bg" cx="50" cy="50" r="43"/>
+          <circle class="ring-fg" id="countCircle" cx="50" cy="50" r="43"
+            stroke-dasharray="270.2" stroke-dashoffset="0"/>
+        </svg>
+        <div class="cd-center">
+          <div class="cd-num" id="countNum">60</div>
+          <div class="cd-lbl">ثانية</div>
+        </div>
+      </div>
+
+      <div class="qr-hint">
+        <h2>امسحي الرمز للحضور</h2>
+        <p>يتجدد كل 60 ثانية تلقائياً<br>تطبيق EduOS على هاتفك 📱</p>
+      </div>
+
+      <!-- Mini stats -->
+      <div class="stats-row">
+        <div class="stat-card stat-present">
+          <div class="stat-num" id="sp">0</div>
+          <div class="stat-lbl">حاضر</div>
+        </div>
+        <div class="stat-card stat-late">
+          <div class="stat-num" id="sl">0</div>
+          <div class="stat-lbl">متأخر</div>
+        </div>
+        <div class="stat-card stat-absent">
+          <div class="stat-num" id="sa">—</div>
+          <div class="stat-lbl">لم يسجل</div>
+        </div>
+      </div>
+
+      <!-- Quick AI alert -->
+      <div id="aiQuickAlert" style="display:none;width:100%">
+        <div class="alert-item alert-warn">
+          <div class="alert-title">⚠️ تنبيه AI</div>
+          <div class="alert-sub" id="aiQuickText">جارٍ التحليل...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PANEL 2: STATS
+══════════════════════════════ -->
+<div class="panel" id="statsPanel">
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-title">📊 إحصائيات الحضور اليومي</div>
+    <div class="stats-row" style="margin-bottom:24px">
+      <div class="stat-card stat-present" style="min-width:120px">
+        <div class="stat-num" id="bigPresent">0</div>
+        <div class="stat-lbl">حضر في الوقت</div>
+      </div>
+      <div class="stat-card stat-late" style="min-width:120px">
+        <div class="stat-num" id="bigLate">0</div>
+        <div class="stat-lbl">حضر متأخراً</div>
+      </div>
+      <div class="stat-card stat-absent" style="min-width:120px">
+        <div class="stat-num" id="bigAbsent">—</div>
+        <div class="stat-lbl">لم يسجل بعد</div>
+      </div>
+      <div class="stat-card stat-total" style="min-width:120px">
+        <div class="stat-num" id="bigTotal">0</div>
+        <div class="stat-lbl">مجموع الموظفين</div>
+      </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div style="margin-bottom:8px;font-size:12px;color:var(--text2)">نسبة الحضور اليوم</div>
+    <div style="background:rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;height:12px;margin-bottom:20px">
+      <div id="attendBar" style="height:100%;background:linear-gradient(90deg,var(--emerald),var(--blue));width:0%;transition:width 1s;border-radius:8px"></div>
+    </div>
+
+    <!-- Hourly breakdown -->
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px">توزيع الحضور بالساعة</div>
+    <div id="hourlyBars" style="display:flex;gap:4px;align-items:flex-end;height:80px;margin-bottom:8px"></div>
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text2)">
+      <span>06:30</span><span>07:00</span><span>07:30</span><span>08:00</span>
+    </div>
+  </div>
+
+  <!-- Department breakdown -->
+  <div class="card">
+    <div class="card-title">🏢 الحضور حسب التخصص</div>
+    <div id="deptStats" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PANEL 3: AI MONITORING
+══════════════════════════════ -->
+<div class="panel" id="aiPanel">
+  <div class="ai-panel-grid">
+    <!-- Alerts -->
+    <div class="card">
+      <div class="card-title">🚨 تنبيهات المراقبة الذكية</div>
+      <div class="alert-list" id="aiAlerts">
+        <div class="alert-item alert-info">
+          <div class="alert-title">🤖 النظام الذكي</div>
+          <div class="alert-sub">يحلل أنماط الحضور ويبحث عن مؤشرات مشبوهة...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Chat -->
+    <div class="card" style="display:flex;flex-direction:column;gap:8px">
+      <div class="card-title">💬 المساعد الذكي — تحليل الحضور</div>
+      <div class="ai-chat" id="aiChat" style="flex:1;min-height:200px;overflow-y:auto">
+        <div class="ai-msg ai">مرحباً 🤲 أنا المساعد الذكي لمراقبة الحضور. يمكنني تحليل أنماط الحضور والكشف عن المخالفات. اسأليني عن أي موظف أو نمط مشبوه.</div>
+      </div>
+      <div class="ai-input-row">
+        <input class="ai-input" id="aiQ" placeholder="اسألي عن أنماط الحضور..." onkeydown="if(event.key==='Enter')sendAIQuery()">
+        <button class="ai-send" onclick="sendAIQuery()">إرسال</button>
+      </div>
+    </div>
+
+    <!-- Pattern analysis -->
+    <div class="card">
+      <div class="card-title">📈 تحليل الأنماط التاريخية</div>
+      <div id="patternList" style="display:flex;flex-direction:column;gap:8px">
+        <div style="font-size:13px;color:var(--text2);text-align:center;padding:20px">
+          جارٍ تحليل البيانات...
+        </div>
+      </div>
+    </div>
+
+    <!-- Suspicious events -->
+    <div class="card">
+      <div class="card-title">🔍 أحداث مشبوهة — السجل الجنائي</div>
+      <div id="susEvents" style="display:flex;flex-direction:column;gap:8px">
+        <div class="alert-item alert-ok">
+          <div class="alert-title">✅ لا أحداث مشبوهة</div>
+          <div class="alert-sub">جميع عمليات المسح ضمن النطاق الزمني المتوقع</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PANEL 4: LOG
+══════════════════════════════ -->
+<div class="panel" id="logPanel">
+  <div class="card">
+    <div class="card-title" style="justify-content:space-between">
+      <span>📋 سجل دخول اليوم</span>
+      <button onclick="exportLog()" style="background:rgba(99,179,237,0.15);border:1px solid rgba(99,179,237,0.3);color:var(--blue);padding:6px 14px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit">📥 تصدير</button>
+    </div>
+    <div class="log-table-wrap">
+      <table class="log-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>الاسم</th>
+            <th>وقت المسح</th>
+            <th>الحالة</th>
+            <th>QR رقم</th>
+            <th>ملاحظة AI</th>
+          </tr>
+        </thead>
+        <tbody id="logBody">
+          <tr><td colspan="6" style="text-align:center;color:var(--text2);padding:20px">جارٍ تحميل السجل...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- QR Log -->
+  <div class="card" style="margin-top:16px">
+    <div class="card-title">🔐 سجل رموز QR اليوم</div>
+    <div class="log-table-wrap">
+      <table class="log-table">
+        <thead>
+          <tr>
+            <th>التسلسل</th>
+            <th>وقت الإنشاء</th>
+            <th>صالح حتى</th>
+            <th>عدد الاستخدامات</th>
+          </tr>
+        </thead>
+        <tbody id="qrLogBody">
+          <tr><td colspan="4" style="text-align:center;color:var(--text2);padding:20px">جارٍ التحميل...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PANEL 5: SETTINGS
+══════════════════════════════ -->
+<div class="panel" id="settingsPanel">
+  <div class="settings-grid">
+    <div class="card">
+      <div class="card-title">⚙️ إعدادات الجيوفنس</div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="form-group">
+          <label class="form-label">خط العرض (Latitude)</label>
+          <input class="form-input" id="cfgLat" value="24.4539" placeholder="24.4539">
+        </div>
+        <div class="form-group">
+          <label class="form-label">خط الطول (Longitude)</label>
+          <input class="form-input" id="cfgLng" value="54.3773" placeholder="54.3773">
+        </div>
+        <div class="form-group">
+          <label class="form-label">نطاق الجيوفنس (متر)</label>
+          <input class="form-input" id="cfgRadius" value="150" type="number" min="50" max="500">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🕐 إعدادات الوقت</div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="form-group">
+          <label class="form-label">وقت بداية التسجيل</label>
+          <input class="form-input" id="cfgStart" value="06:30" type="time">
+        </div>
+        <div class="form-group">
+          <label class="form-label">وقت نهاية التسجيل</label>
+          <input class="form-input" id="cfgEnd" value="08:00" type="time">
+        </div>
+        <div class="form-group">
+          <label class="form-label">مدة تجديد QR (ثانية)</label>
+          <input class="form-input" id="cfgQR" value="60" type="number" min="30" max="300">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🔐 إعدادات الأمان</div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="form-group">
+          <label class="form-label">PIN تفعيل الشاشة</label>
+          <input class="form-input" id="cfgPin" type="password" placeholder="****">
+        </div>
+        <div class="form-group">
+          <label class="form-label">حد الغياب للتنبيه (%)</label>
+          <input class="form-input" id="cfgAbsThreshold" value="20" type="number" min="5" max="50">
+        </div>
+        <div class="form-group">
+          <label class="form-label">فارق التأخير المسموح (دقيقة)</label>
+          <input class="form-input" id="cfgLateGrace" value="5" type="number" min="0" max="30">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🖥️ إعدادات العرض</div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="form-group">
+          <label class="form-label">اسم المدرسة</label>
+          <input class="form-input" id="cfgSchool" value="مدرسة الجود">
+        </div>
+        <div class="form-group">
+          <label class="form-label">السنة الأكاديمية</label>
+          <input class="form-input" id="cfgYear" value="2024–2025">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap">
+    <button class="btn-save" onclick="saveSettings()">💾 حفظ الإعدادات</button>
+    <button class="btn-danger" onclick="if(confirm('مسح سجل اليوم؟'))clearTodayLog()">🗑️ مسح سجل اليوم</button>
+    <button style="padding:12px 28px;background:rgba(99,179,237,0.15);border:1px solid rgba(99,179,237,0.3);border-radius:10px;color:var(--blue);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit" onclick="testGPS()">📍 اختبار GPS</button>
+  </div>
+  <div id="settingsSaved" style="display:none;color:var(--emerald);font-size:13px;margin-top:12px">✅ تم حفظ الإعدادات</div>
+</div>
+
+<!-- Recent check-ins sidebar -->
+<div class="recent-wrap">
+  <div class="recent-title">آخر تسجيلات الحضور</div>
+  <div class="recent-list" id="recentList"></div>
+</div>
+
+<!-- MOTD news bar -->
+<div class="motd-bar" id="motdBar">
+  <div class="motd-inner" id="motdInner">
+    📌 مدرسة الجود — نظام الحضور الذكي | بوابة التحقق الثلاثية: GPS + QR + سجل جنائي
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    📌 مدرسة الجود — نظام الحضور الذكي | بوابة التحقق الثلاثية: GPS + QR + سجل جنائي
+  </div>
+</div>
+
+<!-- Footer -->
+<footer class="gate-footer">
+  <div class="footer-pills">
+    <span>📅 <span id="footerDate">--</span></span>
+    <span>🔐 QR: 60 ثانية</span>
+    <span>📍 نطاق: <span id="footerRadius">150</span> متر</span>
+    <span>⏰ <span id="footerWindow">06:30–08:00</span></span>
+  </div>
+  <div id="saveIndicator" style="font-size:11px" class="save-ok">✓ متصل بـ Supabase</div>
+</footer>
+
+<script src="../platform-week.js"></script>
+<script>
+// ═══════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════
+const SUPA_URL  = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPA_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
+  'eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1le' +
+  'WNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV' +
+  '4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+const OR_KEY    = 'sk-or-v1-61abae706c617ebe661a3945bf0e20bea345f7' +
+                  '222e4b1adfb47f913d9ff6e9bf';
+
+let GATE_PIN    = '2468';
+let QR_INTERVAL = 60;
+let QR_SALT     = 'ALJOOD_GATE_SECURE_KEY_2026';
+let countdownVal = QR_INTERVAL;
+let countInterval = null;
+
+// ═══════════════════════════════════════
+// INIT WEEK INFO
+// ═══════════════════════════════════════
+function initWeek() {
+  if (typeof EduOSWeek !== 'undefined') {
+    const w = EduOSWeek.getCurrent();
+    document.getElementById('weekLabel').textContent = `الأسبوع ${w.week} | ${w.term}`;
+    document.getElementById('hdrSemester').textContent = `${w.year} — ${w.term}`;
+  }
+}
+
+// ═══════════════════════════════════════
+// CLOCK
+// ═══════════════════════════════════════
+function updateClock() {
+  const n = new Date();
+  document.getElementById('clockTime').textContent = n.toLocaleTimeString('ar-SA', { hour12: false });
+  document.getElementById('clockDate').textContent = n.toLocaleDateString('ar-SA', { weekday:'long', month:'long', day:'numeric' });
+  document.getElementById('footerDate').textContent = n.toLocaleDateString('ar-SA');
+}
+
+// ═══════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════
+function showPanel(panelId, tabId) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+  document.getElementById(panelId).classList.add('active');
+  document.getElementById(tabId).classList.add('active');
+  location.hash = panelId;
+}
+
+// Restore tab from hash
+function restoreTab() {
+  const h = location.hash.replace('#','');
+  const map = { qrPanel:'qrTab', statsPanel:'statsTab', aiPanel:'aiTab', logPanel:'logTab', settingsPanel:'settingsTab' };
+  if (h && map[h]) showPanel(h, map[h]);
+}
+
+// ═══════════════════════════════════════
+// PIN CHECK
+// ═══════════════════════════════════════
+function checkPin() {
+  const v = document.getElementById('gatePin').value;
+  if (v === GATE_PIN) {
+    document.getElementById('loginOverlay').style.display = 'none';
+    init();
+  } else {
+    document.getElementById('pinErr').textContent = '❌ الرمز غير صحيح — حاولي مجدداً';
+    document.getElementById('gatePin').value = '';
+  }
+}
+
+// ═══════════════════════════════════════
+// QR GENERATION
+// ═══════════════════════════════════════
+async function makeHash(str) {
+  const buf = new TextEncoder().encode(str);
+  const hb = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hb))
+    .map(b => b.toString(16).padStart(2,'0')).join('')
+    .substring(0, 12).toUpperCase();
+}
+
+async function generateQR() {
+  const now  = new Date();
+  const date = now.toISOString().split('T')[0];
+  const seq  = Math.floor(Date.now() / (QR_INTERVAL * 1000));
+  const raw  = `${date}|${seq}|${QR_SALT}`;
+  const hash = await makeHash(raw);
+  const code = `ALJOOD_${date}_${seq}_${hash}`;
+
+  const validFrom  = new Date(seq * QR_INTERVAL * 1000).toISOString();
+  const validUntil = new Date((seq + 1) * QR_INTERVAL * 1000).toISOString();
+
+  const canvas = document.getElementById('qrCanvas');
+  QRCode.toCanvas(canvas, code, {
+    width: 270, margin: 2,
+    color: { dark:'#000000', light:'#ffffff' },
+    errorCorrectionLevel: 'H'
+  });
+
+  document.getElementById('qrSeqLabel').textContent = `QR رقم: ${seq}`;
+  document.getElementById('qrCodeDisplay').textContent = code.substring(0,20) + '...';
+  document.getElementById('qrValidTime').textContent = `صالح حتى: ${new Date(validUntil).toLocaleTimeString('ar-SA', { hour12: false })}`;
+
+  // Flash animation
+  document.getElementById('qrWrapper').classList.add('qr-fresh');
+  setTimeout(() => document.getElementById('qrWrapper').classList.remove('qr-fresh'), 600);
+
+  // Save to Supabase
+  saveQRToSupabase({ code, seq, validFrom, validUntil, date });
+}
+
+async function saveQRToSupabase(qr) {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/attendance_qr_log`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPA_KEY, 'Authorization': 'Bearer '+SUPA_KEY,
+        'Content-Type': 'application/json', 'Prefer': 'resolution=ignore-duplicates'
+      },
+      body: JSON.stringify({ qr_code:qr.code, qr_sequence:qr.seq, valid_from:qr.validFrom, valid_until:qr.validUntil, date:qr.date })
+    });
+    const ind = document.getElementById('saveIndicator');
+    ind.innerHTML = (r.ok || r.status===409) ? '<span class="save-ok">✓ QR محفوظ</span>' : '<span class="save-err">⚠ خطأ في الحفظ</span>';
+  } catch(e) {
+    document.getElementById('saveIndicator').innerHTML = '<span class="save-err">⚠ لا اتصال</span>';
+  }
+}
+
+// ═══════════════════════════════════════
+// COUNTDOWN
+// ═══════════════════════════════════════
+function startCountdown() {
+  if (countInterval) clearInterval(countInterval);
+  countdownVal = QR_INTERVAL - (Math.floor(Date.now() / 1000) % QR_INTERVAL);
+
+  countInterval = setInterval(async () => {
+    countdownVal--;
+    updateCountdownUI(countdownVal);
+    if (countdownVal <= 0) {
+      countdownVal = QR_INTERVAL;
+      await generateQR();
+    }
+  }, 1000);
+}
+
+function updateCountdownUI(v) {
+  document.getElementById('countNum').textContent = v;
+  const circle = document.getElementById('countCircle');
+  const pct = v / QR_INTERVAL;
+  const len = 270.2;
+  circle.style.strokeDashoffset = len * (1 - pct);
+  if (v <= 10) circle.style.stroke = '#fc8181';
+  else if (v <= 20) circle.style.stroke = '#f6ad55';
+  else circle.style.stroke = 'url(#cg)';
+}
+
+// ═══════════════════════════════════════
+// STATS
+// ═══════════════════════════════════════
+async function loadStats() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const r = await fetch(`${SUPA_URL}/rest/v1/staff_checkin_log?date=eq.${today}&select=status`, {
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer '+SUPA_KEY }
+    });
+    if (!r.ok) return;
+    const rows = await r.json();
+    let p=0, l=0;
+    rows.forEach(row => { if(row.status==='valid') p++; else if(row.status==='late') l++; });
+    const total = rows.length;
+
+    // Update both panels
+    ['sp','bigPresent'].forEach(id => setEl(id, p));
+    ['sl','bigLate'].forEach(id => setEl(id, l));
+    setEl('geoTotal', total + ' موظف');
+    setEl('bigTotal', total);
+
+    // Progress bar
+    const pct = total > 0 ? Math.round((p+l)/total*100) : 0;
+    const bar = document.getElementById('attendBar');
+    if (bar) bar.style.width = pct + '%';
+
+    // AI quick alert
+    if (l > 3) {
+      document.getElementById('aiQuickAlert').style.display = 'block';
+      document.getElementById('aiQuickText').textContent = `${l} موظف تأخروا اليوم — يُنصح بالمتابعة`;
+    }
+  } catch(e) {}
+}
+
+async function loadRecentCheckins() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const r = await fetch(`${SUPA_URL}/rest/v1/staff_checkin_log?date=eq.${today}&order=scanned_at.desc&limit=6`, {
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer '+SUPA_KEY }
+    });
+    if (!r.ok) return;
+    const rows = await r.json();
+    const list = document.getElementById('recentList');
+    list.innerHTML = '';
+    rows.forEach(row => {
+      const t = new Date(row.scanned_at).toLocaleTimeString('ar-SA', { hour:'2-digit', minute:'2-digit' });
+      const cls = row.status==='valid' ? 'ok' : row.status==='late' ? 'late' : 'sus';
+      const icon = row.status==='valid' ? '✅' : row.status==='late' ? '⏰' : '⚠️';
+      list.innerHTML += `<div class="ri ${cls}"><span>${icon}</span><span class="ri-name">${row.staff_name||row.staff_id||'—'}</span><span class="ri-time">${t}</span></div>`;
+    });
+  } catch(e) {}
+}
+
+async function loadFullLog() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const r = await fetch(`${SUPA_URL}/rest/v1/staff_checkin_log?date=eq.${today}&order=scanned_at.asc`, {
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer '+SUPA_KEY }
+    });
+    if (!r.ok) return;
+    const rows = await r.json();
+    const tbody = document.getElementById('logBody');
+    tbody.innerHTML = '';
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:20px">لا سجلات اليوم</td></tr>';
+      return;
+    }
+    rows.forEach((row, i) => {
+      const t = new Date(row.scanned_at).toLocaleTimeString('ar-SA', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+      const statusHtml = row.status==='valid' ? '<span class="badge badge-ok">✅ في الوقت</span>' :
+                         row.status==='late'  ? '<span class="badge badge-late">⏰ متأخر</span>' :
+                                                '<span class="badge badge-sus">⚠️ مشبوه</span>';
+      tbody.innerHTML += `<tr>
+        <td>${i+1}</td>
+        <td style="font-weight:700">${row.staff_name||row.staff_id||'—'}</td>
+        <td style="font-family:monospace">${t}</td>
+        <td>${statusHtml}</td>
+        <td style="font-family:monospace;font-size:11px">${row.qr_sequence||'—'}</td>
+        <td style="font-size:11px;color:var(--text2)">${row.ai_flag||'طبيعي'}</td>
+      </tr>`;
+    });
+  } catch(e) {}
+}
+
+async function loadQRLog() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const r = await fetch(`${SUPA_URL}/rest/v1/attendance_qr_log?date=eq.${today}&order=qr_sequence.desc&limit=20`, {
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer '+SUPA_KEY }
+    });
+    if (!r.ok) return;
+    const rows = await r.json();
+    const tbody = document.getElementById('qrLogBody');
+    tbody.innerHTML = '';
+    rows.forEach(row => {
+      const from = new Date(row.valid_from).toLocaleTimeString('ar-SA', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+      const until = new Date(row.valid_until).toLocaleTimeString('ar-SA', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+      tbody.innerHTML += `<tr>
+        <td style="font-family:monospace">${row.qr_sequence}</td>
+        <td style="font-family:monospace">${from}</td>
+        <td style="font-family:monospace">${until}</td>
+        <td>${row.use_count||0}</td>
+      </tr>`;
+    });
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════
+// AI ANALYSIS
+// ═══════════════════════════════════════
+async function runAIAnalysis() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const r = await fetch(`${SUPA_URL}/rest/v1/staff_checkin_log?date=eq.${today}&select=*&order=scanned_at.asc`, {
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer '+SUPA_KEY }
+    });
+    if (!r.ok) return;
+    const rows = await r.json();
+    if (!rows.length) return;
+
+    // Detect suspicious patterns
+    const alerts = [];
+    const qrGroups = {};
+    rows.forEach(row => {
+      if (!qrGroups[row.qr_sequence]) qrGroups[row.qr_sequence] = [];
+      qrGroups[row.qr_sequence].push(row);
+    });
+
+    // Multiple checkins same QR in <5 seconds
+    Object.values(qrGroups).forEach(grp => {
+      if (grp.length > 1) {
+        const times = grp.map(r => new Date(r.scanned_at).getTime()).sort();
+        for (let i = 1; i < times.length; i++) {
+          if (times[i] - times[i-1] < 5000) {
+            alerts.push({ type:'critical', title:'⚠️ مسح متزامن مشبوه', msg:`QR رقم ${grp[0].qr_sequence} — مسح ${grp.length} مرات خلال ${Math.round((times[times.length-1]-times[0])/1000)} ثانية` });
+          }
+        }
+      }
+    });
+
+    // Late arrivals > 20%
+    const lateCount = rows.filter(r => r.status==='late').length;
+    if (lateCount / rows.length > 0.2) {
+      alerts.push({ type:'warn', title:'⏰ نسبة تأخير مرتفعة', msg:`${lateCount} من ${rows.length} (${Math.round(lateCount/rows.length*100)}%) تأخروا اليوم` });
+    } else {
+      alerts.push({ type:'ok', title:'✅ معدل الحضور جيد', msg:`${rows.length - lateCount} حضروا في الوقت المحدد` });
+    }
+
+    const alertEl = document.getElementById('aiAlerts');
+    alertEl.innerHTML = alerts.map(a => `
+      <div class="alert-item alert-${a.type}">
+        <div class="alert-title">${a.title}</div>
+        <div class="alert-sub">${a.msg}</div>
+      </div>`).join('');
+
+  } catch(e) {}
+}
+
+async function sendAIQuery() {
+  const q = document.getElementById('aiQ').value.trim();
+  if (!q) return;
+  document.getElementById('aiQ').value = '';
+
+  const chat = document.getElementById('aiChat');
+  chat.innerHTML += `<div class="ai-msg user">${q}</div>`;
+  chat.innerHTML += `<div class="ai-msg ai" id="aiTyping">⏳ جارٍ التحليل...</div>`;
+  chat.scrollTop = chat.scrollHeight;
+
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer '+OR_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-3.3-70b-instruct:free',
+        messages: [
+          { role:'system', content:'أنت مساعد ذكي متخصص في تحليل بيانات حضور موظفي مدرسة الجود الابتدائية. تحلل الأنماط وتكشف عن المخالفات. أجب بالعربية بشكل موجز.' },
+          { role:'user', content: q }
+        ]
+      })
+    });
+    const data = await res.json();
+    const reply = data.choices?.[0]?.message?.content || 'عذراً، لم أستطع معالجة الطلب.';
+    document.getElementById('aiTyping').textContent = reply;
+  } catch(e) {
+    document.getElementById('aiTyping').textContent = 'تعذّر الاتصال بالمساعد الذكي.';
+  }
+  chat.scrollTop = chat.scrollHeight;
+}
+
+// ═══════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════
+function saveSettings() {
+  GATE_PIN = document.getElementById('cfgPin').value || GATE_PIN;
+  QR_INTERVAL = parseInt(document.getElementById('cfgQR').value) || 60;
+  const radius = document.getElementById('cfgRadius').value;
+  const start = document.getElementById('cfgStart').value;
+  const end = document.getElementById('cfgEnd').value;
+  setEl('footerRadius', radius);
+  setEl('footerWindow', `${start}–${end}`);
+  setEl('attendWindow', `${start} – ${end}`);
+  setEl('geoRange', radius + ' متر');
+  document.getElementById('settingsSaved').style.display = 'block';
+  setTimeout(() => document.getElementById('settingsSaved').style.display = 'none', 3000);
+}
+
+function testGPS() {
+  if (!navigator.geolocation) {
+    alert('المتصفح لا يدعم GPS');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude.toFixed(4);
+    const lng = pos.coords.longitude.toFixed(4);
+    document.getElementById('geoStatusText').textContent = `📍 ${lat}, ${lng}`;
+    alert(`موقعك الحالي:\nخط العرض: ${lat}\nخط الطول: ${lng}`);
+  }, () => alert('تعذّر تحديد الموقع'));
+}
+
+function clearTodayLog() {
+  alert('هذه العملية تتطلب صلاحيات المدير — يُرجى التواصل مع المدير.');
+}
+
+function exportLog() {
+  const rows = document.querySelectorAll('#logBody tr');
+  let csv = 'م,الاسم,وقت المسح,الحالة,QR رقم,ملاحظة AI\n';
+  rows.forEach(tr => {
+    const cells = tr.querySelectorAll('td');
+    if (cells.length >= 6) {
+      csv += Array.from(cells).map(c => `"${c.textContent.trim()}"`).join(',') + '\n';
+    }
+  });
+  const blob = new Blob(['\uFEFF'+csv], { type:'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `attendance-log-${new Date().toISOString().split('T')[0]}.csv`; a.click();
+}
+
+// ═══════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════
+function setEl(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+async function init() {
+  initWeek();
+  updateClock();
+  setInterval(updateClock, 1000);
+  await generateQR();
+  startCountdown();
+  await loadStats();
+  await loadRecentCheckins();
+  await loadFullLog();
+  await loadQRLog();
+  await runAIAnalysis();
+  restoreTab();
+
+  // Refresh every 15 seconds
+  setInterval(async () => {
+    await loadStats();
+    await loadRecentCheckins();
+  }, 15000);
+
+  // Full refresh every 2 minutes
+  setInterval(async () => {
+    await loadFullLog();
+    await loadQRLog();
+    await runAIAnalysis();
+  }, 120000);
+}
+
+// Hash-based tab switching
+window.addEventListener('hashchange', restoreTab);
+</script>
+</body>
+</html>

@@ -1,0 +1,170 @@
+/**
+ * EduOS Auth Guard v1.1
+ * يُضمَّن في كل منظومة — يمنع الوصول بدون جلسة صحيحة
+ * لا localStorage | sessionStorage للجلسة فقط (مسموح)
+ * v1.1 — يُحقن platform-lang.js تلقائياً في كل صفحة
+ */
+(function() {
+  'use strict';
+
+  // صفحات مُعفاة من الحماية (عامة بطبيعتها)
+  const PUBLIC_PAGES = [
+    '/apps/eduos-landing/',
+    '/apps/eduos-login/',
+    '/apps/eduos-showcase/',
+    '/apps/eduos-attendance-gate/', // شاشة تابلت عامة
+    '/apps/eduos-change-password/', // تغيير كلمة المرور الإجباري
+  ];
+
+  const currentPath = window.location.pathname;
+  const isPublic = PUBLIC_PAGES.some(p => currentPath.includes(p));
+
+  // ── Auto-inject platform-lang.js في كل صفحة (عامة أو محمية) ──
+  if (!document.getElementById('eduos-lang-script')) {
+    const langScript = document.createElement('script');
+    langScript.id = 'eduos-lang-script';
+    langScript.src = '/apps/platform-lang.js?v=44';
+    document.head.appendChild(langScript);
+  }
+
+  if (isPublic) return; // صفحة عامة — لا حاجة للحماية
+
+  // قراءة بيانات الجلسة
+  let session = null;
+  try {
+    const raw = sessionStorage.getItem('edoos_user');
+    if (raw) session = JSON.parse(raw);
+  } catch(e) {
+    session = null;
+  }
+
+  if (!session || !session.role || !session.username) {
+    // لا جلسة — إعادة توجيه لصفحة الدخول
+    const loginUrl = '/apps/eduos-login/?redirect=' + encodeURIComponent(window.location.pathname);
+    window.location.replace(loginUrl);
+    return;
+  }
+
+  // تغيير كلمة المرور الإجباري — يُحوَّل قبل أي تحقق آخر
+  if (session.force_password_change === true) {
+    window.location.replace('/apps/eduos-change-password/');
+    return;
+  }
+
+  // -------- التحقق من الدور --------
+  // خريطة: كل منظومة ← الأدوار المسموح لها
+  const ROLE_MAP = {
+    'eduos-principal':   ['admin','principal'],
+    'eduos-analytics':   ['admin','principal'],
+    'eduos-financial':   ['admin','principal','accountant'],
+    'eduos-teacher':     ['admin','principal','teacher'],
+    'eduos-student':     ['admin','principal','teacher','student'],
+    'eduos-parent':      ['admin','principal','parent'],
+    'eduos-nursing':     ['admin','principal','nurse','support'],
+    'eduos-security':    ['admin','principal','security'],
+    'eduos-maintenance': ['admin','principal','maintenance'],
+    'eduos-transport':   ['admin','principal','driver','transport'],
+    'eduos-library':     ['admin','principal','librarian','teacher'],
+    'eduos-lab':         ['admin','principal','teacher'],
+    'eduos-space':       ['admin','principal','teacher'],
+    'eduos-cafeteria':   ['admin','principal','cafeteria'],
+    'eduos-exam':        ['admin','principal','teacher'],
+    'eduos-broadcasting':['admin','principal','media'],
+    'eduos-calendar':    ['admin','principal','teacher'],
+    'eduos-kg':          ['admin','principal','teacher','kg'],
+    'eduos-timetable':   ['admin','principal','teacher','sub_teacher'],
+    'eduos-inclusion':   ['admin','principal','special_ed','support'],
+    'eduos-socialworker':['admin','principal','social_worker'],
+    'eduos-checkin':     ['admin','principal','security','support'],
+    'eduos-hub':         ['admin','principal','teacher','support','special_ed','security','nurse','librarian','sub_teacher'],
+    'eduos-onboarding':  ['admin','principal'],
+    'duty-os-vision':          ['admin','principal'],
+    'smart-school-blueprint':  ['admin','principal'],
+    'eduos-links':             ['admin','principal','teacher','support','special_ed','security','nurse','librarian','social_worker'],
+    'eduos-demo-portal':       ['admin','principal','teacher','support','special_ed','security','nurse'],
+    'eduos-drive':             ['admin','principal','teacher'],
+    'eduos-achievements':      ['admin','principal','teacher'],
+    'eduos-emiratization':     ['admin','principal'],
+    'eduos-exit-ticket':       ['admin','principal','teacher','sub_teacher'],
+    'eduos-teacher-dashboard': ['admin','principal','teacher','sub_teacher'],
+
+    // ── إضافات الفحص الأمني 24 يونيو 2026 ──
+    'eduos-appraisal':     ['admin','principal'],
+    'eduos-broadcasting':  ['admin','principal','media'],
+    'eduos-calendar':      ['admin','principal','teacher','sub_teacher','support'],
+    'eduos-news':          ['admin','principal','media','teacher'],
+    'eduos-observation':   ['admin','principal','teacher'],
+    'eduos-certificates':  ['admin','principal','teacher'],
+    'eduos-class-session': ['admin','principal','teacher','sub_teacher'],
+    'eduos-store':         ['admin','principal','teacher','student','parent'],
+    'eduos-student-portal':['admin','principal','student','parent'],
+    'eduos-vark':          ['admin','principal','teacher','student'],
+    'eduos-survey':        ['admin','principal','teacher'],
+    'eduos-timetable-gen': ['admin','principal'],
+    'eduos-inspection':    ['admin','principal'],
+    'eduos-welcome':       ['admin','principal'],
+    'eduos-atheer':        ['admin','principal','teacher','social_worker','support','special_ed'],
+    'eduos-pdp':           ['admin','principal','teacher','support','special_ed'],
+    'eduos-meetings':      ['admin','principal','teacher'],
+    'eduos-forms':         ['admin','principal','teacher','support'],
+    'eduos-staff-leaves':  ['admin','principal','teacher','support','special_ed','security','nurse','librarian'],
+    'eduos-portfolio':     ['admin','principal','teacher','student'],
+    'eduos-student-profile':['admin','principal','teacher'],
+  };
+
+  // ── تحقق إضافي: المعلم البديل — منع الوصول لصفحات حساسة ──
+  const SUB_TEACHER_BLOCKED = [
+    'eduos-grades','eduos-financial','eduos-analytics',
+    'eduos-principal','eduos-socialworker','eduos-inclusion',
+    'eduos-reports','eduos-staff','eduos-settings',
+    'eduos-welcome-link','eduos-inspection','eduos-emiratization',
+  ];
+  if (session.role === 'sub_teacher') {
+    const isBlocked = SUB_TEACHER_BLOCKED.some(b => currentPath.includes(b));
+    if (isBlocked) {
+      window.location.replace('/apps/eduos-hub/?err=unauthorized');
+      return;
+    }
+    // تحقق من انتهاء العقد (contract_end_date مخزَّن في الجلسة)
+    if (session.contract_end_date) {
+      const endDate = new Date(session.contract_end_date);
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      if (endDate < today) {
+        // العقد انتهى — إخراج فوري
+        sessionStorage.removeItem('edoos_user');
+        window.location.replace('/apps/eduos-login/?err=contract_expired');
+        return;
+      }
+    }
+  }
+
+  // تحديد المنظومة الحالية
+  const systemKey = Object.keys(ROLE_MAP).find(k => currentPath.includes(k));
+
+  if (systemKey) {
+    const allowed = ROLE_MAP[systemKey];
+    const userRole = session.role || '';
+    if (!allowed.includes(userRole)) {
+      // غير مصرّح له — إعادة للـ Hub
+      window.location.replace('/apps/eduos-hub/?err=unauthorized');
+      return;
+    }
+  }
+
+  // ✅ الجلسة صحيحة والدور مسموح — متابعة تحميل الصفحة
+  // تصدير بيانات المستخدم عالمياً للاستخدام في المنظومات
+  window.EDOOS_USER = session;
+
+  // 🛡️ تحميل EduOS Shield تلقائياً في كل صفحة محمية
+  if (!document.querySelector('script[src*="platform-shield"]')) {
+    const shieldScript = document.createElement('script');
+    // حساب المسار النسبي بناءً على عمق المسار الحالي
+    const depth = (window.location.pathname.match(/\//g) || []).length - 1;
+    const prefix = depth <= 2 ? '../' : '../../';
+    shieldScript.src = prefix + 'platform-shield.js';
+    shieldScript.defer = true;
+    document.head.appendChild(shieldScript);
+  }
+
+})();

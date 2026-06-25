@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Duty OS — نظام المناوبات الذكي</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+<script src="../platform-lang.js"></script>
+<script src="../platform-week.js"></script>
+<script src="../platform-auth-guard.js"></script>
+<script src="../platform-autologout.js"></script>
+<style>
+:root {
+  --bg: #0f0f1a;
+  --card: #1a1a2e;
+  --card2: #16213e;
+  --border: #2a2a4a;
+  --primary: #7c3aed;
+  --primary2: #a855f7;
+  --accent: #06b6d4;
+  --accent2: #22d3ee;
+  --success: #10b981;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --header-h: 64px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+
+/* ─── Header ─── */
+.header{position:fixed;top:0;right:0;left:0;height:var(--header-h);background:linear-gradient(135deg,#1e1b4b,#312e81);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:16px;z-index:100;}
+.header-logo{width:38px;height:38px;border-radius:8px;object-fit:contain;}
+.header-title{font-size:1.1rem;font-weight:700;color:#fff;}
+.header-subtitle{font-size:.75rem;color:#a5b4fc;margin-top:2px;}
+.header-week{margin-right:auto;background:rgba(124,58,237,.3);border:1px solid var(--primary);border-radius:8px;padding:4px 12px;font-size:.75rem;color:#c4b5fd;}
+.btn-exit{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.1);border:none;cursor:pointer;color:var(--text);font-size:1rem;display:flex;align-items:center;justify-content:center;transition:.2s;margin-right:8px;}
+.btn-exit:hover{background:#ef4444;color:#fff;}
+
+/* ─── Layout ─── */
+.main{margin-top:var(--header-h);display:grid;grid-template-columns:260px 1fr;min-height:calc(100vh - var(--header-h));}
+
+/* ─── Sidebar ─── */
+.sidebar{background:var(--card2);border-left:1px solid var(--border);padding:20px 0;}
+.nav-section{padding:8px 16px 4px;font-size:.65rem;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;color:var(--text2);transition:.15s;font-size:.85rem;border-right:3px solid transparent;}
+.nav-item:hover{background:rgba(124,58,237,.1);color:var(--text);}
+.nav-item.active{background:rgba(124,58,237,.2);color:#a78bfa;border-right-color:var(--primary);}
+.nav-item .icon{font-size:1.1rem;width:22px;text-align:center;}
+.nav-badge{margin-right:auto;background:var(--danger);color:#fff;border-radius:10px;padding:2px 7px;font-size:.65rem;font-weight:700;}
+
+/* ─── Content ─── */
+.content{padding:24px;overflow-y:auto;}
+.page{display:none;}
+.page.active{display:block;}
+
+/* ─── KPI Cards ─── */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:24px;}
+.kpi-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center;}
+.kpi-card .kpi-val{font-size:2rem;font-weight:700;margin:8px 0 4px;}
+.kpi-card .kpi-label{font-size:.75rem;color:var(--text2);}
+.kpi-card.green .kpi-val{color:var(--success);}
+.kpi-card.red .kpi-val{color:var(--danger);}
+.kpi-card.yellow .kpi-val{color:var(--warning);}
+.kpi-card.blue .kpi-val{color:var(--accent);}
+.kpi-card.purple .kpi-val{color:var(--primary2);}
+
+/* ─── Section Header ─── */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.section-title{font-size:1rem;font-weight:700;}
+.section-title span{color:var(--primary2);}
+
+/* ─── Duty Table ─── */
+.duty-table-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:24px;}
+.duty-table{width:100%;border-collapse:collapse;}
+.duty-table th{background:rgba(124,58,237,.2);padding:10px 14px;font-size:.75rem;font-weight:600;color:var(--text2);text-align:right;}
+.duty-table td{padding:10px 14px;font-size:.82rem;border-top:1px solid var(--border);vertical-align:middle;}
+.duty-table tr:hover td{background:rgba(255,255,255,.03);}
+.status-badge{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:.72rem;font-weight:600;}
+.status-badge.present{background:rgba(16,185,129,.15);color:#34d399;border:1px solid rgba(16,185,129,.3);}
+.status-badge.absent{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);}
+.status-badge.scheduled{background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.3);}
+.status-badge.covered{background:rgba(6,182,212,.15);color:#22d3ee;border:1px solid rgba(6,182,212,.3);}
+
+/* ─── Duty Map ─── */
+.duty-map{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px;}
+.map-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px;}
+.map-zone{background:var(--card2);border:2px solid var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer;transition:.2s;}
+.map-zone:hover{border-color:var(--primary);}
+.map-zone.occupied{border-color:var(--success);background:rgba(16,185,129,.05);}
+.map-zone.empty{border-color:var(--danger);background:rgba(239,68,68,.05);}
+.map-zone .zone-icon{font-size:1.8rem;margin-bottom:6px;}
+.map-zone .zone-name{font-size:.8rem;font-weight:600;margin-bottom:4px;}
+.map-zone .zone-staff{font-size:.72rem;color:var(--text2);}
+
+/* ─── AI Box ─── */
+.ai-box{background:linear-gradient(135deg,rgba(124,58,237,.15),rgba(6,182,212,.1));border:1px solid rgba(124,58,237,.4);border-radius:12px;padding:20px;margin-bottom:24px;}
+.ai-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+.ai-badge{background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;border-radius:6px;padding:3px 8px;font-size:.7rem;font-weight:700;}
+#aiOutput{background:rgba(0,0,0,.3);border-radius:8px;padding:14px;font-size:.83rem;line-height:1.7;min-height:80px;color:var(--text);}
+.ai-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+.ai-btn{background:rgba(124,58,237,.2);border:1px solid rgba(124,58,237,.4);color:#c4b5fd;border-radius:8px;padding:7px 14px;font-size:.78rem;cursor:pointer;transition:.15s;font-family:inherit;}
+.ai-btn:hover{background:rgba(124,58,237,.4);}
+
+/* ─── Gate Log ─── */
+.gate-entry{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;}
+.gate-entry .etype{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;}
+.gate-entry .etype.student{background:rgba(16,185,129,.2);}
+.gate-entry .etype.staff{background:rgba(124,58,237,.2);}
+.gate-entry .etype.visitor{background:rgba(245,158,11,.2);}
+.gate-entry .etype.unauthorized{background:rgba(239,68,68,.2);}
+.gate-entry .einfo{flex:1;}
+.gate-entry .ename{font-size:.85rem;font-weight:600;}
+.gate-entry .emeta{font-size:.72rem;color:var(--text2);margin-top:2px;}
+.gate-entry .etime{font-size:.75rem;color:var(--text2);}
+
+/* ─── Form ─── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.form-group{display:flex;flex-direction:column;gap:6px;}
+.form-group label{font-size:.78rem;color:var(--text2);}
+.form-input,.form-select{background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font-size:.83rem;font-family:inherit;width:100%;}
+.form-input:focus,.form-select:focus{outline:none;border-color:var(--primary);}
+.btn-primary{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:.85rem;cursor:pointer;font-family:inherit;font-weight:600;transition:.2s;}
+.btn-primary:hover{opacity:.9;}
+.btn-danger{background:rgba(239,68,68,.2);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:6px 12px;font-size:.75rem;cursor:pointer;font-family:inherit;}
+.btn-success{background:rgba(16,185,129,.2);color:#34d399;border:1px solid rgba(16,185,129,.3);border-radius:8px;padding:6px 12px;font-size:.75rem;cursor:pointer;font-family:inherit;}
+
+/* ─── Alert ─── */
+.alert{padding:12px 16px;border-radius:8px;font-size:.82rem;margin-bottom:12px;}
+.alert.info{background:rgba(6,182,212,.1);border:1px solid rgba(6,182,212,.3);color:#67e8f9;}
+.alert.warning{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#fcd34d;}
+.alert.danger{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5;}
+
+/* ─── Week Switcher ─── */
+.week-switcher{display:flex;align-items:center;gap:8px;}
+.week-btn{background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:5px 10px;font-size:.78rem;cursor:pointer;}
+.week-btn:hover{border-color:var(--primary);color:var(--text);}
+.week-label{font-size:.82rem;color:var(--text);}
+
+/* ─── Toast ─── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;border:1px solid var(--primary);color:var(--text);padding:12px 24px;border-radius:10px;font-size:.85rem;z-index:9999;display:none;animation:fadeIn .3s;}
+@keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
+
+/* ─── Loading ─── */
+.loading{text-align:center;padding:32px;color:var(--text2);}
+.spinner{display:inline-block;width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+@media(max-width:768px){
+  .main{grid-template-columns:1fr;}
+  .sidebar{display:none;}
+  .form-grid{grid-template-columns:1fr;}
+  .map-grid{grid-template-columns:repeat(2,1fr);}
+}
+</style>
+<!-- EduOS Auth Guard -->
+<script src="/apps/platform-auth-guard.js"></script>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <div style="width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;box-shadow:0 0 20px rgba(108,61,214,0.35);">🎓</div>
+  <div>
+    <div class="header-title">🛡️ Duty OS — نظام المناوبات الذكي</div>
+    <div class="header-subtitle" id="headerSub">جارٍ التحميل...</div>
+  </div>
+  <div class="header-week" id="weekBadge">الأسبوع —</div>
+  <button class="btn-exit" onclick="goHome()" title="الخروج">✕</button>
+</header>
+
+<!-- Main -->
+<div class="main">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="nav-section">إدارة المناوبات</div>
+    <div class="nav-item active" onclick="showPage('dashboard')">
+      <span class="icon">🏠</span> لوحة التحكم
+    </div>
+    <div class="nav-item" onclick="showPage('today')">
+      <span class="icon">📋</span> مناوبات اليوم
+      <span class="nav-badge" id="absentBadge">0</span>
+    </div>
+    <div class="nav-item" onclick="showPage('map')">
+      <span class="icon">🗺️</span> خريطة المناوبات
+    </div>
+    <div class="nav-item" onclick="showPage('schedule')">
+      <span class="icon">📅</span> الجدول الأسبوعي
+    </div>
+    <div class="nav-section">البوابة والأمن</div>
+    <div class="nav-item" onclick="showPage('gate')">
+      <span class="icon">🚪</span> سجل البوابة
+    </div>
+    <div class="nav-item" onclick="showPage('assign')">
+      <span class="icon">👥</span> تعيين البديل
+    </div>
+    <div class="nav-section">الذكاء الاصطناعي</div>
+    <div class="nav-item" onclick="showPage('ai')">
+      <span class="icon">🤖</span> المساعد الذكي
+    </div>
+    <div class="nav-item" onclick="showPage('reports')">
+      <span class="icon">📊</span> التقارير
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <div class="content">
+
+    <!-- Dashboard -->
+    <div class="page active" id="page-dashboard">
+      <div class="section-header">
+        <div>
+          <div class="section-title">لوحة التحكم — <span>مناوبات اليوم</span></div>
+          <div style="font-size:.75rem;color:var(--text2);margin-top:2px;" id="todayDateLabel"></div>
+        </div>
+        <button class="btn-primary" onclick="refreshDashboard()">🔄 تحديث</button>
+      </div>
+
+      <div class="kpi-grid" id="kpiGrid">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+
+      <div id="alertsContainer"></div>
+
+      <div class="duty-map">
+        <div class="section-header">
+          <div class="section-title">🗺️ خريطة المدرسة — <span>الحالة الآنية</span></div>
+        </div>
+        <div class="map-grid" id="mapGrid">
+          <div class="loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <div class="section-header">
+        <div class="section-title">📋 قائمة المناوبات</div>
+      </div>
+      <div class="duty-table-wrap">
+        <table class="duty-table">
+          <thead>
+            <tr>
+              <th>المعلمة</th>
+              <th>الموقع</th>
+              <th>النوع</th>
+              <th>الوقت</th>
+              <th>الحالة</th>
+              <th>إجراء</th>
+            </tr>
+          </thead>
+          <tbody id="dutyTableBody">
+            <tr><td colspan="6" class="loading"><div class="spinner"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Today's Duties -->
+    <div class="page" id="page-today">
+      <div class="section-header">
+        <div class="section-title">📋 مناوبات اليوم — <span>تفصيلية</span></div>
+        <button class="btn-primary" onclick="showPage('assign')">➕ تعيين بديل</button>
+      </div>
+      <div id="todayDetails">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+    </div>
+
+    <!-- Map -->
+    <div class="page" id="page-map">
+      <div class="section-header">
+        <div class="section-title">🗺️ خريطة المناوبات — <span>تفاعلية</span></div>
+      </div>
+      <div class="duty-map">
+        <div class="map-grid" id="fullMapGrid">
+          <div class="loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+      <div id="zoneDetail" style="display:none;" class="duty-table-wrap"></div>
+    </div>
+
+    <!-- Schedule -->
+    <div class="page" id="page-schedule">
+      <div class="section-header">
+        <div class="section-title">📅 الجدول الأسبوعي</div>
+        <div class="week-switcher">
+          <button class="week-btn" onclick="changeWeek(-1)">◀</button>
+          <span class="week-label" id="schedWeekLabel">الأسبوع 10</span>
+          <button class="week-btn" onclick="changeWeek(1)">▶</button>
+        </div>
+      </div>
+      <div id="scheduleContent">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+    </div>
+
+    <!-- Gate Log -->
+    <div class="page" id="page-gate">
+      <div class="section-header">
+        <div class="section-title">🚪 سجل البوابة — <span>دخول وخروج</span></div>
+        <button class="btn-primary" onclick="showAddGateEntry()">➕ تسجيل دخول</button>
+      </div>
+      <div id="gateLogContainer">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+    </div>
+
+    <!-- Assign Substitute -->
+    <div class="page" id="page-assign">
+      <div class="section-header">
+        <div class="section-title">👥 تعيين البديل — <span>للغائبات</span></div>
+      </div>
+      <div id="absentList" style="margin-bottom:20px;"></div>
+      <div class="ai-box" style="margin-bottom:20px;">
+        <div class="ai-header">
+          <span class="ai-badge">🤖 AI</span>
+          <span style="font-size:.9rem;font-weight:700;">اقتراح البديل التلقائي</span>
+        </div>
+        <p style="font-size:.82rem;color:var(--text2);margin-bottom:12px;">المساعد الذكي يقترح الأنسب بناءً على الجدول والمواد</p>
+        <button class="ai-btn" onclick="aiSuggestSubstitute()">✨ اقترح بديلاً الآن</button>
+        <div id="substituteAISuggestion" style="margin-top:12px;"></div>
+      </div>
+      <div class="duty-table-wrap">
+        <div style="padding:16px;">
+          <h3 style="font-size:.9rem;margin-bottom:14px;">تعيين يدوي</h3>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>الموظفة الغائبة</label>
+              <select class="form-select" id="absentStaff">
+                <option value="">اختر...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>البديلة</label>
+              <select class="form-select" id="substituteStaff">
+                <option value="">اختر...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>الموقع</label>
+              <input type="text" class="form-input" id="assignLocation" placeholder="موقع المناوبة">
+            </div>
+            <div class="form-group">
+              <label>الملاحظات</label>
+              <input type="text" class="form-input" id="assignNotes" placeholder="أي ملاحظة...">
+            </div>
+          </div>
+          <button class="btn-primary" style="margin-top:14px;" onclick="saveSubstitute()">💾 حفظ التعيين</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Page -->
+    <div class="page" id="page-ai">
+      <div class="section-header">
+        <div class="section-title">🤖 المساعد الذكي — <span>تحليل المناوبات</span></div>
+      </div>
+      <div class="ai-box">
+        <div class="ai-header">
+          <span class="ai-badge">AI</span>
+          <span style="font-size:.9rem;font-weight:700;">تحليل ذكي للمناوبات</span>
+        </div>
+        <div id="aiOutput">اضغط على أحد الأزرار أدناه للحصول على تحليل ذكي...</div>
+        <div class="ai-btns">
+          <button class="ai-btn" onclick="aiAnalyze('حلل أنماط الغياب في المناوبات هذا الأسبوع وأعطني تحذيرات')">📊 تحليل الغياب</button>
+          <button class="ai-btn" onclick="aiAnalyze('اقترح توزيعاً مثالياً للمناوبات بناءً على عدد الموظفات')">🗺️ توزيع مثالي</button>
+          <button class="ai-btn" onclick="aiAnalyze('ما الأماكن الأكثر خطورة في المدرسة وتحتاج مراقبة أكبر؟')">⚠️ نقاط الخطر</button>
+          <button class="ai-btn" onclick="aiAnalyze('اكتب تقرير يومي عن مناوبات اليوم بشكل احترافي')">📝 تقرير يومي</button>
+          <button class="ai-btn" onclick="aiAnalyze('قدم إحصائيات الحضور والغياب في المناوبات هذا الشهر')">📈 إحصائيات الشهر</button>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:8px;align-items:center;">
+          <input type="text" class="form-input" id="aiCustomInput" placeholder="أو اكتب سؤالك..." style="flex:1;">
+          <button class="btn-primary" onclick="aiCustomAsk()">إرسال</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reports -->
+    <div class="page" id="page-reports">
+      <div class="section-header">
+        <div class="section-title">📊 التقارير — <span>إحصائيات المناوبات</span></div>
+        <button class="btn-primary" onclick="exportReport()">⬇️ تصدير</button>
+      </div>
+      <div class="kpi-grid" id="reportKPIs"></div>
+      <div id="reportContent">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+    </div>
+
+  </div><!-- end content -->
+</div><!-- end main -->
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Add Gate Entry Modal -->
+<div id="gateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:none;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;width:420px;max-width:95vw;">
+    <h3 style="margin-bottom:16px;font-size:.95rem;">🚪 تسجيل دخول جديد</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>النوع</label>
+        <select class="form-select" id="ge_type">
+          <option value="طالبة">طالبة</option>
+          <option value="موظفة">موظفة</option>
+          <option value="زائر">زائر</option>
+          <option value="ولي أمر">ولي أمر</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>الاسم</label>
+        <input type="text" class="form-input" id="ge_name" placeholder="الاسم الكامل">
+      </div>
+      <div class="form-group">
+        <label>طريقة الدخول</label>
+        <select class="form-select" id="ge_method">
+          <option value="manual">يدوي</option>
+          <option value="qr">QR</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>البوابة</label>
+        <select class="form-select" id="ge_gate">
+          <option value="1">البوابة الرئيسية</option>
+          <option value="2">البوابة الجانبية</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;">
+      <button class="btn-primary" onclick="saveGateEntry()">💾 حفظ</button>
+      <button class="btn-danger" onclick="closeGateModal()">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// Config
+// ─────────────────────────────────────────────
+const SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SB_KEY = ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9','eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0','FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI'].join('.');
+const DUTY_AI = 'https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant';
+
+const HEADERS = {
+  'apikey': SB_KEY,
+  'Authorization': 'Bearer ' + SB_KEY,
+  'Content-Type': 'application/json'
+};
+
+let currentPage = 'dashboard';
+let currentWeek = 10;
+let allDuties = [];
+let allStaff = [];
+
+// ─────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  // Week info
+  if (window.PlatformWeek) {
+    const w = window.PlatformWeek.getInfo();
+    document.getElementById('weekBadge').textContent = `الفصل ${w.semester} — الأسبوع ${w.week}`;
+    document.getElementById('headerSub').textContent = `${w.year} | ${w.dayName}`;
+    currentWeek = w.week;
+    document.getElementById('schedWeekLabel').textContent = `الأسبوع ${currentWeek}`;
+  }
+  document.getElementById('todayDateLabel').textContent = new Date().toLocaleDateString('ar-SA', {weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+  // Auto-logout
+  if (window.PlatformAutoLogout) window.PlatformAutoLogout.init();
+
+  await loadStaff();
+  await refreshDashboard();
+});
+
+// ─────────────────────────────────────────────
+// Navigation
+// ─────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.textContent.trim().startsWith(pageIcon(name))) n.classList.add('active');
+  });
+  currentPage = name;
+  // Load page data
+  if (name === 'today') loadTodayDetails();
+  else if (name === 'map') loadFullMap();
+  else if (name === 'schedule') loadSchedule();
+  else if (name === 'gate') loadGateLog();
+  else if (name === 'assign') loadAssignPage();
+  else if (name === 'reports') loadReports();
+}
+
+function pageIcon(n) {
+  const m = {dashboard:'🏠',today:'📋',map:'🗺️',schedule:'📅',gate:'🚪',assign:'👥',ai:'🤖',reports:'📊'};
+  return m[n] || '';
+}
+
+// ─────────────────────────────────────────────
+// Supabase
+// ─────────────────────────────────────────────
+async function sbGet(table, params = '') {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}`, { headers: HEADERS });
+  return r.json();
+}
+
+async function sbPost(table, data) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: { ...HEADERS, 'Prefer': 'return=minimal' },
+    body: JSON.stringify(data)
+  });
+  return r.ok;
+}
+
+async function sbPatch(table, id, data) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { ...HEADERS, 'Prefer': 'return=minimal' },
+    body: JSON.stringify(data)
+  });
+  return r.ok;
+}
+
+// ─────────────────────────────────────────────
+// Load Staff
+// ─────────────────────────────────────────────
+async function loadStaff() {
+  const data = await sbGet('staff_profiles', 'select=id,name,role&order=name');
+  if (Array.isArray(data)) {
+    allStaff = data;
+    // Populate selects
+    ['absentStaff','substituteStaff'].forEach(id => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      allStaff.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id || s.name;
+        opt.textContent = s.name;
+        sel.appendChild(opt);
+      });
+    });
+  }
+}
+
+// ─────────────────────────────────────────────
+// Dashboard
+// ─────────────────────────────────────────────
+async function refreshDashboard() {
+  const today = new Date().toISOString().split('T')[0];
+  const data = await sbGet('duty_schedule', `duty_date=eq.${today}&order=start_time`);
+
+  if (!Array.isArray(data) || data.length === 0) {
+    // Try loading any data
+    const all = await sbGet('duty_schedule', 'order=duty_date.desc,start_time&limit=20');
+    allDuties = Array.isArray(all) ? all : [];
+  } else {
+    allDuties = data;
+  }
+
+  // Count
+  const present = allDuties.filter(d => d.status === 'present').length;
+  const absent = allDuties.filter(d => d.status === 'absent').length;
+  const scheduled = allDuties.filter(d => d.status === 'scheduled').length;
+  const covered = allDuties.filter(d => d.status === 'covered').length;
+
+  document.getElementById('absentBadge').textContent = absent;
+
+  // KPIs
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="kpi-card green">
+      <div class="kpi-val">${present}</div>
+      <div class="kpi-label">✅ حاضرات</div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-val">${absent}</div>
+      <div class="kpi-label">❌ غائبات</div>
+    </div>
+    <div class="kpi-card yellow">
+      <div class="kpi-val">${scheduled}</div>
+      <div class="kpi-label">⏰ مجدولة</div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="kpi-val">${covered}</div>
+      <div class="kpi-label">🔄 مغطاة</div>
+    </div>
+    <div class="kpi-card purple">
+      <div class="kpi-val">${allDuties.length}</div>
+      <div class="kpi-label">📋 إجمالي المناوبات</div>
+    </div>
+  `;
+
+  // Alerts
+  let alerts = '';
+  if (absent > 0) {
+    const absentNames = allDuties.filter(d => d.status === 'absent').map(d => d.staff_name).join('، ');
+    alerts += `<div class="alert danger">⚠️ غياب غير مغطى: ${absentNames} — يرجى تعيين بديلة فوراً</div>`;
+  }
+  if (scheduled > 0) alerts += `<div class="alert warning">⏰ ${scheduled} مناوبة لم تُؤكَّد بعد</div>`;
+  if (present === allDuties.length && allDuties.length > 0) alerts += `<div class="alert info">✅ جميع المناوبات مكتملة — عمل رائع!</div>`;
+  document.getElementById('alertsContainer').innerHTML = alerts;
+
+  // Map
+  renderMap('mapGrid', allDuties);
+
+  // Table
+  renderDutyTable(allDuties);
+}
+
+// ─────────────────────────────────────────────
+// Map
+// ─────────────────────────────────────────────
+function renderMap(containerId, duties) {
+  const zones = {
+    'البوابة الرئيسية': '🚪',
+    'الممر الرئيسي': '🏫',
+    'الساحة الشمالية': '🌿',
+    'ساحة الكانتين': '🍽️',
+    'المكتبة': '📚',
+    'باب الخروج': '🚶',
+    'الطابق الأول': '🏢',
+    'الساحة الجنوبية': '⛽',
+    'مدخل المبنى': '🏛️'
+  };
+
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  // Build zone → staff map
+  const zoneMap = {};
+  duties.forEach(d => {
+    if (!zoneMap[d.location]) zoneMap[d.location] = [];
+    zoneMap[d.location].push(d);
+  });
+
+  let html = '';
+  Object.entries(zones).forEach(([zone, icon]) => {
+    const staff = zoneMap[zone] || [];
+    const present = staff.filter(s => s.status === 'present');
+    const absent = staff.filter(s => s.status === 'absent');
+    const cls = staff.length === 0 ? '' : (absent.length > 0 ? 'empty' : 'occupied');
+    const staffText = staff.length > 0
+      ? staff.map(s => `${s.staff_name} <span style="opacity:.6">(${s.status === 'present' ? '✅' : s.status === 'absent' ? '❌' : '⏰'})</span>`).join('<br>')
+      : '<span style="color:var(--text2);font-size:.7rem;">لا مناوبة</span>';
+
+    html += `
+      <div class="map-zone ${cls}" onclick="showZoneDetail('${zone}')">
+        <div class="zone-icon">${icon}</div>
+        <div class="zone-name">${zone}</div>
+        <div class="zone-staff">${staffText}</div>
+      </div>
+    `;
+  });
+  container.innerHTML = html;
+}
+
+function showZoneDetail(zone) {
+  const duties = allDuties.filter(d => d.location === zone);
+  if (duties.length === 0) {
+    showToast('لا توجد مناوبات في هذا الموقع اليوم');
+    return;
+  }
+  const detail = document.getElementById('zoneDetail');
+  if (detail) {
+    detail.style.display = 'block';
+    detail.innerHTML = `
+      <div style="padding:16px;">
+        <h3 style="font-size:.9rem;margin-bottom:12px;">📍 تفاصيل: ${zone}</h3>
+        ${duties.map(d => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+            <span>${d.staff_name}</span>
+            <span>${d.start_time || '—'} - ${d.end_time || '—'}</span>
+            <span class="status-badge ${d.status}">${d.status}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+}
+
+// ─────────────────────────────────────────────
+// Duty Table
+// ─────────────────────────────────────────────
+function renderDutyTable(duties) {
+  const tbody = document.getElementById('dutyTableBody');
+  if (!duties || duties.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text2);">لا توجد مناوبات اليوم</td></tr>';
+    return;
+  }
+  tbody.innerHTML = duties.map(d => `
+    <tr>
+      <td><strong>${d.staff_name}</strong></td>
+      <td>${d.location || '—'}</td>
+      <td><span style="background:rgba(124,58,237,.2);padding:2px 8px;border-radius:6px;font-size:.75rem;">${d.duty_type}</span></td>
+      <td style="font-size:.78rem;">${d.start_time || '—'} — ${d.end_time || '—'}</td>
+      <td><span class="status-badge ${d.status}">${statusAr(d.status)}</span></td>
+      <td>
+        ${d.status !== 'present' ? `<button class="btn-success" onclick="markPresent('${d.id}')">✅ حضور</button>` : ''}
+        ${d.status !== 'absent' ? `<button class="btn-danger" onclick="markAbsent('${d.id}')">❌ غياب</button>` : ''}
+      </td>
+    </tr>
+  `).join('');
+}
+
+function statusAr(s) {
+  const m = {present:'حاضرة',absent:'غائبة',scheduled:'مجدولة',covered:'مغطاة'};
+  return m[s] || s;
+}
+
+async function markPresent(id) {
+  const ok = await sbPatch('duty_schedule', id, {status:'present', checked_in_at: new Date().toISOString()});
+  if (ok) { showToast('✅ تم تسجيل الحضور'); await refreshDashboard(); }
+}
+
+async function markAbsent(id) {
+  const ok = await sbPatch('duty_schedule', id, {status:'absent'});
+  if (ok) { showToast('⚠️ تم تسجيل الغياب'); await refreshDashboard(); }
+}
+
+// ─────────────────────────────────────────────
+// Today Details
+// ─────────────────────────────────────────────
+async function loadTodayDetails() {
+  const today = new Date().toISOString().split('T')[0];
+  const data = await sbGet('duty_schedule', `duty_date=eq.${today}&order=start_time`);
+  const duties = Array.isArray(data) ? data : allDuties;
+
+  const types = [...new Set(duties.map(d => d.duty_type))];
+  let html = '';
+  types.forEach(type => {
+    const group = duties.filter(d => d.duty_type === type);
+    html += `
+      <div style="margin-bottom:20px;">
+        <h3 style="font-size:.85rem;color:var(--primary2);margin-bottom:10px;">📌 مناوبة ${type}</h3>
+        ${group.map(d => `
+          <div style="display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:8px;">
+            <div>
+              <div style="font-weight:600;">${d.staff_name}</div>
+              <div style="font-size:.75rem;color:var(--text2);">📍 ${d.location || '—'} | ⏰ ${d.start_time || ''} - ${d.end_time || ''}</div>
+            </div>
+            <span class="status-badge ${d.status}">${statusAr(d.status)}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  });
+
+  document.getElementById('todayDetails').innerHTML = html || '<div class="alert info">لا توجد مناوبات لهذا اليوم</div>';
+}
+
+// ─────────────────────────────────────────────
+// Full Map
+// ─────────────────────────────────────────────
+async function loadFullMap() {
+  const today = new Date().toISOString().split('T')[0];
+  const data = await sbGet('duty_schedule', `duty_date=eq.${today}`);
+  const duties = Array.isArray(data) && data.length > 0 ? data : allDuties;
+  renderMap('fullMapGrid', duties);
+}
+
+// ─────────────────────────────────────────────
+// Schedule
+// ─────────────────────────────────────────────
+async function loadSchedule() {
+  document.getElementById('schedWeekLabel').textContent = `الأسبوع ${currentWeek}`;
+  const data = await sbGet('duty_schedule', `week_number=eq.${currentWeek}&order=duty_date,start_time`);
+  const duties = Array.isArray(data) ? data : [];
+
+  if (duties.length === 0) {
+    document.getElementById('scheduleContent').innerHTML = `
+      <div class="alert warning">لا توجد مناوبات مسجّلة للأسبوع ${currentWeek}</div>
+      <button class="btn-primary" onclick="addWeekDuties()">➕ إضافة مناوبات للأسبوع</button>
+    `;
+    return;
+  }
+
+  // Group by date
+  const byDate = {};
+  duties.forEach(d => {
+    if (!byDate[d.duty_date]) byDate[d.duty_date] = [];
+    byDate[d.duty_date].push(d);
+  });
+
+  let html = '<div class="duty-table-wrap"><table class="duty-table"><thead><tr><th>التاريخ</th><th>المعلمة</th><th>الموقع</th><th>النوع</th><th>الوقت</th><th>الحالة</th></tr></thead><tbody>';
+  Object.entries(byDate).forEach(([date, list]) => {
+    list.forEach((d, i) => {
+      html += `<tr>
+        ${i === 0 ? `<td rowspan="${list.length}" style="font-weight:600;">${formatDate(date)}</td>` : ''}
+        <td>${d.staff_name}</td>
+        <td>${d.location || '—'}</td>
+        <td>${d.duty_type}</td>
+        <td style="font-size:.75rem;">${d.start_time || ''} - ${d.end_time || ''}</td>
+        <td><span class="status-badge ${d.status}">${statusAr(d.status)}</span></td>
+      </tr>`;
+    });
+  });
+  html += '</tbody></table></div>';
+  document.getElementById('scheduleContent').innerHTML = html;
+}
+
+function changeWeek(delta) {
+  currentWeek = Math.max(1, Math.min(18, currentWeek + delta));
+  loadSchedule();
+}
+
+function formatDate(d) {
+  return new Date(d).toLocaleDateString('ar-SA', {weekday:'short',month:'short',day:'numeric'});
+}
+
+// ─────────────────────────────────────────────
+// Gate Log
+// ─────────────────────────────────────────────
+async function loadGateLog() {
+  const data = await sbGet('gate_entry_log', 'order=entry_time.desc&limit=30');
+  const entries = Array.isArray(data) ? data : [];
+
+  if (entries.length === 0) {
+    document.getElementById('gateLogContainer').innerHTML = '<div class="alert info">لا توجد سجلات بوابة حتى الآن — يمكنك إضافة إدخالات يدوياً</div>';
+    return;
+  }
+
+  const html = entries.map(e => {
+    const typeClass = !e.is_authorized ? 'unauthorized' : (e.person_type === 'طالبة' ? 'student' : e.person_type === 'موظفة' ? 'staff' : 'visitor');
+    const typeIcon = {طالبة:'🎒', موظفة:'💼', زائر:'👤', 'ولي أمر':'👨‍👩‍👧'};
+    return `
+      <div class="gate-entry">
+        <div class="etype ${typeClass}">${typeIcon[e.person_type] || '👤'}</div>
+        <div class="einfo">
+          <div class="ename">${e.person_name || 'غير محدد'} ${!e.is_authorized ? '<span style="color:var(--danger);font-size:.7rem;">❌ غير مصرح</span>' : ''}</div>
+          <div class="emeta">${e.person_type} | البوابة ${e.gate_number || 1} | ${e.entry_method || 'manual'}${e.staff_on_duty ? ' | ' + e.staff_on_duty : ''}${e.notes ? ' | ' + e.notes : ''}</div>
+        </div>
+        <div class="etime">${formatTime(e.entry_time)}</div>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('gateLogContainer').innerHTML = html;
+}
+
+function formatTime(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  return d.toLocaleTimeString('ar-SA', {hour:'2-digit',minute:'2-digit'});
+}
+
+function showAddGateEntry() {
+  document.getElementById('gateModal').style.display = 'flex';
+}
+function closeGateModal() {
+  document.getElementById('gateModal').style.display = 'none';
+}
+
+async function saveGateEntry() {
+  const entry = {
+    person_type: document.getElementById('ge_type').value,
+    person_name: document.getElementById('ge_name').value,
+    entry_method: document.getElementById('ge_method').value,
+    gate_number: parseInt(document.getElementById('ge_gate').value),
+    is_authorized: true
+  };
+  const ok = await sbPost('gate_entry_log', entry);
+  if (ok) {
+    showToast('✅ تم تسجيل الدخول');
+    closeGateModal();
+    loadGateLog();
+  } else {
+    showToast('⚠️ تعذر الحفظ — تحقق من الاتصال');
+  }
+}
+
+// ─────────────────────────────────────────────
+// Assign Page
+// ─────────────────────────────────────────────
+async function loadAssignPage() {
+  const absent = allDuties.filter(d => d.status === 'absent');
+  const container = document.getElementById('absentList');
+  if (absent.length === 0) {
+    container.innerHTML = '<div class="alert info">✅ لا توجد غائبات اليوم</div>';
+    return;
+  }
+  container.innerHTML = `
+    <div class="alert danger">⚠️ ${absent.length} غائبة تحتاج تغطية:</div>
+    ${absent.map(d => `
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--card);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:12px 16px;margin-bottom:8px;">
+        <div>
+          <strong>${d.staff_name}</strong>
+          <div style="font-size:.75rem;color:var(--text2);">📍 ${d.location} | ${d.duty_type}</div>
+        </div>
+        <button class="btn-primary" onclick="fillAbsentForm('${d.staff_name}','${d.location}')">تعيين بديلة</button>
+      </div>
+    `).join('')}
+  `;
+}
+
+function fillAbsentForm(name, location) {
+  document.getElementById('absentStaff').value = name;
+  document.getElementById('assignLocation').value = location;
+}
+
+async function saveSubstitute() {
+  const absent = document.getElementById('absentStaff').value;
+  const sub = document.getElementById('substituteStaff').value;
+  const loc = document.getElementById('assignLocation').value;
+  const notes = document.getElementById('assignNotes').value;
+  if (!absent || !sub) { showToast('⚠️ اختر الغائبة والبديلة'); return; }
+  
+  // Update duty status
+  const duty = allDuties.find(d => d.staff_name === absent);
+  if (duty) {
+    await sbPatch('duty_schedule', duty.id, {status:'covered', backup_staff_name: sub});
+  }
+  showToast('✅ تم تعيين البديلة بنجاح');
+  await refreshDashboard();
+  await loadAssignPage();
+}
+
+// ─────────────────────────────────────────────
+// AI
+// ─────────────────────────────────────────────
+async function aiAnalyze(prompt) {
+  const output = document.getElementById('aiOutput');
+  output.innerHTML = '<div class="spinner"></div> جاري التحليل...';
+
+  const context = `معطيات المناوبات اليوم: إجمالي ${allDuties.length} مناوبة، حاضر: ${allDuties.filter(d=>d.status==='present').length}، غائب: ${allDuties.filter(d=>d.status==='absent').length}، مجدولة: ${allDuties.filter(d=>d.status==='scheduled').length}. المواقع: ${[...new Set(allDuties.map(d=>d.location))].join('، ')}.`;
+
+  try {
+    const resp = await fetch(DUTY_AI, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({prompt: context+'\n\n'+prompt, context:'مساعد ذكي متخصص في إدارة مناوبات المدارس. أجب بالعربية بشكل موجز.', module:'duty'})
+    });
+    const data = await resp.json();
+    output.textContent = data.success ? data.text : 'لم أتمكن من الإجابة';
+  } catch(e) {
+    output.textContent = 'تعذر الاتصال بالمساعد الذكي — تحقق من الاتصال بالإنترنت';
+  }
+}
+
+async function aiCustomAsk() {
+  const q = document.getElementById('aiCustomInput').value.trim();
+  if (!q) return;
+  await aiAnalyze(q);
+}
+
+async function aiSuggestSubstitute() {
+  const absent = allDuties.filter(d => d.status === 'absent');
+  if (absent.length === 0) {
+    document.getElementById('substituteAISuggestion').innerHTML = '<div class="alert info">✅ لا يوجد غياب — لا حاجة لبديلة</div>';
+    return;
+  }
+  const names = absent.map(d => d.staff_name).join('، ');
+  const prompt = `هناك غياب في المناوبات اليوم: ${names}. المعلمات المتاحة: ${allStaff.slice(0,8).map(s=>s.name).join('، ')}. اقترح بديلة مناسبة لكل غائبة مع السبب.`;
+  
+  const div = document.getElementById('substituteAISuggestion');
+  div.innerHTML = '<div class="spinner"></div>';
+  
+  try {
+    const resp = await fetch(DUTY_AI, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({prompt, context:'مساعد إداري ذكي للمدارس. أجب بالعربية بشكل مختصر ومفيد.', module:'duty'})
+    });
+    const data = await resp.json();
+    const text = data.success ? data.text : 'لا اقتراح متاح';
+    div.innerHTML = `<div class="alert info">${text}</div>`;
+  } catch(e) {
+    div.innerHTML = '<div class="alert danger">تعذر الاتصال بالمساعد الذكي</div>';
+  }
+}
+
+// ─────────────────────────────────────────────
+// Reports
+// ─────────────────────────────────────────────
+async function loadReports() {
+  const data = await sbGet('duty_schedule', `week_number=eq.${currentWeek}`);
+  const duties = Array.isArray(data) ? data : allDuties;
+
+  const total = duties.length;
+  const present = duties.filter(d=>d.status==='present').length;
+  const absent = duties.filter(d=>d.status==='absent').length;
+  const covered = duties.filter(d=>d.status==='covered').length;
+  const rate = total > 0 ? Math.round((present/total)*100) : 0;
+
+  document.getElementById('reportKPIs').innerHTML = `
+    <div class="kpi-card green"><div class="kpi-val">${rate}%</div><div class="kpi-label">نسبة الحضور</div></div>
+    <div class="kpi-card blue"><div class="kpi-val">${total}</div><div class="kpi-label">إجمالي المناوبات</div></div>
+    <div class="kpi-card red"><div class="kpi-val">${absent}</div><div class="kpi-label">حالات غياب</div></div>
+    <div class="kpi-card yellow"><div class="kpi-val">${covered}</div><div class="kpi-label">تم تغطيتها</div></div>
+  `;
+
+  // By location
+  const byLoc = {};
+  duties.forEach(d => { if (!byLoc[d.location]) byLoc[d.location]={total:0,present:0}; byLoc[d.location].total++; if(d.status==='present')byLoc[d.location].present++; });
+
+  let table = `<div class="duty-table-wrap"><table class="duty-table">
+    <thead><tr><th>الموقع</th><th>إجمالي المناوبات</th><th>الحضور</th><th>نسبة الحضور</th></tr></thead><tbody>`;
+  Object.entries(byLoc).forEach(([loc,v]) => {
+    const r = v.total > 0 ? Math.round((v.present/v.total)*100) : 0;
+    table += `<tr><td>${loc}</td><td>${v.total}</td><td>${v.present}</td><td><span style="color:${r>=80?'var(--success)':r>=50?'var(--warning)':'var(--danger)'}">${r}%</span></td></tr>`;
+  });
+  table += '</tbody></table></div>';
+  document.getElementById('reportContent').innerHTML = table;
+}
+
+async function exportReport() {
+  const rows = allDuties.map(d => `${d.staff_name}\t${d.location}\t${d.duty_type}\t${d.status}`).join('\n');
+  const blob = new Blob([`المعلمة\tالموقع\tالنوع\tالحالة\n${rows}`], {type:'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `duty-report-${new Date().toISOString().split('T')[0]}.txt`;
+  a.click();
+  showToast('✅ تم تصدير التقرير');
+}
+
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3000);
+}
+
+function goHome() {
+  window.location.href = '../eduos-hub/index.html';
+}
+
+// No localStorage — all data via Supabase or JS memory
+</script>
+<script src="../platform-tour.js"></script>
+</body>
+</html>

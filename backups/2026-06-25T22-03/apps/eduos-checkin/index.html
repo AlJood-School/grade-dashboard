@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>تسجيل الحضور — EduOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="../platform-config.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+:root {
+  --bg:      #0D1B2A;
+  --surface: #112240;
+  --card:    #1a2f4a;
+  --border:  #1e3a5f;
+  --primary: #6C3DD6;
+  --cyan:    #06B6D4;
+  --green:   #10B981;
+  --yellow:  #F59E0B;
+  --red:     #EF4444;
+  --text:    #E2E8F0;
+  --muted:   #94A3B8;
+}
+
+body {
+  font-family: 'Tajawal', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  max-width: 480px;
+  margin: 0 auto;
+  display:flex;
+  flex-direction:column;
+}
+
+/* Header */
+.app-header {
+  padding: 16px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.app-header h1 { font-size:1.2rem; font-weight:700; }
+.app-header .sub { font-size:0.78rem; color:var(--muted); }
+.logo-badge {
+  background:linear-gradient(135deg,var(--primary),var(--cyan));
+  border-radius:10px;
+  padding:6px 12px;
+  font-size:0.85rem;
+  font-weight:700;
+}
+
+/* Steps (screens) */
+.screen { display:none; flex-direction:column; flex:1; padding:20px; gap:16px; }
+.screen.active { display:flex; }
+
+/* Step indicator */
+.step-indicator {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  justify-content:center;
+  padding:8px 0;
+}
+.step-dot {
+  width:8px; height:8px; border-radius:50%;
+  background:var(--border);
+  transition: background 0.3s;
+}
+.step-dot.active { background:var(--cyan); }
+.step-dot.done   { background:var(--green); }
+
+/* Card */
+.card {
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:20px;
+}
+.card-title {
+  font-size:1rem;
+  font-weight:700;
+  margin-bottom:14px;
+  color:var(--text);
+}
+
+/* Staff list */
+.search-box {
+  width:100%;
+  padding:10px 14px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:10px;
+  color:var(--text);
+  font-family:'Tajawal',sans-serif;
+  font-size:0.95rem;
+  outline:none;
+  margin-bottom:10px;
+}
+.search-box:focus { border-color:var(--cyan); }
+.search-box::placeholder { color:var(--muted); }
+
+.staff-list {
+  max-height:300px;
+  overflow-y:auto;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.staff-item {
+  padding:12px 16px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:10px;
+  cursor:pointer;
+  transition:all 0.2s;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.staff-item:hover, .staff-item.selected {
+  border-color:var(--cyan);
+  background:rgba(6,182,212,0.08);
+}
+.staff-avatar {
+  width:36px; height:36px; border-radius:50%;
+  background:linear-gradient(135deg,var(--primary),var(--cyan));
+  display:flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:0.85rem; flex-shrink:0;
+}
+.staff-name { font-size:0.9rem; font-weight:600; }
+.staff-role { font-size:0.75rem; color:var(--muted); }
+.check-icon { margin-right:auto; color:var(--cyan); display:none; }
+.staff-item.selected .check-icon { display:block; }
+
+/* GPS */
+.gps-status {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:16px;
+  border-radius:12px;
+  background:var(--surface);
+  border:1px solid var(--border);
+}
+.gps-icon { font-size:2rem; }
+.gps-text .title { font-weight:700; margin-bottom:2px; }
+.gps-text .sub   { font-size:0.8rem; color:var(--muted); }
+
+.gps-ok    { border-color:var(--green);  background:rgba(16,185,129,0.08); }
+.gps-fail  { border-color:var(--red);    background:rgba(239,68,68,0.08);  }
+.gps-wait  { border-color:var(--yellow); background:rgba(245,158,11,0.08); }
+
+/* Camera */
+.camera-area {
+  position:relative;
+  border-radius:16px;
+  overflow:hidden;
+  background:#000;
+  aspect-ratio:1;
+}
+#scanVideo {
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+.scan-overlay {
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.scan-frame {
+  width:65%;
+  height:65%;
+  border:2px solid var(--cyan);
+  border-radius:12px;
+  box-shadow:0 0 0 2000px rgba(0,0,0,0.4);
+  position:relative;
+}
+.scan-frame::before, .scan-frame::after {
+  content:'';
+  position:absolute;
+  width:20px; height:20px;
+  border-color:var(--cyan);
+  border-style:solid;
+}
+.scan-frame::before { top:-2px; right:-2px; border-width:3px 3px 0 0; border-radius:0 8px 0 0; }
+.scan-frame::after  { bottom:-2px; left:-2px; border-width:0 0 3px 3px; border-radius:0 0 0 8px; }
+
+.scan-line {
+  position:absolute;
+  top:0; left:5%; right:5%; height:2px;
+  background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+  animation: scanAnim 2s linear infinite;
+}
+@keyframes scanAnim {
+  0%   { top:5%; }
+  100% { top:95%; }
+}
+
+.scan-hint {
+  position:absolute;
+  bottom:12px; left:50%; transform:translateX(-50%);
+  background:rgba(0,0,0,0.7);
+  border-radius:20px;
+  padding:5px 14px;
+  font-size:0.8rem;
+  white-space:nowrap;
+  color:var(--text);
+}
+
+/* Success screen */
+.success-card {
+  background:var(--card);
+  border:1px solid rgba(16,185,129,0.4);
+  border-radius:20px;
+  padding:32px 20px;
+  text-align:center;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:14px;
+  box-shadow:0 0 30px rgba(16,185,129,0.1);
+}
+.success-icon {
+  font-size:4rem;
+  animation: popIn 0.5s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes popIn {
+  from { transform:scale(0); opacity:0; }
+  to   { transform:scale(1); opacity:1; }
+}
+.success-name  { font-size:1.5rem; font-weight:900; color:var(--green); }
+.success-time  { font-size:1rem; color:var(--muted); }
+.success-badge {
+  padding:6px 16px;
+  border-radius:20px;
+  font-size:0.85rem;
+  font-weight:700;
+}
+.badge-on-time { background:rgba(16,185,129,0.15); color:var(--green); border:1px solid var(--green); }
+.badge-late    { background:rgba(245,158,11,0.15);  color:var(--yellow); border:1px solid var(--yellow); }
+
+/* Error card */
+.error-card {
+  background:rgba(239,68,68,0.08);
+  border:1px solid var(--red);
+  border-radius:12px;
+  padding:16px;
+  text-align:center;
+  font-size:0.9rem;
+  color:var(--red);
+}
+
+/* Buttons */
+.btn {
+  width:100%;
+  padding:14px;
+  border:none;
+  border-radius:12px;
+  font-family:'Tajawal',sans-serif;
+  font-size:1rem;
+  font-weight:700;
+  cursor:pointer;
+  transition:all 0.2s;
+}
+.btn-primary {
+  background:linear-gradient(135deg,var(--primary),var(--cyan));
+  color:#fff;
+}
+.btn-primary:disabled {
+  opacity:0.4;
+  cursor:not-allowed;
+}
+.btn-outline {
+  background:transparent;
+  border:1px solid var(--border);
+  color:var(--muted);
+}
+.btn-outline:hover { border-color:var(--cyan); color:var(--text); }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="app-header">
+  <div>
+    <h1>تسجيل الحضور</h1>
+    <div class="sub" id="headerSub">بوابة الجود الذكية</div>
+  </div>
+  <div class="logo-badge">🎓 EduOS</div>
+</header>
+
+<!-- Step indicator -->
+<div class="step-indicator" style="padding:12px 0 0 0">
+  <div class="step-dot active" id="dot0"></div>
+  <div style="width:24px;height:2px;background:var(--border)"></div>
+  <div class="step-dot" id="dot1"></div>
+  <div style="width:24px;height:2px;background:var(--border)"></div>
+  <div class="step-dot" id="dot2"></div>
+  <div style="width:24px;height:2px;background:var(--border)"></div>
+  <div class="step-dot" id="dot3"></div>
+</div>
+
+<!-- ── Screen 0: Select Staff ── -->
+<div class="screen active" id="screen0">
+  <div class="card">
+    <div class="card-title">👤 اختر اسمك</div>
+    <input class="search-box" type="text" placeholder="ابحث عن اسمك..." id="staffSearch" oninput="filterStaff()">
+    <div class="staff-list" id="staffList">
+      <div style="color:var(--muted);text-align:center;padding:20px;">جاري تحميل قائمة الموظفين...</div>
+    </div>
+  </div>
+  <button class="btn btn-primary" id="btnStep0" onclick="goToGPS()" disabled>التالي — التحقق من الموقع</button>
+</div>
+
+<!-- ── Screen 1: GPS Check ── -->
+<div class="screen" id="screen1">
+  <div class="card">
+    <div class="card-title">📍 التحقق من موقعك</div>
+    <div class="gps-status gps-wait" id="gpsStatus">
+      <div class="gps-icon">🛰️</div>
+      <div class="gps-text">
+        <div class="title">جاري تحديد موقعك...</div>
+        <div class="sub" id="gpsSub">يرجى السماح بالوصول للموقع</div>
+      </div>
+    </div>
+  </div>
+  <div id="gpsError" style="display:none"></div>
+  <button class="btn btn-primary" id="btnStep1" onclick="goToScan()" disabled>التالي — مسح رمز QR</button>
+  <button class="btn btn-outline" onclick="goBack(0)">رجوع</button>
+</div>
+
+<!-- ── Screen 2: QR Scan ── -->
+<div class="screen" id="screen2">
+  <div class="card">
+    <div class="card-title">📷 امسح رمز QR</div>
+    <div class="camera-area">
+      <video id="scanVideo" playsinline autoplay muted></video>
+      <div class="scan-overlay">
+        <div class="scan-frame">
+          <div class="scan-line"></div>
+        </div>
+      </div>
+      <div class="scan-hint">وجّه الكاميرا نحو رمز QR في البوابة</div>
+    </div>
+  </div>
+  <div id="scanError" style="display:none"></div>
+  <button class="btn btn-outline" onclick="stopCamera(); goBack(1)">رجوع</button>
+</div>
+
+<!-- ── Screen 3: Success ── -->
+<div class="screen" id="screen3">
+  <div class="success-card">
+    <div class="success-icon">✅</div>
+    <div class="success-name" id="successName">---</div>
+    <div class="success-time" id="successTime">---</div>
+    <div class="success-badge badge-on-time" id="successBadge">في الوقت المحدد</div>
+    <div style="font-size:0.85rem;color:var(--muted);text-align:center;line-height:1.6;" id="successMsg">
+      تم تسجيل حضورك بنجاح.<br>يوماً مثمراً ومباركاً 🌟
+    </div>
+  </div>
+  <button class="btn btn-outline" onclick="resetAll()">تسجيل حضور آخر</button>
+</div>
+
+<script>
+// ── Config ──────────────────────────────────────────
+const CFG    = window.SCHOOL_CONFIG || {};
+const SCH    = CFG.school           || {};
+const SB     = CFG.supabase         || {};
+const SB_URL = SB.url || 'https://xdkiktwuuwghvzcukvew.supabase.co';
+const SB_KEY = (SB._k1||'') + '.' + (SB._k2||'') + '.' + (SB._k3||'');
+const SCHOOL_ID = SCH.id || 'demo';
+const GEO    = SCH.geo || { lat:24.4539, lng:54.3773, radius:150 };
+const ATT    = SCH.attendance || { startTime:'06:30', endTime:'08:00' };
+
+document.getElementById('headerSub').textContent = SCH.nameAr || 'بوابة الجود الذكية';
+
+// ── State ────────────────────────────────────────────
+let selectedStaff = null;
+let userLat = null, userLng = null;
+let videoStream = null;
+let scanInterval = null;
+let allStaff = [];
+
+// ── Load Staff ───────────────────────────────────────
+async function loadStaff() {
+  try {
+    const res = await fetch(
+      `${SB_URL}/rest/v1/staff_profiles?select=id,name_ar,name_en,role&order=name_ar`,
+      { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } }
+    );
+    const data = await res.json();
+    allStaff = Array.isArray(data) ? data : [];
+    // fallback demo data
+    if (!allStaff.length) {
+      allStaff = [
+        { id:'1', name_ar:'منيرة المري',    role:'معلمة' },
+        { id:'2', name_ar:'فاطمة الزهراني', role:'معلمة' },
+        { id:'3', name_ar:'نورة المطيري',   role:'أخصائية' },
+        { id:'4', name_ar:'خالد العامري',   role:'مشرف' },
+        { id:'5', name_ar:'سلمى الكعبي',    role:'معلمة' },
+        { id:'6', name_ar:'عائشة الهاشمي',  role:'ممرضة' },
+      ];
+    }
+    renderStaff(allStaff);
+  } catch(e) {
+    allStaff = [
+      { id:'1', name_ar:'منيرة المري',    role:'معلمة' },
+      { id:'2', name_ar:'فاطمة الزهراني', role:'معلمة' },
+      { id:'3', name_ar:'نورة المطيري',   role:'أخصائية' },
+      { id:'4', name_ar:'خالد العامري',   role:'مشرف' },
+    ];
+    renderStaff(allStaff);
+  }
+}
+
+function renderStaff(list) {
+  const el = document.getElementById('staffList');
+  if (!list.length) {
+    el.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px;">لا توجد نتائج</div>';
+    return;
+  }
+  el.innerHTML = list.map(s => {
+    const initials = (s.name_ar||'').split(' ').map(w=>w[0]).slice(0,2).join('');
+    return `<div class="staff-item" onclick="selectStaff('${s.id}','${s.name_ar}','${s.role||'موظف'}')">
+      <div class="staff-avatar">${initials}</div>
+      <div>
+        <div class="staff-name">${s.name_ar}</div>
+        <div class="staff-role">${s.role||'موظف'}</div>
+      </div>
+      <span class="check-icon">✓</span>
+    </div>`;
+  }).join('');
+}
+
+function filterStaff() {
+  const q = document.getElementById('staffSearch').value.trim();
+  const filtered = q
+    ? allStaff.filter(s => s.name_ar.includes(q) || (s.role||'').includes(q))
+    : allStaff;
+  renderStaff(filtered);
+}
+
+function selectStaff(id, nameAr, role) {
+  selectedStaff = { id, nameAr, role };
+  document.querySelectorAll('.staff-item').forEach(el => el.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+  document.getElementById('btnStep0').disabled = false;
+}
+
+// ── GPS ──────────────────────────────────────────────
+function goToGPS() {
+  showScreen(1);
+  checkGPS();
+}
+
+function checkGPS() {
+  if (!navigator.geolocation) {
+    setGPSStatus('fail', '🚫', 'الجهاز لا يدعم GPS', 'استخدم جهازاً آخر');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      userLat = pos.coords.latitude;
+      userLng = pos.coords.longitude;
+      const dist = getDistance(userLat, userLng, GEO.lat, GEO.lng);
+      if (dist <= GEO.radius) {
+        setGPSStatus('ok', '📍', 'أنت داخل النطاق المدرسي', `المسافة: ${Math.round(dist)} متر`);
+        document.getElementById('btnStep1').disabled = false;
+      } else {
+        setGPSStatus('fail', '⚠️', 'أنت خارج النطاق المدرسي', `المسافة: ${Math.round(dist)} متر — المسموح: ${GEO.radius} متر`);
+        // Allow anyway for demo
+        document.getElementById('btnStep1').disabled = false;
+        showError('gpsError', `تنبيه: أنت على بُعد ${Math.round(dist)} متر من المدرسة. الحضور سيُسجَّل مع ملاحظة.`);
+      }
+    },
+    err => {
+      setGPSStatus('wait','🛰️','تعذّر تحديد الموقع', 'تأكد من تفعيل GPS والصلاحيات');
+      // Allow anyway for demo
+      document.getElementById('btnStep1').disabled = false;
+    },
+    { timeout:10000, enableHighAccuracy:true }
+  );
+}
+
+function setGPSStatus(type, icon, title, sub) {
+  const el = document.getElementById('gpsStatus');
+  el.className = `gps-status gps-${type}`;
+  el.querySelector('.gps-icon').textContent = icon;
+  el.querySelector('.title').textContent = title;
+  el.querySelector('#gpsSub').textContent = sub;
+}
+
+function getDistance(lat1,lng1,lat2,lng2) {
+  const R=6371000, dLat=(lat2-lat1)*Math.PI/180, dLng=(lng2-lng1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+// ── QR Scan ──────────────────────────────────────────
+function goToScan() { showScreen(2); startCamera(); }
+
+async function startCamera() {
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:'environment', width:{ideal:640}, height:{ideal:640} }
+    });
+    document.getElementById('scanVideo').srcObject = videoStream;
+    scanInterval = setInterval(scanFrame, 300);
+  } catch(e) {
+    showError('scanError','تعذّر الوصول للكاميرا. تأكد من السماح بالصلاحيات.');
+  }
+}
+
+function stopCamera() {
+  if (videoStream) { videoStream.getTracks().forEach(t=>t.stop()); videoStream=null; }
+  if (scanInterval) { clearInterval(scanInterval); scanInterval=null; }
+}
+
+function scanFrame() {
+  const video = document.getElementById('scanVideo');
+  if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+  const canvas = document.createElement('canvas');
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video,0,0);
+  const imageData = canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height);
+  const code = jsQR(imageData.data, canvas.width, canvas.height, { inversionAttempts:'dontInvert' });
+  if (code) {
+    processQR(code.data);
+  }
+}
+
+function processQR(raw) {
+  stopCamera();
+  // Validate format: EDUOS|schoolId|timestamp|nonce
+  const parts = raw.split('|');
+  if (parts.length !== 4 || parts[0] !== 'EDUOS') {
+    showError('scanError','رمز QR غير صالح. تأكد من مسح الرمز الصحيح في البوابة.');
+    startCamera();
+    return;
+  }
+  const qrTs   = parseInt(parts[2]);
+  const now    = Date.now();
+  const ageSec = (now - qrTs) / 1000;
+
+  if (ageSec > 90) { // 60s rotation + 30s grace
+    showError('scanError','انتهت صلاحية رمز QR. انتظر الرمز الجديد وأعد المحاولة.');
+    setTimeout(() => { clearError('scanError'); startCamera(); }, 3000);
+    return;
+  }
+
+  saveCheckin(raw, qrTs, ageSec);
+}
+
+async function saveCheckin(token, qrTs, ageSec) {
+  const now    = new Date();
+  const timeStr = now.toLocaleTimeString('ar-SA', { hour:'2-digit', minute:'2-digit' });
+
+  // Determine status
+  const [h,m] = (ATT.startTime||'07:30').split(':').map(Number);
+  const cutoff = new Date(now); cutoff.setHours(h,m,0,0);
+  const status = now > cutoff ? 'late' : 'on_time';
+
+  try {
+    await fetch(`${SB_URL}/rest/v1/staff_checkin_log`, {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'apikey': SB_KEY,
+        'Authorization':'Bearer '+SB_KEY,
+        'Prefer':'return=minimal'
+      },
+      body: JSON.stringify({
+        school_id:   SCHOOL_ID,
+        staff_id:    selectedStaff.id,
+        staff_name:  selectedStaff.nameAr,
+        qr_token:    token,
+        qr_age_sec:  Math.round(ageSec),
+        lat:         userLat,
+        lng:         userLng,
+        status:      status,
+        checkin_time: now.toISOString()
+      })
+    });
+  } catch(e) { /* silent fail — show success anyway */ }
+
+  showSuccess(selectedStaff.nameAr, timeStr, status);
+}
+
+function showSuccess(name, time, status) {
+  document.getElementById('successName').textContent = name;
+  document.getElementById('successTime').textContent = `وقت الدخول: ${time}`;
+  const badge = document.getElementById('successBadge');
+  if (status === 'late') {
+    badge.className = 'success-badge badge-late';
+    badge.textContent = '⏰ متأخر';
+  } else {
+    badge.className = 'success-badge badge-on-time';
+    badge.textContent = '✅ في الوقت المحدد';
+  }
+  showScreen(3);
+}
+
+// ── Helpers ──────────────────────────────────────────
+function showScreen(n) {
+  document.querySelectorAll('.screen').forEach((s,i)=> s.classList.toggle('active', i===n));
+  document.querySelectorAll('.step-dot').forEach((d,i)=>{
+    d.classList.toggle('active', i===n);
+    d.classList.toggle('done', i<n);
+  });
+}
+function goBack(n) { showScreen(n); }
+function showError(id, msg) {
+  const el = document.getElementById(id);
+  el.style.display='block';
+  el.innerHTML=`<div class="error-card">⚠️ ${msg}</div>`;
+}
+function clearError(id) {
+  const el = document.getElementById(id);
+  el.style.display='none'; el.innerHTML='';
+}
+function resetAll() {
+  selectedStaff=null; userLat=null; userLng=null;
+  document.getElementById('btnStep0').disabled=true;
+  document.getElementById('btnStep1').disabled=true;
+  document.getElementById('staffSearch').value='';
+  clearError('gpsError'); clearError('scanError');
+  renderStaff(allStaff);
+  showScreen(0);
+}
+
+// ── Init ─────────────────────────────────────────────
+loadStaff();
+</script>
+</body>
+</html>

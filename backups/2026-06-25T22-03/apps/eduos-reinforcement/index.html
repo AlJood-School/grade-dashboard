@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>التعزيز والتحفيز — EduOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../platform-config.js"></script>
+<script src="../platform-auth-guard.js"></script>
+<script src="../platform-lang.js"></script>
+<script src="../platform-week.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; font-family:'Tajawal',sans-serif; }
+:root {
+  --bg: #0D1B2A;
+  --card: rgba(255,255,255,0.05);
+  --border: rgba(255,255,255,0.1);
+  --primary: #6C3DD6;
+  --accent: #22D3EE;
+  --gold: #F59E0B;
+  --green: #10B981;
+  --text: #F1F5F9;
+  --muted: #94A3B8;
+}
+body { background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* Header */
+.header {
+  background: rgba(108,61,214,0.15);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 24px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.header-logo { display:flex; align-items:center; gap:12px; }
+.logo-box {
+  width:40px; height:40px; border-radius:10px;
+  background: linear-gradient(135deg,#6C3DD6,#22D3EE);
+  display:flex; align-items:center; justify-content:center;
+  font-size:20px;
+}
+.header-title { font-size:18px; font-weight:700; }
+.header-sub { font-size:12px; color:var(--muted); }
+.header-meta { display:flex; align-items:center; gap:16px; font-size:13px; color:var(--muted); }
+.week-badge {
+  background: rgba(108,61,214,0.3); border:1px solid rgba(108,61,214,0.5);
+  padding:4px 12px; border-radius:20px; font-size:12px; color:var(--accent);
+}
+.logout-btn {
+  width:36px; height:36px; border-radius:50%; border:none; cursor:pointer;
+  background: rgba(255,255,255,0.08); color:var(--muted); font-size:16px;
+  transition: all .2s;
+}
+.logout-btn:hover { background:rgba(239,68,68,0.2); color:#EF4444; }
+
+/* Tabs */
+.tabs {
+  display:flex; gap:4px; padding:16px 24px 0;
+  border-bottom:1px solid var(--border);
+}
+.tab {
+  padding:10px 20px; border-radius:10px 10px 0 0; cursor:pointer;
+  font-size:14px; font-weight:500; color:var(--muted);
+  border:1px solid transparent; border-bottom:none;
+  transition:all .2s; display:flex; align-items:center; gap:6px;
+}
+.tab:hover { color:var(--text); background:rgba(255,255,255,0.05); }
+.tab.active {
+  color:var(--accent); background:rgba(34,211,238,0.08);
+  border-color:var(--border); border-bottom:1px solid var(--bg);
+}
+
+/* Main */
+.main { padding:24px; max-width:1200px; margin:0 auto; }
+
+/* Section Title */
+.section-title {
+  font-size:22px; font-weight:800; margin-bottom:8px;
+  background:linear-gradient(135deg,#A78BFA,#22D3EE);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+}
+.section-sub { color:var(--muted); font-size:14px; margin-bottom:24px; }
+
+/* Send Reinforcement Panel */
+.send-panel {
+  display:grid; grid-template-columns:320px 1fr; gap:24px;
+  align-items:start;
+}
+
+/* Step Cards */
+.step-card {
+  background: var(--card); border:1px solid var(--border);
+  border-radius:16px; padding:20px; margin-bottom:16px;
+}
+.step-label {
+  font-size:12px; color:var(--accent); font-weight:700;
+  letter-spacing:1px; margin-bottom:12px; display:flex; align-items:center; gap:8px;
+}
+.step-num {
+  width:22px; height:22px; border-radius:50%;
+  background:rgba(34,211,238,0.2); color:var(--accent);
+  display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800;
+}
+
+/* Search */
+.search-wrap { position:relative; }
+.search-wrap input {
+  width:100%; padding:12px 16px 12px 40px; border-radius:10px;
+  background:rgba(255,255,255,0.06); border:1px solid var(--border);
+  color:var(--text); font-size:14px; font-family:Tajawal;
+  outline:none; transition:border .2s;
+}
+.search-wrap input:focus { border-color:var(--primary); }
+.search-icon { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); }
+.student-list { max-height:200px; overflow-y:auto; margin-top:8px; }
+.student-item {
+  padding:10px 14px; border-radius:8px; cursor:pointer;
+  display:flex; align-items:center; justify-content:space-between;
+  transition:background .15s; font-size:14px;
+}
+.student-item:hover { background:rgba(255,255,255,0.07); }
+.student-item.selected { background:rgba(108,61,214,0.25); border:1px solid rgba(108,61,214,0.4); }
+.student-class { font-size:12px; color:var(--muted); }
+
+/* Cards Grid */
+.cards-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+.card-btn {
+  padding:14px; border-radius:12px; border:1px solid var(--border);
+  background:rgba(255,255,255,0.04); cursor:pointer; text-align:center;
+  transition:all .2s; color:var(--text);
+}
+.card-btn:hover { border-color:var(--accent); background:rgba(34,211,238,0.08); }
+.card-btn.selected { border-color:var(--gold); background:rgba(245,158,11,0.15); }
+.card-emoji { font-size:26px; margin-bottom:6px; }
+.card-name { font-size:12px; font-weight:600; }
+.card-desc { font-size:11px; color:var(--muted); margin-top:2px; }
+
+/* Preview Panel */
+.preview-panel {
+  background:var(--card); border:1px solid var(--border);
+  border-radius:20px; padding:28px; text-align:center;
+  position:sticky; top:20px;
+}
+.preview-empty { color:var(--muted); font-size:14px; padding:40px 0; }
+.preview-card {
+  background:linear-gradient(135deg,rgba(108,61,214,0.3),rgba(34,211,238,0.2));
+  border:1px solid rgba(108,61,214,0.4); border-radius:16px;
+  padding:24px; margin-bottom:20px; text-align:center;
+}
+.preview-emoji { font-size:52px; margin-bottom:12px; }
+.preview-student { font-size:20px; font-weight:800; margin-bottom:4px; }
+.preview-class { font-size:13px; color:var(--muted); margin-bottom:16px; }
+.preview-card-name {
+  display:inline-block; padding:6px 18px; border-radius:20px;
+  background:rgba(245,158,11,0.2); border:1px solid rgba(245,158,11,0.4);
+  color:var(--gold); font-size:14px; font-weight:700; margin-bottom:16px;
+}
+.preview-msg { font-size:15px; color:var(--text); line-height:1.7; font-style:italic; }
+.preview-from { font-size:12px; color:var(--muted); margin-top:12px; }
+
+/* Options */
+.options-row { display:flex; gap:12px; margin:12px 0; }
+.toggle-opt {
+  flex:1; padding:10px; border-radius:10px; border:1px solid var(--border);
+  background:rgba(255,255,255,0.04); cursor:pointer; text-align:center;
+  font-size:13px; font-weight:500; color:var(--muted); transition:all .2s;
+}
+.toggle-opt.active { border-color:var(--green); background:rgba(16,185,129,0.15); color:var(--green); }
+.toggle-opt:hover { border-color:var(--muted); color:var(--text); }
+
+/* Subject Select */
+.subject-sel {
+  width:100%; padding:10px 14px; border-radius:10px;
+  background:rgba(255,255,255,0.06); border:1px solid var(--border);
+  color:var(--text); font-size:13px; font-family:Tajawal;
+  outline:none; margin-bottom:12px;
+}
+.subject-sel option { background:#1e2d40; }
+
+/* Camera */
+.camera-btn {
+  width:100%; padding:10px; border-radius:10px; border:1px dashed var(--border);
+  background:transparent; color:var(--muted); cursor:pointer; font-family:Tajawal;
+  font-size:13px; transition:all .2s; margin-bottom:12px;
+}
+.camera-btn:hover { border-color:var(--accent); color:var(--accent); }
+.photo-preview { width:100%; border-radius:10px; margin-bottom:12px; max-height:120px; object-fit:cover; display:none; }
+
+/* Send Button */
+.send-btn {
+  width:100%; padding:16px; border-radius:14px; border:none; cursor:pointer;
+  background:linear-gradient(135deg,#6C3DD6,#22D3EE); color:white;
+  font-size:17px; font-weight:800; font-family:Tajawal;
+  transition:all .2s; display:flex; align-items:center; justify-content:center; gap:8px;
+}
+.send-btn:hover { opacity:.9; transform:translateY(-1px); }
+.send-btn:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+
+/* Stars info */
+.stars-note {
+  font-size:11px; color:var(--muted); text-align:center; margin-top:8px;
+  display:flex; align-items:center; justify-content:center; gap:4px;
+}
+
+/* Success */
+.success-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.7);
+  display:flex; align-items:center; justify-content:center; z-index:999;
+  opacity:0; pointer-events:none; transition:opacity .3s;
+}
+.success-overlay.show { opacity:1; pointer-events:all; }
+.success-box {
+  background:rgba(10,25,40,0.95); border:1px solid var(--green);
+  border-radius:24px; padding:40px; text-align:center; max-width:400px;
+}
+.success-icon { font-size:64px; margin-bottom:16px; }
+.success-title { font-size:24px; font-weight:800; color:var(--green); margin-bottom:8px; }
+.success-msg { color:var(--muted); font-size:15px; margin-bottom:8px; }
+.goal-msg { color:var(--gold); font-size:14px; margin:12px 0; font-weight:600; }
+.success-close {
+  margin-top:20px; padding:10px 28px; border-radius:12px; border:none; cursor:pointer;
+  background:rgba(255,255,255,0.1); color:var(--text); font-family:Tajawal; font-size:14px;
+}
+
+/* Leaderboard Tab */
+.leaderboard-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; }
+.lb-card {
+  background:var(--card); border:1px solid var(--border); border-radius:16px;
+  padding:20px; display:flex; align-items:center; gap:16px;
+}
+.lb-rank { font-size:28px; font-weight:900; color:var(--muted); min-width:36px; }
+.lb-rank.top1 { color:var(--gold); }
+.lb-rank.top2 { color:#C0C0C0; }
+.lb-rank.top3 { color:#CD7F32; }
+.lb-info { flex:1; }
+.lb-name { font-weight:700; font-size:15px; }
+.lb-class { font-size:12px; color:var(--muted); }
+.lb-stars { display:flex; align-items:center; gap:4px; font-size:16px; font-weight:800; color:var(--gold); }
+
+/* Challenge Tab */
+.challenge-form {
+  background:var(--card); border:1px solid var(--border); border-radius:20px;
+  padding:28px; max-width:500px;
+}
+.form-label { font-size:13px; color:var(--muted); margin-bottom:6px; display:block; }
+.form-input {
+  width:100%; padding:10px 14px; border-radius:10px; margin-bottom:14px;
+  background:rgba(255,255,255,0.06); border:1px solid var(--border);
+  color:var(--text); font-size:14px; font-family:Tajawal; outline:none;
+}
+.form-input:focus { border-color:var(--primary); }
+.active-challenges { margin-top:24px; }
+.ch-card {
+  background:rgba(108,61,214,0.1); border:1px solid rgba(108,61,214,0.3);
+  border-radius:14px; padding:18px; margin-bottom:12px;
+}
+.ch-title { font-weight:700; margin-bottom:8px; }
+.ch-bar-wrap { background:rgba(255,255,255,0.08); border-radius:99px; height:10px; margin:8px 0; overflow:hidden; }
+.ch-bar { background:linear-gradient(90deg,#6C3DD6,#22D3EE); height:100%; border-radius:99px; transition:width .5s; }
+.ch-meta { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); }
+
+/* History Tab */
+.history-list { display:flex; flex-direction:column; gap:12px; }
+.hist-item {
+  background:var(--card); border:1px solid var(--border); border-radius:14px;
+  padding:16px 20px; display:flex; align-items:center; gap:14px;
+}
+.hist-emoji { font-size:32px; }
+.hist-info { flex:1; }
+.hist-student { font-weight:700; font-size:15px; }
+.hist-detail { font-size:12px; color:var(--muted); margin-top:2px; }
+.hist-msg { font-size:13px; color:var(--text); margin-top:4px; font-style:italic; }
+.hist-stars { color:var(--gold); font-weight:800; font-size:15px; }
+.hist-time { font-size:11px; color:var(--muted); }
+.public-badge {
+  font-size:10px; padding:2px 8px; border-radius:8px;
+  background:rgba(16,185,129,0.15); color:var(--green); border:1px solid rgba(16,185,129,0.3);
+}
+.private-badge {
+  font-size:10px; padding:2px 8px; border-radius:8px;
+  background:rgba(148,163,184,0.1); color:var(--muted); border:1px solid var(--border);
+}
+
+/* Loader */
+.loader { text-align:center; padding:40px; color:var(--muted); font-size:14px; }
+
+/* Hidden file input */
+#photoInput { display:none; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-logo">
+    <div class="logo-box">🌟</div>
+    <div>
+      <div class="header-title">التعزيز والتحفيز</div>
+      <div class="header-sub" id="headerSub">جميع الأدوار</div>
+    </div>
+  </div>
+  <div class="header-meta">
+    <div class="week-badge" id="weekBadge">---</div>
+    <span id="userNameDisplay">...</span>
+    <button class="logout-btn" onclick="logout()" title="خروج">⏻</button>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('send')" id="tab-send">
+    <span>⚡</span> <span>إرسال تعزيز</span>
+  </div>
+  <div class="tab" onclick="switchTab('leaderboard')" id="tab-leaderboard">
+    <span>🏆</span> <span>لوحة النجوم</span>
+  </div>
+  <div class="tab" onclick="switchTab('challenge')" id="tab-challenge">
+    <span>🤝</span> <span>تحدي الفصل</span>
+  </div>
+  <div class="tab" onclick="switchTab('history')" id="tab-history">
+    <span>📋</span> <span>سجل التعزيزات</span>
+  </div>
+</div>
+
+<!-- Main Content -->
+<div class="main">
+
+  <!-- Tab: Send -->
+  <div id="pane-send">
+    <div class="section-title">إرسال تعزيز ⚡</div>
+    <div class="section-sub">نقرتان فقط — بلا كتابة. Gemini يكتب الرسالة تلقائياً</div>
+
+    <div class="send-panel">
+      <!-- Left: Steps -->
+      <div>
+        <!-- Step 1: Student -->
+        <div class="step-card">
+          <div class="step-label"><div class="step-num">1</div> اختر الطالب</div>
+          <div class="search-wrap">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="studentSearch" placeholder="ابحث بالاسم أو الفصل..." oninput="filterStudents()" />
+          </div>
+          <div class="student-list" id="studentList">
+            <div class="loader">جارٍ تحميل الطلاب...</div>
+          </div>
+        </div>
+
+        <!-- Step 2: Card -->
+        <div class="step-card">
+          <div class="step-label"><div class="step-num">2</div> اختر بطاقة التعزيز</div>
+          <div class="cards-grid" id="cardsGrid">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <!-- Step 3: Options -->
+        <div class="step-card">
+          <div class="step-label"><div class="step-num">3</div> خيارات إضافية</div>
+          <select class="subject-sel" id="subjectSel">
+            <option value="">المادة (اختياري)</option>
+            <option value="اللغة العربية">اللغة العربية</option>
+            <option value="اللغة الإنجليزية">اللغة الإنجليزية</option>
+            <option value="الرياضيات">الرياضيات</option>
+            <option value="العلوم">العلوم</option>
+            <option value="الدراسات الاجتماعية">الدراسات الاجتماعية</option>
+            <option value="التربية الإسلامية">التربية الإسلامية</option>
+            <option value="التربية الفنية">التربية الفنية</option>
+            <option value="التربية البدنية">التربية البدنية</option>
+            <option value="الحاسوب">الحاسوب</option>
+            <option value="سلوك عام">سلوك عام</option>
+          </select>
+
+          <div class="options-row">
+            <div class="toggle-opt active" id="opt-public" onclick="togglePublic(true)">🌐 معلن في البوابة</div>
+            <div class="toggle-opt" id="opt-private" onclick="togglePublic(false)">🔒 خاص لولي الأمر</div>
+          </div>
+
+          <button class="camera-btn" onclick="document.getElementById('photoInput').click()">📸 أضف صورة (اختياري)</button>
+          <input type="file" id="photoInput" accept="image/*" onchange="previewPhoto(event)" />
+          <img id="photoPreviewImg" class="photo-preview" />
+        </div>
+      </div>
+
+      <!-- Right: Preview + Send -->
+      <div>
+        <div class="preview-panel">
+          <div id="previewContent">
+            <div class="preview-empty">⬅️<br>اختر طالباً وبطاقة<br>لتظهر المعاينة هنا</div>
+          </div>
+
+          <button class="send-btn" id="sendBtn" onclick="sendReinforcement()" disabled>
+            ⚡ أرسل التعزيز
+          </button>
+          <div class="stars-note" id="starsNote">
+            ⭐ يُضاف للرصيد تلقائياً
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Leaderboard -->
+  <div id="pane-leaderboard" style="display:none">
+    <div class="section-title">لوحة النجوم 🏆</div>
+    <div class="section-sub">الطلاب الأعلى تعزيزاً هذا الشهر</div>
+    <div class="leaderboard-grid" id="leaderboardGrid">
+      <div class="loader">جارٍ التحميل...</div>
+    </div>
+  </div>
+
+  <!-- Tab: Challenge -->
+  <div id="pane-challenge" style="display:none">
+    <div class="section-title">تحدي الفصل 🤝</div>
+    <div class="section-sub">اجمعوا النجوم معاً وانتزعوا المكافأة</div>
+
+    <div style="display:grid;grid-template-columns:400px 1fr;gap:24px;align-items:start">
+      <div class="challenge-form">
+        <div class="step-label"><div class="step-num">+</div> أطلق تحدياً جديداً</div>
+        <label class="form-label">الفصل</label>
+        <select class="form-input" id="chClass">
+          <option value="">اختر الفصل</option>
+          <option>KG1A</option><option>KG1B</option><option>KG1C</option>
+          <option>KG2A</option><option>KG2B</option><option>KG2C</option>
+          <option>1A</option><option>1B</option><option>1C</option><option>1D</option><option>1E</option><option>1F</option>
+          <option>2A</option><option>2B</option><option>2C</option><option>2D</option><option>2E</option><option>2F</option>
+          <option>3A</option><option>3B</option><option>3C</option><option>3D</option><option>3E</option>
+          <option>4A</option><option>4B</option><option>4C</option><option>4D</option><option>4E</option><option>4F</option>
+          <option>5A</option><option>5B</option><option>5C</option><option>5D</option>
+          <option>6A</option><option>6B</option><option>6C</option>
+          <option>7A</option><option>7B</option><option>7C</option>
+          <option>8A</option><option>8B</option><option>8C</option>
+        </select>
+        <label class="form-label">هدف النجوم</label>
+        <input class="form-input" type="number" id="chTarget" placeholder="مثال: 500" min="10" />
+        <label class="form-label">المكافأة</label>
+        <input class="form-input" type="text" id="chReward" placeholder="مثال: حصة ألعاب مفتوحة" />
+        <label class="form-label">تنتهي في</label>
+        <input class="form-input" type="date" id="chEnd" />
+        <button class="send-btn" onclick="launchChallenge()">🚀 أطلق التحدي</button>
+      </div>
+
+      <div>
+        <div class="section-sub">التحديات النشطة</div>
+        <div id="challengesList"><div class="loader">جارٍ التحميل...</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: History -->
+  <div id="pane-history" style="display:none">
+    <div class="section-title">سجل التعزيزات 📋</div>
+    <div class="section-sub">آخر التعزيزات التي أرسلتِها</div>
+    <div class="history-list" id="historyList">
+      <div class="loader">جارٍ التحميل...</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Success Overlay -->
+<div class="success-overlay" id="successOverlay">
+  <div class="success-box">
+    <div class="success-icon">🎉</div>
+    <div class="success-title">تم الإرسال!</div>
+    <div class="success-msg" id="successMsg">وصل التعزيز للطالب وولي الأمر</div>
+    <div class="goal-msg" id="goalMsg"></div>
+    <button class="success-close" onclick="closeSuccess()">✓ رائع</button>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = window.EDUOS_CONFIG?.supabaseUrl || 'https://zuyizaiugpmhmeycqton.supabase.co'
+const ANON_KEY = window.EDUOS_CONFIG?.anonKey || ''
+const FN_URL = SUPABASE_URL + '/functions/v1'
+
+const sb = supabase.createClient(SUPABASE_URL, ANON_KEY)
+
+let currentUser = null
+let allStudents = []
+let selectedStudent = null
+let selectedCard = null
+let isPublic = true
+let photoDataUrl = null
+
+// Cards definition
+const CARDS = [
+  { type:'star', emoji:'🌟', label:'أبدع اليوم', desc:'إجابة رائعة', context:'during' },
+  { type:'idea', emoji:'💡', label:'فكرة لامعة', desc:'تساؤل ذكي', context:'during' },
+  { type:'team', emoji:'🤝', label:'روح الفريق', desc:'ساعد زميله', context:'during' },
+  { type:'progress', emoji:'📈', label:'تحسّن ملحوظ', desc:'تقدّم واضح', context:'during' },
+  { type:'focus', emoji:'🎯', label:'تركيز عالٍ', desc:'منتبه وجاد', context:'during' },
+  { type:'champion', emoji:'🏆', label:'نجم الحصة', desc:'الأفضل اليوم', context:'after' },
+  { type:'keep_going', emoji:'💪', label:'استمر', desc:'مسار رائع', context:'after' },
+  { type:'creative', emoji:'🎨', label:'إبداع خاص', desc:'عمل مميز', context:'after' },
+  { type:'brave', emoji:'🦁', label:'شجاعة', desc:'تجرأ وتكلّم', context:'during' },
+]
+
+// Stars per role
+const ROLE_STARS = { teacher:1, vice_principal:2, social_worker:2, principal:3 }
+
+// Init
+window.addEventListener('DOMContentLoaded', async () => {
+  // Wait for auth
+  await new Promise(r => setTimeout(r, 800))
+  currentUser = JSON.parse(sessionStorage.getItem('edoos_user') || 'null')
+  if (currentUser) {
+    document.getElementById('userNameDisplay').textContent = currentUser.full_name || ''
+    document.getElementById('headerSub').textContent = getRoleLabel(currentUser.role)
+  }
+  if (typeof setWeekDisplay === 'function') setWeekDisplay('weekBadge')
+  renderCards()
+  await loadStudents()
+})
+
+function getRoleLabel(role) {
+  const map = { teacher:'معلمة', social_worker:'أخصائية اجتماعية', principal:'مديرة', vice_principal:'وكيلة', nurse:'ممرضة' }
+  return map[role] || role
+}
+
+async function loadStudents() {
+  const { data } = await sb.from('students').select('id, name, grade, class_name').order('name')
+  allStudents = data || []
+  renderStudentList(allStudents)
+}
+
+function filterStudents() {
+  const q = document.getElementById('studentSearch').value.trim().toLowerCase()
+  const filtered = q ? allStudents.filter(s =>
+    s.name?.toLowerCase().includes(q) ||
+    s.class_name?.toLowerCase().includes(q)
+  ) : allStudents.slice(0, 30)
+  renderStudentList(filtered)
+}
+
+function renderStudentList(list) {
+  const el = document.getElementById('studentList')
+  if (!list.length) { el.innerHTML = '<div class="loader">لا نتائج</div>'; return }
+  el.innerHTML = list.slice(0, 40).map(s => `
+    <div class="student-item ${selectedStudent?.id === s.id ? 'selected' : ''}"
+         onclick="selectStudent('${s.id}','${s.name}','${s.grade}','${s.class_name}')">
+      <span>${s.name}</span>
+      <span class="student-class">${s.class_name || ''}</span>
+    </div>
+  `).join('')
+}
+
+function selectStudent(id, name, grade, cls) {
+  selectedStudent = { id, name, grade, class_name: cls }
+  renderStudentList(allStudents.slice(0, 40))
+  updatePreview()
+}
+
+function renderCards() {
+  document.getElementById('cardsGrid').innerHTML = CARDS.map(c => `
+    <div class="card-btn ${selectedCard?.type === c.type ? 'selected' : ''}"
+         onclick="selectCard('${c.type}')">
+      <div class="card-emoji">${c.emoji}</div>
+      <div class="card-name">${c.label}</div>
+      <div class="card-desc">${c.desc}</div>
+    </div>
+  `).join('')
+}
+
+function selectCard(type) {
+  selectedCard = CARDS.find(c => c.type === type)
+  renderCards()
+  updatePreview()
+}
+
+function togglePublic(pub) {
+  isPublic = pub
+  document.getElementById('opt-public').className = 'toggle-opt' + (pub ? ' active' : '')
+  document.getElementById('opt-private').className = 'toggle-opt' + (!pub ? ' active' : '')
+}
+
+function previewPhoto(e) {
+  const file = e.target.files[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = ev => {
+    photoDataUrl = ev.target.result
+    const img = document.getElementById('photoPreviewImg')
+    img.src = photoDataUrl; img.style.display = 'block'
+  }
+  reader.readAsDataURL(file)
+}
+
+function updatePreview() {
+  const panel = document.getElementById('previewContent')
+  const sendBtn = document.getElementById('sendBtn')
+  const stars = ROLE_STARS[currentUser?.role] || 1
+
+  if (!selectedStudent && !selectedCard) {
+    panel.innerHTML = '<div class="preview-empty">⬅️<br>اختر طالباً وبطاقة<br>لتظهر المعاينة هنا</div>'
+    sendBtn.disabled = true; return
+  }
+
+  const emoji = selectedCard?.emoji || '⭐'
+  const cardName = selectedCard?.label || '---'
+  const studentName = selectedStudent?.name || '---'
+  const cls = selectedStudent?.class_name || ''
+  const sender = currentUser?.full_name || ''
+  const starStr = stars === 1 ? '⭐ +1 نجمة' : stars === 2 ? '⭐⭐ +2 نجمتان' : '⭐⭐⭐ +3 نجوم'
+
+  panel.innerHTML = `
+    <div class="preview-card">
+      ${photoDataUrl ? `<img src="${photoDataUrl}" style="width:100%;border-radius:12px;margin-bottom:12px;max-height:140px;object-fit:cover">` : ''}
+      <div class="preview-emoji">${emoji}</div>
+      <div class="preview-student">${studentName}</div>
+      <div class="preview-class">${cls}</div>
+      <div class="preview-card-name">${cardName}</div>
+      <div class="preview-msg" id="previewMsg"><em style="color:var(--muted)">✨ Gemini سيكتب رسالة شخصية لحظة الإرسال</em></div>
+      <div class="preview-from">من: ${sender}</div>
+    </div>
+    <div class="stars-note">${starStr} • ${isPublic ? '🌐 معلن' : '🔒 خاص'}</div>
+  `
+  sendBtn.disabled = !selectedStudent || !selectedCard
+}
+
+async function sendReinforcement() {
+  if (!selectedStudent || !selectedCard) return
+  const btn = document.getElementById('sendBtn')
+  btn.disabled = true; btn.innerHTML = '⏳ جارٍ الإرسال...'
+
+  try {
+    const subject = document.getElementById('subjectSel').value
+
+    const res = await fetch(`${FN_URL}/send-reinforcement`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': ANON_KEY },
+      body: JSON.stringify({
+        student_id: selectedStudent.id,
+        sender_id: currentUser?.id,
+        sender_role: currentUser?.role,
+        card_type: selectedCard.type,
+        card_emoji: selectedCard.emoji,
+        card_label: selectedCard.label,
+        subject, is_public: isPublic,
+        photo_url: photoDataUrl || null
+      })
+    })
+
+    const data = await res.json()
+    if (data.success) {
+      document.getElementById('successMsg').textContent =
+        `وصل التعزيز لـ ${selectedStudent.name} — ${data.stars_awarded === 1 ? 'نجمة واحدة' : data.stars_awarded + ' نجوم'} أُضيفت لرصيده`
+      document.getElementById('goalMsg').textContent = data.goal_message || ''
+      document.getElementById('successOverlay').classList.add('show')
+      // Reset
+      selectedStudent = null; selectedCard = null; photoDataUrl = null
+      document.getElementById('photoPreviewImg').style.display = 'none'
+      document.getElementById('studentSearch').value = ''
+      renderStudentList(allStudents.slice(0,40))
+      renderCards()
+      updatePreview()
+    } else {
+      alert('خطأ: ' + (data.error || 'فشل الإرسال'))
+    }
+  } catch (err) {
+    alert('خطأ في الاتصال')
+  } finally {
+    btn.disabled = false; btn.innerHTML = '⚡ أرسل التعزيز'
+  }
+}
+
+function closeSuccess() {
+  document.getElementById('successOverlay').classList.remove('show')
+}
+
+// Tab switching
+function switchTab(tab) {
+  ['send','leaderboard','challenge','history'].forEach(t => {
+    document.getElementById('pane-'+t).style.display = t===tab?'block':'none'
+    document.getElementById('tab-'+t).className = 'tab' + (t===tab?' active':'')
+  })
+  if (tab === 'leaderboard') loadLeaderboard()
+  if (tab === 'challenge') loadChallenges()
+  if (tab === 'history') loadHistory()
+}
+
+// Leaderboard
+async function loadLeaderboard() {
+  const { data } = await sb.from('student_stars')
+    .select('student_id, total_stars, students(name, class_name)')
+    .order('total_stars', { ascending: false })
+    .limit(20)
+
+  const grid = document.getElementById('leaderboardGrid')
+  if (!data?.length) { grid.innerHTML = '<div class="loader">لا توجد بيانات بعد</div>'; return }
+
+  grid.innerHTML = data.map((r, i) => {
+    const rankClass = i===0?'top1':i===1?'top2':i===2?'top3':''
+    const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':''
+    return `
+    <div class="lb-card">
+      <div class="lb-rank ${rankClass}">${medal || (i+1)}</div>
+      <div class="lb-info">
+        <div class="lb-name">${r.students?.name || '---'}</div>
+        <div class="lb-class">${r.students?.class_name || ''}</div>
+      </div>
+      <div class="lb-stars">⭐ ${r.total_stars}</div>
+    </div>`
+  }).join('')
+}
+
+// Challenges
+async function loadChallenges() {
+  const { data } = await sb.from('class_challenges')
+    .select('*').eq('status','active').order('created_at', { ascending: false })
+  const el = document.getElementById('challengesList')
+  if (!data?.length) { el.innerHTML = '<div class="loader">لا توجد تحديات نشطة</div>'; return }
+  el.innerHTML = data.map(c => {
+    const pct = Math.min(100, Math.round(c.current_stars/c.target_stars*100))
+    return `
+    <div class="ch-card">
+      <div class="ch-title">🤝 فصل ${c.class_name} — المكافأة: ${c.reward_description}</div>
+      <div class="ch-bar-wrap"><div class="ch-bar" style="width:${pct}%"></div></div>
+      <div class="ch-meta">
+        <span>${c.current_stars} / ${c.target_stars} ⭐</span>
+        <span>${pct}% مكتمل</span>
+      </div>
+    </div>`
+  }).join('')
+}
+
+async function launchChallenge() {
+  const cls = document.getElementById('chClass').value
+  const target = parseInt(document.getElementById('chTarget').value)
+  const reward = document.getElementById('chReward').value.trim()
+  const ends = document.getElementById('chEnd').value
+
+  if (!cls || !target || !reward) { alert('أكمل جميع الحقول'); return }
+
+  const { error } = await sb.from('class_challenges').insert({
+    class_name: cls, target_stars: target,
+    reward_description: reward,
+    started_by: currentUser?.id,
+    ends_at: ends || null
+  })
+
+  if (error) { alert('خطأ: ' + error.message); return }
+  alert('✅ انطلق التحدي!')
+  loadChallenges()
+}
+
+// History
+async function loadHistory() {
+  const { data } = await sb.from('reinforcements')
+    .select('*, students(name, class_name)')
+    .eq('sender_id', currentUser?.id)
+    .order('created_at', { ascending: false })
+    .limit(30)
+
+  const el = document.getElementById('historyList')
+  if (!data?.length) { el.innerHTML = '<div class="loader">لم تُرسلي أي تعزيز بعد</div>'; return }
+
+  el.innerHTML = data.map(r => {
+    const d = new Date(r.created_at)
+    const dateStr = d.toLocaleDateString('ar-AE', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })
+    return `
+    <div class="hist-item">
+      <div class="hist-emoji">${r.card_emoji || '⭐'}</div>
+      <div class="hist-info">
+        <div class="hist-student">
+          ${r.students?.name || '---'}
+          <span style="font-size:12px;color:var(--muted)"> · ${r.students?.class_name || ''}</span>
+        </div>
+        <div class="hist-detail">${r.card_label || ''} ${r.subject ? '· ' + r.subject : ''}</div>
+        ${r.message ? `<div class="hist-msg">"${r.message}"</div>` : ''}
+      </div>
+      <div style="text-align:left">
+        <div class="hist-stars">+${r.stars_awarded} ⭐</div>
+        <div class="hist-time">${dateStr}</div>
+        <div style="margin-top:4px">${r.is_public ? '<span class="public-badge">معلن</span>' : '<span class="private-badge">خاص</span>'}</div>
+      </div>
+    </div>`
+  }).join('')
+}
+
+function logout() {
+  sessionStorage.clear()
+  window.location.href = '../eduos-login/'
+}
+</script>
+</body>
+</html>

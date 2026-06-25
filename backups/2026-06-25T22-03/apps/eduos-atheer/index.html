@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EduOS — أثير | نظام الرصد الصامت</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<script src="../platform-lang.js"></script>
+<script src="../platform-week.js"></script>
+<script src="../platform-auth-guard.js"></script>
+<script src="../platform-autologout.js"></script>
+<style>
+  :root {
+    --bg: #0D1B2A;
+    --card: rgba(255,255,255,0.06);
+    --card-border: rgba(255,255,255,0.1);
+    --primary: #6C3DD6;
+    --accent: #22D3EE;
+    --text: #F0F4FF;
+    --text-muted: rgba(240,244,255,0.6);
+    --success: #10B981;
+    --warning: #F59E0B;
+    --danger: #EF4444;
+    --purple-grad: linear-gradient(135deg, #6C3DD6, #22D3EE);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Tajawal', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    position: sticky; top: 0; z-index: 100;
+    height: 64px;
+    background: rgba(13,27,42,0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--card-border);
+    display: flex; align-items: center;
+    padding: 0 24px; gap: 16px;
+  }
+  .logo-box {
+    width: 38px; height: 38px; border-radius: 10px;
+    background: var(--purple-grad);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .header-title { flex: 1; }
+  .header-title h1 { font-size: 16px; font-weight: 700; }
+  .header-title p { font-size: 12px; color: var(--text-muted); }
+  .header-meta {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--text-muted);
+  }
+  .header-meta span {
+    background: var(--card); border: 1px solid var(--card-border);
+    border-radius: 6px; padding: 4px 10px;
+  }
+  .logout-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(255,255,255,0.08); border: 1px solid var(--card-border);
+    color: var(--text-muted); cursor: pointer; font-size: 16px;
+    transition: all 0.2s; display: flex; align-items: center; justify-content: center;
+  }
+  .logout-btn:hover { background: rgba(239,68,68,0.2); color: var(--danger); border-color: var(--danger); }
+
+  /* ── Confidential Banner ── */
+  .confidential-banner {
+    background: linear-gradient(135deg, rgba(239,68,68,0.12), rgba(108,61,214,0.12));
+    border-bottom: 1px solid rgba(239,68,68,0.2);
+    padding: 12px 24px;
+    display: flex; align-items: center; gap: 12px;
+    font-size: 13px; color: rgba(239,68,68,0.9);
+    font-weight: 600;
+  }
+
+  /* ── KPI Row ── */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px; padding: 24px;
+  }
+  .kpi-card {
+    background: var(--card); border: 1px solid var(--card-border);
+    border-radius: 14px; padding: 20px 16px; text-align: center;
+  }
+  .kpi-icon { font-size: 28px; margin-bottom: 8px; }
+  .kpi-value { font-size: 30px; font-weight: 900; color: var(--accent); }
+  .kpi-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+  .kpi-card.alert { border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.06); }
+  .kpi-card.alert .kpi-value { color: var(--danger); }
+  .kpi-card.warn { border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.06); }
+  .kpi-card.warn .kpi-value { color: var(--warning); }
+
+  /* ── Main Grid ── */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px; padding: 0 24px 24px;
+  }
+  @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+  .section-card {
+    background: var(--card); border: 1px solid var(--card-border);
+    border-radius: 16px; overflow: hidden;
+  }
+  .section-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--card-border);
+    font-size: 15px; font-weight: 700;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .section-header .hdr-title { display: flex; align-items: center; gap: 8px; }
+  .section-body { padding: 16px 20px; }
+
+  /* ── Alert Tabs ── */
+  .tabs { display: flex; gap: 4px; padding: 16px 20px 0; border-bottom: 1px solid var(--card-border); }
+  .tab-btn {
+    padding: 8px 16px; border-radius: 8px 8px 0 0;
+    background: transparent; border: 1px solid transparent;
+    color: var(--text-muted); cursor: pointer;
+    font-family: 'Tajawal', sans-serif; font-size: 13px; font-weight: 600;
+    transition: all 0.2s;
+  }
+  .tab-btn.active {
+    background: rgba(108,61,214,0.15); border-color: var(--primary);
+    color: var(--text); border-bottom-color: transparent;
+  }
+  .tab-content { display: none; padding: 16px 20px; }
+  .tab-content.active { display: block; }
+
+  /* ── Signal Item ── */
+  .signal-item {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--card-border);
+    border-radius: 12px; padding: 14px 16px;
+    margin-bottom: 10px; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .signal-item:hover { background: rgba(255,255,255,0.06); }
+  .signal-item.sev-3 { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.05); }
+  .signal-item.sev-2 { border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.05); }
+  .signal-item.sev-1 { border-color: rgba(34,211,238,0.3); }
+  .sig-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .sig-name { font-weight: 700; font-size: 14px; }
+  .sig-meta { font-size: 12px; color: var(--text-muted); }
+  .sig-type {
+    display: inline-block; border-radius: 6px; padding: 2px 10px;
+    font-size: 11px; font-weight: 600; margin-left: 8px;
+  }
+  .sig-type.exit_ticket { background: rgba(108,61,214,0.2); color: var(--primary); }
+  .sig-type.survey { background: rgba(34,211,238,0.2); color: var(--accent); }
+  .sig-type.vark { background: rgba(16,185,129,0.2); color: var(--success); }
+  .sig-type.manual { background: rgba(239,68,68,0.2); color: var(--danger); }
+  .sig-type.login { background: rgba(255,255,255,0.1); color: var(--text-muted); }
+  .sig-analysis { font-size: 13px; color: var(--text-muted); margin-top: 6px; line-height: 1.5; }
+  .sev-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 600;
+  }
+  .sev-3 .sev-badge { background: rgba(239,68,68,0.2); color: var(--danger); }
+  .sev-2 .sev-badge { background: rgba(245,158,11,0.2); color: var(--warning); }
+  .sev-1 .sev-badge { background: rgba(34,211,238,0.15); color: var(--accent); }
+  .sev-0 .sev-badge { background: rgba(16,185,129,0.15); color: var(--success); }
+
+  /* ── Student Summary Card ── */
+  .student-card {
+    background: rgba(255,255,255,0.03); border: 1px solid var(--card-border);
+    border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 12px; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .student-card:hover { background: rgba(255,255,255,0.06); }
+  .stu-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: var(--purple-grad);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .stu-info { flex: 1; }
+  .stu-name { font-weight: 700; font-size: 14px; }
+  .stu-class { font-size: 12px; color: var(--text-muted); }
+  .stu-signals { font-size: 12px; color: var(--text-muted); }
+  .risk-dot {
+    width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+  }
+  .risk-high { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+  .risk-med  { background: var(--warning); }
+  .risk-low  { background: var(--success); }
+
+  /* ── AI Analysis Box ── */
+  .ai-box {
+    background: rgba(108,61,214,0.08); border: 1px solid rgba(108,61,214,0.2);
+    border-radius: 12px; padding: 16px; margin-top: 12px;
+    font-size: 13px; line-height: 1.7;
+  }
+  .ai-box h4 { font-size: 13px; color: var(--accent); margin-bottom: 8px; }
+
+  /* ── Action Buttons ── */
+  .action-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .action-btn {
+    padding: 8px 16px; border-radius: 8px; border: none;
+    font-family: 'Tajawal', sans-serif; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .action-btn.primary {
+    background: var(--purple-grad); color: #fff;
+  }
+  .action-btn.secondary {
+    background: rgba(255,255,255,0.08); border: 1px solid var(--card-border);
+    color: var(--text);
+  }
+  .action-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+
+  /* ── Empty State ── */
+  .empty-state {
+    text-align: center; padding: 40px 20px; color: var(--text-muted);
+  }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; }
+
+  /* ── Filter Bar ── */
+  .filter-bar {
+    display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 20px;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .filter-chip {
+    padding: 6px 14px; border-radius: 20px;
+    background: var(--card); border: 1px solid var(--card-border);
+    color: var(--text-muted); cursor: pointer; font-size: 12px; font-weight: 600;
+    transition: all 0.2s;
+  }
+  .filter-chip.active {
+    background: rgba(108,61,214,0.2); border-color: var(--primary);
+    color: var(--text);
+  }
+
+  /* ── Loading shimmer ── */
+  .shimmer {
+    background: linear-gradient(90deg,rgba(255,255,255,0.04) 25%,rgba(255,255,255,0.08) 50%,rgba(255,255,255,0.04) 75%);
+    background-size: 200% 100%; animation: shimmer 1.5s infinite;
+    border-radius: 6px; height: 60px; margin-bottom: 8px;
+  }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(6px);
+    z-index: 500; align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: #0F2030; border: 1px solid var(--card-border);
+    border-radius: 20px; padding: 28px; width: 90%; max-width: 560px;
+    max-height: 85vh; overflow-y: auto;
+  }
+  .modal-title { font-size: 18px; font-weight: 800; margin-bottom: 16px; }
+  .modal-close {
+    float: left; background: none; border: none; color: var(--text-muted);
+    font-size: 20px; cursor: pointer;
+  }
+  [dir="rtl"] .modal-close { float: left; }
+  [dir="ltr"] .modal-close { float: right; }
+
+  footer {
+    border-top: 1px solid var(--card-border);
+    padding: 14px 24px; text-align: center;
+    font-size: 11px; color: var(--text-muted);
+  }
+</style>
+<script src="/apps/platform-splash.js" defer></script>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo-box">🌬️</div>
+  <div class="header-title">
+    <h1>أثير — نظام الرصد الذكي الصامت</h1>
+    <p id="header-week-info">للإدارة فقط — سري تام</p>
+  </div>
+  <div class="header-meta">
+    <span id="current-date"></span>
+    <span id="academic-year-label">2025–2026</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <button class="action-btn secondary" onclick="refreshData()" style="padding:6px 14px;font-size:12px;">🔄 تحديث</button>
+    <button class="logout-btn" onclick="doLogout()" title="خروج">✕</button>
+  </div>
+</header>
+
+<!-- Confidential Banner -->
+<div class="confidential-banner">
+  🔒 هذه البيانات سرية للغاية — أثير يعمل بصمت تام — الطالب لا يعلم أبداً — للمدير والأخصائيين فقط
+</div>
+
+<!-- KPI Row -->
+<div class="kpi-row">
+  <div class="kpi-card alert" id="kpi-urgent-wrap">
+    <div class="kpi-icon">🚨</div>
+    <div class="kpi-value" id="kpi-urgent">—</div>
+    <div class="kpi-label">حالات عاجلة (severity 3)</div>
+  </div>
+  <div class="kpi-card warn">
+    <div class="kpi-icon">⚠️</div>
+    <div class="kpi-value" id="kpi-concern">—</div>
+    <div class="kpi-label">تحت المراقبة</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-icon">📡</div>
+    <div class="kpi-value" id="kpi-total">—</div>
+    <div class="kpi-label">إجمالي الإشارات (7 أيام)</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-icon">👩‍🎓</div>
+    <div class="kpi-value" id="kpi-students">—</div>
+    <div class="kpi-label">طلاب تحت الرصد</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-icon">✅</div>
+    <div class="kpi-value" id="kpi-reviewed">—</div>
+    <div class="kpi-label">تمت مراجعته</div>
+  </div>
+</div>
+
+<!-- Main Grid -->
+<div class="main-grid">
+
+  <!-- Left: Alerts Feed -->
+  <div class="section-card">
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('urgent')" id="tab-urgent">🚨 عاجل</button>
+      <button class="tab-btn" onclick="switchTab('concern')" id="tab-concern">⚠️ مراقبة</button>
+      <button class="tab-btn" onclick="switchTab('all')" id="tab-all">📋 الكل</button>
+      <button class="tab-btn" onclick="switchTab('reviewed')" id="tab-reviewed">✅ مراجَع</button>
+    </div>
+
+    <!-- Filter -->
+    <div class="filter-bar">
+      <span style="font-size:12px;color:var(--text-muted);line-height:2;">الفلتر:</span>
+      <button class="filter-chip active" onclick="filterType('all')" id="ftype-all">الكل</button>
+      <button class="filter-chip" onclick="filterType('exit_ticket')" id="ftype-exit_ticket">Exit Ticket</button>
+      <button class="filter-chip" onclick="filterType('survey')" id="ftype-survey">استبيان</button>
+      <button class="filter-chip" onclick="filterType('manual')" id="ftype-manual">يدوي</button>
+    </div>
+
+    <!-- Content tabs -->
+    <div class="tab-content active" id="tc-urgent">
+      <div id="urgent-list"><div class="shimmer"></div><div class="shimmer"></div></div>
+    </div>
+    <div class="tab-content" id="tc-concern">
+      <div id="concern-list"><div class="shimmer"></div><div class="shimmer"></div></div>
+    </div>
+    <div class="tab-content" id="tc-all">
+      <div id="all-list"><div class="shimmer"></div><div class="shimmer"></div></div>
+    </div>
+    <div class="tab-content" id="tc-reviewed">
+      <div id="reviewed-list"><div class="shimmer"></div></div>
+    </div>
+  </div>
+
+  <!-- Right: Students at Risk + AI Analysis -->
+  <div style="display:flex;flex-direction:column;gap:20px;">
+
+    <!-- Students at Risk -->
+    <div class="section-card">
+      <div class="section-header">
+        <div class="hdr-title">👩‍🎓 طلاب تحتاج متابعة</div>
+        <span style="font-size:12px;color:var(--text-muted);" id="risk-count">—</span>
+      </div>
+      <div class="section-body" style="padding-top:12px;">
+        <div id="risk-list"><div class="shimmer" style="height:50px;"></div></div>
+      </div>
+    </div>
+
+    <!-- AI Quick Analysis -->
+    <div class="section-card">
+      <div class="section-header">
+        <div class="hdr-title">🤖 تحليل أثير الذكي</div>
+        <button class="action-btn primary" onclick="runAIAnalysis()" id="ai-btn" style="padding:6px 14px;font-size:12px;">تحليل</button>
+      </div>
+      <div class="section-body">
+        <div id="ai-result">
+          <p style="font-size:13px;color:var(--text-muted);line-height:1.7;">
+            اضغط "تحليل" لتحليل الأنماط السلوكية المرصودة باستخدام الذكاء الاصطناعي، وتقديم توصيات للتدخل المبكر.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Manual Signal Entry (للمعلم/الأخصائي) -->
+    <div class="section-card">
+      <div class="section-header">
+        <div class="hdr-title">✏️ تسجيل ملاحظة يدوية</div>
+      </div>
+      <div class="section-body">
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <input type="text" id="manual-student" placeholder="اسم الطالب" style="
+            background: rgba(255,255,255,0.06); border: 1px solid var(--card-border);
+            border-radius: 8px; padding: 10px 14px; color: var(--text);
+            font-family: 'Tajawal',sans-serif; font-size: 14px; width: 100%;
+          ">
+          <textarea id="manual-note" placeholder="الملاحظة..." rows="3" style="
+            background: rgba(255,255,255,0.06); border: 1px solid var(--card-border);
+            border-radius: 8px; padding: 10px 14px; color: var(--text);
+            font-family: 'Tajawal',sans-serif; font-size: 14px; width: 100%; resize: none;
+          "></textarea>
+          <select id="manual-sev" style="
+            background: rgba(255,255,255,0.06); border: 1px solid var(--card-border);
+            border-radius: 8px; padding: 10px 14px; color: var(--text);
+            font-family: 'Tajawal',sans-serif; font-size: 14px; width: 100%;
+          ">
+            <option value="1">مراقبة — مستوى 1</option>
+            <option value="2">قلق — مستوى 2</option>
+            <option value="3">عاجل — مستوى 3</option>
+          </select>
+          <button class="action-btn primary" onclick="saveManualSignal()" style="width:100%;padding:10px;">حفظ الملاحظة</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Modal: Signal Detail -->
+<div class="modal-overlay" id="signal-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title" id="modal-title">تفاصيل الإشارة</div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<footer>
+  <p>🌬️ أثير — نظام الرصد الصامت | NAFAS FOR ARTIFICIAL INTELLIGENCE — CN-6573712</p>
+  <p style="margin-top:4px">© 2026 جميع الحقوق محفوظة — هذه البيانات سرية ومقيَّدة بالأدوار الإدارية فقط</p>
+</footer>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────
+const SB_URL  = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9' +
+               '.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTkwNjg3MjAsImV4cCI6MjAzNDY0NDcyMH0' +
+               '.Vws2FDhBBKkBSREHipFMqvHrxYzRMfLhB5IA03CJCiU';
+
+const EDGE_URL = 'https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/ai-assistant';
+
+// ── Auth Guard (Principal / Vice / Admin / Social Worker only) ────────────
+const session = JSON.parse(sessionStorage.getItem('edoos_user') || 'null');
+// أثير: مدير المدرسة + الأخصائي الاجتماعي فقط — الطالب لا يعلم أبداً
+if (!session || !['principal', 'social_worker'].includes(session?.role)) {
+  window.location.href = '../eduos-login/index.html';
+}
+
+// ── State ─────────────────────────────────────────────────────────────────
+let allSignals = [];
+let currentFilter = 'all';
+let currentTab = 'urgent';
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function t(k) { return window.EduLang?.t(k) || k; }
+
+function setHeader() {
+  const now = new Date();
+  const lang = window.EduLang?.current || 'ar';
+  const locale = lang === 'ar' ? 'ar-AE' : 'en-AE';
+  document.getElementById('current-date').textContent =
+    now.toLocaleDateString(locale, { weekday:'short', month:'long', day:'numeric' });
+  const weekEl = document.getElementById('header-week-info');
+  if (weekEl && window.PlatformWeek) {
+    const w = PlatformWeek.getCurrent();
+    weekEl.textContent = `سري تام — الفصل ${w.semester} — الأسبوع ${w.week}`;
+  }
+}
+
+async function dbFetch(path) {
+  const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    headers: { 'apikey': SB_ANON, 'Authorization': `Bearer ${SB_ANON}` }
+  });
+  if (!res.ok) throw new Error(res.statusText);
+  return res.json();
+}
+
+// ── Load Data ─────────────────────────────────────────────────────────────
+async function loadAll() {
+  try {
+    // جلب آخر 7 أيام
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    allSignals = await dbFetch(`atheer_signals?created_at=gte.${since}&order=severity.desc,created_at.desc&limit=200`);
+
+    // KPIs
+    const urgent   = allSignals.filter(s => s.severity >= 3);
+    const concern  = allSignals.filter(s => s.severity === 2);
+    const reviewed = allSignals.filter(s => s.is_reviewed);
+    const students = [...new Set(allSignals.map(s => s.student_id))];
+
+    document.getElementById('kpi-urgent').textContent  = urgent.length;
+    document.getElementById('kpi-concern').textContent = concern.length;
+    document.getElementById('kpi-total').textContent   = allSignals.length;
+    document.getElementById('kpi-students').textContent = students.length;
+    document.getElementById('kpi-reviewed').textContent = reviewed.length;
+
+    // KPI card glow for urgent
+    if (urgent.length > 0) {
+      document.getElementById('kpi-urgent-wrap').style.animation = 'pulse 2s infinite';
+    }
+
+    renderTab(currentTab);
+    renderRiskStudents();
+
+  } catch(e) {
+    document.getElementById('urgent-list').innerHTML =
+      `<div class="empty-state"><div class="icon">📡</div><p>لا توجد إشارات حتى الآن — أثير يراقب بصمت</p></div>`;
+    ['kpi-urgent','kpi-concern','kpi-total','kpi-students','kpi-reviewed']
+      .forEach(id => document.getElementById(id).textContent = '0');
+  }
+}
+
+// ── Render Signals ─────────────────────────────────────────────────────────
+function getFilteredSignals(tab) {
+  let data = [...allSignals];
+  // tab filter
+  if (tab === 'urgent')   data = data.filter(s => s.severity >= 3 && !s.is_reviewed);
+  if (tab === 'concern')  data = data.filter(s => s.severity === 2 && !s.is_reviewed);
+  if (tab === 'reviewed') data = data.filter(s => s.is_reviewed);
+  // type filter
+  if (currentFilter !== 'all') data = data.filter(s => s.signal_type === currentFilter);
+  return data;
+}
+
+function renderTab(tab) {
+  currentTab = tab;
+  const data = getFilteredSignals(tab);
+  const listId = tab === 'urgent' ? 'urgent-list' : tab === 'concern' ? 'concern-list' :
+                 tab === 'reviewed' ? 'reviewed-list' : 'all-list';
+  const el = document.getElementById(listId);
+
+  if (data.length === 0) {
+    el.innerHTML = `<div class="empty-state"><div class="icon">✅</div><p>${
+      tab === 'urgent' ? 'لا توجد حالات عاجلة' :
+      tab === 'concern' ? 'لا توجد حالات تحت المراقبة' :
+      tab === 'reviewed' ? 'لم تُراجَع إشارات بعد' : 'لا توجد إشارات في هذه الفترة'
+    }</p></div>`;
+    return;
+  }
+
+  el.innerHTML = data.slice(0, 30).map(s => {
+    const time = new Date(s.created_at).toLocaleString('ar-AE', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+    const sevClass = `sev-${s.severity}`;
+    const sevText = s.severity >= 3 ? '🚨 عاجل' : s.severity === 2 ? '⚠️ قلق' : s.severity === 1 ? '👁️ مراقبة' : '✅ عادي';
+    const typeName = s.signal_type === 'exit_ticket' ? 'Exit Ticket' :
+                     s.signal_type === 'survey' ? 'استبيان' :
+                     s.signal_type === 'vark' ? 'VARK' :
+                     s.signal_type === 'manual' ? 'يدوي' :
+                     s.signal_type === 'login' ? 'دخول' : s.signal_type;
+    return `
+      <div class="signal-item ${sevClass}" onclick="showSignalDetail('${s.id}')">
+        <div class="sig-header">
+          <div>
+            <span class="sig-name">${s.student_name || 'غير محدد'}</span>
+            <span class="sig-type ${s.signal_type}">${typeName}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="sev-badge">${sevText}</span>
+            <span style="font-size:11px;color:var(--text-muted);">${time}</span>
+          </div>
+        </div>
+        <div class="sig-meta">
+          ${s.class_name || ''} ${s.grade_level ? '| ' + s.grade_level : ''} | المصدر: ${s.signal_source || '—'}
+        </div>
+        ${s.ai_analysis ? `<div class="sig-analysis">${s.ai_analysis}</div>` : ''}
+        ${s.is_reviewed ? `<div style="font-size:11px;color:var(--success);margin-top:4px;">✅ راجعه: ${s.reviewed_by || '—'}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+// ── Risk Students ─────────────────────────────────────────────────────────
+function renderRiskStudents() {
+  const studentMap = {};
+  allSignals.forEach(s => {
+    if (!studentMap[s.student_id]) {
+      studentMap[s.student_id] = { name: s.student_name, class: s.class_name, grade: s.grade_level, maxSev: 0, count: 0 };
+    }
+    studentMap[s.student_id].maxSev = Math.max(studentMap[s.student_id].maxSev, s.severity || 0);
+    studentMap[s.student_id].count++;
+  });
+
+  const riskStudents = Object.entries(studentMap)
+    .filter(([,v]) => v.maxSev >= 2)
+    .sort((a,b) => b[1].maxSev - a[1].maxSev)
+    .slice(0, 8);
+
+  document.getElementById('risk-count').textContent = riskStudents.length + ' طالب';
+
+  if (riskStudents.length === 0) {
+    document.getElementById('risk-list').innerHTML =
+      `<div class="empty-state" style="padding:20px;"><div class="icon" style="font-size:32px;">✅</div><p style="font-size:12px;">لا توجد حالات طلاب تحتاج متابعة عاجلة</p></div>`;
+    return;
+  }
+
+  document.getElementById('risk-list').innerHTML = riskStudents.map(([id, v]) => {
+    const riskClass = v.maxSev >= 3 ? 'risk-high' : v.maxSev === 2 ? 'risk-med' : 'risk-low';
+    return `
+      <div class="student-card" onclick="filterByStudent('${id}','${v.name}')">
+        <div class="stu-avatar">👤</div>
+        <div class="stu-info">
+          <div class="stu-name">${v.name || 'غير محدد'}</div>
+          <div class="stu-class">${v.class || ''} ${v.grade ? '| ' + v.grade : ''}</div>
+          <div class="stu-signals">${v.count} إشارة</div>
+        </div>
+        <div class="risk-dot ${riskClass}"></div>
+      </div>`;
+  }).join('');
+}
+
+// ── Tabs & Filters ─────────────────────────────────────────────────────────
+function switchTab(tab) {
+  ['urgent','concern','all','reviewed'].forEach(t => {
+    document.getElementById(`tab-${t}`)?.classList.remove('active');
+    document.getElementById(`tc-${t}`)?.classList.remove('active');
+  });
+  document.getElementById(`tab-${tab}`)?.classList.add('active');
+  document.getElementById(`tc-${tab}`)?.classList.add('active');
+  renderTab(tab);
+}
+
+function filterType(type) {
+  currentFilter = type;
+  document.querySelectorAll('.filter-chip').forEach(el => el.classList.remove('active'));
+  document.getElementById(`ftype-${type}`)?.classList.add('active');
+  renderTab(currentTab);
+}
+
+function filterByStudent(id, name) {
+  // فلتر الكل لهذا الطالب
+  switchTab('all');
+  const data = allSignals.filter(s => s.student_id === id);
+  document.getElementById('all-list').innerHTML = `
+    <div style="padding:8px 0;margin-bottom:8px;border-bottom:1px solid var(--card-border);">
+      <span style="font-size:13px;color:var(--accent);">📍 تصفية: ${name}</span>
+      <button onclick="filterType('all');renderTab('all')" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;margin-right:12px;">✕ إلغاء</button>
+    </div>` +
+    data.slice(0, 20).map(s => {
+      const time = new Date(s.created_at).toLocaleString('ar-AE', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+      const sevClass = `sev-${s.severity}`;
+      const sevText = s.severity >= 3 ? '🚨 عاجل' : s.severity === 2 ? '⚠️ قلق' : s.severity === 1 ? '👁️ مراقبة' : '✅ عادي';
+      return `
+        <div class="signal-item ${sevClass}">
+          <div class="sig-header">
+            <span class="sig-type ${s.signal_type}">${s.signal_type}</span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <span class="sev-badge">${sevText}</span>
+              <span style="font-size:11px;color:var(--text-muted);">${time}</span>
+            </div>
+          </div>
+          ${s.ai_analysis ? `<div class="sig-analysis">${s.ai_analysis}</div>` : ''}
+        </div>`;
+    }).join('');
+}
+
+// ── Show Signal Detail ─────────────────────────────────────────────────────
+function showSignalDetail(id) {
+  const s = allSignals.find(x => x.id === id);
+  if (!s) return;
+  document.getElementById('modal-title').textContent = `تفاصيل إشارة — ${s.student_name || 'غير محدد'}`;
+  const time = new Date(s.created_at).toLocaleString('ar-AE', { dateStyle:'full', timeStyle:'short' });
+  document.getElementById('modal-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+      <div><div style="font-size:11px;color:var(--text-muted);">الطالب</div><div style="font-weight:700;">${s.student_name || '—'}</div></div>
+      <div><div style="font-size:11px;color:var(--text-muted);">الصف</div><div style="font-weight:700;">${s.class_name || '—'}</div></div>
+      <div><div style="font-size:11px;color:var(--text-muted);">نوع الإشارة</div><div style="font-weight:700;">${s.signal_type}</div></div>
+      <div><div style="font-size:11px;color:var(--text-muted);">المصدر</div><div style="font-weight:700;">${s.signal_source || '—'}</div></div>
+      <div><div style="font-size:11px;color:var(--text-muted);">الوقت</div><div style="font-weight:700;font-size:12px;">${time}</div></div>
+      <div><div style="font-size:11px;color:var(--text-muted);">المشاعر</div><div style="font-weight:700;">${s.sentiment || '—'}</div></div>
+    </div>
+    ${s.signal_data ? `<div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;line-height:1.7;"><strong>البيانات:</strong><br><pre style="font-family:Tajawal,sans-serif;white-space:pre-wrap;font-size:12px;">${JSON.stringify(s.signal_data, null, 2)}</pre></div>` : ''}
+    ${s.ai_analysis ? `<div class="ai-box"><h4>🤖 تحليل أثير</h4>${s.ai_analysis}</div>` : ''}
+    ${!s.is_reviewed ? `
+      <div class="action-bar" style="margin-top:16px;">
+        <button class="action-btn primary" onclick="markReviewed('${s.id}')">✅ تمت المراجعة</button>
+        <button class="action-btn secondary" onclick="escalate('${s.id}')">📤 تصعيد للأخصائية</button>
+        <button class="action-btn secondary" onclick="closeModal()">إغلاق</button>
+      </div>` : `<div style="color:var(--success);font-size:13px;margin-top:12px;">✅ راجعه: ${s.reviewed_by || '—'}</div>`}`;
+  document.getElementById('signal-modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('signal-modal').classList.remove('open');
+}
+
+// ── Mark Reviewed ──────────────────────────────────────────────────────────
+async function markReviewed(id) {
+  try {
+    await fetch(`${SB_URL}/rest/v1/atheer_signals?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: { 'apikey': SB_ANON, 'Authorization': `Bearer ${SB_ANON}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ is_reviewed: true, reviewed_by: session.name || session.username, reviewed_at: new Date().toISOString() })
+    });
+    closeModal();
+    loadAll();
+  } catch(e) { alert('خطأ في الحفظ'); }
+}
+
+function escalate(id) {
+  alert('📤 سيتم إرسال تنبيه للأخصائية الاجتماعية (سيُفعَّل عند ربط الإشعارات)');
+  closeModal();
+}
+
+// ── AI Analysis ────────────────────────────────────────────────────────────
+async function runAIAnalysis() {
+  const btn = document.getElementById('ai-btn');
+  const result = document.getElementById('ai-result');
+  btn.textContent = '⏳ جارٍ التحليل...';
+  btn.disabled = true;
+
+  const concerns = allSignals.filter(s => s.severity >= 2);
+  if (concerns.length === 0) {
+    result.innerHTML = `<div class="ai-box"><h4>🤖 تحليل أثير</h4><p>لا توجد إشارات قلق مسجَّلة خلال الأسبوع الماضي. المدرسة بخير ✅</p></div>`;
+    btn.textContent = 'تحليل'; btn.disabled = false;
+    return;
+  }
+
+  const summary = concerns.slice(0, 15).map(s =>
+    `الطالب: ${s.student_name || 'غير محدد'}, الصف: ${s.class_name || ''}, نوع: ${s.signal_type}, المشاعر: ${s.sentiment}, التحليل: ${s.ai_analysis || 'لا يوجد'}`
+  ).join('\n');
+
+  try {
+    const res = await fetch(EDGE_URL, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${SB_ANON}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: `أنت أثير — نظام الرصد الذكي الصامت في مدرسة الجود. حلّل الإشارات التالية وقدّم:
+1. الأنماط المثيرة للقلق
+2. الطلاب الأكثر حاجة للتدخل المبكر
+3. توصيات عملية للإدارة والأخصائيين
+4. ملاحظات على المواد أو الأوقات الأكثر ظهوراً
+
+الإشارات:
+${summary}
+
+الإجابة باللغة العربية فقط. كن دقيقاً ومباشراً.`,
+        context: 'atheer_analysis'
+      })
+    });
+    const data = await res.json();
+    const text = data.response || data.text || 'لم يتمكن النظام من التحليل الآن';
+    result.innerHTML = `<div class="ai-box"><h4>🤖 تحليل أثير — ${new Date().toLocaleString('ar-AE')}</h4><p style="white-space:pre-wrap;line-height:1.8;">${text}</p></div>`;
+  } catch(e) {
+    result.innerHTML = `<div class="ai-box"><h4>🤖 تحليل أثير</h4><p>يوجد ${concerns.length} إشارة قلق تحتاج مراجعة، منها ${allSignals.filter(s=>s.severity>=3).length} عاجلة. يُنصح بالتواصل مع الأخصائيات الاجتماعيات.</p></div>`;
+  }
+
+  btn.textContent = 'تحليل'; btn.disabled = false;
+}
+
+// ── Manual Signal ──────────────────────────────────────────────────────────
+async function saveManualSignal() {
+  const name = document.getElementById('manual-student').value.trim();
+  const note = document.getElementById('manual-note').value.trim();
+  const sev  = parseInt(document.getElementById('manual-sev').value);
+
+  if (!name || !note) { alert('يرجى إدخال اسم الطالب والملاحظة'); return; }
+
+  try {
+    await fetch(`${SB_URL}/rest/v1/atheer_signals`, {
+      method: 'POST',
+      headers: { 'apikey': SB_ANON, 'Authorization': `Bearer ${SB_ANON}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({
+        student_name: name,
+        signal_type: 'manual',
+        signal_source: 'principal_manual',
+        signal_data: { note, entered_by: session.name || session.username },
+        sentiment: sev >= 2 ? 'concern' : 'neutral',
+        severity: sev,
+        ai_analysis: note
+      })
+    });
+    document.getElementById('manual-student').value = '';
+    document.getElementById('manual-note').value = '';
+    alert('✅ تمت إضافة الملاحظة');
+    loadAll();
+  } catch(e) { alert('خطأ في الحفظ'); }
+}
+
+// ── Refresh ────────────────────────────────────────────────────────────────
+function refreshData() { loadAll(); }
+
+function doLogout() {
+  sessionStorage.removeItem('edoos_user');
+  window.location.href = '../eduos-login/index.html';
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+window.addEventListener('eduos:langchange', setHeader);
+setHeader();
+loadAll();
+
+// تحديث تلقائي كل 90 ثانية
+setInterval(loadAll, 90000);
+</script>
+<script src="/apps/platform-shield.js"></script>
+</body>
+</html>

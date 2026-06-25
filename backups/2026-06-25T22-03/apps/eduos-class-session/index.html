@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>الحصة الذكية — EduOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../platform-config.js"></script>
+<script src="../platform-auth-guard.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Tajawal',sans-serif}
+:root{
+  --bg:#0D1B2A;--surface:rgba(255,255,255,0.05);--surface2:rgba(255,255,255,0.08);
+  --border:rgba(255,255,255,0.1);--primary:#6C3DD6;--accent:#22D3EE;
+  --green:#10B981;--red:#EF4444;--gold:#F59E0B;--orange:#F97316;--purple:#8B5CF6;
+  --text:#F1F5F9;--muted:#94A3B8;--dark:#060D17;
+}
+html,body{background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+
+/* ══ HEADER ══ */
+.header{
+  background:linear-gradient(135deg,rgba(108,61,214,0.3),rgba(34,211,238,0.1));
+  border-bottom:1px solid var(--border);padding:0 20px;height:60px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;
+}
+.header-brand{display:flex;align-items:center;gap:10px}
+.brand-icon{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);display:flex;align-items:center;justify-content:center;font-size:18px}
+.brand-text{font-size:15px;font-weight:900}
+.brand-sub{font-size:10px;color:var(--muted)}
+.header-center{display:flex;align-items:center;gap:12px}
+.session-pill{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 16px;border-radius:20px;
+  background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);
+  font-size:13px;font-weight:700;color:#EF4444;
+}
+.session-pill .dot{width:8px;height:8px;border-radius:50%;background:#EF4444;animation:blink 1.2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.timer-display{font-size:20px;font-weight:900;color:var(--accent);letter-spacing:2px;min-width:70px;text-align:center}
+.header-actions{display:flex;align-items:center;gap:8px}
+.btn-end{
+  padding:7px 18px;border-radius:20px;
+  background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.5);
+  color:#EF4444;font-family:Tajawal;font-size:13px;font-weight:700;
+  cursor:pointer;transition:.2s;
+}
+.btn-end:hover{background:rgba(239,68,68,0.4)}
+.logout-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:.2s}
+.logout-btn:hover{background:#EF4444;border-color:#EF4444;color:#fff}
+
+/* ══ SCREENS ══ */
+.screen{display:none;min-height:calc(100vh - 60px)}
+.screen.active{display:block}
+
+/* ══ SCREEN 1: SELECT ══ */
+#screen-select{padding:32px 24px}
+.select-header{text-align:center;margin-bottom:32px}
+.select-header h1{font-size:28px;font-weight:900;margin-bottom:8px}
+.select-header p{font-size:14px;color:var(--muted)}
+.today-schedule{max-width:680px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.schedule-item{
+  background:var(--surface);border:1px solid var(--border);border-radius:16px;
+  padding:16px 20px;display:flex;align-items:center;gap:16px;
+  cursor:pointer;transition:.3s;position:relative;overflow:hidden;
+}
+.schedule-item:hover{border-color:rgba(108,61,214,0.5);background:var(--surface2);transform:translateX(-4px)}
+.schedule-item.current{border-color:rgba(16,185,129,0.5);background:rgba(16,185,129,0.05)}
+.schedule-item.current::before{content:'الحصة الحالية';position:absolute;top:8px;left:16px;font-size:10px;font-weight:700;color:var(--green);letter-spacing:.5px}
+.schedule-item.past{opacity:.5;cursor:default;pointer-events:none}
+.period-badge{
+  width:44px;height:44px;border-radius:12px;
+  background:linear-gradient(135deg,var(--primary),var(--accent));
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;font-weight:900;color:#fff;flex-shrink:0;
+}
+.schedule-item.current .period-badge{background:linear-gradient(135deg,#10B981,#22D3EE)}
+.schedule-info{flex:1}
+.schedule-subject{font-size:17px;font-weight:800}
+.schedule-meta{font-size:12px;color:var(--muted);margin-top:3px}
+.schedule-time{
+  text-align:center;background:var(--surface2);border-radius:10px;
+  padding:8px 14px;border:1px solid var(--border);
+}
+.schedule-time .time{font-size:14px;font-weight:700;color:var(--accent)}
+.schedule-time .dur{font-size:10px;color:var(--muted)}
+.start-btn{
+  padding:8px 20px;border-radius:20px;
+  background:linear-gradient(135deg,var(--primary),var(--accent));
+  border:none;color:#fff;font-family:Tajawal;font-size:13px;font-weight:700;
+  cursor:pointer;transition:.2s;white-space:nowrap;
+}
+.start-btn:hover{opacity:.85;transform:scale(1.03)}
+.no-schedule{text-align:center;padding:60px 20px;color:var(--muted)}
+.no-schedule .icon{font-size:48px;margin-bottom:16px}
+
+/* ══ SCREEN 2: ACTIVE SESSION ══ */
+#screen-session{display:none}
+.session-layout{display:grid;grid-template-columns:1fr 380px;gap:0;min-height:calc(100vh - 60px)}
+@media(max-width:900px){.session-layout{grid-template-columns:1fr}}
+
+/* LEFT: Main Control */
+.session-main{padding:24px;border-left:1px solid var(--border)}
+.session-info-card{
+  background:linear-gradient(135deg,rgba(108,61,214,0.15),rgba(34,211,238,0.08));
+  border:1px solid rgba(108,61,214,0.3);border-radius:20px;
+  padding:20px 24px;margin-bottom:24px;
+  display:flex;align-items:center;gap:20px;
+}
+.session-icon{font-size:42px}
+.session-details h2{font-size:22px;font-weight:900}
+.session-details p{font-size:13px;color:var(--muted);margin-top:4px}
+.session-tags{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.tag{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700}
+.tag.class{background:rgba(108,61,214,0.2);color:#a78bfa}
+.tag.room{background:rgba(34,211,238,0.1);color:var(--accent)}
+.tag.period{background:rgba(16,185,129,0.1);color:var(--green)}
+
+/* Phase Controls */
+.phase-title{font-size:15px;font-weight:800;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.phases-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:24px}
+.phase-btn{
+  padding:14px 10px;border-radius:14px;
+  background:var(--surface);border:1px solid var(--border);
+  color:var(--text);font-family:Tajawal;font-size:12px;font-weight:700;
+  cursor:pointer;transition:.3s;text-align:center;
+}
+.phase-btn:hover{border-color:rgba(108,61,214,0.4);background:var(--surface2)}
+.phase-btn.active{border-color:var(--primary);background:rgba(108,61,214,0.2);color:#a78bfa}
+.phase-btn .phase-icon{font-size:22px;display:block;margin-bottom:6px}
+.phase-btn .phase-name{font-size:12px;font-weight:800}
+.phase-btn .phase-desc{font-size:10px;color:var(--muted);margin-top:2px}
+
+/* Broadcast */
+.broadcast-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:20px}
+.broadcast-label{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.broadcast-input{
+  width:100%;background:var(--surface2);border:1px solid var(--border);
+  border-radius:10px;padding:12px 14px;color:var(--text);
+  font-family:Tajawal;font-size:14px;resize:none;
+  transition:.2s;
+}
+.broadcast-input:focus{outline:none;border-color:rgba(108,61,214,0.5)}
+.broadcast-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.btn-broadcast{
+  padding:9px 20px;border-radius:20px;
+  background:linear-gradient(135deg,var(--primary),var(--accent));
+  border:none;color:#fff;font-family:Tajawal;font-size:13px;font-weight:700;
+  cursor:pointer;transition:.2s;display:flex;align-items:center;gap:6px;
+}
+.btn-broadcast:hover{opacity:.85}
+.btn-outline{
+  padding:9px 20px;border-radius:20px;border:1px solid var(--border);
+  background:transparent;color:var(--muted);font-family:Tajawal;font-size:13px;
+  cursor:pointer;transition:.2s;display:flex;align-items:center;gap:6px;
+}
+.btn-outline:hover{border-color:rgba(108,61,214,0.4);color:var(--text)}
+
+/* Current Broadcast Display */
+.current-broadcast{
+  display:none;background:linear-gradient(135deg,rgba(34,211,238,0.1),rgba(108,61,214,0.08));
+  border:1px solid rgba(34,211,238,0.3);border-radius:14px;
+  padding:14px 18px;margin-bottom:20px;
+}
+.current-broadcast.visible{display:block}
+.cb-label{font-size:10px;font-weight:700;color:var(--accent);letter-spacing:1px;margin-bottom:6px}
+.cb-text{font-size:15px;font-weight:700;line-height:1.6}
+
+/* Quick Tools */
+.quick-tools{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.tool-btn{
+  padding:14px 8px;border-radius:14px;border:1px solid var(--border);
+  background:var(--surface);color:var(--text);font-family:Tajawal;
+  font-size:11px;font-weight:700;cursor:pointer;transition:.3s;text-align:center;
+}
+.tool-btn:hover{border-color:rgba(108,61,214,0.4);background:var(--surface2)}
+.tool-btn .t-icon{font-size:24px;display:block;margin-bottom:6px}
+
+/* RIGHT: Live Responses */
+.session-sidebar{
+  background:rgba(0,0,0,0.2);border-left:1px solid var(--border);
+  display:flex;flex-direction:column;height:calc(100vh - 60px);
+  position:sticky;top:60px;
+}
+.sidebar-tabs{display:flex;border-bottom:1px solid var(--border)}
+.stab{
+  flex:1;padding:14px 8px;font-family:Tajawal;font-size:12px;font-weight:700;
+  background:transparent;border:none;color:var(--muted);cursor:pointer;
+  border-bottom:2px solid transparent;transition:.2s;
+}
+.stab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.sidebar-content{flex:1;overflow-y:auto;padding:16px}
+.sidebar-content::-webkit-scrollbar{width:4px}
+.sidebar-content::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px}
+.stab-panel{display:none}
+.stab-panel.active{display:block}
+
+/* Exit Ticket Panel */
+.et-state-idle{text-align:center;padding:30px 16px}
+.et-state-idle .et-icon{font-size:40px;margin-bottom:12px}
+.et-create-form{display:flex;flex-direction:column;gap:12px}
+.et-label{font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px}
+.et-input{
+  width:100%;background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:10px 12px;color:var(--text);
+  font-family:Tajawal;font-size:13px;
+}
+.et-input:focus{outline:none;border-color:rgba(108,61,214,0.5)}
+.et-textarea{min-height:80px;resize:vertical}
+.et-type-btns{display:flex;gap:6px;flex-wrap:wrap}
+.et-type-btn{
+  padding:5px 12px;border-radius:20px;border:1px solid var(--border);
+  background:transparent;color:var(--muted);font-family:Tajawal;font-size:11px;
+  font-weight:700;cursor:pointer;transition:.2s;
+}
+.et-type-btn.active{background:rgba(108,61,214,0.2);border-color:var(--primary);color:#a78bfa}
+.btn-open-et{
+  width:100%;padding:11px;border-radius:12px;margin-top:4px;
+  background:linear-gradient(135deg,var(--primary),var(--accent));
+  border:none;color:#fff;font-family:Tajawal;font-size:14px;font-weight:700;
+  cursor:pointer;transition:.2s;
+}
+.btn-open-et:hover{opacity:.85}
+.btn-close-et{
+  width:100%;padding:9px;border-radius:12px;margin-top:8px;
+  background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);
+  color:#EF4444;font-family:Tajawal;font-size:13px;font-weight:700;
+  cursor:pointer;transition:.2s;
+}
+.btn-close-et:hover{background:rgba(239,68,68,0.3)}
+
+/* Responses */
+.responses-header{
+  background:linear-gradient(135deg,rgba(16,185,129,0.1),rgba(34,211,238,0.05));
+  border:1px solid rgba(16,185,129,0.3);border-radius:12px;
+  padding:12px 14px;margin-bottom:12px;
+}
+.responses-count{font-size:24px;font-weight:900;color:var(--green)}
+.responses-label{font-size:11px;color:var(--muted);margin-top:2px}
+.response-item{
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:12px 14px;margin-bottom:8px;animation:slideIn .3s ease;
+}
+@keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.response-student{font-size:12px;font-weight:700;color:var(--accent);margin-bottom:4px}
+.response-answer{font-size:13px;color:var(--text);line-height:1.5}
+.response-time{font-size:10px;color:var(--muted);margin-top:6px}
+.feeling-bar{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.feeling-chip{
+  flex:1;min-width:60px;padding:8px 4px;border-radius:10px;text-align:center;
+  border:1px solid var(--border);background:var(--surface);
+  font-size:11px;font-weight:700;
+}
+.feeling-chip .fc-emoji{font-size:18px;display:block;margin-bottom:2px}
+.feeling-chip .fc-count{font-size:15px;font-weight:900;color:var(--text)}
+
+/* Students panel */
+.students-status{display:flex;flex-direction:column;gap:8px}
+.student-status-item{
+  display:flex;align-items:center;gap:10px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:10px 12px;
+}
+.ss-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--accent));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+.ss-name{flex:1;font-size:12px;font-weight:700}
+.ss-status{font-size:10px;padding:3px 8px;border-radius:20px;font-weight:700}
+.ss-status.present{background:rgba(16,185,129,0.15);color:var(--green)}
+.ss-status.responded{background:rgba(108,61,214,0.2);color:#a78bfa}
+
+/* ══ SCREEN 3: SUMMARY ══ */
+#screen-summary{padding:32px 24px}
+.summary-card{
+  max-width:680px;margin:0 auto;
+  background:var(--surface);border:1px solid var(--border);border-radius:20px;
+  padding:28px;
+}
+.summary-header{text-align:center;margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid var(--border)}
+.summary-header .icon{font-size:48px;margin-bottom:12px}
+.summary-header h2{font-size:22px;font-weight:900}
+.summary-header p{font-size:13px;color:var(--muted);margin-top:6px}
+.summary-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px}
+.stat-card{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center}
+.stat-value{font-size:28px;font-weight:900;color:var(--accent)}
+.stat-label{font-size:11px;color:var(--muted);margin-top:4px}
+.summary-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:24px}
+.btn-primary-full{
+  padding:12px 28px;border-radius:20px;
+  background:linear-gradient(135deg,var(--primary),var(--accent));
+  border:none;color:#fff;font-family:Tajawal;font-size:14px;font-weight:700;
+  cursor:pointer;transition:.2s;
+}
+.btn-primary-full:hover{opacity:.85}
+.btn-ghost{
+  padding:12px 28px;border-radius:20px;border:1px solid var(--border);
+  background:transparent;color:var(--muted);font-family:Tajawal;font-size:14px;
+  cursor:pointer;transition:.2s;
+}
+.btn-ghost:hover{border-color:rgba(108,61,214,0.4);color:var(--text)}
+
+/* Exit Ticket Options */
+.et-options{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.et-option-btn{
+  width:100%;padding:11px 14px;border-radius:12px;border:1px solid var(--border);
+  background:var(--surface);color:var(--text);font-family:Tajawal;font-size:13px;
+  font-weight:700;cursor:pointer;transition:.3s;text-align:right;
+}
+.et-option-btn:hover{border-color:rgba(108,61,214,0.4);background:var(--surface2)}
+
+/* Toast */
+.toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);
+  background:rgba(16,185,129,0.9);color:#fff;padding:12px 24px;border-radius:20px;
+  font-size:13px;font-weight:700;z-index:9999;transition:.4s;white-space:nowrap;
+  backdrop-filter:blur(10px);
+}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.error{background:rgba(239,68,68,0.9)}
+
+/* Loading */
+.loading-overlay{
+  position:fixed;inset:0;background:rgba(6,13,23,0.8);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  z-index:9998;backdrop-filter:blur(8px);gap:16px;
+}
+.loading-spinner{width:48px;height:48px;border:3px solid rgba(108,61,214,0.2);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-size:14px;color:var(--muted)}
+</style>
+<script src="../platform-autologout.js"></script>
+</head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<header class="header">
+  <div class="header-brand">
+    <div class="brand-icon">🎓</div>
+    <div>
+      <div class="brand-text">الحصة الذكية</div>
+      <div class="brand-sub">EduOS — مدرسة الجود</div>
+    </div>
+  </div>
+  <div class="header-center" id="header-session-info" style="display:none">
+    <div class="session-pill"><div class="dot"></div><span>حصة مباشرة</span></div>
+    <div class="timer-display" id="timer-display">00:00</div>
+  </div>
+  <div class="header-actions">
+    <button class="btn-end" id="btn-end-session" style="display:none" onclick="endSession()">⏹ إنهاء الحصة</button>
+    <button class="logout-btn" title="خروج" onclick="logout()">⏻</button>
+  </div>
+</header>
+
+<!-- ══ LOADING ══ -->
+<div class="loading-overlay" id="loading">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">جارٍ التحميل...</div>
+</div>
+
+<!-- ══ SCREEN 1: SELECT PERIOD ══ -->
+<div class="screen active" id="screen-select">
+  <div id="select-content"></div>
+</div>
+
+<!-- ══ SCREEN 2: ACTIVE SESSION ══ -->
+<div class="screen" id="screen-session">
+  <div class="session-layout">
+
+    <!-- LEFT: Controls -->
+    <div class="session-main">
+
+      <!-- Session Info -->
+      <div class="session-info-card">
+        <div class="session-icon" id="sess-icon">📚</div>
+        <div class="session-details">
+          <h2 id="sess-subject">الرياضيات</h2>
+          <p id="sess-teacher-name">المعلمة: —</p>
+          <div class="session-tags">
+            <span class="tag class" id="sess-class-tag">—</span>
+            <span class="tag room" id="sess-room-tag">—</span>
+            <span class="tag period" id="sess-period-tag">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase Control -->
+      <div class="phase-title">🎯 مرحلة الحصة</div>
+      <div class="phases-grid">
+        <button class="phase-btn" onclick="setPhase(1,this)">
+          <span class="phase-icon">🔥</span>
+          <div class="phase-name">التهيئة</div>
+          <div class="phase-desc">تحفيز + مراجعة سريعة</div>
+        </button>
+        <button class="phase-btn active" onclick="setPhase(2,this)">
+          <span class="phase-icon">📖</span>
+          <div class="phase-name">التعلم</div>
+          <div class="phase-desc">شرح + تطبيق</div>
+        </button>
+        <button class="phase-btn" onclick="setPhase(3,this)">
+          <span class="phase-icon">🎯</span>
+          <div class="phase-name">التقييم</div>
+          <div class="phase-desc">تحقق + تغذية راجعة</div>
+        </button>
+        <button class="phase-btn" onclick="setPhase(4,this)">
+          <span class="phase-icon">🤝</span>
+          <div class="phase-name">التعاون</div>
+          <div class="phase-desc">عمل مجموعات</div>
+        </button>
+        <button class="phase-btn" onclick="setPhase(5,this)">
+          <span class="phase-icon">🔍</span>
+          <div class="phase-name">التعمق</div>
+          <div class="phase-desc">استكشاف إضافي</div>
+        </button>
+        <button class="phase-btn" onclick="setPhase(6,this)">
+          <span class="phase-icon">🏁</span>
+          <div class="phase-name">الختام</div>
+          <div class="phase-desc">ملخص + Exit Ticket</div>
+        </button>
+      </div>
+
+      <!-- Broadcast -->
+      <div class="broadcast-box">
+        <div class="broadcast-label">📢 أرسل نشاطاً أو تعليمات للطلاب الآن</div>
+        <textarea class="broadcast-input et-textarea" id="broadcast-text" placeholder="مثال: افتحوا الكتاب صفحة 42 وأجيبوا على السؤال الأول...&#10;مثال: أثبتوا مسألة إثبات الوتر..."></textarea>
+        <div class="broadcast-actions">
+          <button class="btn-broadcast" onclick="sendBroadcast()">📢 إرسال للطلاب</button>
+          <button class="btn-outline" onclick="clearBroadcast()">🗑️ مسح</button>
+          <button class="btn-outline" onclick="generateAIActivity()">✨ اقتراح AI</button>
+        </div>
+      </div>
+
+      <!-- Current Broadcast -->
+      <div class="current-broadcast" id="current-broadcast">
+        <div class="cb-label">📺 يظهر الآن على شاشات الطلاب</div>
+        <div class="cb-text" id="cb-text-display">—</div>
+      </div>
+
+      <!-- Quick Tools -->
+      <div class="phase-title" style="margin-bottom:12px">⚡ أدوات سريعة</div>
+      <div class="quick-tools">
+        <button class="tool-btn" onclick="openTimerModal()">
+          <span class="t-icon">⏱️</span>المؤقت
+        </button>
+        <button class="tool-btn" onclick="openRandomPicker()">
+          <span class="t-icon">🎲</span>اختيار عشوائي
+        </button>
+        <button class="tool-btn" onclick="openNoiseAlert()">
+          <span class="t-icon">🔇</span>تنبيه هدوء
+        </button>
+        <button class="tool-btn" onclick="showStarModal()">
+          <span class="t-icon">⭐</span>منح نجمة
+        </button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Sidebar -->
+    <div class="session-sidebar">
+      <div class="sidebar-tabs">
+        <button class="stab active" onclick="switchSTab('et',this)">🎟️ Exit Ticket</button>
+        <button class="stab" onclick="switchSTab('students',this)">👥 الطلاب</button>
+      </div>
+
+      <!-- Exit Ticket Panel -->
+      <div class="sidebar-content">
+        <div class="stab-panel active" id="stab-et">
+
+          <!-- State: No ticket yet -->
+          <div id="et-idle">
+            <div class="et-state-idle">
+              <div class="et-icon">🎟️</div>
+              <p style="font-size:13px;color:var(--muted);margin-bottom:16px">لا يوجد Exit Ticket مفتوح</p>
+            </div>
+            <div class="et-create-form">
+              <div>
+                <div class="et-label">نوع السؤال</div>
+                <div class="et-type-btns">
+                  <button class="et-type-btn active" onclick="selectEtType('open',this)">📝 مفتوح</button>
+                  <button class="et-type-btn" onclick="selectEtType('feeling',this)">😊 مشاعر</button>
+                  <button class="et-type-btn" onclick="selectEtType('mcq',this)">🔘 اختيار</button>
+                </div>
+              </div>
+              <div>
+                <div class="et-label">الموضوع</div>
+                <input class="et-input" id="et-topic" placeholder="موضوع الحصة...">
+              </div>
+              <div id="et-question-wrap">
+                <div class="et-label">السؤال</div>
+                <textarea class="et-input et-textarea" id="et-question" placeholder="ماذا تعلمت اليوم؟ أو اذكر فكرة رئيسية..."></textarea>
+              </div>
+              <div id="et-options-wrap" style="display:none">
+                <div class="et-label">الخيارات (سطر لكل خيار)</div>
+                <textarea class="et-input et-textarea" id="et-options-text" placeholder="فهمت تماماً&#10;فهمت جزئياً&#10;أحتاج مساعدة" style="min-height:70px"></textarea>
+              </div>
+              <button class="btn-open-et" onclick="createAndOpenET()">🎟️ إنشاء وفتح للطلاب</button>
+            </div>
+          </div>
+
+          <!-- State: Ticket open, collecting responses -->
+          <div id="et-active" style="display:none">
+            <div class="responses-header">
+              <div class="responses-count" id="resp-count">0</div>
+              <div class="responses-label">استجابة من الطلاب</div>
+            </div>
+
+            <!-- Feeling summary (visible when type=feeling) -->
+            <div id="feeling-summary" style="display:none;margin-bottom:14px">
+              <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px">ملخص مشاعر الطلاب</div>
+              <div class="feeling-bar">
+                <div class="feeling-chip"><span class="fc-emoji">😊</span><span class="fc-count" id="f-great">0</span><div style="font-size:9px;color:var(--muted)">ممتاز</div></div>
+                <div class="feeling-chip"><span class="fc-emoji">🙂</span><span class="fc-count" id="f-ok">0</span><div style="font-size:9px;color:var(--muted)">جيد</div></div>
+                <div class="feeling-chip"><span class="fc-emoji">😐</span><span class="fc-count" id="f-meh">0</span><div style="font-size:9px;color:var(--muted)">عادي</div></div>
+                <div class="feeling-chip"><span class="fc-emoji">😕</span><span class="fc-count" id="f-bad">0</span><div style="font-size:9px;color:var(--muted)">صعب</div></div>
+              </div>
+            </div>
+
+            <!-- Question display -->
+            <div style="background:rgba(108,61,214,0.1);border:1px solid rgba(108,61,214,0.2);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--text)">
+              <div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:4px">السؤال</div>
+              <div id="et-q-display">—</div>
+            </div>
+
+            <!-- Live responses -->
+            <div id="responses-list"></div>
+
+            <button class="btn-close-et" onclick="closeExitTicket()">⏹ إغلاق Exit Ticket</button>
+          </div>
+
+          <!-- State: Ticket closed -->
+          <div id="et-closed" style="display:none">
+            <div style="text-align:center;padding:20px">
+              <div style="font-size:36px;margin-bottom:10px">✅</div>
+              <div style="font-size:14px;font-weight:700;margin-bottom:6px">انتهى Exit Ticket</div>
+              <div style="font-size:12px;color:var(--muted)" id="et-summary-text">—</div>
+            </div>
+            <button class="btn-open-et" onclick="resetET()" style="margin-top:12px">🎟️ إنشاء آخر</button>
+          </div>
+        </div>
+
+        <!-- Students Panel -->
+        <div class="stab-panel" id="stab-students">
+          <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:12px">طلاب الصف</div>
+          <div class="students-status" id="students-list">
+            <div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">جارٍ التحميل...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SCREEN 3: SUMMARY ══ -->
+<div class="screen" id="screen-summary">
+  <div id="summary-content" style="padding:32px 24px">
+    <div class="summary-card">
+      <div class="summary-header">
+        <div class="icon">🏁</div>
+        <h2>انتهت الحصة</h2>
+        <p id="summary-title">—</p>
+      </div>
+      <div class="summary-stats">
+        <div class="stat-card">
+          <div class="stat-value" id="sum-duration">—</div>
+          <div class="stat-label">⏱️ مدة الحصة</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="sum-responses">—</div>
+          <div class="stat-label">🎟️ استجابات</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="sum-broadcasts">—</div>
+          <div class="stat-label">📢 أنشطة مرسلة</div>
+        </div>
+      </div>
+      <div id="sum-feeling-wrap" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px">
+        <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px">مشاعر الطلاب في نهاية الحصة</div>
+        <div class="feeling-bar" id="sum-feelings"></div>
+      </div>
+      <div class="summary-actions">
+        <button class="btn-primary-full" onclick="startNewSession()">🎓 حصة جديدة</button>
+        <button class="btn-ghost" onclick="goToDashboard()">← لوحة التحكم</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════
+// GLOBALS
+// ════════════════════════════════════════
+const SUPABASE_URL = window.PLATFORM_CONFIG?.supabaseUrl || 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SUPABASE_KEY = window.PLATFORM_CONFIG?.supabaseAnonKey || '';
+let supabase;
+let currentUser = null;
+let currentStaff = null;
+let todaySlots = [];
+let activeSession = null;
+let sessionStartTime = null;
+let timerInterval = null;
+let currentET = null;
+let etType = 'open';
+let responseCount = 0;
+let broadcastCount = 0;
+let realtimeChannel = null;
+let feelingCounts = {great:0, ok:0, meh:0, bad:0};
+
+const SUBJECT_ICONS = {
+  'رياضيات':'🔢','رياضة':'🔢','math':'🔢',
+  'علوم':'🔬','science':'🔬',
+  'عربي':'📖','لغة عربية':'📖','arabic':'📖',
+  'إنجليزي':'🇬🇧','english':'🇬🇧',
+  'تربية إسلامية':'🕌','إسلامية':'🕌',
+  'تاريخ':'📜','تربية وطنية':'🏛️',
+  'فنون':'🎨','موسيقى':'🎵',
+  'تربية بدنية':'⚽','رياضة بدنية':'⚽',
+  'حاسوب':'💻','CCDI':'💻','AI':'🤖',
+  'default':'📚'
+};
+
+function getSubjectIcon(subject) {
+  if (!subject) return '📚';
+  const key = Object.keys(SUBJECT_ICONS).find(k => subject.includes(k));
+  return key ? SUBJECT_ICONS[key] : '📚';
+}
+
+const DAYS_MAP = {0:'الأحد',1:'الاثنين',2:'الثلاثاء',3:'الأربعاء',4:'الخميس',5:'الجمعة',6:'السبت'};
+const DAYS_EN = {0:'Sunday',1:'Monday',2:'Tuesday',3:'Wednesday',4:'Thursday',5:'Friday',6:'Saturday'};
+
+// ════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════
+async function init() {
+  try {
+    supabase = window.supabaseClient || window.createClient?.(SUPABASE_URL, SUPABASE_KEY);
+    if (!supabase) {
+      await waitForSupabase();
+    }
+    supabase = window.supabaseClient;
+
+    // Wait for auth guard
+    let tries = 0;
+    while (!window.__eduosUser && tries < 20) {
+      await new Promise(r => setTimeout(r, 200));
+      tries++;
+    }
+
+    currentUser = window.__eduosUser;
+    if (!currentUser) { showToast('يرجى تسجيل الدخول أولاً','error'); return; }
+
+    // Load staff profile
+    const { data: staff } = await supabase
+      .from('staff_profiles')
+      .select('*')
+      .eq('username', currentUser.username)
+      .single();
+
+    currentStaff = staff;
+    if (!currentStaff) { showToast('لم يتم العثور على بيانات الموظف','error'); return; }
+
+    // Check for active session (resume if exists)
+    const { data: existingSession } = await supabase
+      .from('lesson_sessions')
+      .select('*')
+      .eq('teacher_id', currentStaff.employee_id || currentStaff.username)
+      .eq('status', 'active')
+      .single();
+
+    if (existingSession) {
+      activeSession = existingSession;
+      sessionStartTime = new Date(existingSession.started_at);
+      await resumeSession();
+    } else {
+      await loadTodaySchedule();
+    }
+
+    document.getElementById('loading').style.display = 'none';
+  } catch(e) {
+    console.error(e);
+    document.getElementById('loading').style.display = 'none';
+    showToast('خطأ في التحميل: ' + e.message, 'error');
+  }
+}
+
+function waitForSupabase() {
+  return new Promise(resolve => {
+    let t = setInterval(() => {
+      if (window.supabaseClient) { clearInterval(t); resolve(); }
+    }, 100);
+    setTimeout(() => { clearInterval(t); resolve(); }, 5000);
+  });
+}
+
+// ════════════════════════════════════════
+// SCREEN 1: TODAY SCHEDULE
+// ════════════════════════════════════════
+async function loadTodaySchedule() {
+  const dayIdx = new Date().getDay();
+  const dayAr = DAYS_MAP[dayIdx];
+  const dayEn = DAYS_EN[dayIdx];
+
+  // Try matching by teacher name or teacher_code
+  const teacherName = currentStaff.name || '';
+  const teacherCode = currentStaff.employee_id || currentStaff.username || '';
+
+  const { data: slots } = await supabase
+    .from('timetable_slots')
+    .select('*')
+    .or(`teacher_name.ilike.%${teacherName.split(' ')[0]}%,teacher_code.eq.${teacherCode}`)
+    .or(`day_ar.eq.${dayAr},day_of_week.eq.${dayEn},day_of_week.eq.${dayAr}`)
+    .order('period_number', { ascending: true });
+
+  // Filter for today
+  const todayFiltered = (slots || []).filter(s => {
+    const d = (s.day_ar || s.day_of_week || '').toLowerCase();
+    return d === dayAr || d === dayEn.toLowerCase() || d === DAYS_EN[dayIdx].toLowerCase();
+  });
+
+  todaySlots = todayFiltered;
+  renderSchedule(todaySlots, dayAr);
+}
+
+function renderSchedule(slots, dayAr) {
+  const now = new Date();
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+
+  const container = document.getElementById('select-content');
+  container.innerHTML = `
+    <div class="select-header">
+      <h1>🎓 ابدأ حصتك الذكية</h1>
+      <p>${dayAr} — ${now.toLocaleDateString('ar-AE', {day:'numeric',month:'long',year:'numeric'})}</p>
+      <p style="margin-top:6px;font-size:13px;color:var(--accent)">مرحباً ${currentStaff?.name || ''}</p>
+    </div>
+  `;
+
+  if (!slots || slots.length === 0) {
+    container.innerHTML += `
+      <div class="no-schedule">
+        <div class="icon">📅</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:8px">لا توجد حصص اليوم</div>
+        <p style="font-size:13px">استمتعي بيومك ✨</p>
+      </div>
+    `;
+    return;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'today-schedule';
+
+  slots.forEach(slot => {
+    const startMins = timeToMins(slot.start_time);
+    const endMins = timeToMins(slot.end_time);
+    const isCurrent = startMins <= nowMins && nowMins < endMins;
+    const isPast = nowMins >= endMins;
+
+    const icon = getSubjectIcon(slot.subject);
+    const duration = endMins - startMins;
+
+    const item = document.createElement('div');
+    item.className = `schedule-item ${isCurrent ? 'current' : ''} ${isPast ? 'past' : ''}`;
+    item.innerHTML = `
+      <div class="period-badge">${slot.period_number || '?'}</div>
+      <div class="schedule-info">
+        <div class="schedule-subject">${icon} ${slot.subject}</div>
+        <div class="schedule-meta">${slot.class_name} ${slot.room ? '| ' + slot.room : ''}</div>
+      </div>
+      <div class="schedule-time">
+        <div class="time">${formatTime(slot.start_time)} – ${formatTime(slot.end_time)}</div>
+        <div class="dur">${duration} دقيقة</div>
+      </div>
+      ${!isPast ? `<button class="start-btn" onclick="startSession('${slot.id}')">▶ ابدأ</button>` : '<span style="font-size:11px;color:var(--muted)">انتهت</span>'}
+    `;
+    grid.appendChild(item);
+  });
+
+  container.appendChild(grid);
+}
+
+// ════════════════════════════════════════
+// START SESSION
+// ════════════════════════════════════════
+async function startSession(slotId) {
+  const slot = todaySlots.find(s => s.id === slotId);
+  if (!slot) return;
+
+  document.getElementById('loading').style.display = 'flex';
+  document.getElementById('loading').querySelector('.loading-text').textContent = 'جارٍ بدء الحصة...';
+
+  try {
+    const { data: session, error } = await supabase
+      .from('lesson_sessions')
+      .insert({
+        teacher_id: currentStaff.employee_id || currentStaff.username,
+        teacher_name: currentStaff.name,
+        class_name: slot.class_name,
+        subject: slot.subject,
+        room: slot.room || '',
+        status: 'active',
+        current_phase: 2,
+        broadcast_data: null,
+        started_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    activeSession = session;
+    sessionStartTime = new Date();
+    broadcastCount = 0;
+    responseCount = 0;
+
+    // Store slot info for display
+    activeSession._slot = slot;
+
+    await showSessionScreen();
+    document.getElementById('loading').style.display = 'none';
+    showToast('✅ بدأت الحصة — الطلاب يرونها الآن');
+  } catch(e) {
+    document.getElementById('loading').style.display = 'none';
+    showToast('خطأ في بدء الحصة: ' + e.message, 'error');
+  }
+}
+
+async function resumeSession() {
+  broadcastCount = activeSession.broadcast_data ? 1 : 0;
+  await showSessionScreen();
+  document.getElementById('loading').style.display = 'none';
+  showToast('🔄 تم استئناف الحصة السابقة');
+}
+
+// ════════════════════════════════════════
+// SESSION SCREEN
+// ════════════════════════════════════════
+async function showSessionScreen() {
+  showScreen('session');
+
+  // Update header
+  document.getElementById('header-session-info').style.display = 'flex';
+  document.getElementById('btn-end-session').style.display = 'block';
+
+  // Update session info
+  const subject = activeSession.subject || '—';
+  const icon = getSubjectIcon(subject);
+  document.getElementById('sess-icon').textContent = icon;
+  document.getElementById('sess-subject').textContent = subject;
+  document.getElementById('sess-teacher-name').textContent = 'المعلمة: ' + (activeSession.teacher_name || '—');
+  document.getElementById('sess-class-tag').textContent = '📋 ' + (activeSession.class_name || '—');
+  document.getElementById('sess-room-tag').textContent = '🚪 ' + (activeSession.room || 'غ. غير محددة');
+
+  // Set period info
+  const slot = activeSession._slot;
+  if (slot) {
+    document.getElementById('sess-period-tag').textContent = '⏰ ح.' + (slot.period_number || '—') + ' | ' + formatTime(slot.start_time) + '–' + formatTime(slot.end_time);
+  }
+
+  // Set current phase
+  const phase = activeSession.current_phase || 2;
+  document.querySelectorAll('.phase-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', i + 1 === phase);
+  });
+
+  // Show current broadcast if any
+  if (activeSession.broadcast_data?.message) {
+    document.getElementById('current-broadcast').classList.add('visible');
+    document.getElementById('cb-text-display').textContent = activeSession.broadcast_data.message;
+  }
+
+  // Fill topic from subject
+  document.getElementById('et-topic').value = subject;
+
+  // Start timer
+  startSessionTimer();
+
+  // Load students
+  loadStudents(activeSession.class_name);
+
+  // Subscribe to realtime (exit ticket responses)
+  subscribeToResponses();
+}
+
+function startSessionTimer() {
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    const elapsed = Math.floor((new Date() - sessionStartTime) / 1000);
+    const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
+    const s = (elapsed % 60).toString().padStart(2, '0');
+    document.getElementById('timer-display').textContent = m + ':' + s;
+  }, 1000);
+}
+
+async function loadStudents(className) {
+  const { data: students } = await supabase
+    .from('students')
+    .select('id, name')
+    .eq('class_name', className)
+    .order('name');
+
+  const list = document.getElementById('students-list');
+  if (!students || students.length === 0) {
+    list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">لا بيانات طلاب</div>';
+    return;
+  }
+
+  list.innerHTML = students.map(s => `
+    <div class="student-status-item">
+      <div class="ss-avatar">${(s.name || '?')[0]}</div>
+      <div class="ss-name">${s.name}</div>
+      <span class="ss-status present" id="sstatus-${s.id}">حاضر</span>
+    </div>
+  `).join('');
+}
+
+// ════════════════════════════════════════
+// PHASE CONTROL
+// ════════════════════════════════════════
+async function setPhase(phase, btn) {
+  document.querySelectorAll('.phase-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  await supabase
+    .from('lesson_sessions')
+    .update({ current_phase: phase })
+    .eq('id', activeSession.id);
+}
+
+// ════════════════════════════════════════
+// BROADCAST
+// ════════════════════════════════════════
+async function sendBroadcast() {
+  const text = document.getElementById('broadcast-text').value.trim();
+  if (!text) { showToast('أدخلي نص النشاط أولاً', 'error'); return; }
+
+  const broadcastData = {
+    message: text,
+    sent_at: new Date().toISOString(),
+    type: 'activity'
+  };
+
+  const { error } = await supabase
+    .from('lesson_sessions')
+    .update({ broadcast_data: broadcastData })
+    .eq('id', activeSession.id);
+
+  if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+
+  activeSession.broadcast_data = broadcastData;
+  document.getElementById('current-broadcast').classList.add('visible');
+  document.getElementById('cb-text-display').textContent = text;
+  document.getElementById('broadcast-text').value = '';
+  broadcastCount++;
+  showToast('📢 تم إرسال النشاط للطلاب');
+}
+
+function clearBroadcast() {
+  document.getElementById('broadcast-text').value = '';
+}
+
+async function generateAIActivity() {
+  const subject = activeSession.subject || '';
+  const phase = document.querySelector('.phase-btn.active')?.querySelector('.phase-name')?.textContent || 'التعلم';
+  showToast('✨ يولّد AI نشاطاً...');
+
+  const prompt = `اقترح نشاطاً تعليمياً قصيراً ومحدداً لمادة ${subject} في مرحلة ${phase} للطلاب. النشاط يجب أن يكون تعليمات واضحة في سطر أو سطرين.`;
+
+  try {
+    const { data, error } = await supabase.functions.invoke('askAI', {
+      body: { prompt, maxTokens: 150 }
+    });
+    if (data?.text) {
+      document.getElementById('broadcast-text').value = data.text.trim();
+    }
+  } catch(e) {
+    document.getElementById('broadcast-text').value = 'اعملوا في مجموعات ثنائية وأجيبوا على السؤال الرئيسي في دفتر الملاحظات.';
+  }
+}
+
+// ════════════════════════════════════════
+// EXIT TICKET
+// ════════════════════════════════════════
+function selectEtType(type, btn) {
+  etType = type;
+  document.querySelectorAll('.et-type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  document.getElementById('et-options-wrap').style.display = type === 'mcq' ? 'block' : 'none';
+  document.getElementById('et-question-wrap').style.display = type === 'feeling' ? 'none' : 'block';
+
+  if (type === 'feeling') {
+    document.getElementById('et-question').value = 'كيف تشعر تجاه ما تعلمته اليوم؟';
+  }
+}
+
+async function createAndOpenET() {
+  const topic = document.getElementById('et-topic').value.trim() || activeSession.subject;
+  const question = etType === 'feeling'
+    ? 'كيف تشعر تجاه ما تعلمته اليوم؟'
+    : document.getElementById('et-question').value.trim();
+
+  if (!question && etType !== 'feeling') {
+    showToast('أدخلي السؤال أولاً', 'error');
+    return;
+  }
+
+  let options = null;
+  if (etType === 'mcq') {
+    const raw = document.getElementById('et-options-text').value.trim();
+    options = raw.split('\n').filter(l => l.trim()).map(l => l.trim());
+    if (options.length < 2) { showToast('أدخلي خيارَين على الأقل', 'error'); return; }
+  } else if (etType === 'feeling') {
+    options = ['😊 ممتاز', '🙂 جيد', '😐 عادي', '😕 صعب'];
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { data: et, error } = await supabase
+    .from('exit_tickets')
+    .insert({
+      session_date: today,
+      class_name: activeSession.class_name,
+      subject: activeSession.subject,
+      topic,
+      question,
+      options: options ? JSON.stringify(options) : null,
+      teacher_name: activeSession.teacher_name,
+      status: 'open',
+      is_open: true,
+      total_responses: 0,
+      created_at: new Date().toISOString()
+    })
+    .select()
+    .single();
+
+  if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+
+  currentET = et;
+  currentET._type = etType;
+  responseCount = 0;
+  feelingCounts = {great:0, ok:0, meh:0, bad:0};
+
+  // Show active state
+  document.getElementById('et-idle').style.display = 'none';
+  document.getElementById('et-active').style.display = 'block';
+  document.getElementById('et-closed').style.display = 'none';
+  document.getElementById('et-q-display').textContent = question;
+  document.getElementById('resp-count').textContent = '0';
+  document.getElementById('responses-list').innerHTML = '';
+
+  if (etType === 'feeling') {
+    document.getElementById('feeling-summary').style.display = 'block';
+  }
+
+  // Update broadcast to show ET is open
+  await supabase.from('lesson_sessions').update({
+    broadcast_data: {
+      message: '🎟️ Exit Ticket مفتوح — أجب الآن!',
+      et_id: et.id,
+      sent_at: new Date().toISOString(),
+      type: 'exit_ticket'
+    }
+  }).eq('id', activeSession.id);
+
+  document.getElementById('current-broadcast').classList.add('visible');
+  document.getElementById('cb-text-display').textContent = '🎟️ Exit Ticket مفتوح — الطلاب يجيبون الآن';
+
+  // Subscribe to this ticket's responses
+  subscribeToResponses(et.id);
+
+  showToast('🎟️ Exit Ticket مفتوح للطلاب');
+}
+
+async function closeExitTicket() {
+  if (!currentET) return;
+
+  await supabase.from('exit_tickets').update({
+    status: 'closed',
+    is_open: false,
+    total_responses: responseCount
+  }).eq('id', currentET.id);
+
+  document.getElementById('et-active').style.display = 'none';
+  document.getElementById('et-closed').style.display = 'block';
+  document.getElementById('et-summary-text').textContent = `${responseCount} استجابة — ${currentET.subject}`;
+
+  currentET = null;
+  showToast('✅ تم إغلاق Exit Ticket');
+}
+
+function resetET() {
+  document.getElementById('et-idle').style.display = 'block';
+  document.getElementById('et-active').style.display = 'none';
+  document.getElementById('et-closed').style.display = 'none';
+  document.getElementById('feeling-summary').style.display = 'none';
+  document.getElementById('et-question').value = '';
+  responseCount = 0;
+}
+
+// ════════════════════════════════════════
+// REALTIME SUBSCRIPTIONS
+// ════════════════════════════════════════
+function subscribeToResponses(etId) {
+  if (realtimeChannel) {
+    supabase.removeChannel(realtimeChannel);
+  }
+
+  if (!etId) return;
+
+  realtimeChannel = supabase
+    .channel('et-responses-' + etId)
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'exit_ticket_responses',
+      filter: `ticket_id=eq.${etId}`
+    }, payload => {
+      handleNewResponse(payload.new);
+    })
+    .subscribe();
+}
+
+function handleNewResponse(resp) {
+  responseCount++;
+  document.getElementById('resp-count').textContent = responseCount;
+
+  // Mark student as responded
+  const statusEl = document.getElementById('sstatus-' + resp.student_id);
+  if (statusEl) {
+    statusEl.className = 'ss-status responded';
+    statusEl.textContent = 'أجاب';
+  }
+
+  const answer = resp.answer || '';
+
+  // Feeling counts
+  if (currentET?._type === 'feeling') {
+    if (answer.includes('ممتاز') || answer.includes('😊')) feelingCounts.great++;
+    else if (answer.includes('جيد') || answer.includes('🙂')) feelingCounts.ok++;
+    else if (answer.includes('عادي') || answer.includes('😐')) feelingCounts.meh++;
+    else if (answer.includes('صعب') || answer.includes('😕')) feelingCounts.bad++;
+
+    document.getElementById('f-great').textContent = feelingCounts.great;
+    document.getElementById('f-ok').textContent = feelingCounts.ok;
+    document.getElementById('f-meh').textContent = feelingCounts.meh;
+    document.getElementById('f-bad').textContent = feelingCounts.bad;
+  }
+
+  // Add to responses list
+  const list = document.getElementById('responses-list');
+  const item = document.createElement('div');
+  item.className = 'response-item';
+  item.innerHTML = `
+    <div class="response-student">طالب #${resp.student_id?.slice(-4) || '—'}</div>
+    <div class="response-answer">${answer || '(لا إجابة)'}</div>
+    <div class="response-time">${new Date(resp.submitted_at).toLocaleTimeString('ar-AE')}</div>
+  `;
+  list.insertBefore(item, list.firstChild);
+
+  showToast('📩 استجابة جديدة وصلت');
+}
+
+// ════════════════════════════════════════
+// END SESSION
+// ════════════════════════════════════════
+async function endSession() {
+  if (!activeSession) return;
+  if (!confirm('هل تريدين إنهاء الحصة؟')) return;
+
+  clearInterval(timerInterval);
+  if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+
+  const elapsed = Math.floor((new Date() - sessionStartTime) / 1000);
+  const minutes = Math.floor(elapsed / 60);
+
+  await supabase.from('lesson_sessions').update({
+    status: 'ended',
+    ended_at: new Date().toISOString()
+  }).eq('id', activeSession.id);
+
+  // Close any open ET
+  if (currentET) {
+    await supabase.from('exit_tickets').update({
+      status: 'closed', is_open: false, total_responses: responseCount
+    }).eq('id', currentET.id);
+  }
+
+  // Show summary
+  document.getElementById('header-session-info').style.display = 'none';
+  document.getElementById('btn-end-session').style.display = 'none';
+
+  document.getElementById('summary-title').textContent = activeSession.subject + ' — ' + activeSession.class_name;
+  document.getElementById('sum-duration').textContent = minutes + ' د';
+  document.getElementById('sum-responses').textContent = responseCount;
+  document.getElementById('sum-broadcasts').textContent = broadcastCount;
+
+  if (responseCount > 0 && currentET?._type === 'feeling') {
+    document.getElementById('sum-feeling-wrap').style.display = 'block';
+    document.getElementById('sum-feelings').innerHTML = `
+      <div class="feeling-chip"><span class="fc-emoji">😊</span><span class="fc-count">${feelingCounts.great}</span></div>
+      <div class="feeling-chip"><span class="fc-emoji">🙂</span><span class="fc-count">${feelingCounts.ok}</span></div>
+      <div class="feeling-chip"><span class="fc-emoji">😐</span><span class="fc-count">${feelingCounts.meh}</span></div>
+      <div class="feeling-chip"><span class="fc-emoji">😕</span><span class="fc-count">${feelingCounts.bad}</span></div>
+    `;
+  }
+
+  activeSession = null;
+  showScreen('summary');
+}
+
+function startNewSession() {
+  location.reload();
+}
+
+function goToDashboard() {
+  window.location.href = '../eduos-teacher/';
+}
+
+// ════════════════════════════════════════
+// QUICK TOOLS
+// ════════════════════════════════════════
+function openTimerModal() { showToast('⏱️ المؤقت — قريباً'); }
+function openRandomPicker() {
+  const list = document.getElementById('students-list');
+  const items = list.querySelectorAll('.ss-name');
+  if (items.length === 0) { showToast('لا يوجد طلاب', 'error'); return; }
+  const pick = items[Math.floor(Math.random() * items.length)].textContent;
+  showToast('🎲 الاختيار العشوائي: ' + pick);
+}
+function openNoiseAlert() {
+  supabase.from('lesson_sessions').update({
+    broadcast_data: { message: '🔇 يرجى الهدوء والانتباه', type: 'alert', sent_at: new Date().toISOString() }
+  }).eq('id', activeSession?.id);
+  document.getElementById('cb-text-display').textContent = '🔇 يرجى الهدوء والانتباه';
+  document.getElementById('current-broadcast').classList.add('visible');
+  showToast('🔇 تنبيه الهدوء أُرسل');
+}
+function showStarModal() {
+  window.open('../eduos-reinforcement/', '_blank');
+}
+
+// ════════════════════════════════════════
+// SIDEBAR TABS
+// ════════════════════════════════════════
+function switchSTab(tab, btn) {
+  document.querySelectorAll('.stab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.stab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('stab-' + tab).classList.add('active');
+}
+
+// ════════════════════════════════════════
+// SCREEN MANAGEMENT
+// ════════════════════════════════════════
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => {
+    s.classList.remove('active');
+    s.style.display = 'none';
+  });
+  const el = document.getElementById('screen-' + name);
+  if (el) { el.classList.add('active'); el.style.display = 'block'; }
+}
+
+// ════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════
+function timeToMins(t) {
+  if (!t) return 0;
+  const parts = t.split(':');
+  return parseInt(parts[0]) * 60 + parseInt(parts[1] || 0);
+}
+
+function formatTime(t) {
+  if (!t) return '—';
+  const parts = t.split(':');
+  const h = parseInt(parts[0]);
+  const m = parts[1] || '00';
+  const ampm = h >= 12 ? 'م' : 'ص';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return h12 + ':' + m + ' ' + ampm;
+}
+
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (type === 'error' ? ' error' : '');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+function logout() {
+  if (window.eduosLogout) window.eduosLogout();
+  else window.location.href = '../eduos-login/';
+}
+
+// ════════════════════════════════════════
+// BOOT
+// ════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

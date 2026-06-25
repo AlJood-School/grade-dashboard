@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>بوابة الحضور — EduOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../platform-config.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family: 'Tajawal', sans-serif;
+  background: #0D1B2A;
+  color: #E2E8F0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ── Header ── */
+.gate-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 32px;
+  background: rgba(17,34,64,0.95);
+  border-bottom: 1px solid #1e3a5f;
+  backdrop-filter: blur(10px);
+}
+.gate-header .school-info { display:flex; flex-direction:column; gap:2px; }
+.gate-header .school-name { font-size:1.3rem; font-weight:700; color:#E2E8F0; }
+.gate-header .school-sub  { font-size:0.85rem; color:#64B5F6; }
+
+.live-clock {
+  text-align:center;
+}
+.clock-time {
+  font-size:2.8rem;
+  font-weight:900;
+  color:#06B6D4;
+  letter-spacing:2px;
+  font-variant-numeric: tabular-nums;
+}
+.clock-date {
+  font-size:0.9rem;
+  color:#94A3B8;
+  margin-top:2px;
+}
+
+.logo-area { display:flex; align-items:center; gap:10px; }
+.logo-area img { height:48px; }
+.logo-text { font-size:1.1rem; font-weight:700; color:#8B5CF6; }
+
+/* ── Main ── */
+.gate-main {
+  flex:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:60px;
+  padding:30px;
+}
+
+/* QR Card */
+.qr-card {
+  background: rgba(17,34,64,0.9);
+  border: 1px solid #1e3a5f;
+  border-radius: 24px;
+  padding: 40px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:24px;
+  box-shadow: 0 0 40px rgba(6,182,212,0.15);
+  position: relative;
+}
+
+.qr-label {
+  font-size:1.1rem;
+  color:#94A3B8;
+  font-weight:500;
+}
+
+.qr-wrapper {
+  background: #fff;
+  border-radius:16px;
+  padding:16px;
+  position:relative;
+}
+
+#qrCanvas {
+  display:block;
+  border-radius:8px;
+}
+
+/* Countdown ring */
+.countdown-wrap {
+  position:relative;
+  width:80px; height:80px;
+}
+.countdown-svg {
+  transform: rotate(-90deg);
+  position:absolute; top:0; left:0;
+}
+.countdown-circle {
+  fill:none;
+  stroke:#1e3a5f;
+  stroke-width:6;
+}
+.countdown-progress {
+  fill:none;
+  stroke:#06B6D4;
+  stroke-width:6;
+  stroke-linecap:round;
+  transition: stroke-dashoffset 1s linear;
+}
+.countdown-text {
+  position:absolute;
+  top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  font-size:1.4rem;
+  font-weight:900;
+  color:#06B6D4;
+}
+
+.qr-hint {
+  font-size:0.85rem;
+  color:#64B5F6;
+  text-align:center;
+  max-width:220px;
+  line-height:1.5;
+}
+
+/* Info Panel */
+.info-panel {
+  display:flex;
+  flex-direction:column;
+  gap:20px;
+  min-width:280px;
+}
+
+.info-title {
+  font-size:1.8rem;
+  font-weight:900;
+  color:#E2E8F0;
+  line-height:1.3;
+}
+.info-title span { color:#6C3DD6; }
+
+.info-desc {
+  font-size:1rem;
+  color:#94A3B8;
+  line-height:1.7;
+}
+
+.steps {
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.step {
+  display:flex;
+  align-items:center;
+  gap:14px;
+  background:rgba(108,61,214,0.08);
+  border:1px solid rgba(108,61,214,0.2);
+  border-radius:12px;
+  padding:12px 16px;
+}
+.step-num {
+  width:32px; height:32px;
+  border-radius:50%;
+  background:linear-gradient(135deg,#6C3DD6,#06B6D4);
+  display:flex; align-items:center; justify-content:center;
+  font-weight:900; font-size:0.9rem;
+  flex-shrink:0;
+}
+.step-text { font-size:0.9rem; color:#CBD5E1; }
+
+/* Attendance log strip */
+.log-strip {
+  padding: 10px 32px;
+  background: rgba(17,34,64,0.8);
+  border-top: 1px solid #1e3a5f;
+  min-height: 52px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  overflow:hidden;
+}
+.log-strip-title {
+  font-size:0.8rem;
+  color:#64B5F6;
+  white-space:nowrap;
+  font-weight:600;
+}
+.log-entries {
+  display:flex;
+  gap:10px;
+  overflow:hidden;
+  flex:1;
+}
+.log-entry {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  background:rgba(16,185,129,0.1);
+  border:1px solid rgba(16,185,129,0.3);
+  border-radius:20px;
+  padding:4px 12px;
+  font-size:0.78rem;
+  color:#10B981;
+  white-space:nowrap;
+  animation: slideIn 0.4s ease;
+}
+@keyframes slideIn {
+  from { opacity:0; transform:translateX(20px); }
+  to   { opacity:1; transform:translateX(0); }
+}
+.log-entry .log-time { color:#94A3B8; }
+
+/* Status badge */
+.status-badge {
+  position:absolute;
+  top:-10px; left:50%; transform:translateX(-50%);
+  background:linear-gradient(135deg,#6C3DD6,#06B6D4);
+  border-radius:20px;
+  padding:4px 14px;
+  font-size:0.75rem;
+  font-weight:700;
+  white-space:nowrap;
+}
+
+/* Flash animation on refresh */
+@keyframes qrFlash {
+  0%   { opacity:0.3; transform:scale(0.95); }
+  100% { opacity:1;   transform:scale(1); }
+}
+.qr-wrapper.flash { animation: qrFlash 0.4s ease; }
+</style>
+<script src="../platform-auth-guard.js"></script>
+<script src="../platform-autologout.js"></script>
+</head>
+<body>
+
+<!-- Header -->
+<header class="gate-header">
+  <div class="school-info">
+    <div class="school-name" id="schoolName">بوابة الحضور الذكية</div>
+    <div class="school-sub" id="schoolSub">EduOS — نظام تسجيل الدخول</div>
+  </div>
+  <div class="live-clock">
+    <div class="clock-time" id="clockTime">--:--:--</div>
+    <div class="clock-date" id="clockDate">---</div>
+  </div>
+  <div class="logo-area">
+    <div class="logo-text">🎓 EduOS</div>
+  </div>
+</header>
+
+<!-- Main -->
+<main class="gate-main">
+
+  <!-- QR Card -->
+  <div class="qr-card">
+    <div class="status-badge">🟢 نظام الحضور نشط</div>
+    <div class="qr-label">امسح رمز الحضور</div>
+
+    <div class="qr-wrapper" id="qrWrapper">
+      <canvas id="qrCanvas" width="220" height="220"></canvas>
+    </div>
+
+    <!-- Countdown -->
+    <div class="countdown-wrap">
+      <svg class="countdown-svg" width="80" height="80" viewBox="0 0 80 80">
+        <circle class="countdown-circle" cx="40" cy="40" r="34"/>
+        <circle class="countdown-progress" id="countdownCircle"
+          cx="40" cy="40" r="34"
+          stroke-dasharray="213.6"
+          stroke-dashoffset="0"/>
+      </svg>
+      <div class="countdown-text" id="countdownNum">60</div>
+    </div>
+
+    <div class="qr-hint">يتجدد الرمز كل 60 ثانية<br>لضمان الأمان والدقة</div>
+  </div>
+
+  <!-- Info Panel -->
+  <div class="info-panel">
+    <div class="info-title">تسجيل الحضور<br><span>بالذكاء الاصطناعي</span></div>
+    <div class="info-desc">نظام حضور ذكي يوثّق وقت الدخول بدقة ويكتشف الأنماط المشبوهة تلقائياً.</div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">١</div>
+        <div class="step-text">افتح تطبيق الجود على هاتفك</div>
+      </div>
+      <div class="step">
+        <div class="step-num">٢</div>
+        <div class="step-text">اختر اسمك من القائمة</div>
+      </div>
+      <div class="step">
+        <div class="step-num">٣</div>
+        <div class="step-text">امسح رمز QR أمامك</div>
+      </div>
+      <div class="step">
+        <div class="step-num">٤</div>
+        <div class="step-text">يُسجَّل حضورك فوراً ✅</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Log Strip -->
+<div class="log-strip">
+  <div class="log-strip-title">📋 آخر تسجيلات:</div>
+  <div class="log-entries" id="logEntries">
+    <div style="color:#475569;font-size:0.8rem;">في انتظار أول تسجيل...</div>
+  </div>
+</div>
+
+<script>
+// ── Config ──────────────────────────────────────────
+const CFG   = window.SCHOOL_CONFIG  || {};
+const SCH   = CFG.school            || {};
+const SB    = CFG.supabase          || {};
+const SB_URL = SB.url || 'https://xdkiktwuuwghvzcukvew.supabase.co';
+const SB_KEY = (SB._k1||'') + '.' + (SB._k2||'') + '.' + (SB._k3||'');
+const SCHOOL_ID  = SCH.id   || 'demo';
+const QR_SECONDS = (SCH.attendance && SCH.attendance.qrRotation) || 60;
+
+// ── UI init ─────────────────────────────────────────
+document.getElementById('schoolName').textContent =
+  (SCH.nameAr || 'مدرسة الجود') + ' — بوابة الحضور';
+document.getElementById('schoolSub').textContent =
+  'EduOS — ' + (SCH.city || 'العين') + ' | ' + (SCH.region || '');
+
+// ── Clock ────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clockTime').textContent =
+    now.toLocaleTimeString('ar-SA', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  document.getElementById('clockDate').textContent =
+    now.toLocaleDateString('ar-SA', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── QR Generation ────────────────────────────────────
+let currentToken = '';
+let secondsLeft  = QR_SECONDS;
+const circumference = 2 * Math.PI * 34; // 213.6
+
+async function generateQR() {
+  const now    = Date.now();
+  // QR يفتح صفحة demo-join مباشرة
+  const demoURL = `https://demo.eduos.ae/apps/eduos-demo-join/?t=${now}`;
+  currentToken  = demoURL;
+
+  // Draw QR
+  const canvas = document.getElementById('qrCanvas');
+  await QRCode.toCanvas(canvas, demoURL, {
+    width: 220,
+    margin: 1,
+    color: { dark:'#0D1B2A', light:'#FFFFFF' },
+    errorCorrectionLevel: 'M'
+  });
+
+  // Flash effect
+  const wrapper = document.getElementById('qrWrapper');
+  wrapper.classList.remove('flash');
+  void wrapper.offsetWidth;
+  wrapper.classList.add('flash');
+}
+
+async function logQRToSupabase(token, ts) {
+  try {
+    await fetch(`${SB_URL}/rest/v1/attendance_qr_log`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'apikey':        SB_KEY,
+        'Authorization': 'Bearer ' + SB_KEY,
+        'Prefer':        'return=minimal'
+      },
+      body: JSON.stringify({
+        school_id:   SCHOOL_ID,
+        token:       token,
+        generated_at: new Date(ts).toISOString(),
+        expires_at:  new Date(ts + QR_SECONDS * 1000).toISOString()
+      })
+    });
+  } catch(e) { /* silent */ }
+}
+
+// ── Countdown ────────────────────────────────────────
+function updateCountdown() {
+  secondsLeft--;
+  if (secondsLeft <= 0) {
+    secondsLeft = QR_SECONDS;
+    generateQR();
+  }
+  // UI
+  document.getElementById('countdownNum').textContent = secondsLeft;
+  const offset = circumference * (1 - secondsLeft / QR_SECONDS);
+  document.getElementById('countdownCircle').style.strokeDashoffset = offset;
+
+  // Color change
+  const pct = secondsLeft / QR_SECONDS;
+  const color = pct > 0.4 ? '#06B6D4' : pct > 0.2 ? '#F59E0B' : '#EF4444';
+  document.getElementById('countdownCircle').style.stroke = color;
+  document.getElementById('countdownNum').style.color    = color;
+}
+
+// ── Checkin Listener ─────────────────────────────────
+let logEntries = [];
+async function pollCheckins() {
+  try {
+    const since = new Date(Date.now() - 3600000).toISOString(); // last 1 hour
+    const res = await fetch(
+      `${SB_URL}/rest/v1/staff_checkin_log?created_at=gte.${since}&order=created_at.desc&limit=8`,
+      { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } }
+    );
+    const data = await res.json();
+    if (!Array.isArray(data) || !data.length) return;
+    renderLog(data);
+  } catch(e) { /* silent */ }
+}
+
+function renderLog(entries) {
+  const container = document.getElementById('logEntries');
+  if (!entries.length) return;
+  container.innerHTML = entries.map(e => {
+    const t = new Date(e.created_at);
+    const timeStr = t.toLocaleTimeString('ar-SA', { hour:'2-digit', minute:'2-digit' });
+    const icon = e.status === 'late' ? '🟡' : '🟢';
+    return `<div class="log-entry">
+      ${icon} <strong>${e.staff_name || 'موظف'}</strong>
+      <span class="log-time">${timeStr}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Demo: Realtime broadcast listener ────────────────
+let demoVisitorLog = [];
+function addDemoVisitor(payload){
+  demoVisitorLog.unshift(payload);
+  if(demoVisitorLog.length > 8) demoVisitorLog = demoVisitorLog.slice(0,8);
+  const container = document.getElementById('logEntries');
+  const roleColors = {
+    principal:'#9333EA', teacher:'#06B6D4',
+    socialworker:'#10B981', nurse:'#EF4444', security:'#F59E0B'
+  };
+  container.innerHTML = demoVisitorLog.map(v=>{
+    const c = roleColors[v.role] || '#06B6D4';
+    return `<div class="log-entry" style="border-color:${c}33;color:${c};background:${c}15">
+      ${v.icon||'👤'} <strong>${v.name}</strong> — ${v.label||v.role}
+      <span class="log-time">${v.time||''}</span>
+    </div>`;
+  }).join('');
+}
+
+async function initRealtimeBroadcast(){
+  try {
+    if(!window.supabase) return;
+    const K1='sb_publishable_J',K2='SFBsXy-6ixwArRH',K3='eC0HCQ_Dyo3qZHs';
+    const sb = window.supabase.createClient(
+      'https://xdkiktwuuwghvzcukvew.supabase.co', K1+K2+K3
+    );
+    sb.channel('eduos-demo-live')
+      .on('broadcast',{event:'visitor'},({payload})=>{ addDemoVisitor(payload); })
+      .subscribe();
+  } catch(e){ /* silent */ }
+}
+
+// ── Init ─────────────────────────────────────────────
+generateQR();
+setInterval(updateCountdown, 1000);
+setInterval(pollCheckins, 8000);
+pollCheckins();
+initRealtimeBroadcast();
+</script>
+</body>
+</html>
