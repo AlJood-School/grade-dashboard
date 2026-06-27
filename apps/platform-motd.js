@@ -165,6 +165,7 @@ const TYPE_META = {
   }
 
   function getCurrentLang() {
+    // يكتشف اللغة الحالية من EduLang أو URL
     if (window.EduLang && window.EduLang.current) return window.EduLang.current;
     return new URLSearchParams(window.location.search).get('lang') === 'en' ? 'en' : 'ar';
   }
@@ -197,15 +198,22 @@ const TYPE_META = {
     `;
 
     if (isEn && item.textEn) {
+      // وضع إنجليزي: النص العربي الأصلي أعلى (مصغَّر + محجَّم) + الترجمة أدناه
       card.innerHTML = `
         <div style="font-size:42px;margin-bottom:12px;filter:drop-shadow(0 0 12px ${meta.color})">${meta.icon}</div>
         <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;color:${meta.color};opacity:.9;margin-bottom:14px;text-transform:uppercase">${meta.labelEn || meta.label}</div>
+
+        <!-- النص العربي الأصلي — دائماً موجود للحفاظ على الأصالة -->
         <div style="direction:rtl;font-size:15px;font-weight:600;color:rgba(255,255,255,.45);line-height:1.8;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)">${item.text.replace(/\n/g,'<br>')}</div>
+
+        <!-- الترجمة الإنجليزية المعتمدة — رئيسية -->
         <div style="font-size:19px;font-weight:700;color:#fff;line-height:1.75;margin-bottom:14px;text-shadow:0 2px 12px rgba(0,0,0,.6);font-style:italic">${(item.textEn||'').replace(/\n/g,'<br>')}</div>
+
         <div style="font-size:11px;color:${meta.color};opacity:.85;margin-top:4px">${item.refEn || item.ref}</div>
         <div style="font-size:10px;color:rgba(255,255,255,.3);margin-top:6px">Arabic text preserved as original • Translation for understanding only</div>
       `;
     } else {
+      // وضع عربي: العرض الكلاسيكي
       card.innerHTML = `
         <div style="font-size:42px;margin-bottom:12px;filter:drop-shadow(0 0 12px ${meta.color})">${meta.icon}</div>
         <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;color:${meta.color};opacity:.9;margin-bottom:14px;text-transform:uppercase">${meta.label}</div>
@@ -227,6 +235,7 @@ const TYPE_META = {
       });
     });
 
+    // اختفاء بعد 8.5 ثانية
     setTimeout(() => {
       card.style.opacity = '0';
       card.style.transform = 'scale(.94) translateY(-10px)';
@@ -238,6 +247,7 @@ const TYPE_META = {
     }, 8500);
   }
 
+  // أول ظهور بعد 5 ثوانٍ، ثم كل دقيقتين
   setTimeout(showNext, 5000);
   setInterval(showNext, 120000);
 
@@ -247,30 +257,16 @@ const TYPE_META = {
 
 /* ── شريط الأخبار (أسفل الشاشة) ─────────────────────────── */
 (function initNewsBar() {
-  // ── آخر تحديث: 24 يونيو 2026 (06:00 GMT+4) — AI News Monitor ──
+  // ── آخر تحديث: 16 يونيو 2026 (06:00 GMT+4) ──
   const NEWS = [
-    // 🔴 أخبار اليوم — 24 يونيو 2026
-    { type:'official', icon:'🔵', text:'أبوظبي تطلق 5 دراسات جديدة لفهم تجارب الأطفال المدرسية والرفاهية الأسرية والهوية الثقافية',
-                                   textEn:'Abu Dhabi launches 5 new studies on children\'s school experiences, family wellbeing & cultural identity' },
-    { type:'ministry', icon:'🟢', text:'Aldar Education تستثمر 385.8 مليون درهم لنقل مدرسة كرانلي أبوظبي إلى جزيرة السعديات (2027–2028)',
-                                   textEn:'Aldar Education invests AED 385.8M to relocate Cranleigh Abu Dhabi to Saadiyat Island campus (2027–28)' },
-    { type:'ministry', icon:'🔵', text:'ADEK وAldar توقِّعان شراكة استراتيجية لتسريع التوطين وتحقيق زيادة تسعة أضعاف في القيادات الإماراتية بالتعليم',
-                                   textEn:'ADEK & Aldar sign strategic Emiratisation partnership targeting 9x increase in UAE nationals in education leadership' },
-    { type:'ai',       icon:'🤖', text:'Alef Education تُكمل الترحيل الكامل لمنصة التعلم الرقمية مع تكامل متقدم للذكاء الاصطناعي في مدارس الإمارات',
-                                   textEn:'Alef Education completes full digital learning platform migration with advanced AI integration across UAE schools' },
-    { type:'ai',       icon:'🤖', text:'تقرير يونسكو: الإمارات في طليعة الدول المدمِجة للذكاء الاصطناعي في التعليم على مستوى المنطقة — أبريل 2026',
-                                   textEn:'UNESCO Report: UAE leads the region in AI integration in education — April–June 2026 edition' },
-    // 🟡 أخبار مستمرة
-    { type:'official', icon:'🟢', text:'نهاية العام الدراسي 2025–2026: 3 يوليو 2026',
-                                   textEn:'End of Academic Year 2025–2026: July 3, 2026' },
-    { type:'ministry', icon:'🔵', text:'التقويم الأكاديمي 2026–2027 — بداية العام الدراسي الجديد: 31 أغسطس 2026',
-                                   textEn:'Academic Calendar 2026–2027 — New school year starts: August 31, 2026' },
-    { type:'ministry', icon:'🔵', text:'جدول الامتحانات النهائية للصفوف 5–12 معتمد رسمياً',
-                                   textEn:'Final exam schedule for Grades 5–12 officially approved' },
-    { type:'admin',    icon:'🟡', text:'تذكير: مراجعة بيانات الحضور وإغلاق سجلات الفصل قبل 3 يوليو 2026',
-                                   textEn:'Reminder: Review attendance records and close term reports before July 3, 2026' },
-    { type:'ai',       icon:'🤖', text:'سوق الذكاء الاصطناعي في التعليم يتجاوز 11 مليار دولار في 2026 ومتوقع 57 ملياراً بحلول 2033',
-                                   textEn:'AI in Education market surpasses $11.4B in 2026, projected to reach $57B by 2033' },
+    { type:'ministry', icon:'🔴', text:'حضور مرن للطلاب 16–23 يونيو — وزارة التربية والتعليم',                           textEn:'Flexible attendance for students Jun 16–23 — Ministry of Education' },
+    { type:'ministry', icon:'🔵', text:'جدول الامتحانات النهائية للصفوف 5–12 معتمد رسمياً',                               textEn:'Final exam schedule for Grades 5–12 officially approved' },
+    { type:'official', icon:'🟢', text:'نهاية العام الدراسي 2025–2026: 3 يوليو 2026',                                      textEn:'End of Academic Year 2025–2026: July 3, 2026' },
+    { type:'ministry', icon:'🔵', text:'التقويم الأكاديمي 2026–2027 — بداية العام الجامعي: 31 أغسطس 2026',                textEn:'Academic Calendar 2026–2027 — New year starts: August 31, 2026' },
+    { type:'ai',       icon:'🤖', text:'سوق الذكاء الاصطناعي في التعليم يرتفع إلى 57 مليار دولار بحلول 2033',            textEn:'AI in Education market projected to reach $57B by 2033' },
+    { type:'official', icon:'🟢', text:'الإمارات تتصدر دمج الذكاء الاصطناعي في التعليم على مستوى المنطقة',               textEn:'UAE leads AI integration in education across the region' },
+    { type:'admin',    icon:'🟡', text:'تذكير: مراجعة بيانات الحضور قبل نهاية الفصل الدراسي',                            textEn:'Reminder: Review attendance records before end of term' },
+    { type:'ministry', icon:'🔵', text:'برنامج تطوير المعلم المهني — التسجيل مفتوح حتى نهاية الشهر',                     textEn:'Professional Teacher Development Program — Registration open until end of month' },
   ];
 
   const bar = document.createElement('div');
@@ -309,7 +305,7 @@ const TYPE_META = {
 
   function buildTicker(lang) {
     const isEn = lang === 'en';
-    const allNews = [...NEWS, ...NEWS];
+    const allNews = [...NEWS, ...NEWS]; // loop
     ticker.style.direction = isEn ? 'ltr' : 'rtl';
     document.getElementById('edu-news-label') && (document.getElementById('edu-news-label').textContent = isEn ? 'EduOS News' : 'أخبار EduOS');
     ticker.innerHTML = allNews.map(n =>
@@ -323,6 +319,7 @@ const TYPE_META = {
 
   buildTicker(newsLang());
 
+  // تحديث شريط الأخبار عند تغيير اللغة
   window.addEventListener('eduos-lang-change', (e) => {
     buildTicker(e.detail?.lang || newsLang());
   });
@@ -332,6 +329,7 @@ const TYPE_META = {
   bar.appendChild(track);
   document.body.appendChild(bar);
 
+  // CSS animation
   const style = document.createElement('style');
   style.textContent = `
     @keyframes eduNewsTicker {
@@ -352,19 +350,21 @@ const TYPE_META = {
 
 /* ── تذكير التنفس والحركة ────────────────────────────────── */
 (function initWellnessReminder() {
-  const WORK_LIMIT = 30 * 60 * 1000;
-  const CHECK_INT  = 60 * 1000;
-  const BREATHE_DURATION = 16;
+  const WORK_LIMIT = 30 * 60 * 1000;   // 30 دقيقة
+  const CHECK_INT  = 60 * 1000;         // فحص كل دقيقة
+  const BREATHE_DURATION = 16;          // ثانية (4 دورات)
 
   let lastActivity = Date.now();
   let totalActive  = 0;
   let lastCheck    = Date.now();
   let breatheShown = false;
 
+  // تتبّع النشاط
   ['mousemove','mousedown','keydown','touchstart','scroll'].forEach(ev => {
     document.addEventListener(ev, () => { lastActivity = Date.now(); }, { passive:true });
   });
 
+  // إنشاء نافذة التذكير
   const reminderEl = document.createElement('div');
   reminderEl.id = 'edu-wellness-reminder';
   reminderEl.style.cssText = `
@@ -391,6 +391,8 @@ const TYPE_META = {
           « إنَّ لجسدِكَ عليكَ حقًّا » — رواه البخاري
         </span>
       </div>
+
+      <!-- دائرة التنفس -->
       <div id="breathe-circle" style="
         width:120px;height:120px;border-radius:50%;margin:0 auto 20px;
         background:radial-gradient(circle,rgba(16,185,129,0.5),rgba(16,185,129,0.1));
@@ -400,6 +402,8 @@ const TYPE_META = {
         transition:transform 4s ease-in-out, box-shadow 4s ease-in-out;
       ">استنشق</div>
       <div id="breathe-text" style="font-size:13px;color:rgba(255,255,255,.6);margin-bottom:24px;height:20px"></div>
+
+      <!-- أزرار الحركة -->
       <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:20px">
         <button onclick="EduWellness.dismiss()" style="
           background:linear-gradient(135deg,#10b981,#059669);
@@ -412,6 +416,7 @@ const TYPE_META = {
           color:rgba(255,255,255,.7);font-family:'Tajawal',sans-serif;font-size:13px;cursor:pointer;
         ">⏰ بعد 10 دقائق</button>
       </div>
+
       <div style="font-size:11px;color:rgba(255,255,255,.3)">
         تذكير ذكي يحسب نشاطك الفعلي — لجودة حياتك وطلابك 🤲
       </div>
@@ -419,6 +424,7 @@ const TYPE_META = {
   `;
   document.body.appendChild(reminderEl);
 
+  // دورة التنفس (4-4-4-4)
   const breathePhases = [
     { text:'استنشق...', duration:4, scale:1.35, shadow:'0 0 40px rgba(16,185,129,0.6)' },
     { text:'احبس...', duration:4, scale:1.35, shadow:'0 0 50px rgba(6,182,212,0.7)' },
@@ -433,6 +439,7 @@ const TYPE_META = {
     const circle = document.getElementById('breathe-circle');
     const text   = document.getElementById('breathe-text');
     breathePhaseIdx = 0; breatheCount = 0;
+
     function nextPhase() {
       if (breatheCount >= BREATHE_DURATION) {
         if (circle) circle.textContent = '✅';
@@ -449,6 +456,7 @@ const TYPE_META = {
       breathePhaseIdx++;
       breatheCount += p.duration;
     }
+
     nextPhase();
     breatheInterval = setInterval(nextPhase, 4000);
   }
@@ -473,17 +481,23 @@ const TYPE_META = {
     lastActivity = Date.now();
   }
 
+  // فحص كل دقيقة
   setInterval(() => {
     const now = Date.now();
     const idle = now - lastActivity;
-    if (idle < 120000) { totalActive += now - lastCheck; }
+    // إذا المستخدم نشط (لم يتجاوز الخمول 2 دقيقة) → أضف للوقت الفعّال
+    if (idle < 120000) {
+      totalActive += now - lastCheck;
+    }
     lastCheck = now;
-    if (!breatheShown && totalActive >= WORK_LIMIT) { showReminder(); }
+    if (!breatheShown && totalActive >= WORK_LIMIT) {
+      showReminder();
+    }
   }, CHECK_INT);
 
   window.EduWellness = {
     dismiss: hideReminder,
-    snooze: () => { hideReminder(); totalActive = -10 * 60 * 1000; },
+    snooze: () => { hideReminder(); totalActive = -10 * 60 * 1000; /* تأخير 10 دق */ },
     getActiveTime: () => Math.round(totalActive / 60000) + ' دقيقة',
   };
 })();

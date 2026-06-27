@@ -61,13 +61,11 @@
       font-size: 10px; color: rgba(240,244,255,0.35);
       text-align: center; letter-spacing: 0.3px;
     }
-    /* trigger elements */
     [data-hc-student], [data-hc-staff] { cursor: pointer; }
     [data-hc-student]:hover, [data-hc-staff]:hover { text-decoration: underline dotted rgba(108,61,214,0.6); }
   `;
   document.head.appendChild(style);
 
-  /* ── Card Element ─────────────────────────────────────────────────── */
   const card = document.createElement('div');
   card.className = 'edu-hc';
   card.id = '_edu_hc_';
@@ -93,7 +91,6 @@
     _hideTimer = setTimeout(() => card.classList.remove('hc-show'), 220);
   }
 
-  /* ── Avatar colors ────────────────────────────────────────────────── */
   const _COLORS = ['#6366f1','#10b981','#f43f5e','#0ea5e9','#8b5cf6','#f6c90e','#ec4899','#14b8a6','#f97316'];
   function _color(name) {
     let h = 0;
@@ -101,11 +98,10 @@
     return _COLORS[Math.abs(h) % _COLORS.length];
   }
 
-  /* ── STUDENT Card ─────────────────────────────────────────────────── */
   const _VARK = {
-    V:{ ar:'بصري',   en:'Visual',    c:'#6366f1' },
-    A:{ ar:'سمعي',   en:'Auditory',  c:'#10b981' },
-    R:{ ar:'قرائي',  en:'Reading',   c:'#f59e0b' },
+    V:{ ar:'بصري',   en:'Visual',      c:'#6366f1' },
+    A:{ ar:'سمعي',   en:'Auditory',    c:'#10b981' },
+    R:{ ar:'قرائي',  en:'Reading',     c:'#f59e0b' },
     K:{ ar:'حركي',   en:'Kinesthetic', c:'#ec4899' }
   };
 
@@ -117,7 +113,6 @@
     const attC  = att  == null ? '#94a3b8' : att  >= 90 ? '#10b981' : att  >= 75 ? '#f59e0b' : '#ef4444';
     const grC   = grade == null ? '#94a3b8' : grade >= 80 ? '#10b981' : grade >= 60 ? '#6C3DD6' : '#ef4444';
     const init  = (d.name||'؟').charAt(0);
-
     return `
       <div class="hc-head">
         <div class="hc-av" style="background:${col}1a;color:${col};border:2px solid ${col}">${init}</div>
@@ -140,23 +135,21 @@
     `;
   }
 
-  /* ── STAFF Card ───────────────────────────────────────────────────── */
   const _ROLES = {
-    teacher:        { ar:'معلم',                 ic:'👩‍🏫', c:'#6366f1' },
-    principal:      { ar:'مدير',                 ic:'🏫',  c:'#6C3DD6' },
-    vice_principal: { ar:'وكيل',                 ic:'🏫',  c:'#8b5cf6' },
-    social_worker:  { ar:'أخصائي اجتماعي',       ic:'🤝',  c:'#10b981' },
-    nurse:          { ar:'ممرض',                 ic:'🏥',  c:'#ef4444' },
-    counselor:      { ar:'مرشد',                 ic:'💬',  c:'#f59e0b' },
-    admin:          { ar:'إداري',                ic:'⚙️',  c:'#94a3b8' },
-    security:       { ar:'أمن',                  ic:'🔐',  c:'#64748b' },
+    teacher:        { ar:'معلم',           ic:'👩‍🏫', c:'#6366f1' },
+    principal:      { ar:'مدير',           ic:'🏫',  c:'#6C3DD6' },
+    vice_principal: { ar:'وكيل',           ic:'🏫',  c:'#8b5cf6' },
+    social_worker:  { ar:'أخصائي اجتماعي', ic:'🤝',  c:'#10b981' },
+    nurse:          { ar:'ممرض',           ic:'🏥',  c:'#ef4444' },
+    counselor:      { ar:'مرشد',           ic:'💬',  c:'#f59e0b' },
+    admin:          { ar:'إداري',          ic:'⚙️',  c:'#94a3b8' },
+    security:       { ar:'أمن',            ic:'🔐',  c:'#64748b' },
   };
 
   function _staffHTML(d) {
     const role = _ROLES[d.role] || { ar: d.role||'—', ic:'👤', c:'#6C3DD6' };
     const name = d.full_name || d.name || '—';
     const isUAE = d.nationality === 'UAE' || d.is_emirati === true || d.is_emirati === 'true';
-
     return `
       <div class="hc-head">
         <div class="hc-av" style="background:${role.c}1a;color:${role.c};border:2px solid ${role.c};font-size:22px">${role.ic}</div>
@@ -167,18 +160,17 @@
         </div>
       </div>
       <div class="hc-rows">
-        ${d.qualification   ? `<div class="hc-r"><span class="hc-ri">🎓</span><span class="hc-rl">المؤهل</span><span class="hc-rv">${d.qualification}</span></div>`:''}
-        ${d.years_experience? `<div class="hc-r"><span class="hc-ri">📆</span><span class="hc-rl">الخبرة</span><span class="hc-rv">${d.years_experience} سنة</span></div>`:''}
-        ${d.email           ? `<div class="hc-r"><span class="hc-ri">📧</span><span class="hc-rl">البريد</span><span class="hc-rv" style="font-size:11px">${d.email}</span></div>`:''}
-        ${d.phone           ? `<div class="hc-r"><span class="hc-ri">📞</span><span class="hc-rl">الجوال</span><span class="hc-rv">${d.phone}</span></div>`:''}
-        ${d.pdp_status      ? `<div class="hc-r"><span class="hc-ri">📈</span><span class="hc-rl">خطة التطوير</span><span class="hc-rv" style="color:${d.pdp_status==='active'?'#10b981':'#f59e0b'}">${d.pdp_status==='active'?'✅ نشطة':'⏳ قيد الإعداد'}</span></div>`:''}
-        ${d.appraisal_score ? `<div class="hc-r"><span class="hc-ri">⭐</span><span class="hc-rl">تقييم الأداء</span><span class="hc-rv" style="color:#f6c90e">${d.appraisal_score}/6</span></div>`:''}
+        ${d.qualification    ? `<div class="hc-r"><span class="hc-ri">🎓</span><span class="hc-rl">المؤهل</span><span class="hc-rv">${d.qualification}</span></div>`:''}
+        ${d.years_experience ? `<div class="hc-r"><span class="hc-ri">📆</span><span class="hc-rl">الخبرة</span><span class="hc-rv">${d.years_experience} سنة</span></div>`:''}
+        ${d.email            ? `<div class="hc-r"><span class="hc-ri">📧</span><span class="hc-rl">البريد</span><span class="hc-rv" style="font-size:11px">${d.email}</span></div>`:''}
+        ${d.phone            ? `<div class="hc-r"><span class="hc-ri">📞</span><span class="hc-rl">الجوال</span><span class="hc-rv">${d.phone}</span></div>`:''}
+        ${d.pdp_status       ? `<div class="hc-r"><span class="hc-ri">📈</span><span class="hc-rl">خطة التطوير</span><span class="hc-rv" style="color:${d.pdp_status==='active'?'#10b981':'#f59e0b'}">${d.pdp_status==='active'?'✅ نشطة':'⏳ قيد الإعداد'}</span></div>`:''}
+        ${d.appraisal_score  ? `<div class="hc-r"><span class="hc-ri">⭐</span><span class="hc-rl">تقييم الأداء</span><span class="hc-rv" style="color:#f6c90e">${d.appraisal_score}/6</span></div>`:''}
       </div>
       <div class="hc-ft">🖱️ انقر لملف الموظف</div>
     `;
   }
 
-  /* ── Attach Helpers ───────────────────────────────────────────────── */
   function attachStudent(el, data) {
     el.addEventListener('mouseenter', e => _show(_studentHTML(data), e));
     el.addEventListener('mousemove',  e => _pos(e));
@@ -191,32 +183,20 @@
     el.addEventListener('mouseleave', _hide);
   }
 
-  /* ── Auto-scan (data-hc-student / data-hc-staff attributes) ──────── */
   function _scan() {
     document.querySelectorAll('[data-hc-student]:not([data-hcr])').forEach(el => {
-      try {
-        attachStudent(el, JSON.parse(decodeURIComponent(el.dataset.hcStudent)));
-        el.setAttribute('data-hcr','1');
-      } catch(e) {}
+      try { attachStudent(el, JSON.parse(decodeURIComponent(el.dataset.hcStudent))); el.setAttribute('data-hcr','1'); } catch(e) {}
     });
     document.querySelectorAll('[data-hc-staff]:not([data-hcr])').forEach(el => {
-      try {
-        attachStaff(el, JSON.parse(decodeURIComponent(el.dataset.hcStaff)));
-        el.setAttribute('data-hcr','1');
-      } catch(e) {}
+      try { attachStaff(el, JSON.parse(decodeURIComponent(el.dataset.hcStaff))); el.setAttribute('data-hcr','1'); } catch(e) {}
     });
   }
 
-  /* ── Public API ───────────────────────────────────────────────────── */
   window.EduHoverCard = { attachStudent, attachStaff, scan: _scan, colorFor: _color };
 
-  /* ── Init ─────────────────────────────────────────────────────────── */
   const _obs = new MutationObserver(_scan);
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      _scan();
-      _obs.observe(document.body, { childList: true, subtree: true });
-    });
+    document.addEventListener('DOMContentLoaded', () => { _scan(); _obs.observe(document.body, { childList: true, subtree: true }); });
   } else {
     _scan();
     _obs.observe(document.body, { childList: true, subtree: true });
