@@ -192,6 +192,7 @@ select.form-control option{background:var(--bg3);}
 
     <div class="sb-section">ذكاء اصطناعي</div>
     <div class="sb-item" onclick="showTab('ai')" id="sb-ai">🤲 المساعد الذكي</div>
+    <div class="sb-item" onclick="showTab('smartreport')" id="sb-smartreport">📊 التقرير الذكي <span class="sb-notif" id="newReportBadge" style="display:none">جديد</span></div>
     <div class="sb-item" onclick="showTab('islamic')" id="sb-islamic">🌙 الزاد اليومي</div>
   </aside>
 
@@ -567,6 +568,30 @@ select.form-control option{background:var(--bg3);}
             <div style="font-size:13px;font-weight:700;margin-top:4px;">11:50 – 12:30</div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ===== SMART REPORT ===== -->
+    <div class="tab-content" id="tab-smartreport">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div>
+          <h2 style="font-size:18px;font-weight:800;">📊 التقرير الذكي الأسبوعي</h2>
+          <p style="font-size:12px;color:var(--text3);margin-top:4px;">تقارير مُولَّدة بالذكاء الاصطناعي — محدَّثة أسبوعياً</p>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="loadSmartReports()">🔄 تحديث</button>
+      </div>
+
+      <!-- Level Legend -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <div style="background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.3);border-radius:20px;padding:5px 14px;font-size:11px;font-weight:700;color:var(--green);">🌟 ممتاز</div>
+        <div style="background:rgba(45,212,191,.12);border:1px solid rgba(45,212,191,.3);border-radius:20px;padding:5px 14px;font-size:11px;font-weight:700;color:var(--teal);">✅ جيد جداً</div>
+        <div style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);border-radius:20px;padding:5px 14px;font-size:11px;font-weight:700;color:var(--blue);">👍 جيد</div>
+        <div style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);border-radius:20px;padding:5px 14px;font-size:11px;font-weight:700;color:var(--amber);">📌 يحتاج دعم</div>
+      </div>
+
+      <!-- Reports list -->
+      <div id="reportsList">
+        <div class="spinner"></div>
       </div>
     </div>
 
@@ -1418,6 +1443,96 @@ function sendMsg() {
   }, 1000);
 }
 
+// ============ PARENT AI REPORT ============
+const REPORT_FN = 'https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/parent-ai-report';
+const SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SB_ANON = window.__supabaseAnonKey || '';
+
+async function loadSmartReports() {
+  const wrap = document.getElementById('reportsList');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="spinner"></div>';
+  try {
+    const user = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+    const studentId = user.student_id || user.id;
+    let url = `${SB_URL}/rest/v1/parent_reports?order=week_start.desc&limit=8`;
+    if (studentId) url += `&student_id=eq.${studentId}`;
+    const res = await fetch(url, {
+      headers: { 'apikey': SB_ANON, 'Authorization': `Bearer ${SB_ANON}` }
+    });
+    const reports = await res.json();
+    if (!reports || reports.length === 0) {
+      wrap.innerHTML = `<div style="text-align:center;color:var(--text3);padding:40px 0;">
+        <div style="font-size:40px;margin-bottom:10px;">📊</div>
+        <div>لا توجد تقارير بعد لهذا الأسبوع</div>
+        <div style="font-size:11px;margin-top:6px;">التقارير تُولَّد تلقائياً كل أسبوع</div>
+      </div>`;
+      return;
+    }
+    const levelColor = { 'ممتاز':'var(--green)', 'جيد جداً':'var(--teal)', 'جيد':'var(--blue)', 'يحتاج دعم':'var(--amber)' };
+    wrap.innerHTML = reports.map(r => `
+      <div class="card" style="border-right:4px solid ${levelColor[r.overall_level]||'var(--teal)'};margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div>
+            <div style="font-size:14px;font-weight:800;">📅 ${r.week_start} — ${r.week_end}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px;">Generated ${new Date(r.generated_at).toLocaleDateString('ar-AE')}</div>
+          </div>
+          <span class="badge" style="background:${levelColor[r.overall_level]||'var(--teal)'}22;color:${levelColor[r.overall_level]||'var(--teal)'};border:1px solid ${levelColor[r.overall_level]||'var(--teal)'}44;font-size:13px;">${r.overall_level}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
+          <div style="background:var(--bg3);border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:18px;font-weight:800;color:var(--teal);">${r.avg_comprehension ?? '—'}${r.avg_comprehension ? '%' : ''}</div>
+            <div style="font-size:10px;color:var(--text3);">الفهم</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:18px;font-weight:800;color:var(--green);">${r.present_days}/${r.total_days}</div>
+            <div style="font-size:10px;color:var(--text3);">الحضور</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:18px;font-weight:800;color:var(--amber);">⭐ ${r.total_stars}</div>
+            <div style="font-size:10px;color:var(--text3);">النجوم</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:18px;font-weight:800;color:var(--purple);">🏅 ${r.badges_earned}</div>
+            <div style="font-size:10px;color:var(--text3);">الشارات</div>
+          </div>
+        </div>
+        ${r.summary_ar ? `<div style="background:rgba(45,212,191,.07);border:1px solid rgba(45,212,191,.2);border-radius:10px;padding:12px;margin-bottom:10px;">
+          <div style="font-size:11px;color:var(--teal);font-weight:700;margin-bottom:5px;">📝 ملخص الأسبوع</div>
+          <div style="font-size:13px;line-height:1.8;">${r.summary_ar}</div>
+        </div>` : ''}
+        ${r.strengths_ar?.length ? `<div style="margin-bottom:10px;">
+          <div style="font-size:11px;color:var(--green);font-weight:700;margin-bottom:6px;">✅ نقاط القوة</div>
+          ${r.strengths_ar.map(s => `<div style="font-size:12px;color:var(--text2);padding:4px 0;border-bottom:1px solid var(--border);">• ${s}</div>`).join('')}
+        </div>` : ''}
+        ${r.home_tips_ar?.length ? `<div style="margin-bottom:10px;">
+          <div style="font-size:11px;color:var(--blue);font-weight:700;margin-bottom:6px;">🏠 نصائح للمنزل</div>
+          ${r.home_tips_ar.map(t => `<div style="font-size:12px;color:var(--text2);padding:4px 0;border-bottom:1px solid var(--border);">• ${t}</div>`).join('')}
+        </div>` : ''}
+        ${r.motivation_ar ? `<div style="background:linear-gradient(135deg,rgba(167,139,250,.1),rgba(45,212,191,.1));border:1px solid rgba(167,139,250,.2);border-radius:10px;padding:12px;text-align:center;">
+          <div style="font-size:13px;font-weight:700;color:var(--purple);">💌 ${r.motivation_ar}</div>
+        </div>` : ''}
+        <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
+          <button class="btn btn-sm btn-secondary" onclick="rateReport('${r.id}',5)">⭐ ممتاز</button>
+          <button class="btn btn-sm btn-secondary" onclick="shareReport('${r.id}')">📤 مشاركة</button>
+        </div>
+      </div>`).join('');
+    // Mark as viewed
+    if (!r?.viewed_by_parent) {
+      document.getElementById('newReportBadge')?.style && (document.getElementById('newReportBadge').style.display = 'inline');
+    }
+  } catch (e) {
+    wrap.innerHTML = `<div style="color:var(--red);text-align:center;padding:30px;">⚠️ حدث خطأ في تحميل التقارير</div>`;
+  }
+}
+
+async function rateReport(id, rating) {
+  showToast('✅ شكراً على تقييمك!', 'success');
+}
+function shareReport(id) {
+  showToast('📤 جاري تجهيز التقرير للمشاركة...', 'success');
+}
+
 // ============ ACTIONS ============
 function submitExcuse() {
   const d = document.getElementById('absDate').value;
@@ -1446,12 +1561,29 @@ function showToast(msg, type='success') {
 }
 
 // ============ INIT ============
+// Override showTab to auto-load smart reports
+const _origShowTab = typeof showTab === 'function' ? showTab : null;
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.sb-item').forEach(s => s.classList.remove('active'));
+  const pane = document.getElementById('tab-' + name);
+  if (pane) pane.classList.add('active');
+  const sb = document.getElementById('sb-' + name);
+  if (sb) sb.classList.add('active');
+  location.hash = name;
+  if (name === 'smartreport') {
+    loadSmartReports();
+    const badge = document.getElementById('newReportBadge');
+    if (badge) badge.style.display = 'none';
+  }
+}
+
 window.addEventListener('load', () => {
   initWeekInfo();
   initMOTD();
   loadDashboard();
   const h = location.hash.slice(1);
-  if (h) showTab(h);
+  if (h) showTab(h); else showTab('dashboard');
 });
 </script>
 <script src="../platform-tour.js"></script>
