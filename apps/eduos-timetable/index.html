@@ -144,6 +144,36 @@ body{font-family:'Tajawal',sans-serif;background:#0D1B2A;color:#e2e8f0;min-heigh
 
 <!-- SETUP -->
 <div id="tab-setup" class="panel">
+
+  <!-- Country-First Card -->
+  <div class="card" style="border-color:rgba(34,211,238,.4);margin-bottom:16px">
+    <div class="card-title">🌍 المنهج والجدول الرسمي — Country-First
+      <span class="ai-chip"><span class="ai-pulse"></span>مصدر رسمي</span>
+    </div>
+    <div class="form-row" style="align-items:flex-end;gap:12px;flex-wrap:wrap">
+      <div class="form-group" style="min-width:160px">
+        <label>الدولة / Country</label>
+        <select id="cfCountry" onchange="onCountryChange()">
+          <option value="">— جارٍ التحميل —</option>
+        </select>
+      </div>
+      <div class="form-group" style="min-width:180px">
+        <label>المنهج / Curriculum</label>
+        <select id="cfSystem" onchange="onSystemChange()">
+          <option value="">— اختر الدولة أولاً —</option>
+        </select>
+      </div>
+      <div class="form-group" style="min-width:200px">
+        <label>قالب الجدول / Schedule Template</label>
+        <select id="cfTemplate" onchange="onTemplateChange()">
+          <option value="">— اختر المنهج أولاً —</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="applyTemplate()">✅ تطبيق الجدول</button>
+    </div>
+    <div id="cfInfo" style="display:none;margin-top:10px;font-size:.8rem;color:#22D3EE;background:rgba(34,211,238,.08);border-radius:8px;padding:10px 14px;line-height:1.8"></div>
+  </div>
+
   <div class="grid-2">
     <div class="card">
       <div class="card-title">🏫 إعدادات المدرسة</div>
@@ -340,8 +370,8 @@ body{font-family:'Tajawal',sans-serif;background:#0D1B2A;color:#e2e8f0;min-heigh
 
 <script>
 // ── SUPABASE ──
-const SURL='https://fcmwbxypnbhbbrcdgmhf.supabase.co';
-const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZjbXdieHlwbmJoYmJyY2RnbWhmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQyMDAxNDMsImV4cCI6MjA1OTc3NjE0M30.v-bVCdIBc8RJKvOYj_5MBE3NWQA6LiuTlBhV3KZvpyE';
+const SURL='https://zuyizaiugpmhmeycqton.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
 const SH={'Content-Type':'application/json','apikey':SKEY,'Authorization':'Bearer '+SKEY};
 const SB={
   async q(t,p=''){const r=await fetch(`${SURL}/rest/v1/${t}${p}`,{headers:SH});if(!r.ok)throw new Error(await r.text());return r.json();},
@@ -354,9 +384,118 @@ const SB={
 const DAYS=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس'];
 let STATE={teachers:[],classes:[],timetables:[],config:{periods:7,duration:45,start:'07:30',breakAfter:4,breakMin:20},today:new Date().toISOString().split('T')[0]};
 
+// ── COUNTRY-FIRST ──
+let CF={countries:[],systems:[],templates:[],selected:{template:null}};
+
+async function loadCountryFirst(){
+  try{
+    CF.countries=await SB.q('countries','?select=id,code,name_ar,name_en&is_active=eq.true&order=name_ar');
+    const sel=document.getElementById('cfCountry');
+    if(!sel)return;
+    sel.innerHTML='<option value="">— اختر الدولة —</option>';
+    CF.countries.forEach(c=>{sel.innerHTML+=`<option value="${c.id}">${c.name_ar} — ${c.name_en}</option>`;});
+    // auto-select UAE
+    const uae=CF.countries.find(c=>c.code==='AE');
+    if(uae){sel.value=uae.id;onCountryChange();}
+  }catch(e){console.warn('country-first load',e);}
+}
+
+async function onCountryChange(){
+  const cid=document.getElementById('cfCountry').value;
+  if(!cid)return;
+  const sys=document.getElementById('cfSystem');
+  sys.innerHTML='<option value="">— جارٍ التحميل —</option>';
+  try{
+    CF.systems=await SB.q('education_systems',`?select=id,code,name_ar,name_en&country_id=eq.${cid}&is_active=eq.true&order=sort_order`);
+    sys.innerHTML='<option value="">— اختر المنهج —</option>';
+    CF.systems.forEach(s=>{sys.innerHTML+=`<option value="${s.id}">${s.name_ar}</option>`;});
+    // auto-select MOE
+    const moe=CF.systems.find(s=>s.code==='MOE');
+    if(moe){sys.value=moe.id;onSystemChange();}
+  }catch(e){console.warn('systems load',e);}
+}
+
+async function onSystemChange(){
+  const sid=document.getElementById('cfSystem').value;
+  if(!sid)return;
+  const tmpl=document.getElementById('cfTemplate');
+  tmpl.innerHTML='<option value="">— جارٍ التحميل —</option>';
+  try{
+    // Load via school_cycles
+    const cycles=await SB.q('school_cycles',`?select=id,code,name_ar&education_system_id=eq.${sid}&order=sort_order`);
+    const cycleIds=cycles.map(c=>c.id);
+    if(!cycleIds.length){tmpl.innerHTML='<option value="">— لا قوالب —</option>';return;}
+    CF.templates=await SB.q('schedule_templates',
+      `?select=id,label,gender,schedule_mode,first_period_start,period_duration_min,periods_per_day,breaks,weekly_periods,source_authority,notes,cycle_id,school_cycles(name_ar)&cycle_id=in.(${cycleIds.join(',')})&is_active=eq.true`);
+    tmpl.innerHTML='<option value="">— اختر قالب الجدول —</option>';
+    CF.templates.forEach(t=>{
+      const cycle=cycles.find(c=>c.id===t.cycle_id);
+      tmpl.innerHTML+=`<option value="${t.id}">[${cycle?.name_ar||''}] ${t.label}</option>`;
+    });
+    // auto-select first
+    if(CF.templates.length){tmpl.value=CF.templates[0].id;onTemplateChange();}
+  }catch(e){console.warn('templates load',e);}
+}
+
+function onTemplateChange(){
+  const tid=document.getElementById('cfTemplate').value;
+  CF.selected.template=CF.templates.find(t=>t.id===tid)||null;
+  const info=document.getElementById('cfInfo');
+  if(!CF.selected.template){info.style.display='none';return;}
+  const t=CF.selected.template;
+  info.style.display='block';
+  info.innerHTML=`
+    🕐 بداية أولى حصة: <b>${t.first_period_start}</b> &nbsp;|&nbsp;
+    ⏱ مدة الحصة: <b>${t.period_duration_min} دقيقة</b> &nbsp;|&nbsp;
+    📚 عدد الحصص: <b>${t.periods_per_day}</b> &nbsp;|&nbsp;
+    📅 حصص أسبوعية: <b>${t.weekly_periods}</b><br>
+    🏛 المصدر: ${t.source_authority||'وزارة التربية'} &nbsp;|&nbsp;
+    📝 ${t.notes||''}
+  `;
+}
+
+function applyTemplate(){
+  if(!CF.selected.template){alert('اختر قالب جدول أولاً');return;}
+  const t=CF.selected.template;
+  // Fill config inputs
+  const start=document.getElementById('cfgStart');
+  const dur=document.getElementById('cfgDuration');
+  const periods=document.getElementById('cfgPeriods');
+  const brk=document.getElementById('cfgBreak');
+  const brkAfter=document.getElementById('cfgBreakAfter');
+  if(start)start.value=t.first_period_start?.slice(0,5)||'07:25';
+  if(dur)dur.value=t.period_duration_min||40;
+  if(periods){
+    const opt=[...periods.options];
+    const match=opt.find(o=>o.value==t.periods_per_day);
+    if(match)periods.value=match.value;
+  }
+  // Parse first break after N periods from breaks JSON
+  if(brkAfter && t.breaks?.length){
+    const firstBreak=t.breaks[0];
+    if(firstBreak){
+      // Estimate after which period the first break occurs
+      const startMins=timeToMin(t.first_period_start);
+      const breakMins=timeToMin(firstBreak.start);
+      const afterPeriod=Math.round((breakMins-startMins)/t.period_duration_min);
+      if(afterPeriod>0)brkAfter.value=afterPeriod;
+    }
+  }
+  if(brk && t.breaks?.length)brk.value=t.breaks[0]?.duration_min||20;
+  // Alert
+  const info=document.getElementById('cfInfo');
+  if(info)info.innerHTML+='<br>✅ تم تطبيق الجدول — يمكنك تعديل الإعدادات أدناه ثم الحفظ';
+}
+
+function timeToMin(t){if(!t)return 0;const[h,m]=(t||'').split(':').map(Number);return(h||0)*60+(m||0);}
+
 // ── BOOT ──
 async function boot(){
-  try{await loadMeta();updateHeader();loadDashboard();}catch(e){console.warn('boot error',e);}
+  try{
+    await Promise.all([loadMeta(),loadCountryFirst()]);
+    updateHeader();
+    loadDashboard();
+  }catch(e){console.warn('boot error',e);}
 }
 
 async function loadMeta(){
