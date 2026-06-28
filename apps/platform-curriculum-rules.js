@@ -24,26 +24,39 @@
   let _currType    = 'MOE';
   let _loadPromise = null;
 
-  // ── تحويل رقم الصف إلى grade_group ──────────────────────────────
+  // ── تحويل رقم الصف إلى grade_group (يعتمد على المنهج الحالي) ────
   function _groupForGrade(gradeNum) {
     if (!gradeNum && gradeNum !== 0) return 'G4-8';
     const s = String(gradeNum).trim().toUpperCase();
 
-    // GCSE / A-Level / IBDP
-    if (s.includes('GCSE'))    return 'GCSE';
+    // أنماط خاصة
+    if (s.includes('GCSE'))                             return 'GCSE';
     if (s.includes('A-LEVEL') || s.includes('ALEVEL')) return 'A-Level';
-    if (s.includes('IBDP'))    return 'ALL'; // IB
+    if (s.includes('IBDP'))                             return 'ALL';
 
-    // KG
-    if (s.includes('KG') || s === 'K' || s === 'KS1' || s === 'FOUNDATION') return 'K-3';
+    // KG/Foundation
+    if (s.includes('KG') || s === 'K' || s === 'KS1' || s === 'FOUNDATION') {
+      return _currType === 'ADEK' ? 'K-5' : 'K-3';
+    }
 
-    // رقمي
     const n = parseInt(s.replace(/[^0-9]/g, '')) || 0;
-    if (n === 0) return 'K-3';
+    if (n === 0) return _currType === 'ADEK' ? 'K-5' : 'K-3';
+
+    // ADEK: K-5 / G6-12
+    if (_currType === 'ADEK') {
+      return n <= 5 ? 'K-5' : 'G6-12';
+    }
+
+    // British: Y1-9 / GCSE / A-Level
+    if (_currType === 'British') {
+      if (n <= 9)  return 'Y1-9';
+      if (n <= 11) return 'GCSE';
+      return 'A-Level';
+    }
+
+    // MOE / KHDA / CBSE / American / IB — استخدام المجموعات الأربع العامة
     if (n <= 3)  return 'K-3';
-    if (n <= 5)  return 'K-5';  // ADEK
     if (n <= 8)  return 'G4-8';
-    if (n <= 9)  return 'Y1-9'; // British
     return 'G9-12';
   }
 
