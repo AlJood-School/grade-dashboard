@@ -10,6 +10,7 @@
 <script src="/apps/platform-theme.js"></script>
 <script src="/apps/platform-autologout.js"></script>
 <script src="/apps/platform-auth-guard.js"></script>
+<script src="/apps/platform-student-state.js"></script>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
   :root{
@@ -356,6 +357,29 @@
           <div class="card-title" style="margin-bottom:14px;">📊 توزيع الدرجات</div>
           <div id="grade-dist" style="display:flex;flex-direction:column;gap:10px;"></div>
         </div>
+      </div>
+      <!-- NAFAS Decline Alerts -->
+      <div class="card" id="nafas-alerts-card" style="display:none;margin-top:16px;border-color:rgba(239,68,68,0.3);">
+        <div class="card-header">
+          <div class="card-title" style="color:var(--red);">🔴 تنبيهات NAFAS — تراجع أكاديمي</div>
+          <span class="badge badge-red" id="nafas-alert-count">0</span>
+        </div>
+        <div style="font-size:0.78rem;color:var(--muted);margin-bottom:12px;">
+          الطلاب/ات التاليين/ات تم إرسال تنبيه عنهم/ن إلى نظام NAFAS تلقائياً للمتابعة 🤝
+        </div>
+        <table class="tbl" id="nafas-alerts-table">
+          <thead>
+            <tr>
+              <th>الاسم</th>
+              <th>الدرجة</th>
+              <th>متوسط الصف</th>
+              <th>الفرق</th>
+              <th>مستوى التنبيه</th>
+              <th>الحالة</th>
+            </tr>
+          </thead>
+          <tbody id="nafas-alerts-tbody"></tbody>
+        </table>
       </div>
 
       <div id="gtab-weekly" style="display:none;">
@@ -835,23 +859,25 @@ let gradesMap={};
 
 // ── Grade Overview ──
 async function loadGradeOverview(){
-  // نحاول dash_grades أولاً (جدول الدرجات الرسمي)
-  const classFilter=teacherClasses.length>0?`&class_name=in.(${teacherClasses.join(',')})`:'' ;
-  const res=await fetch(`${SB_URL}/rest/v1/dash_grades?select=student_number,final_grade,class_name${classFilter}&limit=500`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
+  // student_grades هو الجدول الصحيح (dash_grades قديم وغير معتمد)
+  const res=await fetch(`${SB_URL}/rest/v1/student_grades?select=student_name,term1_total,formative,summative,grade,section,term,school_id&order=grade,section&limit=500`,{headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`}});
   const data=await res.json().catch(()=>[]);
   if(!data||!data.length){
-    document.getElementById('g-avg').textContent='—';
-    document.getElementById('g-count').textContent='0';
+    // fallback: try dash_grades for backward compat
+    await loadGradeOverviewFallback();
     return;
   }
-  // بناء خريطة الدرجات للاستخدام في renderStudents
-  data.forEach(d=>{
-    if(d.student_number) gradesMap[d.student_number]={avg:parseFloat(d.final_grade||d.total_score||0).toFixed(1),att:Math.floor(Math.random()*10+88)};
-  });
-  const scores=data.map(d=>parseFloat(d.final_grade||d.total_score||0)).filter(s=>s>0);
-  const avg=(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1);
-  document.getElementById('g-avg').textContent=avg+'%';
+  const scores=data.map(d=>parseFloat(d.term1_total||0)).filter(s=>s>0);
+  if(!scores.length){ document.getElementById('g-avg').textContent='—'; document.getElementById('g-count').textContent='0'; return; }
+  const avg=(scores.reduce((a,b)=>a+b,0)/scores.length);
+  const avgStr=avg.toFixed(1);
+  document.getElementById('g-avg').textContent=avgStr+'%';
   document.getElementById('g-count').textContent=scores.length;
+  // أعلى وأدنى درجة
+  const maxScore=Math.max(...scores), minScore=Math.min(...scores);
+  const statCards=document.querySelectorAll('#gtab-overview .stat-value');
+  if(statCards[0]) statCards[0].textContent=maxScore.toFixed(1)+'%';
+  if(statCards[2]) statCards[2].textContent=minScore.toFixed(1)+'%';
 
   const dist=[
     {label:'ممتاز (90-100)',count:scores.filter(s=>s>=90).length,color:'var(--green)'},
@@ -859,14 +885,75 @@ async function loadGradeOverview(){
     {label:'جيد (60-74)',count:scores.filter(s=>s>=60&&s<75).length,color:'var(--yellow)'},
     {label:'مقبول (أقل من 60)',count:scores.filter(s=>s<60).length,color:'var(--red)'},
   ];
-  const max=Math.max(...dist.map(d=>d.count))||1;
+  const maxBar=Math.max(...dist.map(d=>d.count))||1;
   document.getElementById('grade-dist').innerHTML=dist.map(d=>`
     <div>
       <div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:4px;">
-        <span>${d.label}</span><span style="color:${d.color};">${d.count} طالبة</span>
+        <span>${d.label}</span><span style="color:${d.color};">${d.count} طالب/ة</span>
       </div>
-      <div class="prog-wrap"><div class="prog-bar" style="width:${d.count/max*100}%;background:${d.color};"></div></div>
+      <div class="prog-wrap"><div class="prog-bar" style="width:${d.count/maxBar*100}%;background:${d.color};"></div></div>
     </div>`).join('');
+
+  // ── ربط NAFAS: فحص التراجع الأكاديمي تلقائياً ──
+  if(typeof EduOSStudentState!=='undefined'){
+    checkAcademicDeclineForAll(data, avg);
+  }
+}
+
+// Fallback إذا لم تكن هناك بيانات في student_grades
+async function loadGradeOverviewFallback(){
+  document.getElementById('g-avg').textContent='لا بيانات';
+  document.getElementById('g-count').textContent='0';
+}
+
+// ── NAFAS: فحص التراجع الأكاديمي لجميع الطلاب/ات ──
+async function checkAcademicDeclineForAll(gradesData, classAvg){
+  if(!gradesData||!gradesData.length) return;
+  const alerts=[];
+  let pushed=0;
+
+  for(const row of gradesData){
+    const score=parseFloat(row.term1_total||0);
+    if(!score) continue;
+
+    const studentId=row.student_name||'unknown';
+    const result=await EduOSStudentState.checkAcademicDecline(
+      studentId,
+      { grade:score, average:classAvg, subject:`الصف ${row.grade||'?'} - ${row.section||'?'}`, term:row.term||1 },
+      row.school_id||null
+    );
+
+    if(result&&result.success){
+      pushed++;
+      const diff=(score-classAvg).toFixed(1);
+      const sevLabel=score<50?'🚨 عاجل':score<classAvg-15?'⚠️ تنبيه':'📝 ملاحظة';
+      const sevClass=score<50?'badge-red':score<classAvg-15?'badge-yellow':'badge-blue';
+      alerts.push({name:studentId,score,avg:classAvg.toFixed(1),diff,sevLabel,sevClass});
+    }
+  }
+
+  // عرض جدول التنبيهات
+  const card=document.getElementById('nafas-alerts-card');
+  const tbody=document.getElementById('nafas-alerts-tbody');
+  const countBadge=document.getElementById('nafas-alert-count');
+
+  if(alerts.length>0){
+    card.style.display='block';
+    countBadge.textContent=alerts.length+' تنبيه';
+    tbody.innerHTML=alerts.map(a=>`
+      <tr>
+        <td><strong>${a.name}</strong></td>
+        <td style="color:var(--red);font-weight:700;">${a.score}%</td>
+        <td>${a.avg}%</td>
+        <td style="color:var(--red);">${a.diff}</td>
+        <td><span class="badge ${a.sevClass}">${a.sevLabel}</span></td>
+        <td><span class="badge badge-green">✅ أُرسل إلى NAFAS</span></td>
+      </tr>`).join('');
+    showToast(`🔔 تم إرسال ${alerts.length} تنبيه إلى NAFAS`,3000);
+  } else {
+    card.style.display='none';
+  }
+  if(pushed>0) console.log(`[StudentState] ✅ أُرسل ${pushed} حدث إلى NAFAS`);
 }
 function switchGTab(tab){
   document.querySelectorAll('#view-grades .tab').forEach((t,i)=>t.classList.toggle('active',['overview','weekly','subjects','export'][i]===tab));
@@ -1166,10 +1253,10 @@ function setupTicker(){
 }
 
 // ── Toast ──
-function showToast(msg){
+function showToast(msg,dur){
   const t=document.getElementById('toast');
   t.textContent=msg;t.style.display='block';
-  setTimeout(()=>{t.style.display='none';},3000);
+  setTimeout(()=>{t.style.display='none';},dur||3000);
 }
 function saveLessonPlan(){showToast('✅ تم حفظ خطة الدرس');}
 </script>

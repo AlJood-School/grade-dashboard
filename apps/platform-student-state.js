@@ -1,11 +1,12 @@
 /**
  * platform-student-state.js
  * © 2026 NAFAS FOR ARTIFICIAL INTELLIGENCE — CN-6573712
- * 
+ *
  * مكتبة مشتركة لدفع أحداث الطالب/ة من الجود إلى NAFAS student_state
  * تُستدعى من أي صفحة في aljood-portal تحتاج إرسال حدث
- * 
+ *
  * القرار المعتمد: 28 يونيو 2026
+ * v1.1 — استخدام fetch مباشرة بدلاً من supabase-js client
  */
 
 (function(window) {
@@ -13,29 +14,31 @@
 
   // ── الأحداث المدعومة ──
   const JOOD_EVENTS = {
-    ACADEMIC_DECLINE:   'academic_decline',
-    ATTENDANCE_ALERT:   'attendance_alert',
-    GRADE_BELOW_AVG:    'grade_below_average',
-    EXAM_FAILED:        'exam_failed',
-    CONSISTENT_ABSENCE: 'consistent_absence',
-    SUBJECT_WEAKNESS:   'subject_weakness',
+    ACADEMIC_DECLINE:   'aljood.academic_decline',
+    ATTENDANCE_ALERT:   'aljood.attendance_alert',
+    GRADE_BELOW_AVG:    'aljood.grade_below_average',
+    EXAM_FAILED:        'aljood.exam_failed',
+    CONSISTENT_ABSENCE: 'aljood.consistent_absence',
+    SUBJECT_WEAKNESS:   'aljood.subject_weakness',
   };
 
   // ── مستويات الخطورة ──
   const SEVERITY = {
-    NOTE:    1, // ملاحظة — لا تدخل فوري
-    ALERT:   2, // تنبيه — يحتاج متابعة
-    URGENT:  3, // تدخل عاجل
+    NOTE:   1,  // ملاحظة — لا تدخل فوري
+    ALERT:  2,  // تنبيه — يحتاج متابعة
+    URGENT: 3,  // تدخل عاجل
   };
 
+  // ── قراءة config من globals أو window ──
+  function getConfig() {
+    return {
+      url: window.SB_URL   || (window._eduosConfig && window._eduosConfig.url),
+      key: window.SB_KEY   || (window._eduosConfig && window._eduosConfig.key),
+    };
+  }
+
   /**
-   * دفع حدث طالب/ة إلى NAFAS student_state
-   * @param {Object} opts
-   * @param {string} opts.studentId   - معرف الطالب/ة (text)
-   * @param {string} opts.eventType   - نوع الحدث (من JOOD_EVENTS)
-   * @param {number} opts.severity    - مستوى الخطورة (1-3)
-   * @param {Object} opts.payload     - بيانات إضافية
-   * @param {string} [opts.schoolId]  - معرف المدرسة (اختياري)
+   * دفع حدث طالب/ة إلى NAFAS student_state عبر Edge Function
    */
   async function pushStudentEvent(opts) {
     const { studentId, eventType, severity = SEVERITY.NOTE, payload = {}, schoolId } = opts;
@@ -45,30 +48,42 @@
       return { success: false, error: 'missing_required_fields' };
     }
 
-    try {
-      // استدعاء Edge Function في الجود
-      const { data, error } = await window._eduosSupabase
-        .functions
-        .invoke('push-student-state', {
-          body: {
-            student_id: String(studentId),
-            school_id:  schoolId ?? null,
-            event_type: eventType,
-            severity:   Number(severity),
-            payload,
-          },
-        });
+    const { url, key } = getConfig();
+    if (!url || !key) {
+      console.warn('[StudentState] SB_URL / SB_KEY غير موجودان');
+      return { success: false, error: 'missing_config' };
+    }
 
-      if (error) {
-        console.error('[StudentState] خطأ:', error.message);
-        return { success: false, error: error.message };
+    try {
+      const resp = await fetch(`${url}/functions/v1/push-student-state`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${key}`,
+          'Content-Type':  'application/json',
+        },
+        body: JSON.stringify({
+          student_id: String(studentId),
+          school_id:  schoolId ?? null,
+          event_type: eventType,
+          severity:   Number(severity),
+          payload,
+        }),
+      });
+
+      if (!resp.ok) {
+        const errText = await resp.text();
+        console.error('[StudentState] HTTP Error:', resp.status, errText);
+        return { success: false, error: errText };
       }
 
+      const data = await resp.json().catch(() => ({}));
+
       if (severity >= SEVERITY.URGENT) {
-        console.warn(`[StudentState] 🚨 حدث عاجل: ${eventType} | طالب: ${studentId}`);
+        console.warn(`[StudentState] 🚨 حدث عاجل: ${eventType} | طالب/ة: ${studentId}`);
       }
 
       return { success: true, ...data };
+
     } catch (err) {
       console.error('[StudentState] استثناء غير متوقع:', err);
       return { success: false, error: 'unexpected_error' };
@@ -76,26 +91,27 @@
   }
 
   /**
-   * دالة مساعدة: فحص تراجع أكاديمي تلقائي
-   * تُستدعى بعد حفظ الدرجات
+   * فحص تراجع أكاديمي تلقائي — تُستدعى بعد حفظ/تحميل الدرجات
+   * @param {string} studentId   — معرف الطالب/ة (نص)
+   * @param {Object} gradeData   — { grade, average, subject, term }
+   * @param {string} [schoolId]  — معرف المدرسة (اختياري)
    */
   async function checkAcademicDecline(studentId, gradeData, schoolId) {
     const { grade, average, subject, term } = gradeData;
-
-    if (grade === null || grade === undefined) return;
+    if (grade === null || grade === undefined) return null;
 
     let eventType = null;
-    let severity = SEVERITY.NOTE;
+    let severity  = SEVERITY.NOTE;
 
     if (grade < 50) {
       eventType = JOOD_EVENTS.EXAM_FAILED;
-      severity = SEVERITY.URGENT;
+      severity  = SEVERITY.URGENT;
     } else if (grade < average - 15) {
       eventType = JOOD_EVENTS.ACADEMIC_DECLINE;
-      severity = SEVERITY.ALERT;
+      severity  = SEVERITY.ALERT;
     } else if (grade < average - 10) {
       eventType = JOOD_EVENTS.GRADE_BELOW_AVG;
-      severity = SEVERITY.NOTE;
+      severity  = SEVERITY.NOTE;
     }
 
     if (eventType) {
@@ -111,20 +127,23 @@
   }
 
   /**
-   * دالة مساعدة: تنبيه غياب
+   * فحص تنبيه غياب
+   * @param {string} studentId
+   * @param {Object} absenceData — { consecutiveDays, totalAbsences, term }
+   * @param {string} [schoolId]
    */
   async function checkAttendance(studentId, absenceData, schoolId) {
     const { consecutiveDays, totalAbsences, term } = absenceData;
 
     let eventType = null;
-    let severity = SEVERITY.NOTE;
+    let severity  = SEVERITY.NOTE;
 
     if (consecutiveDays >= 3) {
       eventType = JOOD_EVENTS.CONSISTENT_ABSENCE;
-      severity = consecutiveDays >= 5 ? SEVERITY.URGENT : SEVERITY.ALERT;
+      severity  = consecutiveDays >= 5 ? SEVERITY.URGENT : SEVERITY.ALERT;
     } else if (totalAbsences >= 10) {
       eventType = JOOD_EVENTS.ATTENDANCE_ALERT;
-      severity = SEVERITY.ALERT;
+      severity  = SEVERITY.ALERT;
     }
 
     if (eventType) {
@@ -141,29 +160,11 @@
 
   // ── تصدير ──
   window.EduOSStudentState = {
-    push: pushStudentEvent,
+    push:                 pushStudentEvent,
     checkAcademicDecline,
     checkAttendance,
-    EVENTS: JOOD_EVENTS,
+    EVENTS:   JOOD_EVENTS,
     SEVERITY,
   };
 
 })(window);
-
-/**
- * مثال الاستخدام:
- *
- * // تنبيه تراجع أكاديمي
- * await EduOSStudentState.push({
- *   studentId: '12345',
- *   eventType: EduOSStudentState.EVENTS.ACADEMIC_DECLINE,
- *   severity: EduOSStudentState.SEVERITY.ALERT,
- *   payload: { subject: 'رياضيات', grade: 42, average: 65 },
- *   schoolId: 'uuid-school'
- * });
- *
- * // فحص تلقائي بعد حفظ الدرجة
- * await EduOSStudentState.checkAcademicDecline('12345', {
- *   grade: 38, average: 65, subject: 'علوم', term: 'T1'
- * }, schoolId);
- */
