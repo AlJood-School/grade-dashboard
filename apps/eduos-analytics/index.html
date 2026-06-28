@@ -156,6 +156,7 @@ body{background:var(--dark);min-height:100vh;color:#fff}
 <script src="../platform-motd.js"></script>
 <script src="../platform-autologout.js"></script>
 <script src="../platform-agent-brain.js"></script>
+<script src="../platform-curriculum-rules.js"></script>
 <!-- EduOS Auth Guard -->
 <script src="/apps/platform-auth-guard.js"></script>
 </head>
@@ -837,23 +838,27 @@ function setCircle(id, pct) {
 async function loadOverviewCharts() {
   // Grades distribution
   const grades = await sb('project_grades','?select=score,max_score&limit=2000');
+  // شرائح الدرجات ديناميكية حسب المنهج
+  await loadCurriculumRules();
+  const _anlBands = getGradeBands();
+  const _anlPS    = getPassScore();
   const dist = {a:0,b:0,c:0,d:0,f:0};
   grades.forEach(g=>{
     if(!g.max_score) return;
     const pct = g.score/g.max_score*100;
-    if(pct>=90) dist.a++;
-    else if(pct>=80) dist.b++;
-    else if(pct>=70) dist.c++;
-    else if(pct>=60) dist.d++;
-    else dist.f++;
+    if(pct>=_anlBands.A)      dist.a++;
+    else if(pct>=_anlBands.B) dist.b++;
+    else if(pct>=_anlBands.C) dist.c++;
+    else if(pct>=_anlPS)      dist.d++;
+    else                       dist.f++;
   });
   const total = grades.length||1;
   document.getElementById('grades-dist').innerHTML = `
-    ${barRow('امتياز 90+%', Math.round(dist.a/total*100), dist.a, 'var(--green)')}
-    ${barRow('جيد جداً 80+%', Math.round(dist.b/total*100), dist.b, 'var(--blue)')}
-    ${barRow('جيد 70+%', Math.round(dist.c/total*100), dist.c, 'var(--accent)')}
-    ${barRow('مقبول 60+%', Math.round(dist.d/total*100), dist.d, 'var(--orange)')}
-    ${barRow('دون 60%', Math.round(dist.f/total*100), dist.f, 'var(--red)')}
+    ${barRow(`امتياز ${_anlBands.A}+%`,  Math.round(dist.a/total*100), dist.a, 'var(--green)')}
+    ${barRow(`جيد جداً ${_anlBands.B}+%`, Math.round(dist.b/total*100), dist.b, 'var(--blue)')}
+    ${barRow(`جيد ${_anlBands.C}+%`,     Math.round(dist.c/total*100), dist.c, 'var(--accent)')}
+    ${barRow(`مقبول ${_anlPS}+%`,        Math.round(dist.d/total*100), dist.d, 'var(--orange)')}
+    ${barRow(`دون ${_anlPS}%`,           Math.round(dist.f/total*100), dist.f, 'var(--red)')}
     <div style="font-size:11px;color:var(--gray);margin-top:10px">إجمالي السجلات: <strong style="color:#fff">${total}</strong></div>
   `;
   globalData.dist = dist;
@@ -914,7 +919,8 @@ async function loadAlerts() {
   } catch(e) {}
 
   // ✅ تنبيهات مشتقة من البيانات المحلية
-  if(globalData.dist?.f>0) alerts.push({type:'r',msg:`⚠️ ${globalData.dist.f} سجل درجة أقل من 60% — تحتاج مراجعة`});
+  const _anlPSAlert = (typeof getPassScore === 'function') ? getPassScore() : 50;
+  if(globalData.dist?.f>0) alerts.push({type:'r',msg:`⚠️ ${globalData.dist.f} سجل درجة أقل من ${_anlPSAlert}% — تحتاج مراجعة`});
   if(globalData.pendingMaintenance>0) alerts.push({type:'w',msg:`🔧 ${globalData.pendingMaintenance} طلب صيانة معلق`});
   if(globalData.attendancePct && globalData.attendancePct<90) alerts.push({type:'w',msg:`⚠️ حضور الموظفات اليوم ${globalData.attendancePct}% — دون الهدف`});
   if(globalData.stream?.length>0) alerts.push({type:'i',msg:`📊 ${globalData.stream.length} طالبة في برنامج STREAM متابعة`});
@@ -957,7 +963,8 @@ async function loadAcademicData() {
   document.getElementById('academic-detail').innerHTML = typeHTML || '<div style="color:var(--gray)">لا بيانات تصنيف</div>';
 
   // At risk
-  const atRisk = grades.filter(g=>g.max_score>0 && g.score/g.max_score<0.6);
+  const _anlPS2   = (typeof getPassScore === 'function') ? getPassScore() : 50;
+  const atRisk = grades.filter(g=>g.max_score>0 && (g.score/g.max_score*100)<_anlPS2);
   const atRiskStudents = [...new Set(atRisk.map(g=>g.student_id))];
   const improving = grades.filter(g=>g.max_score>0 && g.score/g.max_score>=0.9);
   const excellents = [...new Set(improving.map(g=>g.student_id))];
@@ -975,7 +982,8 @@ async function loadAcademicData() {
       <thead><tr><th>#</th><th>معرف الطالبة</th><th>نوع الدرجة</th><th>الدرجة</th><th>من</th><th>النسبة</th><th>التاريخ</th></tr></thead>
       <tbody>${recent.map((g,i)=>{
         const pct = g.max_score>0 ? (g.score/g.max_score*100).toFixed(1) : '—';
-        const color = pct>=75?'var(--green)':pct>=60?'var(--orange)':'var(--red)';
+        const _rowPS = (typeof getPassScore==='function')?getPassScore():50;
+        const color = pct>=75?'var(--green)':pct>=_rowPS?'var(--orange)':'var(--red)';
         return `<tr><td style="color:var(--gray)">${i+1}</td><td style="color:#fff">${g.student_id||'—'}</td><td style="color:var(--accent)">${g.grade_type||'—'}</td><td style="color:#fff;font-weight:700">${g.score??'—'}</td><td style="color:var(--gray)">${g.max_score||'—'}</td><td style="color:${color};font-weight:700">${pct}%</td><td style="color:var(--gray)">${g.created_at?new Date(g.created_at).toLocaleDateString('ar-SA'):'—'}</td></tr>`;
       }).join('')}</tbody>
     </table>

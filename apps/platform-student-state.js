@@ -103,7 +103,9 @@
     let eventType = null;
     let severity  = SEVERITY.NOTE;
 
-    if (grade < 50) {
+    // عتبة الرسوب ديناميكية حسب المنهج (MOE G4-8=50، G9-12=60، KHDA=60، إلخ)
+    const _passThreshold = (typeof getPassScore === 'function') ? getPassScore() : 50;
+    if (grade < _passThreshold) {
       eventType = JOOD_EVENTS.EXAM_FAILED;
       severity  = SEVERITY.URGENT;
     } else if (grade < average - 15) {
