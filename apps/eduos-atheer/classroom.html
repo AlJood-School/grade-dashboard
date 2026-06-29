@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>أثير — وضع الفصل الجماعي | EduOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+<script src="../platform-state.js"></script>
+<style>
+:root {
+  --bg:#0a1628; --bg2:#0f2035; --bg3:#1a2f4a;
+  --border:rgba(255,255,255,0.1);
+  --text:#f1f5f9; --text2:#94a3b8; --text3:#64748b;
+  --purple:#8b5cf6; --blue:#3b82f6; --green:#22c55e;
+  --amber:#f59e0b; --teal:#14b8a6;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);
+  min-height:100vh;overflow:hidden;}
+
+/* Full-screen layout for smartboard */
+.classroom-hdr{
+  background:linear-gradient(135deg,#0d1b2a,var(--bg2));
+  border-bottom:2px solid rgba(139,92,246,0.3);
+  padding:16px 32px;display:flex;align-items:center;justify-content:space-between;
+}
+.classroom-title{font-size:22px;font-weight:900;
+  background:linear-gradient(135deg,var(--purple),#22D3EE);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.classroom-meta{font-size:14px;color:var(--text2);}
+.timer{font-size:28px;font-weight:900;color:var(--amber);font-variant-numeric:tabular-nums;}
+
+.classroom-body{height:calc(100vh - 80px);display:grid;
+  grid-template-columns:1fr 380px;gap:0;}
+
+/* Left: Main content */
+.main-area{padding:24px;overflow-y:auto;display:flex;flex-direction:column;gap:20px;}
+
+/* Current Question / Activity */
+.activity-card{
+  background:linear-gradient(135deg,rgba(139,92,246,0.15),rgba(34,211,238,0.08));
+  border:2px solid rgba(139,92,246,0.4);border-radius:20px;padding:28px;
+  text-align:center;flex-shrink:0;
+}
+.activity-label{font-size:13px;color:var(--text2);margin-bottom:8px;font-weight:600;}
+.activity-question{font-size:24px;font-weight:800;line-height:1.5;margin-bottom:16px;}
+.activity-options{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:600px;margin:0 auto;}
+.option-btn{
+  background:rgba(255,255,255,0.06);border:1.5px solid var(--border);
+  border-radius:14px;padding:14px 18px;font-family:'Tajawal',sans-serif;
+  font-size:16px;font-weight:700;color:var(--text);cursor:pointer;
+  transition:all .2s;text-align:center;
+}
+.option-btn:hover{background:rgba(139,92,246,0.2);border-color:var(--purple);}
+.option-btn.voted{background:rgba(139,92,246,0.3);border-color:var(--purple);}
+
+/* Results Bar */
+.results-section{flex-shrink:0;}
+.result-bar-wrap{margin-bottom:10px;}
+.result-bar-label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;}
+.result-bar-track{height:28px;background:var(--bg3);border-radius:8px;overflow:hidden;}
+.result-bar-fill{height:100%;border-radius:8px;display:flex;align-items:center;padding-right:10px;
+  font-size:12px;font-weight:700;color:#fff;transition:width .6s ease;}
+
+/* Session modes */
+.mode-selector{display:flex;gap:10px;justify-content:center;margin-bottom:16px;flex-wrap:wrap;}
+.mode-btn{padding:10px 20px;border-radius:20px;border:1.5px solid var(--border);
+  background:var(--bg2);color:var(--text2);font-family:'Tajawal',sans-serif;
+  font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;}
+.mode-btn.active{background:var(--purple);color:#fff;border-color:var(--purple);}
+
+/* Mood pulse grid */
+.mood-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:10px;}
+.mood-bubble{
+  background:var(--bg3);border:1px solid var(--border);border-radius:14px;
+  padding:14px 10px;text-align:center;cursor:pointer;transition:all .3s;
+}
+.mood-bubble:hover{transform:scale(1.05);}
+.mood-bubble.selected{border-color:var(--purple);background:rgba(139,92,246,0.2);transform:scale(1.1);}
+.mood-bubble.selected::after{content:'✓';display:block;font-size:10px;color:var(--purple);}
+.mood-emoji{font-size:28px;}
+.mood-lbl{font-size:10px;color:var(--text2);margin-top:4px;}
+.mood-count{font-size:13px;font-weight:700;color:var(--purple);margin-top:2px;}
+
+/* Breathing exercise */
+.breath-display{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:30px;text-align:center;
+}
+.breath-circle{
+  width:140px;height:140px;border-radius:50%;
+  background:radial-gradient(circle,rgba(139,92,246,0.4),rgba(34,211,238,0.1));
+  border:3px solid rgba(139,92,246,0.5);
+  display:flex;align-items:center;justify-content:center;
+  font-size:40px;animation:breathe-big 4s ease-in-out infinite;
+  margin:0 auto 16px;
+}
+@keyframes breathe-big{
+  0%,100%{transform:scale(1);box-shadow:0 0 20px rgba(139,92,246,0.3);}
+  50%{transform:scale(1.2);box-shadow:0 0 40px rgba(139,92,246,0.6);}
+}
+.breath-instruction{font-size:20px;font-weight:800;margin-bottom:8px;}
+.breath-sub{font-size:14px;color:var(--text2);}
+
+/* Right panel: Live feed */
+.live-panel{
+  background:var(--bg2);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.live-hdr{padding:16px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;}
+.live-title{font-size:14px;font-weight:800;}
+.live-count{font-size:22px;font-weight:900;color:var(--green);}
+.live-feed{flex:1;overflow-y:auto;padding:12px;}
+.live-item{
+  background:rgba(255,255,255,0.04);border:1px solid var(--border);
+  border-radius:10px;padding:10px 12px;margin-bottom:8px;
+  display:flex;align-items:center;gap:10px;
+  animation:slideIn .3s ease;
+}
+@keyframes slideIn{from{opacity:0;transform:translateX(-10px);}to{opacity:1;transform:none;}}
+.live-avatar{width:32px;height:32px;border-radius:50%;
+  background:linear-gradient(135deg,var(--purple),var(--blue));
+  display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.live-name{font-size:12px;font-weight:700;}
+.live-detail{font-size:11px;color:var(--text3);}
+.live-time{font-size:10px;color:var(--text3);margin-right:auto;flex-shrink:0;}
+
+/* Control bar */
+.control-bar{
+  padding:14px 20px;border-top:1px solid var(--border);
+  display:flex;gap:8px;flex-wrap:wrap;justify-content:center;
+}
+.ctrl-btn{padding:8px 14px;border-radius:10px;border:none;
+  font-family:'Tajawal',sans-serif;font-size:12px;font-weight:700;
+  cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:4px;}
+.ctrl-primary{background:linear-gradient(135deg,var(--purple),var(--blue));color:#fff;}
+.ctrl-secondary{background:var(--bg3);border:1px solid var(--border);color:var(--text2);}
+.ctrl-red{background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;}
+.ctrl-green{background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);color:#86efac;}
+
+/* State banner overlay */
+.state-banner-overlay{
+  padding:8px 32px;font-size:13px;font-weight:600;
+  display:flex;align-items:center;gap:8px;
+  background:rgba(245,158,11,0.1);border-bottom:1px solid rgba(245,158,11,0.2);
+}
+</style>
+</head>
+<body>
+
+<!-- State Banner (platform-state aware) -->
+<div class="state-banner-overlay" id="state-banner-overlay" style="display:none;">
+  <span id="state-banner-icon">🏫</span>
+  <span id="state-banner-text">جارٍ تحميل الحالة...</span>
+</div>
+
+<!-- Header -->
+<div class="classroom-hdr">
+  <div>
+    <div class="classroom-title">🧠 أثير — وضع الفصل الجماعي</div>
+    <div class="classroom-meta" id="class-meta">الصف: -- · المادة: -- · المعلم/ة: --</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:20px;">
+    <div class="timer" id="session-timer">00:00</div>
+    <button class="ctrl-btn ctrl-red" onclick="endSession()">⏹️ إنهاء الجلسة</button>
+  </div>
+</div>
+
+<!-- Mode Selector -->
+<div style="padding:12px 32px;background:var(--bg2);border-bottom:1px solid var(--border);">
+  <div class="mode-selector">
+    <button class="mode-btn active" data-mode="mood" onclick="switchMode('mood',this)">🎭 قياس المزاج</button>
+    <button class="mode-btn" data-mode="poll" onclick="switchMode('poll',this)">📊 استفتاء سريع</button>
+    <button class="mode-btn" data-mode="breath" onclick="switchMode('breath',this)">🫁 تمرين التنفس</button>
+    <button class="mode-btn" data-mode="checkin" onclick="switchMode('checkin',this)">✅ تسجيل الحضور</button>
+    <button class="mode-btn" data-mode="reflect" onclick="switchMode('reflect',this)">💭 تأمل ختامي</button>
+  </div>
+</div>
+
+<!-- Body -->
+<div class="classroom-body">
+  <!-- Main Area -->
+  <div class="main-area" id="main-area">
+
+    <!-- Mood Mode (default) -->
+    <div id="mode-mood">
+      <div class="activity-card">
+        <div class="activity-label">🎭 كيف تشعر/ين الآن؟</div>
+        <div class="activity-question" id="mood-question">اضغط/ي على المشاعر التي تصف حالك الآن</div>
+        <div class="activity-label" style="font-size:11px;margin-top:4px;">لا أحد يرى اختيارك إلا المعلم/ة — كن/كوني صادقاً/ة</div>
+      </div>
+      <div class="mood-grid" id="mood-grid">
+        <!-- filled by JS -->
+      </div>
+      <div id="mood-results" style="display:none;margin-top:16px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px;">📊 نتائج الصف:</div>
+        <div id="mood-results-bars"></div>
+      </div>
+    </div>
+
+    <!-- Poll Mode -->
+    <div id="mode-poll" style="display:none;">
+      <div class="activity-card">
+        <div class="activity-label" id="poll-label">📊 استفتاء الحصة</div>
+        <div class="activity-question" id="poll-question">هل فهمت/ِ الدرس اليوم؟</div>
+        <div class="activity-options" id="poll-options">
+          <!-- filled by JS -->
+        </div>
+      </div>
+      <div id="poll-results" style="display:none;margin-top:16px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px;">📊 نتائج:</div>
+        <div id="poll-results-bars" class="results-section"></div>
+      </div>
+    </div>
+
+    <!-- Breathing Mode -->
+    <div id="mode-breath" style="display:none;">
+      <div class="activity-card" style="max-width:500px;margin:0 auto;">
+        <div class="activity-label">🫁 تمرين التنفس العميق</div>
+        <div class="breath-display">
+          <div class="breath-circle" id="breath-circle">🌬️</div>
+          <div class="breath-instruction" id="breath-instruction">استنشق ببطء...</div>
+          <div class="breath-sub" id="breath-sub">4 ثوانٍ استنشاق · 4 ثوانٍ حبس · 4 ثوانٍ زفير</div>
+          <div style="margin-top:16px;font-size:20px;font-weight:800;color:var(--amber);" id="breath-count">4</div>
+        </div>
+        <button class="ctrl-btn ctrl-primary" style="margin:0 auto;display:flex;" onclick="startBreathing()">
+          ▶️ ابدأ التمرين
+        </button>
+      </div>
+    </div>
+
+    <!-- Check-in Mode -->
+    <div id="mode-checkin" style="display:none;">
+      <div class="activity-card">
+        <div class="activity-label">✅ تسجيل الحضور العاطفي</div>
+        <div class="activity-question">كيف حالك/ِ اليوم؟ اختر/ي مستوى طاقتك/ِ</div>
+        <div class="activity-options">
+          <button class="option-btn" onclick="checkin('high','🔥 طاقة عالية')">🔥 طاقة عالية</button>
+          <button class="option-btn" onclick="checkin('medium','😊 جيد/ة')">😊 جيد/ة</button>
+          <button class="option-btn" onclick="checkin('low','😴 متعب/ة شوي')">😴 متعب/ة شوي</button>
+          <button class="option-btn" onclick="checkin('need_help','🙋 أحتاج مساعدة')">🙋 أحتاج مساعدة</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reflect Mode -->
+    <div id="mode-reflect" style="display:none;">
+      <div class="activity-card">
+        <div class="activity-label">💭 تأمل ختامي</div>
+        <div class="activity-question" id="reflect-question">ما أهم شيء تعلمته/ِه اليوم؟</div>
+        <div class="activity-label" style="font-size:11px;margin-top:4px;">
+          اكتب/ي بكلمة أو كلمتين — هذا للمعلم/ة فقط
+        </div>
+      </div>
+      <div id="reflect-responses" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;">
+        <!-- Word cloud from students -->
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Live Panel -->
+  <div class="live-panel">
+    <div class="live-hdr">
+      <div>
+        <div class="live-title">👥 الطلاب/ات المشاركون/ن</div>
+        <div style="font-size:11px;color:var(--text3);">مباشر</div>
+      </div>
+      <div class="live-count" id="live-count">0</div>
+    </div>
+    <div class="live-feed" id="live-feed">
+      <div style="text-align:center;padding:40px;color:var(--text3);font-size:13px;">
+        في انتظار مشاركة الطلاب/ات...<br>
+        <span style="font-size:24px;margin-top:12px;display:block;">👋</span>
+      </div>
+    </div>
+    <div class="control-bar">
+      <button class="ctrl-btn ctrl-primary" onclick="showResults()">📊 عرض النتائج</button>
+      <button class="ctrl-btn ctrl-green" onclick="nextQuestion()">التالي ←</button>
+      <button class="ctrl-btn ctrl-secondary" onclick="resetActivity()">🔄 إعادة</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Session State ────────────────────────────────────────────────
+const session = {
+  id: 'session_' + Date.now(),
+  mode: 'mood',
+  responses: {},
+  participants: [],
+  startTime: Date.now(),
+  timerInterval: null,
+};
+
+// ── Mood Options (with platform-state adaptation) ────────────────
+const MOOD_OPTIONS = [
+  { emoji:'😊', label:'سعيد/ة', color:'#22c55e' },
+  { emoji:'😐', label:'عادي/ة', color:'#94a3b8' },
+  { emoji:'😔', label:'حزين/ة', color:'#ef4444' },
+  { emoji:'😰', label:'قلقان/ة', color:'#f59e0b' },
+  { emoji:'😴', label:'متعب/ة', color:'#8b5cf6' },
+  { emoji:'😠', label:'منزعج/ة', color:'#dc2626' },
+  { emoji:'🤩', label:'متحمس/ة', color:'#3b82f6' },
+  { emoji:'😌', label:'هادئ/ة', color:'#14b8a6' },
+];
+
+// ── Init ─────────────────────────────────────────────────────────
+async function init() {
+  startTimer();
+  renderMoodGrid();
+  renderPollOptions();
+  await loadPlatformState();
+}
+
+async function loadPlatformState() {
+  try {
+    if (window.EduOSState) {
+      const state = await window.EduOSState.getPlatformState();
+      // تكيّف الأسئلة مع الحالة
+      if (state.isExam) {
+        document.getElementById('mood-question').textContent =
+          'قبل الامتحان — كيف تشعر/ين الآن؟ كن/كوني صادقاً/ة';
+      } else if (state.isRamadan) {
+        document.getElementById('mood-question').textContent =
+          'في رمضان — كيف مستوى طاقتك/ِ الآن؟';
+        MOOD_OPTIONS.push({ emoji:'🌙', label:'شوق رمضان', color:'#f59e0b' });
+        renderMoodGrid();
+      }
+      if (state.hubBannerColor) {
+        const banner = document.getElementById('state-banner-overlay');
+        banner.style.display = 'flex';
+        banner.style.background = state.hubBannerColor + '15';
+        banner.style.borderBottomColor = state.hubBannerColor + '40';
+        document.getElementById('state-banner-icon').textContent = state.icon;
+        document.getElementById('state-banner-text').textContent = state.labelAr + ' — ' + state.labelEn;
+      }
+    }
+  } catch(e) {}
+}
+
+function renderMoodGrid() {
+  document.getElementById('mood-grid').innerHTML = MOOD_OPTIONS.map(m => `
+    <div class="mood-bubble" onclick="selectMood('${m.emoji}','${m.label}')" data-mood="${m.emoji}">
+      <div class="mood-emoji">${m.emoji}</div>
+      <div class="mood-lbl">${m.label}</div>
+      <div class="mood-count" id="mood-count-${m.emoji}">0</div>
+    </div>
+  `).join('');
+}
+
+function renderPollOptions() {
+  const defaultPoll = {
+    question: 'هل فهمت/ِ الدرس اليوم؟',
+    options: ['نعم، تمام! ✅', 'معظمه 👍', 'بحاجة لتوضيح 🤔', 'لأ، ما فهمت/ِ ❌']
+  };
+  document.getElementById('poll-question').textContent = defaultPoll.question;
+  document.getElementById('poll-options').innerHTML = defaultPoll.options.map((opt, i) => `
+    <button class="option-btn" onclick="selectPoll(${i},'${opt.replace(/'/g,"\\'")}')">
+      ${opt}
+    </button>
+  `).join('');
+}
+
+// ── Timer ────────────────────────────────────────────────────────
+function startTimer() {
+  session.timerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - session.startTime) / 1000);
+    const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+    const s = String(elapsed % 60).padStart(2, '0');
+    document.getElementById('session-timer').textContent = `${m}:${s}`;
+  }, 1000);
+}
+
+// ── Mode switching ───────────────────────────────────────────────
+function switchMode(mode, btn) {
+  session.mode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  ['mood','poll','breath','checkin','reflect'].forEach(m => {
+    const el = document.getElementById(`mode-${m}`);
+    if (el) el.style.display = m === mode ? 'block' : 'none';
+  });
+}
+
+// ── Mood Selection ───────────────────────────────────────────────
+function selectMood(emoji, label) {
+  document.querySelectorAll('.mood-bubble').forEach(b => b.classList.remove('selected'));
+  const el = document.querySelector(`[data-mood="${emoji}"]`);
+  if (el) el.classList.add('selected');
+  addLiveFeedItem('طالب/ة', emoji + ' ' + label);
+  // increment count
+  const countEl = document.getElementById(`mood-count-${emoji}`);
+  if (countEl) countEl.textContent = parseInt(countEl.textContent||0) + 1;
+  updateLiveCount();
+}
+
+// ── Poll Selection ───────────────────────────────────────────────
+function selectPoll(idx, label) {
+  document.querySelectorAll('.option-btn').forEach((b,i) => {
+    b.classList.toggle('voted', i === idx);
+  });
+  addLiveFeedItem('طالب/ة', label);
+  updateLiveCount();
+}
+
+// ── Check-in ─────────────────────────────────────────────────────
+function checkin(level, label) {
+  document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('voted'));
+  event.target.classList.add('voted');
+  addLiveFeedItem('طالب/ة', '✅ ' + label);
+  updateLiveCount();
+}
+
+// ── Breathing ────────────────────────────────────────────────────
+let breathPhase = 0;
+let breathInterval = null;
+const breathPhases = [
+  { text:'استنشق ببطء...', count:4, emoji:'🌬️' },
+  { text:'احبس نفسك...', count:4, emoji:'🫁' },
+  { text:'ازفر ببطء...', count:6, emoji:'💨' },
+  { text:'استرح...', count:2, emoji:'😌' },
+];
+
+function startBreathing() {
+  if (breathInterval) clearInterval(breathInterval);
+  breathPhase = 0;
+  runBreathPhase();
+  breathInterval = setInterval(runBreathPhase, 4000);
+}
+
+function runBreathPhase() {
+  const p = breathPhases[breathPhase % breathPhases.length];
+  document.getElementById('breath-instruction').textContent = p.text;
+  document.getElementById('breath-count').textContent = p.count;
+  document.getElementById('breath-circle').textContent = p.emoji;
+  breathPhase++;
+  if (breathPhase >= 12) { clearInterval(breathInterval); }
+}
+
+// ── Show Results ─────────────────────────────────────────────────
+function showResults() {
+  if (session.mode === 'mood') {
+    const resultsEl = document.getElementById('mood-results');
+    resultsEl.style.display = 'block';
+    const counts = {};
+    MOOD_OPTIONS.forEach(m => {
+      const el = document.getElementById(`mood-count-${m.emoji}`);
+      counts[m.emoji] = { count: parseInt(el?.textContent||0), label:m.label, color:m.color };
+    });
+    const total = Math.max(1, Object.values(counts).reduce((s,v)=>s+v.count,0));
+    document.getElementById('mood-results-bars').innerHTML = Object.entries(counts)
+      .filter(([,v])=>v.count>0)
+      .sort(([,a],[,b])=>b.count-a.count)
+      .map(([emoji,v])=> {
+        const pct = Math.round(v.count/total*100);
+        return `<div class="result-bar-wrap">
+          <div class="result-bar-label">
+            <span>${emoji} ${v.label}</span>
+            <span>${v.count} (${pct}%)</span>
+          </div>
+          <div class="result-bar-track">
+            <div class="result-bar-fill" style="width:${pct}%;background:${v.color};">${pct > 10 ? pct+'%' : ''}</div>
+          </div>
+        </div>`;
+      }).join('');
+  }
+}
+
+// ── Live Feed ────────────────────────────────────────────────────
+let liveCount = 0;
+function addLiveFeedItem(name, detail) {
+  liveCount++;
+  const feed = document.getElementById('live-feed');
+  const item = document.createElement('div');
+  item.className = 'live-item';
+  const now = new Date();
+  item.innerHTML = `
+    <div class="live-avatar">${liveCount}</div>
+    <div class="live-body">
+      <div class="live-name">${name}</div>
+      <div class="live-detail">${detail}</div>
+    </div>
+    <div class="live-time">${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}</div>
+  `;
+  feed.insertBefore(item, feed.firstChild);
+  // حذف عناصر أكثر من 20
+  while (feed.children.length > 20) feed.removeChild(feed.lastChild);
+}
+
+function updateLiveCount() {
+  document.getElementById('live-count').textContent = liveCount;
+}
+
+function resetActivity() {
+  liveCount = 0;
+  updateLiveCount();
+  document.getElementById('live-feed').innerHTML =
+    '<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px;">في انتظار مشاركة الطلاب/ات...<br><span style="font-size:24px;margin-top:12px;display:block;">👋</span></div>';
+  document.querySelectorAll('.mood-bubble').forEach(b => {
+    b.classList.remove('selected');
+    const countEl = b.querySelector('[id^="mood-count-"]');
+    if (countEl) countEl.textContent = '0';
+  });
+  document.getElementById('mood-results').style.display = 'none';
+}
+
+function nextQuestion() {
+  resetActivity();
+  // cycle through predefined questions
+  const questions = [
+    'هل فهمت/ِ الدرس اليوم؟',
+    'هل تحتاج/ين مساعدة في أي شيء؟',
+    'ما مستوى صعوبة النشاط؟',
+    'هل أنت/ِ مستعد/ة للامتحان القادم؟',
+  ];
+  const idx = Math.floor(Math.random() * questions.length);
+  document.getElementById('poll-question').textContent = questions[idx];
+}
+
+function endSession() {
+  if (confirm('هل تريد/ين إنهاء الجلسة؟')) {
+    clearInterval(session.timerInterval);
+    if (breathInterval) clearInterval(breathInterval);
+    window.close();
+  }
+}
+
+init();
+</script>
+</body>
+</html>
