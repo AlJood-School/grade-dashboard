@@ -27,8 +27,9 @@ CREATE TABLE IF NOT EXISTS curriculum_rules (
   retention_allowed boolean DEFAULT true,
   core_subjects    text[] DEFAULT ARRAY['Arabic','English','Math','Science','Islamic','Social Studies'],
   notes_ar         text,
-  notes_en         text,
-  created_at       timestamptz DEFAULT now(),
+  notes_en              text,
+  language_policy_note  text,   -- ملاحظة سياسة اللغات (إعفاءات، قرارات رسمية)
+  created_at            timestamptz DEFAULT now(),
   UNIQUE(curriculum_type, grade_group)
 );
 
@@ -87,6 +88,16 @@ VALUES
    'Min 24/45 pts; min grade 2 per subject; fail >2 at grade 2 = no diploma')
 
 ON CONFLICT (curriculum_type, grade_group) DO NOTHING;
+
+-- 4b) تحديث language_policy_note للمناهج التي تملك سياسات لغوية خاصة
+UPDATE curriculum_rules
+SET language_policy_note =
+  'UAE/Gulf CBSE schools are EXEMPT from CBSE Three-Language Policy (Circular Acad-33/2026, effective July 1 2026). ' ||
+  'Students already in Grades 7-9 retain current language combinations through Grade 10. ' ||
+  'New rule applies prospectively from Grade 6 only. ' ||
+  'No student barred from Grade 10 exams for language reasons. ' ||
+  'Source: CBSE + Union Minister Pradhan clarification, June 26 2026.'
+WHERE curriculum_type = 'CBSE';
 
 -- 5) RLS
 ALTER TABLE curriculum_rules ENABLE ROW LEVEL SECURITY;
