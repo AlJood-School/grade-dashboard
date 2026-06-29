@@ -1100,5 +1100,257 @@ window.addEventListener('DOMContentLoaded',()=>{
 });
 </script>
 <script src="../platform-tour.js"></script>
+<script src="../platform-state.js"></script>
+
+<!-- ═══════════════════════════════════════════════════════
+     كاشف تعارض الامتحانات — Assessment Conflict Detector
+     © 2026 NAFAS FOR ARTIFICIAL INTELLIGENCE
+     ═══════════════════════════════════════════════════ -->
+<style>
+.conflict-card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:20px;margin-bottom:16px;}
+.conflict-card-title{font-size:15px;font-weight:800;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.conflict-row{padding:12px 14px;border-radius:10px;margin-bottom:8px;border:1px solid;
+  display:flex;align-items:flex-start;gap:12px;}
+.conflict-row.critical{background:rgba(239,68,68,0.08);border-color:rgba(239,68,68,0.3);}
+.conflict-row.warning{background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.3);}
+.conflict-row.ok{background:rgba(34,197,94,0.05);border-color:rgba(34,197,94,0.15);}
+.conflict-icon{font-size:20px;flex-shrink:0;}
+.conflict-body{flex:1;}
+.conflict-title{font-size:13px;font-weight:700;margin-bottom:3px;}
+.conflict-detail{font-size:11px;color:var(--text-muted);}
+.conflict-badge{font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700;}
+.new-exam-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+@media(max-width:600px){.new-exam-form{grid-template-columns:1fr;}}
+.exam-input{background:var(--card);border:1px solid var(--card-border);color:var(--text);
+  padding:9px 12px;border-radius:8px;font-family:'Tajawal',sans-serif;font-size:13px;outline:none;}
+.exam-input:focus{border-color:var(--accent);}
+select.exam-input option{background:#0a1628;}
+</style>
+
+<script>
+// ── Assessment Conflict Detector ────────────────────────────────
+let conflictAssessments = [];
+
+async function loadConflictPanel() {
+  await loadAssessmentSchedule();
+  analyzeConflicts();
+}
+
+async function loadAssessmentSchedule() {
+  const url = window.SB_URL || '';
+  const key = window.SB_KEY || '';
+  if (!url || !key) { conflictAssessments = getMockAssessments(); return; }
+  try {
+    const res = await fetch(
+      `${url}/rest/v1/assessment_schedule?select=*&order=scheduled_date,grade,period_number&limit=200`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+    );
+    conflictAssessments = await res.json() || [];
+  } catch { conflictAssessments = getMockAssessments(); }
+}
+
+function getMockAssessments() {
+  const today = new Date();
+  const d1 = new Date(today); d1.setDate(d1.getDate() + 2);
+  const d2 = new Date(today); d2.setDate(d2.getDate() + 5);
+  return [
+    { id:'1', subject_name:'الرياضيات', grade:'G7', class_section:'A',
+      scheduled_date: d1.toISOString().split('T')[0], period_number:1, assessment_type:'chapter_test',
+      conflict_flag:false },
+    { id:'2', subject_name:'العلوم', grade:'G7', class_section:'A',
+      scheduled_date: d1.toISOString().split('T')[0], period_number:2, assessment_type:'quiz',
+      conflict_flag:false },
+    { id:'3', subject_name:'اللغة العربية', grade:'G7', class_section:'A',
+      scheduled_date: d1.toISOString().split('T')[0], period_number:3, assessment_type:'chapter_test',
+      conflict_flag:true, conflict_note:'تعارض: 3 امتحانات في نفس اليوم للصف G7' },
+    { id:'4', subject_name:'الإنجليزية', grade:'G8', class_section:'B',
+      scheduled_date: d2.toISOString().split('T')[0], period_number:1, assessment_type:'midterm',
+      conflict_flag:false },
+  ];
+}
+
+function analyzeConflicts() {
+  // تجميع حسب الصف + اليوم
+  const dayGradeMap = {};
+  conflictAssessments.forEach(a => {
+    const key = `${a.scheduled_date}_${a.grade}_${a.class_section || 'ALL'}`;
+    if (!dayGradeMap[key]) dayGradeMap[key] = [];
+    dayGradeMap[key].push(a);
+  });
+
+  const conflicts = [];
+  const warnings = [];
+  const ok = [];
+
+  Object.entries(dayGradeMap).forEach(([key, items]) => {
+    if (items.length >= 3) {
+      conflicts.push({ key, items, type: 'critical',
+        msg: `⚠️ ${items.length} امتحانات في يوم واحد للصف ${items[0].grade}` });
+    } else if (items.length === 2) {
+      warnings.push({ key, items, type: 'warning',
+        msg: `💡 امتحانان في يوم واحد للصف ${items[0].grade} — يُفضَّل التوزيع` });
+    } else {
+      ok.push({ key, items });
+    }
+  });
+
+  renderConflictResults(conflicts, warnings, ok);
+}
+
+function renderConflictResults(conflicts, warnings, ok) {
+  const el = document.getElementById('conflict-results');
+  if (!el) return;
+
+  const kpiEl = document.getElementById('conflict-kpis');
+  if (kpiEl) {
+    kpiEl.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:14px;text-align:center;">
+          <div style="font-size:28px;font-weight:800;color:#ef4444;">${conflicts.length}</div>
+          <div style="font-size:11px;color:var(--text-muted);">تعارض حرج</div>
+        </div>
+        <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:14px;text-align:center;">
+          <div style="font-size:28px;font-weight:800;color:#f59e0b;">${warnings.length}</div>
+          <div style="font-size:11px;color:var(--text-muted);">تحذير</div>
+        </div>
+        <div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:12px;padding:14px;text-align:center;">
+          <div style="font-size:28px;font-weight:800;color:#22c55e;">${ok.length}</div>
+          <div style="font-size:11px;color:var(--text-muted);">بدون تعارض</div>
+        </div>
+      </div>`;
+  }
+
+  const rows = [
+    ...conflicts.map(c => renderConflictRow(c, 'critical')),
+    ...warnings.map(w => renderConflictRow(w, 'warning')),
+  ];
+
+  el.innerHTML = rows.length ? rows.join('') :
+    '<div style="text-align:center;padding:30px;color:var(--text-muted);">✅ لا تعارضات — جدول الامتحانات سليم</div>';
+}
+
+function renderConflictRow(c, type) {
+  const items = c.items;
+  const date = items[0]?.scheduled_date || '';
+  const grade = items[0]?.grade || '';
+  const subjects = items.map(i => i.subject_name).join(' · ');
+  const icon = type === 'critical' ? '🔴' : '🟡';
+  const badgeBg = type === 'critical' ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)';
+  const badgeColor = type === 'critical' ? '#fca5a5' : '#fcd34d';
+  return `
+    <div class="conflict-row ${type}">
+      <div class="conflict-icon">${icon}</div>
+      <div class="conflict-body">
+        <div class="conflict-title">${c.msg}</div>
+        <div class="conflict-detail">📅 ${date} · الصف ${grade} · ${subjects}</div>
+        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
+          ${items.map(i =>
+            `<span style="font-size:10px;background:${badgeBg};color:${badgeColor};padding:2px 8px;border-radius:8px;">
+              ${i.assessment_type === 'chapter_test' ? '📝' : '📋'} ${i.subject_name} (ح${i.period_number||'?'})
+            </span>`).join('')}
+        </div>
+      </div>
+    </div>`;
+}
+
+async function addNewAssessment() {
+  const subject = document.getElementById('new-subject')?.value;
+  const grade   = document.getElementById('new-grade')?.value;
+  const section = document.getElementById('new-section')?.value;
+  const date    = document.getElementById('new-date')?.value;
+  const period  = document.getElementById('new-period')?.value;
+  const type    = document.getElementById('new-type')?.value;
+
+  if (!subject || !grade || !date) {
+    alert('يرجى ملء الحقول المطلوبة: المادة، الصف، التاريخ');
+    return;
+  }
+
+  const url = window.SB_URL || '';
+  const key = window.SB_KEY || '';
+  if (!url || !key) {
+    alert('⚠️ إضافة تجريبية — لا يوجد اتصال بقاعدة البيانات');
+    conflictAssessments.push({ id: Date.now(), subject_name:subject, grade, class_section:section,
+      scheduled_date:date, period_number:parseInt(period)||1, assessment_type:type, conflict_flag:false });
+    analyzeConflicts();
+    return;
+  }
+
+  try {
+    const res = await fetch(`${url}/rest/v1/assessment_schedule`, {
+      method: 'POST',
+      headers: { apikey: key, Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ subject_name:subject, grade, class_section:section||null,
+        scheduled_date:date, period_number:parseInt(period)||1, assessment_type:type }),
+    });
+    const data = await res.json();
+    if (data?.conflict_flag) {
+      alert(`⚠️ تحذير تعارض:\n${data.conflict_note}`);
+    } else {
+      alert('✅ تمت إضافة الامتحان بدون تعارض');
+    }
+    await loadConflictPanel();
+  } catch(e) { alert('❌ خطأ: ' + e.message); }
+}
+</script>
+
+<!-- ─── Conflict Panel ─── -->
+<div class="panel" id="panel-conflict">
+  <div style="padding:20px;">
+
+    <div id="conflict-kpis"></div>
+
+    <!-- Add New Assessment Form -->
+    <div class="conflict-card">
+      <div class="conflict-card-title">➕ إضافة امتحان جديد</div>
+      <div class="new-exam-form">
+        <input id="new-subject" class="exam-input" type="text" placeholder="اسم المادة *">
+        <select id="new-grade" class="exam-input">
+          <option value="">الصف *</option>
+          <option>KG1</option><option>KG2</option>
+          <option>G1</option><option>G2</option><option>G3</option><option>G4</option>
+          <option>G5</option><option>G6</option><option>G7</option><option>G8</option>
+          <option>G9</option><option>G10</option><option>G11</option><option>G12</option>
+        </select>
+        <input id="new-section" class="exam-input" type="text" placeholder="الشعبة (A/B/C)">
+        <input id="new-date" class="exam-input" type="date">
+        <select id="new-period" class="exam-input">
+          <option value="">الحصة</option>
+          <option>1</option><option>2</option><option>3</option><option>4</option>
+          <option>5</option><option>6</option><option>7</option><option>8</option>
+        </select>
+        <select id="new-type" class="exam-input">
+          <option value="quiz">اختبار قصير</option>
+          <option value="chapter_test">اختبار فصلي</option>
+          <option value="midterm">نصف الفصل</option>
+          <option value="final">نهاية الفصل</option>
+          <option value="project">مشروع</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" style="margin-top:12px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;padding:10px 20px;border-radius:10px;border:none;cursor:pointer;background:linear-gradient(135deg,var(--accent),#8B5CF6);color:#fff;"
+        onclick="addNewAssessment()">
+        ➕ إضافة وكشف التعارض
+      </button>
+    </div>
+
+    <!-- Results -->
+    <div class="conflict-card">
+      <div class="conflict-card-title">
+        ⚠️ تقرير التعارضات
+        <button onclick="loadConflictPanel()" style="margin-right:auto;background:none;border:1px solid var(--card-border);color:var(--text-muted);padding:4px 10px;border-radius:8px;cursor:pointer;font-family:'Tajawal',sans-serif;font-size:11px;">🔄 تحديث</button>
+      </div>
+      <div id="conflict-results">
+        <div style="text-align:center;padding:30px;color:var(--text-muted);">
+          <button class="btn btn-primary" onclick="loadConflictPanel()" style="font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;padding:10px 20px;border-radius:10px;border:none;cursor:pointer;background:linear-gradient(135deg,var(--accent),#8B5CF6);color:#fff;">
+            🔍 تحليل الجدول
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 </body>
 </html>

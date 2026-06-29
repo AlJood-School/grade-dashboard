@@ -520,6 +520,7 @@ body {
   <button class="nav-tab" onclick="switchTab('predict')">🔮 التنبؤ الذكي</button>
   <button class="nav-tab" onclick="switchTab('approvals')">✅ الموافقات</button>
   <button class="nav-tab" onclick="switchTab('backup')">💾 النسخ الاحتياطية</button>
+  <button class="nav-tab" onclick="switchTab('platform-state')" style="border-left:2px solid rgba(139,92,246,0.4);">🗓️ حالة المنصة</button>
 </div>
 
 <!-- ─── MAIN ─── -->
@@ -3126,7 +3127,223 @@ async function principalRunAgent() {
 // تحميل عند الفتح
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(loadPrincipalAgentWidget, 1500);
+  setTimeout(loadCurrentPlatformState, 1000);
 });
 </script>
+
+<!-- ══════════════════════════════════════════════════════
+     تبويب حالة المنصة — Principal Platform State Override
+     © 2026 NAFAS FOR ARTIFICIAL INTELLIGENCE
+     ════════════════════════════════════════════════════ -->
+<script src="../platform-state.js"></script>
+
+<style>
+/* Platform State Override Styles */
+.state-override-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+@media(max-width:768px){.state-override-grid{grid-template-columns:1fr;}}
+.state-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;}
+.state-card-title{font-size:14px;font-weight:800;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.state-btn-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.state-btn{padding:12px 14px;border-radius:10px;border:none;
+  font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;
+  transition:all .2s;display:flex;align-items:center;justify-content:center;gap:6px;
+  color:#fff;}
+.state-btn:hover{transform:translateY(-1px);opacity:.9;}
+.state-btn-normal{background:linear-gradient(135deg,#3b82f6,#6366f1);}
+.state-btn-exam{background:linear-gradient(135deg,#ef4444,#dc2626);}
+.state-btn-prep{background:linear-gradient(135deg,#f59e0b,#d97706);}
+.state-btn-ramadan{background:linear-gradient(135deg,#f59e0b,#84cc16);}
+.state-btn-holiday{background:linear-gradient(135deg,#22c55e,#16a34a);}
+.state-btn-national{background:linear-gradient(135deg,#22c55e,#065f46);}
+.state-btn-distance{background:linear-gradient(135deg,#3b82f6,#0284c7);}
+.state-btn-halfday{background:linear-gradient(135deg,#8b5cf6,#6C3DD6);}
+.state-btn-emergency{background:linear-gradient(135deg,#ef4444,#7f1d1d);box-shadow:0 0 10px rgba(239,68,68,0.4);}
+.current-state-display{background:var(--bg2);border:2px solid rgba(139,92,246,0.3);
+  border-radius:14px;padding:20px;display:flex;align-items:center;gap:16px;margin-bottom:16px;}
+.current-state-icon{font-size:40px;}
+.current-state-label{font-size:18px;font-weight:800;}
+.current-state-sub{font-size:12px;color:var(--text3);margin-top:2px;}
+.state-history-item{padding:10px 12px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;font-size:12px;}
+.state-history-item:last-child{border:none;}
+.override-form{display:flex;flex-direction:column;gap:10px;margin-top:12px;}
+.override-input{background:var(--bg2);border:1px solid var(--border);color:var(--text);
+  padding:9px 12px;border-radius:8px;font-family:'Tajawal',sans-serif;font-size:13px;outline:none;}
+.override-input:focus{border-color:var(--gold);}
+.calendar-event-row{padding:10px 12px;border-radius:10px;background:var(--bg2);
+  border:1px solid var(--border);display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.cal-event-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+</style>
+
+<script>
+// ── Platform State Override ──────────────────────────────────────
+let _currentState = null;
+
+async function loadCurrentPlatformState() {
+  try {
+    if (!window.EduOSState) return;
+    _currentState = await window.EduOSState.getPlatformState();
+    renderCurrentState();
+    loadStateHistory();
+    loadUpcomingEvents();
+  } catch(e) { console.warn('state load', e); }
+}
+
+function renderCurrentState() {
+  const el = document.getElementById('current-state-display');
+  if (!el || !_currentState) return;
+  el.querySelector('.current-state-icon').textContent = _currentState.icon;
+  el.querySelector('.current-state-label').textContent = _currentState.labelAr;
+  el.querySelector('.current-state-sub').textContent =
+    _currentState.labelEn + ' · المصدر: ' + (_currentState.source === 'supabase' ? 'قاعدة البيانات' : 'حساب محلي');
+}
+
+async function setStateOverride(state, icon, labelAr, note) {
+  const confirmed = confirm(`هل تريدين تغيير حالة المنصة إلى:\n${icon} ${labelAr}؟\nسيؤثر هذا على الجميع فوراً.`);
+  if (!confirmed) return;
+
+  const noteInput = document.getElementById('override-note');
+  const finalNote = noteInput?.value || note || null;
+
+  const result = await window.EduOSState.overridePlatformState(state, {
+    labelAr, icon, note: finalNote,
+  });
+
+  if (result.success) {
+    _currentState = result.state;
+    renderCurrentState();
+    showStateNotif('✅ تم تغيير حالة المنصة بنجاح', 'success');
+    loadStateHistory();
+  } else {
+    showStateNotif('❌ فشل تغيير الحالة: ' + (result.error || ''), 'error');
+  }
+}
+
+function showStateNotif(msg, type) {
+  const n = document.getElementById('state-notif');
+  if (!n) return;
+  n.textContent = msg;
+  n.style.cssText = `display:block;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:12px;
+    background:${type === 'success' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)'};
+    border:1px solid ${type === 'success' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'};
+    color:${type === 'success' ? '#86efac' : '#fca5a5'};`;
+  setTimeout(() => { n.style.display = 'none'; }, 5000);
+}
+
+async function loadStateHistory() {
+  const el = document.getElementById('state-history-list');
+  if (!el) return;
+  const url = window.SB_URL || '';
+  const key = window.SB_KEY || '';
+  if (!url || !key) { el.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:10px;">لا يمكن تحميل السجل</div>'; return; }
+  try {
+    const res = await fetch(`${url}/rest/v1/platform_state_history?select=*&order=changed_at.desc&limit=10`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+    const data = await res.json();
+    el.innerHTML = (data || []).map(h => `
+      <div class="state-history-item">
+        <span style="font-size:16px;">🔄</span>
+        <div style="flex:1;">
+          <span style="color:var(--text);">${h.previous_state || '?'}</span>
+          <span style="color:var(--gold);"> → </span>
+          <span style="color:var(--emerald);">${h.new_state}</span>
+          ${h.note ? `<span style="color:var(--text3);"> · ${h.note}</span>` : ''}
+        </div>
+        <div style="color:var(--text3);font-size:10px;">${new Date(h.changed_at).toLocaleString('ar-AE')}</div>
+      </div>`).join('') || '<div style="color:var(--text3);font-size:12px;padding:10px;">لا يوجد سجل بعد</div>';
+  } catch { el.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:10px;">--</div>'; }
+}
+
+async function loadUpcomingEvents() {
+  const el = document.getElementById('upcoming-events-list');
+  if (!el) return;
+  const url = window.SB_URL || '';
+  const key = window.SB_KEY || '';
+  if (!url || !key) return;
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const in30 = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+    const res = await fetch(
+      `${url}/rest/v1/academic_events?select=*&starts_at=gte.${today}&starts_at=lte.${in30}&order=starts_at`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+    const data = await res.json();
+    const colors = { exam_period:'#ef4444', holiday_religious:'#22c55e', holiday_national:'#22c55e',
+      ramadan_schedule:'#f59e0b', orientation:'#3b82f6', ministry_exam:'#ef4444', makeup_exam:'#f59e0b',
+      eid:'#22c55e', default:'#8b5cf6' };
+    el.innerHTML = (data || []).map(e => {
+      const color = colors[e.event_type] || colors.default;
+      return `<div class="calendar-event-row">
+        <div class="cal-event-dot" style="background:${color};"></div>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:700;">${e.title_ar}</div>
+          <div style="font-size:11px;color:var(--text3);">${e.starts_at} — ${e.ends_at}</div>
+        </div>
+        ${e.affects_platform_state ? `<span style="font-size:10px;background:rgba(139,92,246,0.2);color:#c4b5fd;padding:2px 6px;border-radius:6px;">تؤثر على الحالة</span>` : ''}
+      </div>`;
+    }).join('') || '<div style="color:var(--text3);font-size:12px;">لا أحداث خلال 30 يوماً</div>';
+  } catch {}
+}
+</script>
+
+<!-- ────── تبويب حالة المنصة ────── -->
+<div class="tab-content" id="tab-platform-state">
+  <div style="padding:20px;">
+
+    <div id="state-notif" style="display:none;"></div>
+
+    <!-- الحالة الحالية -->
+    <div class="current-state-display" id="current-state-display">
+      <div class="current-state-icon" style="font-size:36px;">⏳</div>
+      <div>
+        <div class="current-state-label">جارٍ التحميل...</div>
+        <div class="current-state-sub">--</div>
+      </div>
+    </div>
+
+    <div class="state-override-grid">
+
+      <!-- تغيير الحالة -->
+      <div class="state-card">
+        <div class="state-card-title">⚡ تغيير حالة المنصة فوراً</div>
+        <p style="font-size:11px;color:var(--text3);margin-bottom:12px;">
+          التغيير يُطبَّق على كل المستخدمين فوراً — يُعلِّم MOTD والثيم وأثير وبوابات الوالدين
+        </p>
+        <div class="override-form">
+          <input id="override-note" class="override-input" type="text" placeholder="ملاحظة اختيارية (مثال: بسبب الطقس)">
+        </div>
+        <div class="state-btn-grid" style="margin-top:12px;">
+          <button class="state-btn state-btn-normal" onclick="setStateOverride('normal_school_day','🏫','يوم دراسي')">🏫 يوم دراسي</button>
+          <button class="state-btn state-btn-exam" onclick="setStateOverride('exam_period','📝','فترة الامتحانات')">📝 امتحانات</button>
+          <button class="state-btn state-btn-prep" onclick="setStateOverride('exam_prep_week','📚','أسبوع المراجعة')">📚 مراجعة</button>
+          <button class="state-btn state-btn-ramadan" onclick="setStateOverride('ramadan_schedule','🌙','رمضان المبارك')">🌙 رمضان</button>
+          <button class="state-btn state-btn-holiday" onclick="setStateOverride('holiday_religious','🕌','إجازة دينية')">🕌 إجازة دينية</button>
+          <button class="state-btn state-btn-national" onclick="setStateOverride('holiday_national','🇦🇪','عطلة وطنية')">🇦🇪 وطنية</button>
+          <button class="state-btn state-btn-distance" onclick="setStateOverride('distance_learning','💻','تعلم عن بُعد')">💻 عن بُعد</button>
+          <button class="state-btn state-btn-halfday" onclick="setStateOverride('half_day','⏰','نصف يوم')">⏰ نصف يوم</button>
+          <button class="state-btn state-btn-emergency" style="grid-column:1/-1;" onclick="setStateOverride('emergency_closure','🚨','إغلاق طارئ')">🚨 إغلاق طارئ — طوارئ</button>
+        </div>
+      </div>
+
+      <!-- الأحداث القادمة -->
+      <div class="state-card">
+        <div class="state-card-title">📅 الأحداث خلال 30 يوماً</div>
+        <div id="upcoming-events-list">
+          <div style="color:var(--text3);font-size:12px;">جارٍ التحميل...</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- سجل التغييرات -->
+    <div class="state-card" style="margin-top:16px;">
+      <div class="state-card-title">📋 سجل التغييرات</div>
+      <div id="state-history-list">
+        <div style="color:var(--text3);font-size:12px;">جارٍ التحميل...</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 </body>
 </html>
