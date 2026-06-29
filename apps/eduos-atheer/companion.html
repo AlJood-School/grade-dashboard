@@ -235,67 +235,135 @@ const SESSION = {
   startTime: Date.now()
 };
 
-// ── 6 SCREENS FLOW ──
-const SCREENS = [
-  {
-    id: 'welcome',
-    bg: '#0a1628',
-    avatar: { x: 0.5, y: 0.62, scale: 1.2 },
-    bubble: 'أهلاً وسهلاً 🌟\nأنا أثير، رفيقك الذكي!\nكيف اسمك؟',
-    choices: ['أحمد 👦', 'فاطمة 👧', 'اسمي مختلف ✏️'],
-    action: 'speak',
-    nextAuto: false
-  },
-  {
-    id: 'checkin',
-    bg: '#0d1a2e',
-    avatar: { x: 0.5, y: 0.60, scale: 1.0 },
+// ── VARK + PLATFORM STATE — DYNAMIC SCREEN BUILDER ──
+
+async function getChildVARK(childId) {
+  if (!childId) return null;
+  try {
+    const r = await fetch(
+      `${SURL}/rest/v1/atheer_signals?child_id=eq.${childId}&signal_type=eq.vark_result&order=captured_at.desc&limit=1`,
+      { headers: SH }
+    );
+    if (r.ok) { const d = await r.json(); return d[0]?.signal_data?.vark_type || null; }
+  } catch(e) {}
+  return null;
+}
+
+async function getCurrentPlatformState() {
+  try {
+    const r = await fetch(`${SURL}/rest/v1/platform_state?order=updated_at.desc&limit=1`, { headers: SH });
+    if (r.ok) { const d = await r.json(); return d[0]?.current_state || 'normal'; }
+  } catch(e) {}
+  return 'normal';
+}
+
+function buildScreens(vark, state) {
+  const isExam      = state === 'exam';
+  const isRamadan   = state === 'ramadan';
+  const isHoliday   = ['holiday','break','summer'].includes(state);
+  const isEmergency = state === 'emergency';
+  const v = (vark || 'K').toUpperCase();
+
+  // ── VARK story variants ──
+  const stories = {
+    V: { bubble: 'هيّا نتخيّل معاً 🎨\n\nتخيّل/ي أنك في مكان جميل جداً —\nالألوان حولك زاهية والضوء دافئ.\nأيّ لوحة تصفها؟', choices: ['🌅 شروق الشمس على البحر','🌿 حديقة خضراء هادئة','🌠 سماء ليلية بالنجوم'] },
+    A: { bubble: 'هيّا نستمع معاً 🎶\n\nتخيّل/ي صوتاً يجعلك/ِ سعيداً/ة —\nصوت يريحك/ِ ويطمئنك/ِ.\nأيّ صوت هو؟', choices: ['🌊 صوت الأمواج','🎵 موسيقى هادئة','🌧️ صوت المطر'] },
+    R: { bubble: 'هيّا نفكّر معاً 📖\n\nأمامك ثلاثة خيارات ليوم جميل.\nأيّها يصف يومك الأجمل؟', choices: ['📚 يوم تعلّم شيء جديد','✍️ يوم كتبت أفكاري','📖 يوم قرأت قصة مميزة'] },
+    K: { bubble: 'هيّا نحسّ ونتحرّك 🌀\n\nفكّر/ي في جسمك الآن.\nأين تشعر/ين بأكبر طاقة؟', choices: ['💪 يديّ — أريد أن أصنع شيئاً','🦵 قدميّ — أريد أن أتحرك','❤️ قلبي — أشعر بدفء'] }
+  };
+  // ── VARK activity variants ──
+  const activities = {
+    V: 'ارسم/ي في مخيّلتك صورة من يومك.\nصف/صفي لي ما تراه — ألوانه ومشاعره! 🎨',
+    A: 'تذكّر/ي صوتاً جميلاً سمعته/ِ اليوم.\nأيّ صوت كان؟ أخبرني! 🎶',
+    R: 'اذكر/ي لي ثلاثة أشياء جميلة\nحدثت معك/ِ اليوم — أي شيء صغير أو كبير! 📋',
+    K: 'تذكّر/ي لحظة تحرّكت فيها أو صنعت شيئاً بيديك/ِ اليوم.\nكيف شعرت/ِ؟ 💫'
+  };
+
+  const story    = stories[v]    || stories.K;
+  const actTxt   = activities[v] || activities.K;
+
+  // ── State-aware check-in ──
+  let checkin = {
+    id:'checkin', bg:'#0d1a2e', avatar:{x:.5,y:.6,scale:1},
     bubble: 'رائع! كيف حالك اليوم؟\nأخبرني بصدق 💙',
-    choices: ['😊 بخير وسعيد/ة', '😐 عادي، لا بأس', '😔 أشعر بشيء ما'],
-    action: 'choose',
-    nextAuto: false,
-    signalKey: 'emotional_state'
-  },
-  {
-    id: 'story',
-    bg: '#0f1f35',
-    avatar: { x: 0.5, y: 0.58, scale: 1.1 },
-    bubble: 'هيّا نسمع قصة معاً 📖\n\nكان يا ما كان طفل/ة شجاع/ة...\nوجد/ت أمام ثلاثة أبواب.\nأيّ باب تختار/ين؟',
-    choices: ['🔵 الباب الأزرق — هادئ وهادئة', '🟡 الباب الذهبي — مغامرة', '🟢 الباب الأخضر — طبيعة'],
-    action: 'choose',
-    nextAuto: false,
-    signalKey: 'story_choice'
-  },
-  {
-    id: 'feeling_draw',
-    bg: '#0a1628',
-    avatar: { x: 0.5, y: 0.55, scale: 0.9 },
-    bubble: 'الآن، أغمض/ي عينيك للحظة...\nخذ/ي نفساً عميقاً 🌬️\n\nما الذي تشعر/ين به في قلبك الآن؟',
-    choices: ['❤️ دفء وأمان', '⚡ طاقة ونشاط', '💧 هدوء وراحة', '🌪️ قلق أو توتر'],
-    action: 'choose',
-    nextAuto: false,
-    signalKey: 'inner_feeling'
-  },
-  {
-    id: 'activity',
-    bg: '#0c1e30',
-    avatar: { x: 0.5, y: 0.60, scale: 1.0 },
-    bubble: 'نشاط اليوم 🎯\n\nقُل/قولي لي شيئاً جميلاً\nحدث معك/ِ اليوم\n— أي شيء، صغير أو كبير! 🌈',
-    choices: null,
-    action: 'speak',
-    nextAuto: false,
-    signalKey: 'positive_event'
-  },
-  {
-    id: 'goodbye',
-    bg: '#0a1628',
-    avatar: { x: 0.5, y: 0.60, scale: 1.15 },
-    bubble: 'شكراً لك 💜\nكانت جلستنا رائعة!\nأثير فخور/ة بك دائماً.',
-    choices: null,
-    action: 'end',
-    nextAuto: true
+    choices:['😊 بخير وسعيد/ة','😐 عادي لا بأس','😔 أشعر بشيء ما'],
+    action:'choose', nextAuto:false, signalKey:'emotional_state'
+  };
+  if (isExam) {
+    checkin.bubble  = 'أعرف أن هناك اختباراً قريباً 📝\nكيف تشعر/ين حيال ذلك؟\nكل مشاعرك طبيعية 💙';
+    checkin.choices = ['😤 متوتر/ة قليلاً','😊 مستعد/ة وواثق/ة','😔 خائف/ة من الاختبار'];
+    checkin.signalKey = 'exam_stress';
+  } else if (isRamadan) {
+    checkin.bubble  = 'رمضان كريم 🌙\nكيف تشعر/ين اليوم في رمضان؟\nشاركني اللحظة 💜';
+    checkin.choices = ['🌙 أحسّ بسكينة','🤲 أتمنى الخير للجميع','😴 متعب/ة لكنني سعيد/ة'];
+    checkin.signalKey = 'ramadan_feeling';
+  } else if (isHoliday) {
+    checkin.bubble  = 'إجازة مباركة 🎉\nكيف تقضي/ين وقتك؟ أخبرني! 😄';
+    checkin.choices = ['🎮 ألعب وأستمتع','👨‍👩‍👧 مع العائلة','😌 أرتاح وأسترخي'];
+    checkin.signalKey = 'holiday_mood';
   }
-];
+
+  // ── State-specific extra screens ──
+  const examBreath = isExam ? [{
+    id:'exam_breath', bg:'#0a1628', avatar:{x:.5,y:.62,scale:1},
+    bubble:'تمرين التنفّس قبل الاختبار 🌬️\n\nخذ/ي نفساً عميقاً ببطء...\nاحبسه/ِ للحظة...\nثم أخرجه ببطء.\n\nأحسنت! أنت أقوى مما تظن/ين 💪',
+    choices:null, action:'next', nextAuto:false, signalKey:'breath_done'
+  }] : [];
+
+  const ramadanGrat = isRamadan ? [{
+    id:'ramadan_gratitude', bg:'#0f1428', avatar:{x:.5,y:.62,scale:1},
+    bubble:'لحظة شكر 🤲\n\nما الشيء الجميل الذي تشكر/ين الله عليه اليوم؟\nحتى النِعم الصغيرة تستحق الشكر 🌟',
+    choices:['🏠 بيتي وعائلتي','❤️ صحتي وسلامتي','📚 تعلّمي ومدرستي'],
+    action:'choose', nextAuto:false, signalKey:'gratitude_focus'
+  }] : [];
+
+  return [
+    {
+      id:'welcome', bg:'#0a1628', avatar:{x:.5,y:.62,scale:1.2},
+      bubble: isHoliday  ? 'أهلاً في الإجازة 🎉\nأنا أثير، رفيقك الذكي!\nكيف اسمك؟'
+            : isRamadan  ? 'رمضان كريم 🌙\nأنا أثير، رفيقك الذكي!\nكيف اسمك؟'
+            : 'أهلاً وسهلاً 🌟\nأنا أثير، رفيقك الذكي!\nكيف اسمك؟',
+      choices:['أحمد 👦','فاطمة 👧','اسمي مختلف ✏️'],
+      action:'speak', nextAuto:false
+    },
+    checkin,
+    ...examBreath,
+    ...ramadanGrat,
+    {
+      id:'story', bg:'#0f1f35', avatar:{x:.5,y:.58,scale:1.1},
+      bubble:story.bubble, choices:story.choices,
+      action:'choose', nextAuto:false, signalKey:'story_choice'
+    },
+    {
+      id:'feeling_draw', bg:'#0a1628', avatar:{x:.5,y:.55,scale:.9},
+      bubble: isEmergency
+        ? 'أنا هنا معك/ِ 💙\nلا تخف/ي — كلّ شيء سيكون بخير.\nما الذي تشعر/ين به الآن؟'
+        : 'الآن، خذ/ي نفساً عميقاً 🌬️\n\nما الذي تشعر/ين به في قلبك الآن؟',
+      choices: isEmergency
+        ? ['💙 أشعر بالأمان','😟 قلقان/ة قليلاً','🤗 بحاجة لأحد يتحدث معي']
+        : ['❤️ دفء وأمان','⚡ طاقة ونشاط','💧 هدوء وراحة','🌪️ قلق أو توتر'],
+      action:'choose', nextAuto:false,
+      signalKey: isEmergency ? 'emergency_feeling' : 'inner_feeling'
+    },
+    {
+      id:'activity', bg:'#0c1e30', avatar:{x:.5,y:.6,scale:1},
+      bubble:`نشاط اليوم 🎯\n\n${actTxt}`,
+      choices:null, action:'speak', nextAuto:false, signalKey:'positive_event'
+    },
+    {
+      id:'goodbye', bg:'#0a1628', avatar:{x:.5,y:.6,scale:1.15},
+      bubble: isExam    ? 'أنت مستعد/ة 💜\nثق/ي بنفسك في الاختبار.\nأثير فخور/ة بك دائماً. 🌟'
+            : isRamadan ? 'رمضان مبارك 🌙\nكانت جلستنا رائعة!\nأثير معك/ِ دائماً. 💜'
+            : 'شكراً لك 💜\nكانت جلستنا رائعة!\nأثير فخور/ة بك دائماً.',
+      choices:null, action:'end', nextAuto:true
+    }
+  ];
+}
+
+// ── 6 SCREENS FLOW (dynamic — built in init) ──
+let SCREENS = [];
+// ── WELCOME SCREEN PLACEHOLDER (replaced by buildScreens) ──
+// (static screens removed — buildScreens() generates them dynamically)
 
 let currentStep = 0;
 let phaserScene = null;
@@ -483,6 +551,9 @@ function showAction(action) {
     speakBtn.style.display = 'flex';
     nextBtn.classList.add('hidden');
   } else if (action === 'choose') {
+    speakBtn.style.display = 'none';
+    nextBtn.classList.remove('hidden');
+  } else if (action === 'next') {
     speakBtn.style.display = 'none';
     nextBtn.classList.remove('hidden');
   } else if (action === 'end') {
@@ -676,18 +747,35 @@ function restartFlow() {
 
 // ── INIT ──
 async function init() {
+  // 1. Detect child_id from URL param (optional — passed by parent/teacher portal)
+  const urlParams   = new URLSearchParams(window.location.search);
+  const childIdParam = urlParams.get('child_id') || null;
+  SESSION.childId   = childIdParam;
+
+  // 2. Load VARK type + platform state in parallel
+  const [varkType, platformState] = await Promise.all([
+    getChildVARK(childIdParam),
+    getCurrentPlatformState()
+  ]);
+  SESSION.vark  = varkType  || 'K';   // default kinesthetic (most universal for young children)
+  SESSION.state = platformState || 'normal';
+
+  // 3. Build personalized screens
+  SCREENS = buildScreens(SESSION.vark, SESSION.state);
+
+  // 4. Build step dots based on actual screen count
   buildStepDots();
 
-  // Start Phaser
+  // 5. Start Phaser
   const game = new Phaser.Game(phaserConfig);
 
-  // Wait for scene to be ready
+  // 6. Wait for scene to be ready
   await new Promise(r => setTimeout(r, 800));
 
-  // Hide loading
+  // 7. Hide loading
   document.getElementById('ath-loading').style.display = 'none';
 
-  // Start flow
+  // 8. Start personalized flow
   runScreen(0);
 }
 
