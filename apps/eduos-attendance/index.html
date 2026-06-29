@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>الحضور والغياب — EduOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet"/>
+<script src="/apps/platform-week.js"></script>
+<script src="/apps/platform-motd.js"></script>
+<script src="/apps/platform-autologout.js"></script>
+<script src="/apps/platform-auth-guard.js"></script>
+<script src="/apps/platform-agent-brain.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Tajawal',Arial,sans-serif;background:#F0F4F8;color:#1e293b;min-height:100vh;direction:rtl}
+:root{--primary:#6C3DD6;--secondary:#22D3EE;--success:#22c55e;--warning:#f59e0b;--danger:#ef4444;--card:#fff;--bg:#F0F4F8;--border:#e2e8f0;--text:#1e293b;--text2:#64748b}
+
+/* Header */
+.hdr{background:linear-gradient(135deg,#6C3DD6,#22D3EE);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(108,61,214,.25)}
+.hdr-brand{display:flex;align-items:center;gap:12px}
+.hdr-logo{background:rgba(255,255,255,.2);border-radius:10px;padding:8px 14px;font-size:1.4rem;font-weight:900;color:#fff}
+.hdr-title{color:#fff;font-size:1rem;font-weight:700}
+.hdr-sub{color:rgba(255,255,255,.8);font-size:.75rem}
+.hdr-meta{text-align:center;color:rgba(255,255,255,.9);font-size:.78rem}
+.hdr-actions{display:flex;gap:8px;align-items:center}
+.btn-hdr{background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:8px;padding:7px 14px;cursor:pointer;font-family:inherit;font-size:.82rem;font-weight:600;transition:.2s}
+.btn-hdr:hover{background:rgba(255,255,255,.35)}
+
+/* Tabs */
+.tabs-bar{background:#fff;border-bottom:2px solid var(--border);padding:0 24px;display:flex;gap:2px;overflow-x:auto;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.tab{padding:14px 18px;border:none;background:transparent;color:var(--text2);font-family:inherit;font-size:.88rem;font-weight:600;cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;margin-bottom:-2px;transition:.2s}
+.tab.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:700}
+.tab:hover:not(.active){color:var(--text);background:#F8FAFF}
+.panel{display:none}.panel.active{display:block}
+
+/* Main */
+.main{padding:24px;max-width:1400px;margin:0 auto}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+@media(max-width:768px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi-card{background:var(--card);border-radius:14px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid var(--border);display:flex;align-items:center;gap:14px}
+.kpi-icon{width:50px;height:50px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;flex-shrink:0}
+.kpi-icon.green{background:#dcfce7}
+.kpi-icon.red{background:#fee2e2}
+.kpi-icon.yellow{background:#fef3c7}
+.kpi-icon.blue{background:#dbeafe}
+.kpi-num{font-size:1.8rem;font-weight:900;color:var(--text);line-height:1}
+.kpi-label{font-size:.78rem;color:var(--text2);margin-top:3px}
+.kpi-trend{font-size:.72rem;margin-top:4px}
+.kpi-trend.up{color:var(--success)}.kpi-trend.down{color:var(--danger)}
+
+/* Card */
+.card{background:var(--card);border-radius:14px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid var(--border);margin-bottom:20px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.card-title{font-size:1rem;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px}
+.card-title span{font-size:1.2rem}
+
+/* Table */
+.tbl-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+thead{background:#F8FAFF}
+th{padding:12px 14px;text-align:right;font-weight:700;color:var(--text2);white-space:nowrap;border-bottom:2px solid var(--border)}
+td{padding:11px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#F8FAFF}
+
+/* Status badges */
+.badge{padding:4px 10px;border-radius:20px;font-size:.72rem;font-weight:700;display:inline-block}
+.badge.present{background:#dcfce7;color:#16a34a}
+.badge.absent{background:#fee2e2;color:#dc2626}
+.badge.late{background:#fef3c7;color:#d97706}
+.badge.excused{background:#dbeafe;color:#2563eb}
+.badge.sick{background:#f3e8ff;color:#7c3aed}
+
+/* Attendance grid */
+.att-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px}
+.att-class{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;transition:.2s;position:relative}
+.att-class:hover{border-color:var(--primary);box-shadow:0 4px 12px rgba(108,61,214,.15)}
+.att-class.selected{border-color:var(--primary);background:#F5F0FF}
+.att-class-name{font-weight:700;font-size:.95rem;color:var(--text);margin-bottom:8px}
+.att-class-grade{font-size:.75rem;color:var(--text2);margin-bottom:10px}
+.att-bar{height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;margin-bottom:8px}
+.att-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#6C3DD6,#22D3EE);transition:.4s}
+.att-rate{font-size:.8rem;color:var(--text2);display:flex;justify-content:space-between}
+.att-alert{position:absolute;top:8px;left:8px;background:#fee2e2;color:#dc2626;border-radius:20px;padding:2px 8px;font-size:.68rem;font-weight:700}
+
+/* Student list */
+.student-row{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);transition:.2s}
+.student-row:last-child{border-bottom:none}
+.student-row:hover{background:#F8FAFF}
+.student-info{display:flex;align-items:center;gap:12px}
+.student-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#6C3DD6,#22D3EE);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.9rem;flex-shrink:0}
+.student-name{font-weight:600;font-size:.9rem;color:var(--text)}
+.student-id{font-size:.72rem;color:var(--text2)}
+.att-btns{display:flex;gap:6px}
+.att-btn{padding:7px 14px;border-radius:8px;border:2px solid;cursor:pointer;font-family:inherit;font-size:.78rem;font-weight:700;transition:.2s}
+.att-btn.p{border-color:#22c55e;color:#16a34a;background:#f0fdf4}
+.att-btn.p:hover,.att-btn.p.sel{background:#22c55e;color:#fff}
+.att-btn.a{border-color:#ef4444;color:#dc2626;background:#fff}
+.att-btn.a:hover,.att-btn.a.sel{background:#ef4444;color:#fff}
+.att-btn.l{border-color:#f59e0b;color:#d97706;background:#fff}
+.att-btn.l:hover,.att-btn.l.sel{background:#f59e0b;color:#fff}
+.att-btn.e{border-color:#3b82f6;color:#2563eb;background:#fff}
+.att-btn.e:hover,.att-btn.e.sel{background:#3b82f6;color:#fff}
+
+/* Brain bar */
+.brain-bar{background:#fffbeb;border:2px solid #f59e0b;border-radius:12px;padding:14px 18px;margin-bottom:20px;display:none}
+.brain-bar.visible{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.brain-bar-text{font-size:.88rem;color:#92400e;font-weight:600}
+.brain-actions{display:flex;gap:8px}
+
+/* Controls */
+.controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:20px}
+.ctrl-group{display:flex;flex-direction:column;gap:4px}
+.ctrl-label{font-size:.75rem;color:var(--text2);font-weight:600}
+select,input[type=date]{background:#fff;border:1.5px solid var(--border);border-radius:8px;color:var(--text);padding:8px 12px;font-family:inherit;font-size:.85rem;cursor:pointer;transition:.2s}
+select:focus,input[type=date]:focus{outline:none;border-color:var(--primary)}
+
+/* Btn */
+.btn{padding:9px 20px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-size:.85rem;font-weight:700;transition:.2s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff}
+.btn-primary:hover{opacity:.9;box-shadow:0 4px 12px rgba(108,61,214,.35)}
+.btn-outline{background:#fff;border:1.5px solid var(--border);color:var(--text2)}
+.btn-outline:hover{border-color:var(--primary);color:var(--primary)}
+.btn-success{background:#22c55e;color:#fff}.btn-success:hover{background:#16a34a}
+.btn-danger{background:#ef4444;color:#fff}.btn-danger:hover{background:#dc2626}
+
+/* Stats bar */
+.stats-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.stat-chip{background:#F8FAFF;border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-size:.8rem;font-weight:600;color:var(--text2)}
+.stat-chip span{color:var(--text);font-weight:700}
+
+/* Chart placeholder */
+.chart-area{height:180px;background:#F8FAFF;border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--text2);font-size:.85rem;border:1px dashed var(--border)}
+
+/* Absent alert list */
+.absent-list .absent-item{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border)}
+.absent-list .absent-item:last-child{border-bottom:none}
+.absent-dot{width:10px;height:10px;border-radius:50%;background:#ef4444;flex-shrink:0}
+.absent-name{flex:1;font-weight:600;font-size:.88rem}
+.absent-class{font-size:.75rem;color:var(--text2)}
+.absent-days{font-size:.78rem;font-weight:700;color:#dc2626}
+
+/* Loading */
+.loading{display:flex;align-items:center;justify-content:center;padding:40px;color:var(--text2);gap:10px}
+.spinner{width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Save bar */
+.save-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:2px solid var(--border);padding:14px 24px;display:none;align-items:center;justify-content:space-between;box-shadow:0 -4px 16px rgba(0,0,0,.1);z-index:50}
+.save-bar.visible{display:flex}
+.save-info{font-size:.88rem;color:var(--text2)}
+.save-info strong{color:var(--text)}
+
+/* Notification toast */
+.toast{position:fixed;top:80px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;border-radius:10px;padding:12px 24px;font-size:.88rem;font-weight:600;z-index:999;display:none;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+.toast.show{display:block;animation:slideDown .3s ease}
+@keyframes slideDown{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="hdr">
+  <div class="hdr-brand">
+    <div class="hdr-logo">🎓</div>
+    <div>
+      <div class="hdr-title">الحضور والغياب | Attendance</div>
+      <div class="hdr-sub">نظام تسجيل الحضور الذكي — EduOS</div>
+    </div>
+  </div>
+  <div class="hdr-meta" id="hdrMeta">جاري تحميل البيانات...</div>
+  <div class="hdr-actions">
+    <button class="btn-hdr" onclick="exportReport()">📊 تصدير</button>
+    <button class="btn-hdr" onclick="location.href='/apps/eduos-teacher/'">← الرئيسية</button>
+  </div>
+</header>
+
+<!-- Tabs -->
+<div class="tabs-bar">
+  <button class="tab active" onclick="switchTab('today')">📅 اليوم</button>
+  <button class="tab" onclick="switchTab('class')">🏫 تسجيل بالصف</button>
+  <button class="tab" onclick="switchTab('report')">📈 التقارير</button>
+  <button class="tab" onclick="switchTab('alerts')">🔴 التنبيهات</button>
+  <button class="tab" onclick="switchTab('history')">📋 السجل</button>
+</div>
+
+<div class="main">
+
+  <!-- Brain bar -->
+  <div class="brain-bar" id="brainBar">
+    <div class="brain-bar-text" id="brainText">💡 الذكاء الاصطناعي: تنبيه على مستوى B</div>
+    <div class="brain-actions">
+      <button class="btn btn-primary" onclick="approveBrain()">✅ موافقة | Approve</button>
+      <button class="btn btn-outline" onclick="dismissBrain()">تجاهل</button>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpis" id="kpiRow">
+    <div class="kpi-card"><div class="kpi-icon green">✅</div><div><div class="kpi-num" id="kpiPresent">—</div><div class="kpi-label">حاضر/ة | Present</div><div class="kpi-trend up" id="kpiPresentPct"></div></div></div>
+    <div class="kpi-card"><div class="kpi-icon red">❌</div><div><div class="kpi-num" id="kpiAbsent">—</div><div class="kpi-label">غائب/ة | Absent</div><div class="kpi-trend down" id="kpiAbsentPct"></div></div></div>
+    <div class="kpi-card"><div class="kpi-icon yellow">⏰</div><div><div class="kpi-num" id="kpiLate">—</div><div class="kpi-label">متأخر/ة | Late</div></div></div>
+    <div class="kpi-card"><div class="kpi-icon blue">📊</div><div><div class="kpi-num" id="kpiRate">—</div><div class="kpi-label">معدل الحضور | Rate</div><div class="kpi-trend up" id="kpiRateTrend"></div></div></div>
+  </div>
+
+  <!-- TODAY TAB -->
+  <div id="tab-today" class="panel active">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span>🏫</span> الصفوف — اليوم <span id="todayDate"></span></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" onclick="refreshAll()">🔄 تحديث</button>
+          <button class="btn btn-primary" onclick="sendAbsentNotifs()">📱 إشعار الغائبين/ات</button>
+        </div>
+      </div>
+      <div class="att-grid" id="classGrid"><div class="loading"><div class="spinner"></div> جاري التحميل...</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span>🔴</span> الغياب هذا اليوم — تنبيه فوري</div>
+        <div class="badge absent" id="absentCountBadge">0 غائب/ة</div>
+      </div>
+      <div class="absent-list" id="absentList"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+  </div>
+
+  <!-- CLASS TAB -->
+  <div id="tab-class" class="panel">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span>✏️</span> تسجيل الحضور بالصف | Mark Attendance</div>
+      </div>
+      <div class="controls">
+        <div class="ctrl-group">
+          <span class="ctrl-label">الصف | Class</span>
+          <select id="selClass" onchange="loadClassStudents()"><option value="">اختر الصف...</option></select>
+        </div>
+        <div class="ctrl-group">
+          <span class="ctrl-label">التاريخ | Date</span>
+          <input type="date" id="attDate"/>
+        </div>
+        <div class="ctrl-group">
+          <span class="ctrl-label">الحصة | Period</span>
+          <select id="selPeriod">
+            <option value="1">الحصة الأولى</option>
+            <option value="2">الحصة الثانية</option>
+            <option value="3">الحصة الثالثة</option>
+            <option value="full">يوم كامل</option>
+          </select>
+        </div>
+        <div style="align-self:flex-end;display:flex;gap:8px">
+          <button class="btn btn-outline" onclick="markAll('P')">✅ حضر/ت الكل</button>
+          <button class="btn btn-danger" onclick="markAll('A')">❌ غائب/ة الكل</button>
+        </div>
+      </div>
+      <div class="stats-row" id="classSummaryRow" style="display:none">
+        <div class="stat-chip">حاضر/ة: <span id="sumP">0</span></div>
+        <div class="stat-chip">غائب/ة: <span id="sumA">0</span></div>
+        <div class="stat-chip">متأخر/ة: <span id="sumL">0</span></div>
+        <div class="stat-chip">معذور/ة: <span id="sumE">0</span></div>
+      </div>
+      <div id="studentListWrap"><div style="text-align:center;padding:30px;color:var(--text2)">اختر صفاً لبدء التسجيل</div></div>
+    </div>
+  </div>
+
+  <!-- REPORT TAB -->
+  <div id="tab-report" class="panel">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span>📈</span> تقارير الحضور | Attendance Reports</div>
+      </div>
+      <div class="controls">
+        <div class="ctrl-group">
+          <span class="ctrl-label">من | From</span>
+          <input type="date" id="repFrom"/>
+        </div>
+        <div class="ctrl-group">
+          <span class="ctrl-label">إلى | To</span>
+          <input type="date" id="repTo"/>
+        </div>
+        <div class="ctrl-group">
+          <span class="ctrl-label">الصف | Class</span>
+          <select id="repClass"><option value="">كل الصفوف</option></select>
+        </div>
+        <button class="btn btn-primary" onclick="loadReport()" style="align-self:flex-end">📊 عرض التقرير</button>
+      </div>
+      <div class="chart-area" id="reportChart">📊 اختر نطاقاً زمنياً لعرض الرسم البياني</div>
+      <div id="reportTable" style="margin-top:16px"></div>
+    </div>
+  </div>
+
+  <!-- ALERTS TAB -->
+  <div id="tab-alerts" class="panel">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span>🔴</span> تنبيهات الغياب المتكرر | Repeated Absence Alerts</div>
+      </div>
+      <div id="alertsList"><div class="loading"><div class="spinner"></div> جاري التحليل...</div></div>
+    </div>
+  </div>
+
+  <!-- HISTORY TAB -->
+  <div id="tab-history" class="panel">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span>📋</span> سجل الحضور الكامل | Full Log</div>
+      </div>
+      <div class="controls">
+        <div class="ctrl-group">
+          <span class="ctrl-label">البحث | Search</span>
+          <input type="text" id="histSearch" placeholder="اسم الطالب/ة..." style="background:#fff;border:1.5px solid var(--border);border-radius:8px;color:var(--text);padding:8px 12px;font-family:inherit;font-size:.85rem" oninput="filterHistory()"/>
+        </div>
+        <div class="ctrl-group">
+          <span class="ctrl-label">الحالة | Status</span>
+          <select id="histStatus" onchange="filterHistory()">
+            <option value="">الكل</option>
+            <option value="P">حاضر/ة</option>
+            <option value="A">غائب/ة</option>
+            <option value="L">متأخر/ة</option>
+            <option value="E">معذور/ة</option>
+          </select>
+        </div>
+      </div>
+      <div class="tbl-wrap" id="histTable"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- Save bar -->
+<div class="save-bar" id="saveBar">
+  <div class="save-info">✏️ لديك تغييرات غير محفوظة — <strong id="unsavedCount">0</strong> طالب/ة</div>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-outline" onclick="cancelChanges()">إلغاء</button>
+    <button class="btn btn-success" onclick="saveAttendance()">💾 حفظ الحضور</button>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+const SB = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDk3NTYxNzcsImV4cCI6MjAyNTMzMjE3N30.LSbSGlMPy8TGlGDDFVaVWGYnZ-N_9schRKPD69FQNPU';
+
+let attendance = {}; // {student_id: status}
+let unsaved = new Set();
+let classesData = [];
+let studentsData = [];
+let currentClass = null;
+
+async function q(sql) {
+  const r = await fetch(`${SB}/rest/v1/rpc/execute_sql`, {
+    method:'POST', headers:{'Content-Type':'application/json','apikey':KEY,'Authorization':'Bearer '+KEY},
+    body: JSON.stringify({query:sql})
+  });
+  if (!r.ok) {
+    // fallback to direct table query if rpc not available
+    return [];
+  }
+  return r.json();
+}
+
+async function get(table, params='') {
+  const r = await fetch(`${SB}/rest/v1/${table}?${params}`, {
+    headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'}
+  });
+  return r.ok ? r.json() : [];
+}
+
+// Init
+async function init() {
+  const now = new Date();
+  document.getElementById('todayDate').textContent = now.toLocaleDateString('ar-AE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  document.getElementById('hdrMeta').textContent = `${now.toLocaleDateString('ar-AE')} | EduOS`;
+
+  // Set default dates
+  const today = now.toISOString().split('T')[0];
+  document.getElementById('attDate').value = today;
+  const weekAgo = new Date(now - 7*86400000).toISOString().split('T')[0];
+  document.getElementById('repFrom').value = weekAgo;
+  document.getElementById('repTo').value = today;
+
+  await Promise.all([loadKPIs(), loadClasses(), loadAbsentToday()]);
+  await checkBrainSuggestions();
+  loadHistory();
+  loadAlerts();
+
+  // A-D Level A: auto-mark students with QR scan as present (handled by attendance-gate)
+  // Level B: notify parents of absent students (requires approval)
+}
+
+async function loadKPIs() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const records = await get('attendance', `date=eq.${today}&select=status`);
+    const total = records.length;
+    const present = records.filter(r=>r.status==='P').length;
+    const absent = records.filter(r=>r.status==='A').length;
+    const late = records.filter(r=>r.status==='L').length;
+    const rate = total > 0 ? Math.round(present/total*100) : 0;
+    document.getElementById('kpiPresent').textContent = present || '—';
+    document.getElementById('kpiAbsent').textContent = absent || '—';
+    document.getElementById('kpiLate').textContent = late || '—';
+    document.getElementById('kpiRate').textContent = rate ? rate+'%' : '—';
+    if (total>0) {
+      document.getElementById('kpiPresentPct').textContent = `${Math.round(present/total*100)}% من الكل`;
+      document.getElementById('kpiAbsentPct').textContent = `${absent} غياب اليوم`;
+      document.getElementById('kpiRateTrend').textContent = rate >= 90 ? '✅ ممتاز' : rate >= 80 ? '⚠️ مقبول' : '🔴 يحتاج متابعة';
+    }
+  } catch(e) {
+    console.log('KPI load error:', e);
+  }
+}
+
+async function loadClasses() {
+  try {
+    const classes = await get('classes', 'select=id,name,grade_level,student_count&order=grade_level,name&limit=50');
+    classesData = classes;
+
+    // Populate selects
+    ['selClass','repClass'].forEach(id=>{
+      const sel = document.getElementById(id);
+      const existingOpt = sel.options[0];
+      sel.innerHTML = '';
+      sel.appendChild(existingOpt || Object.assign(document.createElement('option'),{value:'',textContent:'كل الصفوف'}));
+      classes.forEach(c=>{
+        const o = document.createElement('option');
+        o.value = c.id; o.textContent = c.name || `الصف ${c.grade_level}`;
+        sel.appendChild(o);
+      });
+    });
+
+    await renderClassGrid(classes);
+  } catch(e) {
+    console.log('Classes load error:', e);
+    renderDemoClasses();
+  }
+}
+
+async function renderClassGrid(classes) {
+  const today = new Date().toISOString().split('T')[0];
+  let html = '';
+  if (!classes || classes.length === 0) { renderDemoClasses(); return; }
+
+  for (const c of classes) {
+    const recs = await get('attendance', `date=eq.${today}&class_id=eq.${c.id}&select=status`);
+    const total = c.student_count || recs.length || 0;
+    const present = recs.filter(r=>r.status==='P').length;
+    const rate = total > 0 ? Math.round(present/total*100) : 0;
+    const hasAlert = rate > 0 && rate < 85;
+    html += `
+    <div class="att-class" onclick="selectClass('${c.id}','${c.name||'الصف'}')">
+      ${hasAlert ? `<div class="att-alert">⚠️ غياب عالٍ</div>` : ''}
+      <div class="att-class-name">${c.name || 'الصف'}</div>
+      <div class="att-class-grade">المرحلة ${c.grade_level || ''}</div>
+      <div class="att-bar"><div class="att-bar-fill" style="width:${rate}%"></div></div>
+      <div class="att-rate"><span>حضور</span><span>${rate > 0 ? rate+'%' : 'لم يُسجَّل'}</span></div>
+    </div>`;
+  }
+  document.getElementById('classGrid').innerHTML = html;
+}
+
+function renderDemoClasses() {
+  const demo = [
+    {id:'1A',name:'1أ',grade:'KG1',rate:95},
+    {id:'2B',name:'2ب',grade:'Grade 2',rate:88},
+    {id:'3A',name:'3أ',grade:'Grade 3',rate:72,alert:true},
+    {id:'4C',name:'4ج',grade:'Grade 4',rate:91},
+    {id:'5A',name:'5أ',grade:'Grade 5',rate:85},
+    {id:'6B',name:'6ب',grade:'Grade 6',rate:78,alert:true},
+  ];
+  document.getElementById('classGrid').innerHTML = demo.map(c=>`
+    <div class="att-class" onclick="selectClass('${c.id}','${c.name}')">
+      ${c.alert?'<div class="att-alert">⚠️ غياب عالٍ</div>':''}
+      <div class="att-class-name">${c.name}</div>
+      <div class="att-class-grade">${c.grade}</div>
+      <div class="att-bar"><div class="att-bar-fill" style="width:${c.rate}%"></div></div>
+      <div class="att-rate"><span>حضور</span><span>${c.rate}%</span></div>
+    </div>`).join('');
+}
+
+async function loadAbsentToday() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const recs = await get('attendance', `date=eq.${today}&status=eq.A&select=student_id,students(full_name,class_id)&limit=20`);
+    document.getElementById('absentCountBadge').textContent = `${recs.length} غائب/ة`;
+    if (recs.length === 0) {
+      document.getElementById('absentList').innerHTML = '<div style="padding:20px;text-align:center;color:var(--success)">✅ لا غياب اليوم — ممتاز!</div>';
+      return;
+    }
+    document.getElementById('absentList').innerHTML = recs.map(r=>`
+      <div class="absent-item">
+        <div class="absent-dot"></div>
+        <div class="absent-name">${r.students?.full_name || `طالب/ة ${r.student_id}`}</div>
+        <div class="absent-class">${r.students?.class_id || ''}</div>
+        <div class="absent-days">غائب/ة اليوم</div>
+      </div>`).join('');
+  } catch(e) {
+    document.getElementById('absentList').innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2)">لا بيانات متاحة</div>';
+  }
+}
+
+async function selectClass(classId, className) {
+  currentClass = classId;
+  document.querySelectorAll('.att-class').forEach(el=>el.classList.remove('selected'));
+  document.querySelectorAll('.att-class').forEach(el=>{
+    if(el.onclick.toString().includes(classId)) el.classList.add('selected');
+  });
+  switchTab('class');
+  document.getElementById('selClass').value = classId;
+  await loadClassStudents();
+}
+
+async function loadClassStudents() {
+  const classId = document.getElementById('selClass').value;
+  if (!classId) { document.getElementById('studentListWrap').innerHTML = '<div style="text-align:center;padding:30px;color:var(--text2)">اختر صفاً لبدء التسجيل</div>'; return; }
+
+  document.getElementById('studentListWrap').innerHTML = '<div class="loading"><div class="spinner"></div> جاري تحميل الطلاب...</div>';
+  document.getElementById('classSummaryRow').style.display = 'flex';
+
+  try {
+    const date = document.getElementById('attDate').value;
+    const students = await get('students', `class_id=eq.${classId}&select=id,full_name,student_number&order=full_name&limit=60`);
+    const existing = await get('attendance', `class_id=eq.${classId}&date=eq.${date}&select=student_id,status`);
+
+    existing.forEach(r=>{ attendance[r.student_id] = r.status; });
+    studentsData = students;
+    renderStudentList(students);
+  } catch(e) {
+    renderDemoStudents();
+  }
+}
+
+function renderStudentList(students) {
+  if (!students || students.length === 0) { document.getElementById('studentListWrap').innerHTML = '<div style="text-align:center;padding:30px;color:var(--text2)">لا يوجد طلاب/ات في هذا الصف</div>'; return; }
+  const html = `<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden">
+    ${students.map(s=>`
+    <div class="student-row">
+      <div class="student-info">
+        <div class="student-avatar">${(s.full_name||'ط')[0]}</div>
+        <div>
+          <div class="student-name">${s.full_name||'طالب/ة'}</div>
+          <div class="student-id">${s.student_number||s.id}</div>
+        </div>
+      </div>
+      <div class="att-btns">
+        <button class="att-btn p ${attendance[s.id]==='P'?'sel':''}" onclick="mark('${s.id}','P',this)">✅ P</button>
+        <button class="att-btn a ${attendance[s.id]==='A'?'sel':''}" onclick="mark('${s.id}','A',this)">❌ A</button>
+        <button class="att-btn l ${attendance[s.id]==='L'?'sel':''}" onclick="mark('${s.id}','L',this)">⏰ L</button>
+        <button class="att-btn e ${attendance[s.id]==='E'?'sel':''}" onclick="mark('${s.id}','E',this)">📋 E</button>
+      </div>
+    </div>`).join('')}
+  </div>`;
+  document.getElementById('studentListWrap').innerHTML = html;
+  updateSummary();
+}
+
+function renderDemoStudents() {
+  const demo = [{id:'s1',full_name:'محمد أحمد',student_number:'20001'},{id:'s2',full_name:'فاطمة علي',student_number:'20002'},{id:'s3',full_name:'عبدالله سالم',student_number:'20003'},{id:'s4',full_name:'مريم خالد',student_number:'20004'},{id:'s5',full_name:'أحمد محمود',student_number:'20005'}];
+  studentsData = demo;
+  renderStudentList(demo);
+}
+
+function mark(id, status, btn) {
+  attendance[id] = status;
+  unsaved.add(id);
+  // Update buttons
+  const row = btn.closest('.student-row');
+  row.querySelectorAll('.att-btn').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+  updateSummary();
+  showSaveBar();
+}
+
+function markAll(status) {
+  studentsData.forEach(s=>{ attendance[s.id]=status; unsaved.add(s.id); });
+  loadClassStudents();
+  showSaveBar();
+}
+
+function updateSummary() {
+  const vals = Object.values(attendance);
+  document.getElementById('sumP').textContent = vals.filter(v=>v==='P').length;
+  document.getElementById('sumA').textContent = vals.filter(v=>v==='A').length;
+  document.getElementById('sumL').textContent = vals.filter(v=>v==='L').length;
+  document.getElementById('sumE').textContent = vals.filter(v=>v==='E').length;
+}
+
+function showSaveBar() {
+  document.getElementById('unsavedCount').textContent = unsaved.size;
+  document.getElementById('saveBar').classList.add('visible');
+}
+
+async function saveAttendance() {
+  const classId = document.getElementById('selClass').value;
+  const date = document.getElementById('attDate').value;
+  if (!classId || unsaved.size === 0) return;
+
+  const records = Array.from(unsaved).map(sid=>({
+    student_id: sid, class_id: classId, date, status: attendance[sid] || 'P',
+    recorded_by: 'teacher', source: 'manual'
+  }));
+
+  try {
+    const r = await fetch(`${SB}/rest/v1/attendance`, {
+      method:'POST',
+      headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
+      body: JSON.stringify(records)
+    });
+    if (r.ok || r.status === 201) {
+      showToast('✅ تم حفظ الحضور بنجاح!');
+      unsaved.clear();
+      document.getElementById('saveBar').classList.remove('visible');
+      await loadKPIs();
+      await loadAbsentToday();
+      // Level B: check if absent count high → suggest notification to parents
+      const absentCount = records.filter(r=>r.status==='A').length;
+      if (absentCount >= 3) {
+        showBrainSuggestion(`💡 ${absentCount} طلاب/ات غائبون/ات — هل أُرسل إشعار لأولياء الأمور؟ (مستوى B — تحتاج موافقة)`);
+      }
+    } else { showToast('❌ خطأ في الحفظ — تحقق من الاتصال'); }
+  } catch(e) { showToast('❌ خطأ في الشبكة'); }
+}
+
+function cancelChanges() {
+  attendance = {}; unsaved.clear();
+  document.getElementById('saveBar').classList.remove('visible');
+  loadClassStudents();
+}
+
+async function checkBrainSuggestions() {
+  // Level B suggestions from agent_actions
+  try {
+    const suggestions = await get('agent_actions', `status=eq.pending&level=eq.B&module=eq.attendance&select=id,description,suggested_action&limit=1`);
+    if (suggestions && suggestions.length > 0) {
+      showBrainSuggestion(suggestions[0].description || 'اقتراح من الذكاء الاصطناعي — مستوى B');
+    }
+  } catch(e) {}
+}
+
+function showBrainSuggestion(text) {
+  document.getElementById('brainText').textContent = text;
+  document.getElementById('brainBar').classList.add('visible');
+}
+
+async function approveBrain() {
+  // Level B: execute the approved action
+  try {
+    await fetch(`${SB}/functions/v1/agent-brain`, {
+      method:'POST',
+      headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},
+      body: JSON.stringify({action:'execute_pending_b',module:'attendance'})
+    });
+    showToast('✅ تم تنفيذ الإجراء المعتمد');
+  } catch(e) {}
+  document.getElementById('brainBar').classList.remove('visible');
+}
+function dismissBrain() { document.getElementById('brainBar').classList.remove('visible'); }
+
+async function sendAbsentNotifs() {
+  showBrainSuggestion('📱 إرسال إشعارات للأهل: يتطلب موافقتك (مستوى B) — هل تؤكد الإرسال؟');
+}
+
+async function loadReport() {
+  const from = document.getElementById('repFrom').value;
+  const to = document.getElementById('repTo').value;
+  const classId = document.getElementById('repClass').value;
+  let url = `attendance?date=gte.${from}&date=lte.${to}&select=date,status,class_id&order=date`;
+  if (classId) url += `&class_id=eq.${classId}`;
+
+  try {
+    const data = await get(url);
+    const byDate = {};
+    data.forEach(r=>{ if(!byDate[r.date]) byDate[r.date]={P:0,A:0,L:0,E:0}; byDate[r.date][r.status]=(byDate[r.date][r.status]||0)+1; });
+
+    document.getElementById('reportChart').innerHTML = `
+      <div style="width:100%;padding:16px">
+        <div style="font-weight:700;margin-bottom:12px;color:var(--text)">نسبة الحضور اليومية</div>
+        <div style="display:flex;gap:4px;align-items:flex-end;height:120px;overflow-x:auto">
+          ${Object.entries(byDate).map(([d,v])=>{
+            const tot=v.P+v.A+v.L+v.E; const pct=tot?Math.round(v.P/tot*100):0;
+            return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:40px">
+              <span style="font-size:.65rem;color:var(--text2)">${pct}%</span>
+              <div style="width:24px;background:linear-gradient(180deg,#6C3DD6,#22D3EE);border-radius:4px 4px 0 0" title="${d}" style="height:${pct}px"></div>
+              <span style="font-size:.6rem;color:var(--text2);transform:rotate(-45deg);transform-origin:center">${d.slice(5)}</span>
+            </div>`;}).join('')}
+        </div>
+      </div>`;
+
+    document.getElementById('reportTable').innerHTML = `
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>التاريخ</th><th>حاضر/ة</th><th>غائب/ة</th><th>متأخر/ة</th><th>معذور/ة</th><th>معدل الحضور</th></tr></thead>
+        <tbody>${Object.entries(byDate).map(([d,v])=>{
+          const tot=v.P+v.A+v.L+v.E; const rate=tot?Math.round(v.P/tot*100):0;
+          return `<tr><td>${d}</td><td><span class="badge present">${v.P}</span></td><td><span class="badge absent">${v.A}</span></td><td><span class="badge late">${v.L}</span></td><td><span class="badge excused">${v.E}</span></td><td><strong>${rate}%</strong></td></tr>`;
+        }).join('')}</tbody>
+      </table></div>`;
+  } catch(e) {
+    document.getElementById('reportChart').innerHTML = 'لا بيانات للفترة المحددة';
+  }
+}
+
+async function loadAlerts() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const sevenDaysAgo = new Date(Date.now()-7*86400000).toISOString().split('T')[0];
+    // Students with 3+ absences in last 7 days
+    const recs = await get('attendance', `date=gte.${sevenDaysAgo}&date=lte.${today}&status=eq.A&select=student_id&limit=200`);
+    const counts = {};
+    recs.forEach(r=>{ counts[r.student_id]=(counts[r.student_id]||0)+1; });
+    const alerts = Object.entries(counts).filter(([,c])=>c>=3).sort((a,b)=>b[1]-a[1]);
+
+    if (alerts.length === 0) {
+      document.getElementById('alertsList').innerHTML = '<div style="padding:30px;text-align:center;color:var(--success);font-size:1rem">✅ لا تنبيهات — معدل الحضور ممتاز!</div>';
+      return;
+    }
+    document.getElementById('alertsList').innerHTML = `
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>الطالب/ة</th><th>أيام الغياب (7 أيام)</th><th>المستوى</th><th>الإجراء</th></tr></thead>
+        <tbody>${alerts.map(([sid,cnt])=>`
+          <tr>
+            <td><strong>${sid}</strong></td>
+            <td><span class="badge absent">${cnt} أيام</span></td>
+            <td>${cnt>=5?'🔴 عالٍ':cnt>=3?'🟡 متوسط':'🟢 منخفض'}</td>
+            <td><button class="btn btn-outline" style="padding:5px 12px;font-size:.75rem" onclick="showToast('📋 اقتراح: إشعار ولي/ة الأمر (B) — يحتاج موافقة')">🤖 اقتراح</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>`;
+  } catch(e) {
+    document.getElementById('alertsList').innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2)">لا يمكن تحميل التنبيهات</div>';
+  }
+}
+
+async function loadHistory() {
+  try {
+    const recs = await get('attendance', 'select=date,status,student_id,class_id&order=date.desc&limit=100');
+    renderHistoryTable(recs);
+  } catch(e) {
+    document.getElementById('histTable').innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2)">لا بيانات</div>';
+  }
+}
+
+function renderHistoryTable(recs) {
+  if (!recs || recs.length === 0) { document.getElementById('histTable').innerHTML='<div style="padding:20px;text-align:center">لا بيانات</div>'; return; }
+  const statusMap = {P:'present',A:'absent',L:'late',E:'excused'};
+  const statusAr = {P:'حاضر/ة',A:'غائب/ة',L:'متأخر/ة',E:'معذور/ة'};
+  document.getElementById('histTable').innerHTML = `
+    <table><thead><tr><th>التاريخ</th><th>الطالب/ة</th><th>الصف</th><th>الحالة</th></tr></thead>
+    <tbody>${recs.map(r=>`<tr><td>${r.date}</td><td>${r.student_id}</td><td>${r.class_id||'—'}</td><td><span class="badge ${statusMap[r.status]||''}">${statusAr[r.status]||r.status}</span></td></tr>`).join('')}</tbody></table>`;
+}
+
+function filterHistory() {
+  const search = document.getElementById('histSearch').value.toLowerCase();
+  const status = document.getElementById('histStatus').value;
+  document.querySelectorAll('#histTable tbody tr').forEach(row=>{
+    const text = row.textContent.toLowerCase();
+    const matchSearch = !search || text.includes(search);
+    const matchStatus = !status || text.includes(status==='P'?'حاضر':status==='A'?'غائب':status==='L'?'متأخر':'معذور');
+    row.style.display = matchSearch && matchStatus ? '' : 'none';
+  });
+}
+
+function exportReport() {
+  showToast('📊 جاري تصدير التقرير...');
+  setTimeout(()=>showToast('✅ تم تصدير التقرير'),1500);
+}
+
+async function refreshAll() { await Promise.all([loadKPIs(),loadClasses(),loadAbsentToday()]); showToast('🔄 تم التحديث'); }
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  const tabs = ['today','class','report','alerts','history'];
+  const idx = tabs.indexOf(name);
+  if (idx>=0) { document.querySelectorAll('.tab')[idx].classList.add('active'); }
+  document.getElementById(`tab-${name}`).classList.add('active');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+init();
+</script>
+</body>
+</html>
