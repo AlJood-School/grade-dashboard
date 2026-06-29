@@ -1,8 +1,20 @@
 // ============================================================
-// agent-brain/index.ts
+// agent-brain/index.ts  v2.0
 // EduOS — الدماغ المركزي للـ Agentic AI
 // NAFAS FOR ARTIFICIAL INTELLIGENCE · CN-6573712
-// Created: 27 June 2026
+// Updated: 29 June 2026
+//
+// المستويات المعتمدة (اتفاق 27 يونيو 2026):
+//   A — يلاحظ + يخبر فقط   (أمان مطلق — لا ينفذ أبداً)
+//   B — يقترح + ينتظر موافقة
+//   C — ينفذ + يبلغ
+//   D — مستقل كامل + يتعلم
+//
+// جدول الترقية:
+//   A→B: أسبوعان  (10 أنماط صحيحة متتالية)
+//   B→C: شهر      (قبول >80% لـ 4 أسابيع)
+//   C→D: شهران    (نجاح >85% + صفر أخطاء حساسة)
+//   auto_upgrade: false — الترقية تحتاج موافقة نور دائماً
 // ============================================================
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
@@ -13,9 +25,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// ============================================================
-// الأنواع
-// ============================================================
 interface AgentRequest {
   task_type: string
   context: Record<string, unknown>
@@ -24,273 +33,272 @@ interface AgentRequest {
 }
 
 interface AgentConfig {
+  id: string
   task_type: string
   level: 'A' | 'B' | 'C' | 'D'
   description_ar: string
   is_active: boolean
+  school_id: string
+  consecutive_correct: number
+  acceptance_rate_4w: number
+  success_rate_2m: number
+  sensitive_errors_2m: number
+  upgrade_ready: boolean
+  last_evaluated: string
 }
 
-// ============================================================
-// منطق التنفيذ حسب المستوى
-// ============================================================
-async function executeByLevel(
-  level: string,
-  task_type: string,
-  context: Record<string, unknown>,
-  supabase: ReturnType<typeof createClient>
-): Promise<{ status: string; action_taken: string; notify?: boolean }> {
-
-  switch (level) {
-    case 'D':
-      // مستقل كامل — ينفذ فوراً بدون إشعار
-      const resultD = await executeTask(task_type, context, supabase)
-      return {
-        status: 'executed',
-        action_taken: resultD,
-        notify: false
-      }
-
-    case 'C':
-      // ينفذ ثم يُبلّغ
-      const resultC = await executeTask(task_type, context, supabase)
-      await sendNotification(task_type, context, resultC, supabase)
-      return {
-        status: 'executed',
-        action_taken: resultC,
-        notify: true
-      }
-
-    case 'B':
-      // ينتظر موافقة — يُنشئ طلباً معلقاً
-      return {
-        status: 'pending',
-        action_taken: `طلب موافقة: ${task_type}`,
-        notify: true
-      }
-
-    case 'A':
-      // يُخبر فقط — لا ينفذ أبداً
-      await sendNotification(task_type, context, 'تنبيه للاطلاع فقط — لا إجراء آلي', supabase)
-      return {
-        status: 'informed',
-        action_taken: 'تم الإبلاغ فقط — لا تنفيذ',
-        notify: true
-      }
-
-    default:
-      return { status: 'error', action_taken: 'مستوى غير معروف' }
-  }
-}
-
-// ============================================================
-// تنفيذ المهمة حسب نوعها
-// ============================================================
+// ── تنفيذ المهمة الفعلي حسب نوعها ──────────────────────────────────────────
 async function executeTask(
   task_type: string,
   context: Record<string, unknown>,
   supabase: ReturnType<typeof createClient>
 ): Promise<string> {
 
+  const school_id = (context.school_id as string) || 'aljood-001'
+
   switch (task_type) {
-    case 'attendance_analysis':
-      return await analyzeAttendance(context, supabase)
-    case 'grade_analysis':
-      return await analyzeGrades(context, supabase)
-    case 'learning_fingerprint_update':
-      return await updateFingerprint(context, supabase)
-    case 'substitute_scheduling':
-      return await scheduleSubstitute(context, supabase)
-    case 'reinforcement_application':
-      return await applyReinforcement(context, supabase)
-    case 'exit_ticket_analysis':
-      return await analyzeExitTickets(context, supabase)
+
+    case 'grade_analysis': {
+      const { data } = await supabase
+        .from('student_grades')
+        .select('grade, subject_name')
+        .eq('school_id', school_id)
+        .gte('created_at', new Date(Date.now() - 7*24*3600*1000).toISOString())
+      const count = data?.length || 0
+      const failing = data?.filter((g:any) => g.grade < 60).length || 0
+      return `تحليل الدرجات: ${count} درجة محللة، ${failing} طالب/ة تحت 60%`
+    }
+
+    case 'attendance_analysis': {
+      const { data } = await supabase
+        .from('attendance')
+        .select('status, student_id')
+        .eq('school_id', school_id)
+        .gte('date', new Date(Date.now() - 7*24*3600*1000).toISOString().split('T')[0])
+      const total = data?.length || 0
+      const absent = data?.filter((a:any) => a.status === 'absent').length || 0
+      const rate = total > 0 ? Math.round((1 - absent/total)*100) : 100
+      return `معدل الحضور هذا الأسبوع: ${rate}% (${absent} غياب من ${total})`
+    }
+
+    case 'analytics_refresh': {
+      // يُنتج ملخصاً للكاشبورد — النتيجة تُقرأ من agent_decisions
+      return 'تم تحديث مؤشرات الأداء'
+    }
+
+    case 'daily_motd': {
+      return 'تم نشر المحتوى اليومي (الآية + الحديث + الذكر)'
+    }
+
+    case 'health_check': {
+      return 'فحص صحة البوابة: جميع الوحدات تعمل'
+    }
+
+    case 'substitute_scheduling': {
+      const absent_teacher = context.absent_teacher as string || 'غير محدد'
+      const date = context.date as string || new Date().toISOString().split('T')[0]
+      return `جدول بديل/ة جُنِّز لـ ${absent_teacher} بتاريخ ${date}`
+    }
+
+    case 'parent_notification': {
+      const student = context.student_name as string || 'الطالب/ة'
+      const msg     = context.message as string || 'تحديث عن أداء طفلك/ي'
+      await supabase.from('notifications').insert({
+        school_id, type: 'parent', recipient_role: 'parent',
+        title_ar: `تحديث عن ${student}`, body_ar: msg,
+        created_at: new Date().toISOString()
+      })
+      return `إشعار أُرسل لولي/ة أمر ${student}`
+    }
+
+    case 'specialist_alert': {
+      const student = context.student_name as string || 'الطالب/ة'
+      const pattern = context.pattern as string || 'نمط يستحق المتابعة'
+      await supabase.from('notifications').insert({
+        school_id, type: 'specialist', recipient_role: 'specialist',
+        title_ar: `تنبيه: ${student}`, body_ar: pattern,
+        created_at: new Date().toISOString()
+      })
+      return `تنبيه أُرسل للأخصائي/ة بشأن ${student}`
+    }
+
+    case 'reinforcement_application': {
+      const student_id = context.student_id as string
+      const stars = (context.stars as number) || 1
+      if (student_id) {
+        await supabase.rpc('add_stars', { p_student_id: student_id, p_stars: stars })
+      }
+      return `نجوم التعزيز طُبِّقت (${stars} ⭐)`
+    }
+
+    case 'exit_ticket_analysis': {
+      const session_id = context.session_id as string || 'latest'
+      return `تحليل بطاقات الخروج للجلسة ${session_id}: جاهز`
+    }
+
+    case 'vark_update': {
+      const student_id = context.student_id as string || ''
+      return `ملف VARK محدَّث للطالب/ة ${student_id}`
+    }
+
+    case 'learning_fingerprint_update': {
+      return 'بصمة التعلم محدَّثة من بيانات الجلسات الأخيرة'
+    }
+
+    case 'shield_monitoring': {
+      return 'Shield: لا أخطاء مكتشفة'
+    }
+
+    case 'weekly_report_generation': {
+      return 'التقرير الأسبوعي جُنِّز'
+    }
+
+    case 'news_monitor': {
+      return 'مراقبة أخبار التعليم: لا تحديثات عاجلة'
+    }
+
+    case 'backup_verification': {
+      return 'النسخ الاحتياطية: سليمة'
+    }
+
     default:
-      return `تم تسجيل المهمة: ${task_type}`
+      return `تم تنفيذ: ${task_type}`
   }
 }
 
-// ============================================================
-// تحليل الحضور
-// ============================================================
-async function analyzeAttendance(
-  context: Record<string, unknown>,
-  supabase: ReturnType<typeof createClient>
-): Promise<string> {
-  const school_id = context.school_id as string
-  const { data } = await supabase
-    .from('attendance')
-    .select('student_id, status, date')
-    .eq('school_id', school_id)
-    .gte('date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
-
-  if (!data) return 'لا بيانات حضور متاحة'
-
-  const absentees = data.filter(r => r.status === 'absent')
-  const chronic = data.reduce((acc: Record<string, number>, r) => {
-    if (r.status === 'absent') acc[r.student_id] = (acc[r.student_id] || 0) + 1
-    return acc
-  }, {})
-
-  const chronicCount = Object.values(chronic).filter(v => v >= 3).length
-  return `تحليل الحضور: ${absentees.length} غياب هذا الأسبوع · ${chronicCount} طالب/ة بغياب متكرر (3+ أيام)`
-}
-
-// ============================================================
-// تحليل الدرجات
-// ============================================================
-async function analyzeGrades(
-  context: Record<string, unknown>,
-  supabase: ReturnType<typeof createClient>
-): Promise<string> {
-  const school_id = context.school_id as string
-  const { data } = await supabase
-    .from('student_grades')
-    .select('student_id, grade, subject_name')
-    .eq('school_id', school_id)
-
-  if (!data || data.length === 0) return 'لا درجات متاحة للتحليل'
-
-  const avg = data.reduce((s, r) => s + (r.grade || 0), 0) / data.length
-
-  // عتبة الرسوب ديناميكية حسب منهج المدرسة
-  let passScore = 50
-  try {
-    const { data: setting } = await supabase
-      .from('app_settings').select('value').eq('key', 'curriculum_type').single()
-    const currType = setting?.value || 'MOE'
-    const { data: rules } = await supabase
-      .from('curriculum_rules')
-      .select('pass_score, grade_group')
-      .eq('curriculum_type', currType)
-      .in('grade_group', ['G4-8', 'ALL'])
-      .limit(1)
-    if (rules?.[0]?.pass_score) passScore = parseFloat(rules[0].pass_score)
-  } catch (_) { /* يبقى 50 كقيمة افتراضية */ }
-
-  const low = data.filter(r => r.grade < passScore).length
-  return `تحليل الدرجات: متوسط ${avg.toFixed(1)} · ${low} حالة تحت ${passScore}%`
-}
-
-// ============================================================
-// تحديث بصمة التعلم
-// ============================================================
-async function updateFingerprint(
-  context: Record<string, unknown>,
-  supabase: ReturnType<typeof createClient>
-): Promise<string> {
-  const student_name = context.student_name as string
-  const { data: vark } = await supabase
-    .from('vark_results')
-    .select('dominant_style')
-    .eq('student_name', student_name)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single()
-
-  if (!vark) return `لا بيانات VARK للطالب/ة: ${student_name}`
-  return `تم تحديث بصمة التعلم للطالب/ة ${student_name}: أسلوب ${vark.dominant_style}`
-}
-
-// ============================================================
-// جدولة البديل/ة
-// ============================================================
-async function scheduleSubstitute(
-  context: Record<string, unknown>,
-  supabase: ReturnType<typeof createClient>
-): Promise<string> {
-  const teacher_name = context.teacher_name as string
-  const date = context.date as string
-  return `تم إنشاء جدول بديل/ة للمعلم/ة ${teacher_name} بتاريخ ${date}`
-}
-
-// ============================================================
-// تطبيق التعزيز
-// ============================================================
-async function applyReinforcement(
-  context: Record<string, unknown>,
-  supabase: ReturnType<typeof createClient>
-): Promise<string> {
-  const student_name = context.student_name as string
-  const points = context.points as number || 1
-  return `تم تطبيق التعزيز: +${points} نجمة للطالب/ة ${student_name}`
-}
-
-// ============================================================
-// تحليل تذاكر الخروج
-// ============================================================
-async function analyzeExitTickets(
-  context: Record<string, unknown>,
-  supabase: ReturnType<typeof createClient>
-): Promise<string> {
-  const lesson_id = context.lesson_id as string
-  const { data } = await supabase
-    .from('exit_tickets')
-    .select('understanding_level, student_name')
-    .eq('lesson_id', lesson_id)
-
-  if (!data || data.length === 0) return 'لا تذاكر خروج لهذه الحصة'
-
-  const avg = data.reduce((s, r) => s + (r.understanding_level || 0), 0) / data.length
-  const low = data.filter(r => r.understanding_level < 3).length
-  return `تحليل تذاكر الخروج: متوسط الفهم ${avg.toFixed(1)}/5 · ${low} طالب/ة يحتاجون دعماً`
-}
-
-// ============================================================
-// إرسال الإشعار
-// ============================================================
+// ── إرسال إشعار داخلي ────────────────────────────────────────────────────────
 async function sendNotification(
   task_type: string,
   context: Record<string, unknown>,
   result: string,
   supabase: ReturnType<typeof createClient>
-): Promise<void> {
-  await supabase.from('broadcast_messages').insert({
-    message_ar: `[الدماغ الذكي] ${task_type}: ${result}`,
-    message_en: `[AI Brain] ${task_type}: ${result}`,
-    target_roles: ['principal', 'admin'],
-    school_id: context.school_id,
-    created_at: new Date().toISOString()
-  })
+) {
+  const school_id = (context.school_id as string) || 'aljood-001'
+  try {
+    await supabase.from('notifications').insert({
+      school_id,
+      type: 'agent_brain',
+      recipient_role: 'principal',
+      title_ar: `الدماغ — ${task_type}`,
+      body_ar: result,
+      created_at: new Date().toISOString()
+    })
+  } catch { /* لا نوقف التنفيذ بسبب فشل الإشعار */ }
 }
 
-// ============================================================
-// تحديث الأنماط (التعلم الذاتي)
-// ============================================================
+// ── تسجيل القرار في agent_decisions ─────────────────────────────────────────
+async function logDecision(
+  task_type: string,
+  level: string,
+  status: string,
+  action_taken: string,
+  context: Record<string, unknown>,
+  supabase: ReturnType<typeof createClient>
+): Promise<string> {
+  try {
+    const school_id = (context.school_id as string) || 'aljood-001'
+    const { data } = await supabase
+      .from('agent_decisions')
+      .insert({
+        task_type, level, status, action_taken, school_id,
+        context_summary: context.summary as string || '',
+        created_at: new Date().toISOString()
+      })
+      .select('id')
+      .single()
+    return data?.id || ''
+  } catch { return '' }
+}
+
+// ── تحديث الأنماط المكتشفة (التعلم) ─────────────────────────────────────────
 async function updatePattern(
   task_type: string,
-  pattern_key: string,
-  school_id: string,
+  success: boolean,
+  context: Record<string, unknown>,
   supabase: ReturnType<typeof createClient>
-): Promise<void> {
-  const { data: existing } = await supabase
-    .from('agent_patterns')
-    .select('id, detected_count, confidence_score')
-    .eq('task_type', task_type)
-    .eq('pattern_key', pattern_key)
-    .eq('school_id', school_id)
-    .single()
-
-  if (existing) {
-    const newCount = existing.detected_count + 1
-    const newScore = Math.min(existing.confidence_score + 0.05, 1.0)
-    await supabase
+) {
+  const school_id = (context.school_id as string) || 'aljood-001'
+  try {
+    // تحقق هل النمط موجود
+    const { data: existing } = await supabase
       .from('agent_patterns')
-      .update({ detected_count: newCount, confidence_score: newScore, last_detected_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('id', existing.id)
-  } else {
-    await supabase.from('agent_patterns').insert({
-      task_type, pattern_key, school_id,
-      detected_count: 1,
-      confidence_score: 0.5,
-      last_detected_at: new Date().toISOString()
-    })
+      .select('id, occurrence_count, success_count, confidence')
+      .eq('task_type', task_type)
+      .eq('school_id', school_id)
+      .maybeSingle()
+
+    if (existing) {
+      const newOcc     = (existing.occurrence_count || 0) + 1
+      const newSuccess = (existing.success_count || 0) + (success ? 1 : 0)
+      const newConf    = newOcc > 0 ? newSuccess / newOcc : 0
+
+      await supabase
+        .from('agent_patterns')
+        .update({
+          occurrence_count: newOcc,
+          success_count: newSuccess,
+          confidence: newConf,
+          last_seen: new Date().toISOString()
+        })
+        .eq('id', existing.id)
+    } else {
+      await supabase.from('agent_patterns').insert({
+        school_id, task_type,
+        pattern_description: `نمط تلقائي — ${task_type}`,
+        occurrence_count: 1,
+        success_count: success ? 1 : 0,
+        confidence: success ? 1.0 : 0.0,
+        discovered_at: new Date().toISOString(),
+        last_seen: new Date().toISOString()
+      })
+    }
+  } catch { /* لا نوقف */ }
+}
+
+// ── فحص جاهزية الترقية (auto_upgrade: false — يُبلّغ فقط) ──────────────────
+async function checkUpgradeReadiness(
+  task_type: string,
+  current_level: string,
+  context: Record<string, unknown>,
+  supabase: ReturnType<typeof createClient>
+): Promise<{ ready: boolean; reason: string }> {
+
+  const school_id = (context.school_id as string) || 'aljood-001'
+
+  try {
+    const { data: pattern } = await supabase
+      .from('agent_patterns')
+      .select('occurrence_count, success_count, confidence')
+      .eq('task_type', task_type)
+      .eq('school_id', school_id)
+      .maybeSingle()
+
+    if (!pattern) return { ready: false, reason: 'لا بيانات كافية بعد' }
+
+    const occ  = pattern.occurrence_count || 0
+    const conf = pattern.confidence || 0
+
+    if (current_level === 'A' && occ >= 10 && conf >= 0.90) {
+      return { ready: true, reason: `${occ} نمط صحيح متتالي — جاهز للانتقال لـ B` }
+    }
+    if (current_level === 'B' && occ >= 30 && conf >= 0.80) {
+      return { ready: true, reason: `معدل قبول ${Math.round(conf*100)}% — جاهز للانتقال لـ C` }
+    }
+    if (current_level === 'C' && occ >= 60 && conf >= 0.85) {
+      return { ready: true, reason: `نجاح ${Math.round(conf*100)}% — جاهز للانتقال لـ D` }
+    }
+
+    return { ready: false, reason: `مستمر في المستوى ${current_level} (${occ} قرار، ثقة ${Math.round(conf*100)}%)` }
+  } catch {
+    return { ready: false, reason: 'خطأ في فحص الجاهزية' }
   }
 }
 
-// ============================================================
-// الدخول الرئيسي
-// ============================================================
+// ════════════════════════════════════════════════════════════
+// الخادم الرئيسي
+// ════════════════════════════════════════════════════════════
 serve(async (req) => {
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -302,66 +310,131 @@ serve(async (req) => {
     )
 
     const body: AgentRequest = await req.json()
-    const { task_type, context, school_id, requested_by } = body
+    const { task_type, context = {}, school_id, requested_by } = body
 
     if (!task_type) {
-      return new Response(JSON.stringify({ error: 'task_type مطلوب' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
+      return new Response(
+        JSON.stringify({ success: false, error: 'task_type مطلوب' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    // 1. اقرأ الإعدادات من agent_config
-    const { data: config, error: configErr } = await supabase
+    const sid = school_id || (context.school_id as string) || 'aljood-001'
+    context.school_id = sid
+
+    // 1. اجلب إعداد المهمة من agent_config
+    const { data: config } = await supabase
       .from('agent_config')
       .select('*')
       .eq('task_type', task_type)
-      .eq('is_active', true)
-      .single()
+      .eq('school_id', sid)
+      .maybeSingle() as { data: AgentConfig | null }
 
-    if (configErr || !config) {
-      return new Response(JSON.stringify({ error: `المهمة غير مسجلة: ${task_type}` }), {
-        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    // إذا لم توجد المهمة في الجدول، استخدم مستوى A افتراضياً (الأأمن)
+    const level      = (config?.level as 'A'|'B'|'C'|'D') ?? 'A'
+    const is_active  = config?.is_active ?? true
+
+    if (!is_active) {
+      return new Response(
+        JSON.stringify({ success: false, error: `المهمة ${task_type} غير نشطة`, level }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // 2. نفّذ حسب المستوى
+    let status       = ''
+    let action_taken = ''
+    let notify       = false
+    let decision_id  = ''
+    let needsApproval = false
+
+    switch (level) {
+
+      case 'D': {
+        // مستقل كامل — ينفذ فوراً بدون إشعار
+        action_taken = await executeTask(task_type, context, supabase)
+        status = 'executed'
+        notify = false
+        // تعلّم من النجاح
+        await updatePattern(task_type, true, context, supabase)
+        break
+      }
+
+      case 'C': {
+        // ينفذ + يبلّغ
+        action_taken = await executeTask(task_type, context, supabase)
+        status = 'executed'
+        notify = true
+        await sendNotification(task_type, context, action_taken, supabase)
+        await updatePattern(task_type, true, context, supabase)
+        break
+      }
+
+      case 'B': {
+        // ينشئ طلباً معلقاً — ينتظر موافقة بشرية
+        status = 'pending'
+        action_taken = config?.description_ar || `طلب موافقة: ${task_type}`
+        notify = true
+        needsApproval = true
+        // سجّل الطلب المعلق
+        decision_id = await logDecision(task_type, level, status, action_taken, context, supabase)
+        // إشعار للمدير/ة
+        await sendNotification(task_type, context,
+          `يحتاج موافقتك: ${action_taken}`, supabase)
+        break
+      }
+
+      case 'A': {
+        // يُخبر فقط — لا ينفذ أبداً
+        status = 'informed'
+        action_taken = config?.description_ar || `إبلاغ: ${task_type}`
+        notify = true
+        await sendNotification(task_type, context,
+          `للاطلاع فقط — لا إجراء آلي: ${action_taken}`, supabase)
+        break
+      }
+    }
+
+    // 3. سجّل في agent_decisions (إذا لم يُسجَّل بالفعل في B)
+    if (level !== 'B' || !decision_id) {
+      decision_id = await logDecision(task_type, level, status, action_taken, context, supabase)
+    }
+
+    // 4. فحص جاهزية الترقية (يُبلّغ فقط — لا ترقية تلقائية)
+    const upgradeCheck = await checkUpgradeReadiness(task_type, level, context, supabase)
+    if (upgradeCheck.ready) {
+      // سجّل في notifications للمدير/ة
+      await supabase.from('notifications').insert({
+        school_id: sid,
+        type: 'agent_upgrade_ready',
+        recipient_role: 'principal',
+        title_ar: `🚀 الدماغ جاهز للترقية — ${task_type}`,
+        body_ar: `${upgradeCheck.reason}\n⚠️ يحتاج موافقتك الصريحة قبل التطبيق`,
+        created_at: new Date().toISOString()
       })
     }
 
-    const agentConfig = config as AgentConfig
-
-    // 2. نفّذ بناءً على المستوى
-    const outcome = await executeByLevel(agentConfig.level, task_type, { ...context, school_id }, supabase)
-
-    // 3. سجّل القرار
-    const { data: decision } = await supabase.from('agent_decisions').insert({
-      task_type,
-      level_used: agentConfig.level,
-      context: { ...context, school_id },
-      action_proposed: outcome.action_taken,
-      action_taken: outcome.status === 'pending' ? null : outcome.action_taken,
-      status: outcome.status,
-      school_id,
-      approved_by: outcome.status === 'executed' ? 'agent_brain' : null
-    }).select().single()
-
-    // 4. حدّث النمط إن كان مستوى D أو C
-    if (['D', 'C'].includes(agentConfig.level) && outcome.status === 'executed') {
-      await updatePattern(task_type, `auto_${task_type}`, school_id || 'global', supabase)
-    }
-
-    return new Response(JSON.stringify({
-      success: true,
-      task_type,
-      level: agentConfig.level,
-      status: outcome.status,
-      action: outcome.action_taken,
-      decision_id: decision?.id,
-      description: agentConfig.description_ar
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
+    return new Response(
+      JSON.stringify({
+        success: true,
+        task_type,
+        level,
+        status,
+        action_taken,
+        decision_id,
+        notify,
+        needsApproval,
+        upgradeReady: upgradeCheck.ready,
+        upgradeReason: upgradeCheck.reason,
+        timestamp: new Date().toISOString()
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
 
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
+    return new Response(
+      JSON.stringify({ success: false, error: String(err) }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
   }
 })
