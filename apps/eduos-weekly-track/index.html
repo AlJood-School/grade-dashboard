@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>المسار الأسبوعي التشاركي — EduOS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="../platform-shield.js" defer></script>
+<script src="../platform-agent-brain.js" defer></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Tajawal',Arial,sans-serif;background:#F8FAFC;color:#111827;min-height:100vh;}
+
+  /* ── Header ── */
+  .app-header{
+    background:white;border-bottom:1px solid #E5E7EB;
+    padding:0 20px;height:60px;display:flex;align-items:center;
+    justify-content:space-between;position:sticky;top:0;z-index:100;
+  }
+  .logo-pill{
+    display:flex;align-items:center;gap:10px;
+  }
+  .logo-sq{
+    width:36px;height:36px;border-radius:9px;
+    background:linear-gradient(135deg,#6C3DD6,#22D3EE);
+    display:flex;align-items:center;justify-content:center;
+    font-size:18px;color:white;font-weight:700;
+  }
+
+  /* ── Toolbar ── */
+  .toolbar{
+    background:white;border-bottom:1px solid #E5E7EB;
+    padding:12px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+  .toolbar select,.toolbar input{
+    border:1px solid #D1D5DB;border-radius:8px;
+    padding:7px 12px;font-size:14px;font-family:'Tajawal',Arial,sans-serif;
+    background:white;color:#111827;
+  }
+  .btn{
+    border:none;border-radius:8px;padding:8px 18px;
+    font-size:13px;font-family:'Tajawal',Arial,sans-serif;
+    cursor:pointer;font-weight:600;transition:opacity .15s;
+  }
+  .btn:hover{opacity:.85}
+  .btn-primary{background:#6C3DD6;color:white;}
+  .btn-success{background:#059669;color:white;}
+  .btn-danger{background:#DC2626;color:white;}
+  .btn-ghost{background:#F3F4F6;color:#374151;}
+
+  /* ── Week nav ── */
+  .week-nav{display:flex;align-items:center;gap:8px;}
+  .week-nav button{
+    width:32px;height:32px;border:1px solid #D1D5DB;border-radius:8px;
+    background:white;cursor:pointer;font-size:16px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .week-label{font-size:14px;font-weight:700;color:#111827;white-space:nowrap;}
+
+  /* ── Main grid ── */
+  .grid-wrap{padding:20px;overflow-x:auto;}
+  .week-grid{
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    gap:12px;min-width:860px;
+  }
+
+  /* ── Day column ── */
+  .day-col{
+    background:white;border-radius:12px;
+    border:1px solid #E5E7EB;
+    min-height:400px;display:flex;flex-direction:column;
+    transition:border-color .2s;
+  }
+  .day-col.drag-over{border-color:#6C3DD6;background:#FAF5FF;}
+  .day-header{
+    padding:12px 14px;border-bottom:1px solid #F3F4F6;
+    background:#FAFAFA;border-radius:12px 12px 0 0;
+  }
+  .day-name{font-size:15px;font-weight:700;color:#111827;}
+  .day-date{font-size:11px;color:#9CA3AF;margin-top:1px;}
+  .day-load-bar{
+    height:4px;border-radius:2px;margin-top:6px;
+    background:#E5E7EB;overflow:hidden;
+  }
+  .day-load-fill{height:100%;border-radius:2px;transition:width .3s;}
+
+  /* ── Items ── */
+  .day-items{
+    flex:1;padding:10px;display:flex;flex-direction:column;gap:8px;
+    min-height:80px;
+  }
+
+  .track-item{
+    border-radius:9px;padding:10px 12px;cursor:grab;
+    border-right:4px solid currentColor;
+    background:var(--item-bg,#F9FAFB);
+    user-select:none;position:relative;
+    transition:transform .15s,box-shadow .15s;
+  }
+  .track-item:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.1);}
+  .track-item.dragging{opacity:.4;cursor:grabbing;}
+  .track-item.new-flash{animation:item-flash .6s ease;}
+  @keyframes item-flash{0%{background:#DBEAFE}100%{}}
+
+  .item-type-badge{
+    font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;
+    background:rgba(255,255,255,.7);display:inline-block;margin-bottom:4px;
+  }
+  .item-subject{font-size:11px;color:#6B7280;margin-bottom:2px;}
+  .item-title{font-size:13px;font-weight:700;line-height:1.4;}
+  .item-pages{font-size:11px;color:#6B7280;margin-top:3px;}
+  .item-teacher{font-size:10px;color:#9CA3AF;margin-top:4px;}
+  .item-conflict{font-size:10px;color:#DC2626;margin-top:4px;}
+
+  .item-actions{
+    position:absolute;top:6px;left:8px;
+    display:none;gap:4px;
+  }
+  .track-item:hover .item-actions{display:flex;}
+  .item-action-btn{
+    width:22px;height:22px;border-radius:5px;border:none;
+    cursor:pointer;font-size:11px;
+    background:rgba(255,255,255,.9);
+  }
+
+  /* ── Add button ── */
+  .day-add-btn{
+    margin:8px 10px 10px;border:2px dashed #D1D5DB;
+    border-radius:9px;padding:8px;text-align:center;
+    color:#9CA3AF;font-size:13px;cursor:pointer;
+    font-family:'Tajawal',Arial,sans-serif;
+    transition:all .15s;
+  }
+  .day-add-btn:hover{border-color:#6C3DD6;color:#6C3DD6;background:#FAF5FF;}
+
+  /* ── Student preview ── */
+  .preview-section{
+    background:white;border-top:2px solid #E5E7EB;
+    padding:20px;margin-top:0;
+  }
+  .preview-title{
+    font-size:16px;font-weight:700;color:#111827;margin-bottom:16px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .preview-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;min-width:860px;}
+  .preview-day{border-radius:10px;padding:12px;background:#FAFAFA;border:1px solid #E5E7EB;}
+  .preview-day-name{font-size:13px;font-weight:700;color:#374151;margin-bottom:8px;}
+  .preview-item{
+    border-radius:7px;padding:8px 10px;margin-bottom:6px;
+    border-right:3px solid currentColor;
+  }
+
+  /* ── Modal ── */
+  .modal-overlay{
+    position:fixed;inset:0;z-index:9999;
+    background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;
+    padding:20px;
+  }
+  .modal-box{
+    background:white;border-radius:16px;width:100%;max-width:540px;
+    max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2);
+  }
+  .modal-header{
+    padding:20px 24px 16px;border-bottom:1px solid #E5E7EB;
+    display:flex;justify-content:space-between;align-items:center;
+    position:sticky;top:0;background:white;z-index:1;
+  }
+  .modal-title{font-size:17px;font-weight:700;color:#111827;}
+  .modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:#6B7280;padding:4px;}
+  .modal-body{padding:20px 24px;}
+  .modal-footer{padding:16px 24px;border-top:1px solid #E5E7EB;display:flex;gap:10px;justify-content:flex-end;}
+
+  .form-group{margin-bottom:16px;}
+  label{display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;}
+  input,select,textarea{
+    width:100%;border:1px solid #D1D5DB;border-radius:8px;
+    padding:9px 12px;font-size:14px;font-family:'Tajawal',Arial,sans-serif;
+    color:#111827;background:white;
+  }
+  input:focus,select:focus,textarea:focus{outline:none;border-color:#6C3DD6;}
+  textarea{resize:vertical;min-height:70px;}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .type-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+  .type-btn{
+    border:2px solid #E5E7EB;border-radius:9px;padding:10px 6px;
+    text-align:center;cursor:pointer;transition:all .15s;background:white;
+  }
+  .type-btn:hover,.type-btn.selected{border-color:#6C3DD6;background:#FAF5FF;}
+  .type-icon{font-size:20px;display:block;margin-bottom:4px;}
+  .type-label{font-size:11px;font-weight:600;color:#374151;}
+
+  /* ── Conflict alert ── */
+  .conflict-alert{
+    background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;
+    padding:12px 16px;margin-bottom:12px;
+    display:flex;gap:10px;align-items:flex-start;
+  }
+
+  /* ── Live indicator ── */
+  .live-dot{
+    width:8px;height:8px;border-radius:50%;background:#10B981;
+    display:inline-block;margin-left:6px;
+    animation:live-pulse 1.5s infinite;
+  }
+  @keyframes live-pulse{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.4)}50%{box-shadow:0 0 0 5px rgba(16,185,129,0)}}
+
+  /* ── Publish banner ── */
+  .publish-bar{
+    background:linear-gradient(135deg,#6C3DD6,#22D3EE);
+    padding:12px 20px;display:flex;align-items:center;justify-content:space-between;
+    flex-wrap:wrap;gap:10px;
+  }
+  .publish-bar-text{color:white;font-size:14px;font-weight:600;}
+
+  /* ── Responsive ── */
+  @media(max-width:700px){
+    .week-grid,.preview-grid{grid-template-columns:1fr;min-width:0;}
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="app-header">
+  <div class="logo-pill">
+    <div class="logo-sq">🗓️</div>
+    <div>
+      <div style="font-size:15px;font-weight:700;color:#111827;">المسار الأسبوعي التشاركي</div>
+      <div style="font-size:11px;color:#9CA3AF;">Weekly Collaborative Track</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span id="live-indicator" style="font-size:12px;color:#059669;display:none;">
+      <span class="live-dot"></span> مباشر
+    </span>
+    <span id="current-user-badge" style="font-size:12px;background:#F3F4F6;padding:4px 12px;border-radius:20px;color:#374151;"></span>
+  </div>
+</header>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    <label style="font-size:13px;font-weight:600;color:#374151;margin:0;">الصف:</label>
+    <select id="class-select" onchange="loadWeekTrack()" style="min-width:100px;">
+      <option value="">اختر الصف</option>
+    </select>
+  </div>
+
+  <div class="week-nav">
+    <button onclick="changeWeek(-1)">→</button>
+    <span class="week-label" id="week-label">الأسبوع —</span>
+    <button onclick="changeWeek(1)">←</button>
+  </div>
+
+  <div style="font-size:12px;color:#6B7280;" id="week-dates-label"></div>
+
+  <div style="margin-right:auto;display:flex;gap:8px;">
+    <button class="btn btn-ghost" onclick="togglePreview()">👁️ عرض الطلاب</button>
+    <button class="btn btn-primary" onclick="openAddModal(null)">+ إضافة عنصر</button>
+    <button id="publish-btn" class="btn btn-success" onclick="publishTrack()" style="display:none;">📢 نشر للطلاب والأولياء</button>
+  </div>
+</div>
+
+<!-- Conflict alerts -->
+<div id="conflict-zone" style="padding:0 20px;"></div>
+
+<!-- Week Grid -->
+<div class="grid-wrap">
+  <div class="week-grid" id="week-grid">
+    <!-- Injected by JS -->
+  </div>
+</div>
+
+<!-- Student Preview (hidden by default) -->
+<div class="preview-section" id="preview-section" style="display:none;">
+  <div style="overflow-x:auto;">
+    <div class="preview-title">
+      👁️ معاينة ما يراه الطالب/ة وولي/ة الأمر
+    </div>
+    <div class="preview-grid" id="preview-grid"></div>
+  </div>
+</div>
+
+<!-- Footer -->
+<div style="text-align:center;padding:16px;font-size:11px;color:#9CA3AF;">
+  © 2026 NAFAS FOR ARTIFICIAL INTELLIGENCE · CN-6573712 | EduOS — بوابة الجود الذكية
+</div>
+
+<!-- Add/Edit Item Modal -->
+<div class="modal-overlay" id="item-modal" style="display:none;" onclick="if(event.target===this)closeModal()">
+<div class="modal-box">
+  <div class="modal-header">
+    <span class="modal-title" id="modal-title">إضافة عنصر للمسار</span>
+    <button class="modal-close" onclick="closeModal()">✕</button>
+  </div>
+  <div class="modal-body">
+    <input type="hidden" id="modal-item-id">
+    <input type="hidden" id="modal-day">
+
+    <!-- Item type -->
+    <div class="form-group">
+      <label>نوع العنصر</label>
+      <div class="type-grid" id="type-grid">
+        <div class="type-btn" onclick="selectType('exam')" data-type="exam">
+          <span class="type-icon">📝</span><span class="type-label">اختبار</span>
+        </div>
+        <div class="type-btn" onclick="selectType('quiz')" data-type="quiz">
+          <span class="type-icon">❓</span><span class="type-label">قصير</span>
+        </div>
+        <div class="type-btn" onclick="selectType('homework')" data-type="homework">
+          <span class="type-icon">📓</span><span class="type-label">واجب</span>
+        </div>
+        <div class="type-btn" onclick="selectType('activity')" data-type="activity">
+          <span class="type-icon">🎨</span><span class="type-label">نشاط</span>
+        </div>
+        <div class="type-btn" onclick="selectType('lesson')" data-type="lesson">
+          <span class="type-icon">📖</span><span class="type-label">درس</span>
+        </div>
+        <div class="type-btn" onclick="selectType('project')" data-type="project">
+          <span class="type-icon">🔬</span><span class="type-label">مشروع</span>
+        </div>
+        <div class="type-btn" onclick="selectType('announcement')" data-type="announcement">
+          <span class="type-icon">📢</span><span class="type-label">إعلان</span>
+        </div>
+        <div class="type-btn" onclick="selectType('other')" data-type="other">
+          <span class="type-icon">📌</span><span class="type-label">أخرى</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>المادة <span style="color:#DC2626">*</span></label>
+      <input type="text" id="f-subject" placeholder="مثال: رياضيات، علوم...">
+    </div>
+
+    <div class="form-group">
+      <label>العنوان <span style="color:#DC2626">*</span></label>
+      <input type="text" id="f-title" placeholder="مثال: اختبار الوحدة الثانية — الكسور">
+    </div>
+
+    <div class="form-group">
+      <label>الوحدة الدراسية</label>
+      <input type="text" id="f-unit" placeholder="مثال: الوحدة الثانية — الكسور">
+    </div>
+
+    <div class="form-group">
+      <label>عنوان الدرس</label>
+      <input type="text" id="f-lesson" placeholder="مثال: الدرس الثالث: جمع الكسور">
+    </div>
+
+    <div class="form-row">
+      <div class="form-group" style="margin:0;">
+        <label>صفحة من</label>
+        <input type="number" id="f-pages-from" placeholder="45" min="1">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>صفحة إلى</label>
+        <input type="number" id="f-pages-to" placeholder="62" min="1">
+      </div>
+    </div>
+
+    <div class="form-group" id="exam-method-group" style="display:none;">
+      <label>طريقة الاختبار</label>
+      <select id="f-exam-method">
+        <option value="">— اختر —</option>
+        <option value="written">✏️ تحريري</option>
+        <option value="oral">🎤 شفهي</option>
+        <option value="practical">🔬 عملي</option>
+        <option value="online">💻 إلكتروني</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>الكلمات المهمة (افصل بفاصلة)</label>
+      <input type="text" id="f-keywords" placeholder="الكسور، القسمة، المضاعفات">
+    </div>
+
+    <div class="form-group">
+      <label>ملاحظة</label>
+      <textarea id="f-description" placeholder="أي معلومة إضافية للطلاب/ة أو أولياء الأمور..."></textarea>
+    </div>
+
+    <div class="form-group">
+      <label>الوقت التقديري (دقيقة)</label>
+      <input type="number" id="f-duration" placeholder="45" min="5" max="240">
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-ghost" onclick="closeModal()">إلغاء</button>
+    <button class="btn btn-primary" onclick="saveItem()">💾 حفظ</button>
+  </div>
+</div>
+</div>
+
+<script>
+const SB_URL  = 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTU1MjI4MDAsImV4cCI6MjAzMTA5ODgwMH0.Vf4uGJDwvAg1V3n0h1OAtW35A1FMKbEXRaGzFxXfx48';
+
+// ── State ──────────────────────────────────────────────────────
+let _user = {}, _supabase = null;
+let _currentWeek = 1, _currentClass = '', _trackId = null;
+let _items = {}, _selectedType = 'exam';
+const ACADEMIC_YEAR = '2025-2026';
+
+const DAYS = [
+  { key: 0, ar: 'الأحد',    en: 'Sun' },
+  { key: 1, ar: 'الاثنين',  en: 'Mon' },
+  { key: 2, ar: 'الثلاثاء', en: 'Tue' },
+  { key: 3, ar: 'الأربعاء', en: 'Wed' },
+  { key: 4, ar: 'الخميس',   en: 'Thu' },
+];
+
+const TYPE_CONFIG = {
+  exam:         { icon:'📝', label:'اختبار',    color:'#DC2626', bg:'#FEF2F2' },
+  quiz:         { icon:'❓', label:'قصير',       color:'#EA580C', bg:'#FFF7ED' },
+  homework:     { icon:'📓', label:'واجب',       color:'#1D4ED8', bg:'#EFF6FF' },
+  activity:     { icon:'🎨', label:'نشاط',       color:'#7C3AED', bg:'#F5F3FF' },
+  lesson:       { icon:'📖', label:'درس',        color:'#059669', bg:'#ECFDF5' },
+  project:      { icon:'🔬', label:'مشروع',      color:'#0891B2', bg:'#ECFEFF' },
+  announcement: { icon:'📢', label:'إعلان',      color:'#D97706', bg:'#FFFBEB' },
+  other:        { icon:'📌', label:'أخرى',       color:'#6B7280', bg:'#F9FAFB' },
+};
+
+const SUBJECT_COLORS = [
+  '#6C3DD6','#DC2626','#059669','#0891B2','#D97706',
+  '#7C3AED','#EA580C','#0369A1','#065F46','#B45309',
+];
+const _subjectColorMap = {};
+let _colorIdx = 0;
+function subjectColor(s) {
+  if (!_subjectColorMap[s]) {
+    _subjectColorMap[s] = SUBJECT_COLORS[_colorIdx % SUBJECT_COLORS.length];
+    _colorIdx++;
+  }
+  return _subjectColorMap[s];
+}
+
+// ── Init ───────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  _user = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+  if (!_user.role) { alert('يرجى تسجيل الدخول أولاً'); return; }
+
+  document.getElementById('current-user-badge').textContent =
+    (_user.name || _user.email || _user.role) + ' · ' + (_user.subject || '');
+
+  // Init Supabase
+  _supabase = window.supabase.createClient(SB_URL, SB_ANON);
+
+  // Show publish button for principal only
+  if (['principal','admin'].includes(_user.role)) {
+    document.getElementById('publish-btn').style.display = '';
+  }
+
+  // Load classes
+  await loadClasses();
+  setCurrentWeek();
+  renderGrid();
+
+  // Auto-load if class set
+  if (_currentClass) loadWeekTrack();
+});
+
+function setCurrentWeek() {
+  // Calculate current academic week from week start date
+  const now = new Date();
+  const yearStart = new Date('2025-09-01'); // academic year start
+  const diffMs = now - yearStart;
+  _currentWeek = Math.max(1, Math.min(40, Math.ceil(diffMs / (7 * 24 * 3600_000))));
+  updateWeekLabel();
+}
+
+function updateWeekLabel() {
+  document.getElementById('week-label').textContent = `الأسبوع ${_currentWeek}`;
+  // Calculate dates
+  const yearStart = new Date('2025-09-01');
+  const weekStart = new Date(yearStart.getTime() + (_currentWeek - 1) * 7 * 24 * 3600_000);
+  const weekEnd = new Date(weekStart.getTime() + 4 * 24 * 3600_000);
+  document.getElementById('week-dates-label').textContent =
+    `${weekStart.toLocaleDateString('ar-AE',{day:'numeric',month:'short'})} — ${weekEnd.toLocaleDateString('ar-AE',{day:'numeric',month:'short',year:'numeric'})}`;
+
+  // Update day headers
+  DAYS.forEach(d => {
+    const dateEl = document.getElementById(`day-date-${d.key}`);
+    if (dateEl) {
+      const dayDate = new Date(weekStart.getTime() + d.key * 24 * 3600_000);
+      dateEl.textContent = dayDate.toLocaleDateString('ar-AE',{day:'numeric',month:'short'});
+    }
+  });
+}
+
+function changeWeek(delta) {
+  _currentWeek = Math.max(1, Math.min(40, _currentWeek + delta));
+  updateWeekLabel();
+  if (_currentClass) loadWeekTrack();
+}
+
+async function loadClasses() {
+  // Load classes teacher teaches (or all if principal)
+  const { data } = await _supabase.from('classes').select('id,name').order('name').limit(50);
+  const sel = document.getElementById('class-select');
+  (data || []).forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id || c.name;
+    opt.textContent = c.name;
+    sel.appendChild(opt);
+  });
+
+  // Teacher: pre-select their class
+  if (_user.class_id) {
+    sel.value = _user.class_id;
+    _currentClass = _user.class_id;
+  }
+}
+
+// ── Render empty grid ────────────────────────────────────────
+function renderGrid() {
+  const grid = document.getElementById('week-grid');
+  grid.innerHTML = DAYS.map(d => `
+    <div class="day-col" id="day-col-${d.key}"
+      ondragover="event.preventDefault();this.classList.add('drag-over')"
+      ondragleave="this.classList.remove('drag-over')"
+      ondrop="onDrop(event,${d.key})">
+      <div class="day-header">
+        <div class="day-name">${d.ar} <span style="font-size:12px;color:#9CA3AF;font-weight:400;">${d.en}</span></div>
+        <div class="day-date" id="day-date-${d.key}"></div>
+        <div class="day-load-bar"><div class="day-load-fill" id="load-bar-${d.key}" style="width:0%;background:#10B981;"></div></div>
+      </div>
+      <div class="day-items" id="day-items-${d.key}"></div>
+      <div class="day-add-btn" onclick="openAddModal(${d.key})">+ إضافة</div>
+    </div>
+  `).join('');
+  updateWeekLabel();
+}
+
+// ── Load week track from Supabase ────────────────────────────
+async function loadWeekTrack() {
+  _currentClass = document.getElementById('class-select').value;
+  if (!_currentClass) return;
+
+  // Clear items
+  _items = {};
+  DAYS.forEach(d => { document.getElementById(`day-items-${d.key}`).innerHTML = ''; });
+  document.getElementById('conflict-zone').innerHTML = '';
+
+  // Get or create weekly_track record
+  let { data: track } = await _supabase.from('weekly_track')
+    .select('id,is_published')
+    .eq('class_id', _currentClass)
+    .eq('academic_year', ACADEMIC_YEAR)
+    .eq('week_number', _currentWeek)
+    .maybeSingle();
+
+  if (!track) {
+    // Create track record
+    const { data: newTrack } = await _supabase.from('weekly_track').insert({
+      class_id: _currentClass, academic_year: ACADEMIC_YEAR, week_number: _currentWeek,
+      school_id: _user.school_id || null,
+    }).select('id,is_published').single();
+    track = newTrack;
+  }
+
+  if (!track) return;
+  _trackId = track.id;
+
+  // Update publish button state
+  const pubBtn = document.getElementById('publish-btn');
+  if (pubBtn) pubBtn.textContent = track.is_published ? '✅ تم النشر' : '📢 نشر للطلاب والأولياء';
+
+  // Load items
+  const { data: items } = await _supabase.from('weekly_track_items')
+    .select('*')
+    .eq('track_id', _trackId)
+    .order('day_of_week').order('position');
+
+  (items || []).forEach(item => {
+    if (!_items[item.day_of_week]) _items[item.day_of_week] = [];
+    _items[item.day_of_week].push(item);
+    renderItemCard(item);
+  });
+
+  updateLoadBars();
+  checkConflicts();
+  startRealtime();
+
+  document.getElementById('live-indicator').style.display = 'inline-flex';
+}
+
+// ── Render one item card ─────────────────────────────────────
+function renderItemCard(item, prepend = false) {
+  const container = document.getElementById(`day-items-${item.day_of_week}`);
+  if (!container) return;
+
+  const tc = TYPE_CONFIG[item.item_type] || TYPE_CONFIG.other;
+  const sc = subjectColor(item.subject_name || '');
+  const isOwn = item.teacher_id === _user.id;
+
+  const div = document.createElement('div');
+  div.className = 'track-item' + (prepend ? ' new-flash' : '');
+  div.id = `item-${item.id}`;
+  div.draggable = isOwn;
+  div.style.cssText = `--item-bg:${tc.bg};color:${tc.color};border-color:${sc};`;
+  div.dataset.id = item.id;
+  div.dataset.day = item.day_of_week;
+
+  div.innerHTML = `
+    ${isOwn ? `<div class="item-actions">
+      <button class="item-action-btn" onclick="openEditModal('${item.id}')" title="تعديل">✏️</button>
+      <button class="item-action-btn" onclick="deleteItem('${item.id}')" title="حذف" style="color:#DC2626;">🗑️</button>
+    </div>` : ''}
+    <span class="item-type-badge" style="background:${tc.bg};color:${tc.color};">${tc.icon} ${tc.label}</span>
+    <div class="item-subject" style="color:${sc};">${item.subject_name || ''}</div>
+    <div class="item-title">${item.title_ar}</div>
+    ${item.pages_from ? `<div class="item-pages">📄 ص ${item.pages_from}${item.pages_to ? '–' + item.pages_to : ''}</div>` : ''}
+    ${item.teacher_name ? `<div class="item-teacher">👤 ${item.teacher_name}</div>` : ''}
+    ${item.ai_conflict_flag ? `<div class="item-conflict">⚠️ ${item.ai_conflict_note}</div>` : ''}
+  `;
+
+  if (isOwn) {
+    div.addEventListener('dragstart', onDragStart);
+    div.addEventListener('dragend', onDragEnd);
+  }
+
+  if (prepend) container.insertBefore(div, container.firstChild);
+  else container.appendChild(div);
+}
+
+// ── Drag & Drop ────────────────────────────────────────────
+let _dragItemId = null;
+
+function onDragStart(e) {
+  _dragItemId = e.currentTarget.dataset.id;
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function onDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.day-col').forEach(c => c.classList.remove('drag-over'));
+}
+
+async function onDrop(e, targetDay) {
+  e.preventDefault();
+  const col = document.getElementById(`day-col-${targetDay}`);
+  if (col) col.classList.remove('drag-over');
+  if (!_dragItemId) return;
+
+  const oldCard = document.getElementById(`item-${_dragItemId}`);
+  const oldDay = Number(oldCard?.dataset.day);
+  if (oldDay === targetDay) return; // same column
+
+  // Check ownership
+  const allItems = Object.values(_items).flat();
+  const item = allItems.find(i => i.id === _dragItemId);
+  if (!item || item.teacher_id !== _user.id) {
+    showToast('⚠️ لا يمكن تحريك عنصر معلم/ة أخرى', 'warning');
+    return;
+  }
+
+  // A-D Level C: execute + learn
+  if (window.AgentBrain) await window.AgentBrain.checkpoint('move_weekly_item', 'C');
+
+  // Update DB
+  const { error } = await _supabase.from('weekly_track_items')
+    .update({ day_of_week: targetDay, updated_at: new Date().toISOString() })
+    .eq('id', _dragItemId);
+
+  if (error) { showToast('حدث خطأ — ' + error.message, 'error'); return; }
+
+  // Update local state
+  if (_items[oldDay]) _items[oldDay] = _items[oldDay].filter(i => i.id !== _dragItemId);
+  if (!_items[targetDay]) _items[targetDay] = [];
+  item.day_of_week = targetDay;
+  _items[targetDay].push(item);
+
+  // Update UI
+  oldCard.remove();
+  oldCard.dataset.day = targetDay;
+  document.getElementById(`day-items-${targetDay}`).appendChild(oldCard);
+
+  updateLoadBars();
+  checkConflicts();
+  _dragItemId = null;
+}
+
+// ── Modal ─────────────────────────────────────────────────
+function openAddModal(day) {
+  document.getElementById('modal-title').textContent = 'إضافة عنصر للمسار';
+  document.getElementById('modal-item-id').value = '';
+  document.getElementById('modal-day').value = day !== null ? day : '';
+  clearForm();
+  if (day !== null) selectType('exam');
+  document.getElementById('item-modal').style.display = 'flex';
+}
+
+function openEditModal(itemId) {
+  const allItems = Object.values(_items).flat();
+  const item = allItems.find(i => i.id === itemId);
+  if (!item) return;
+  document.getElementById('modal-title').textContent = 'تعديل العنصر';
+  document.getElementById('modal-item-id').value = itemId;
+  document.getElementById('modal-day').value = item.day_of_week;
+  selectType(item.item_type);
+  document.getElementById('f-subject').value = item.subject_name || '';
+  document.getElementById('f-title').value = item.title_ar || '';
+  document.getElementById('f-unit').value = item.unit_name || '';
+  document.getElementById('f-lesson').value = item.lesson_title || '';
+  document.getElementById('f-pages-from').value = item.pages_from || '';
+  document.getElementById('f-pages-to').value = item.pages_to || '';
+  document.getElementById('f-exam-method').value = item.exam_method || '';
+  document.getElementById('f-keywords').value = (item.keywords || []).join(', ');
+  document.getElementById('f-description').value = item.description_ar || '';
+  document.getElementById('f-duration').value = item.estimated_minutes || '';
+  document.getElementById('item-modal').style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('item-modal').style.display = 'none';
+}
+
+function clearForm() {
+  ['f-subject','f-title','f-unit','f-lesson','f-pages-from','f-pages-to',
+   'f-keywords','f-description','f-duration'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('f-exam-method').value = '';
+}
+
+function selectType(type) {
+  _selectedType = type;
+  document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('selected'));
+  const btn = document.querySelector(`[data-type="${type}"]`);
+  if (btn) btn.classList.add('selected');
+  document.getElementById('exam-method-group').style.display =
+    (type === 'exam' || type === 'quiz') ? '' : 'none';
+}
+
+async function saveItem() {
+  if (!_trackId) { showToast('اختر الصف أولاً', 'warning'); return; }
+
+  const title = document.getElementById('f-title').value.trim();
+  const subject = document.getElementById('f-subject').value.trim();
+  if (!title || !subject) { showToast('العنوان والمادة مطلوبان', 'error'); return; }
+
+  const dayVal = document.getElementById('modal-day').value;
+  const day = dayVal !== '' ? Number(dayVal) : 0;
+  const itemId = document.getElementById('modal-item-id').value;
+
+  // A-D Level B for teacher posts
+  if (window.AgentBrain) await window.AgentBrain.checkpoint('add_weekly_item', 'B');
+
+  const payload = {
+    track_id: _trackId,
+    teacher_id: _user.id,
+    teacher_name: _user.name || _user.email,
+    subject_name: subject,
+    subject_color: subjectColor(subject),
+    day_of_week: day,
+    item_type: _selectedType,
+    title_ar: title,
+    unit_name: document.getElementById('f-unit').value.trim() || null,
+    lesson_title: document.getElementById('f-lesson').value.trim() || null,
+    pages_from: Number(document.getElementById('f-pages-from').value) || null,
+    pages_to: Number(document.getElementById('f-pages-to').value) || null,
+    exam_method: document.getElementById('f-exam-method').value || null,
+    keywords: document.getElementById('f-keywords').value.split(',').map(k=>k.trim()).filter(Boolean),
+    description_ar: document.getElementById('f-description').value.trim() || null,
+    estimated_minutes: Number(document.getElementById('f-duration').value) || null,
+    position: (_items[day] || []).length,
+    updated_at: new Date().toISOString(),
+  };
+
+  let error, data;
+  if (itemId) {
+    ({ error } = await _supabase.from('weekly_track_items').update(payload).eq('id', itemId));
+    if (!error) {
+      // Update local state
+      const allItems = Object.values(_items).flat();
+      const idx = allItems.findIndex(i => i.id === itemId);
+      if (idx >= 0) Object.assign(allItems[idx], payload);
+      document.getElementById(`item-${itemId}`)?.remove();
+      renderItemCard({...payload, id: itemId});
+    }
+  } else {
+    ({ data, error } = await _supabase.from('weekly_track_items').insert(payload).select('id').single());
+    if (!error && data) {
+      const newItem = { ...payload, id: data.id };
+      if (!_items[day]) _items[day] = [];
+      _items[day].push(newItem);
+      renderItemCard(newItem);
+    }
+  }
+
+  if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+
+  closeModal();
+  updateLoadBars();
+  checkConflicts();
+  showToast('✅ تم الحفظ بنجاح', 'success');
+}
+
+async function deleteItem(itemId) {
+  if (!confirm('هل تريد/ين حذف هذا العنصر؟')) return;
+
+  const { error } = await _supabase.from('weekly_track_items').delete().eq('id', itemId);
+  if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+
+  // Remove from local state
+  for (const day in _items) {
+    _items[day] = _items[day].filter(i => i.id !== itemId);
+  }
+  document.getElementById(`item-${itemId}`)?.remove();
+  updateLoadBars();
+  checkConflicts();
+  showToast('🗑️ تم الحذف', 'success');
+}
+
+// ── Load bars ─────────────────────────────────────────────
+function updateLoadBars() {
+  DAYS.forEach(d => {
+    const dayItems = _items[d.key] || [];
+    const weights = { exam:4, quiz:3, homework:2, project:3, activity:1, lesson:1, other:1, announcement:0 };
+    const load = Math.min(10, dayItems.reduce((s, i) => s + (weights[i.item_type] || 1), 0));
+    const bar = document.getElementById(`load-bar-${d.key}`);
+    if (bar) {
+      const pct = (load / 10) * 100;
+      bar.style.width = pct + '%';
+      bar.style.background = load >= 8 ? '#DC2626' : load >= 5 ? '#D97706' : '#10B981';
+    }
+  });
+}
+
+// ── Conflict detection ────────────────────────────────────
+async function checkConflicts() {
+  if (!_trackId) return;
+  const zone = document.getElementById('conflict-zone');
+  const conflicts = [];
+
+  DAYS.forEach(d => {
+    const dayItems = _items[d.key] || [];
+    const exams = dayItems.filter(i => i.item_type === 'exam' || i.item_type === 'quiz');
+    if (exams.length >= 2) {
+      conflicts.push(`<div class="conflict-alert">
+        <span style="font-size:20px;">⚠️</span>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:#DC2626;">تعارض: يوم ${DAYS[d.key].ar}</div>
+          <div style="font-size:13px;color:#374151;">
+            ${exams.length} اختبارات في نفس اليوم (${exams.map(e=>e.subject_name).join('، ')})
+            — يُنصح بتوزيعها على أيام مختلفة
+          </div>
+        </div>
+      </div>`);
+    }
+  });
+
+  zone.innerHTML = conflicts.length ? `<div style="padding:12px 20px 0;">${conflicts.join('')}</div>` : '';
+}
+
+// ── Publish ────────────────────────────────────────────────
+async function publishTrack() {
+  if (!_trackId) return;
+  if (!confirm('سيتمكن الطلاب/ة وأولياء الأمور من رؤية هذا المسار. هل تريد/ين المتابعة؟')) return;
+
+  const { error } = await _supabase.from('weekly_track')
+    .update({ is_published: true, published_at: new Date().toISOString(), published_by_id: _user.id })
+    .eq('id', _trackId);
+
+  if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+  document.getElementById('publish-btn').textContent = '✅ تم النشر';
+  showToast('✅ تم نشر المسار للطلاب/ة وأولياء الأمور', 'success');
+  renderStudentPreview();
+}
+
+// ── Student preview ───────────────────────────────────────
+let _previewVisible = false;
+function togglePreview() {
+  _previewVisible = !_previewVisible;
+  document.getElementById('preview-section').style.display = _previewVisible ? '' : 'none';
+  if (_previewVisible) renderStudentPreview();
+}
+
+function renderStudentPreview() {
+  const grid = document.getElementById('preview-grid');
+  grid.innerHTML = DAYS.map(d => {
+    const dayItems = _items[d.key] || [];
+    return `
+      <div class="preview-day">
+        <div class="preview-day-name">${d.ar}</div>
+        ${!dayItems.length ? `<div style="font-size:12px;color:#9CA3AF;text-align:center;padding:8px;">يوم فارغ</div>` :
+          dayItems.map(item => {
+            const tc = TYPE_CONFIG[item.item_type] || TYPE_CONFIG.other;
+            const sc = subjectColor(item.subject_name || '');
+            return `<div class="preview-item" style="background:${tc.bg};border-color:${sc};">
+              <div style="font-size:12px;font-weight:700;color:${tc.color};">${tc.icon} ${item.subject_name || ''}</div>
+              <div style="font-size:13px;font-weight:600;color:#111827;margin-top:2px;">${item.title_ar}</div>
+              ${item.pages_from ? `<div style="font-size:11px;color:#6B7280;margin-top:2px;">📄 ص ${item.pages_from}${item.pages_to ? '–'+item.pages_to : ''}</div>` : ''}
+              ${item.keywords?.length ? `<div style="margin-top:4px;">${item.keywords.slice(0,3).map(k=>`<span style="background:rgba(0,0,0,.06);border-radius:4px;padding:1px 6px;font-size:10px;margin-left:3px;">${k}</span>`).join('')}</div>` : ''}
+            </div>`;
+          }).join('')}
+      </div>`;
+  }).join('');
+}
+
+// ── Realtime subscription ─────────────────────────────────
+let _realtimeChannel = null;
+function startRealtime() {
+  if (_realtimeChannel) _supabase.removeChannel(_realtimeChannel);
+  if (!_trackId) return;
+
+  _realtimeChannel = _supabase.channel(`track-${_trackId}`)
+    .on('postgres_changes', {
+      event: '*', schema: 'public', table: 'weekly_track_items',
+      filter: `track_id=eq.${_trackId}`,
+    }, payload => {
+      const { eventType, new: newRec, old: oldRec } = payload;
+      if (eventType === 'INSERT' && newRec.teacher_id !== _user.id) {
+        // Someone else added an item
+        if (!_items[newRec.day_of_week]) _items[newRec.day_of_week] = [];
+        _items[newRec.day_of_week].push(newRec);
+        renderItemCard(newRec, true);
+        updateLoadBars(); checkConflicts();
+        showToast(`✨ ${newRec.teacher_name || 'معلم/ة'} أضاف/ت: ${newRec.title_ar}`, 'info');
+      }
+      if (eventType === 'DELETE') {
+        for (const day in _items) {
+          _items[day] = _items[day].filter(i => i.id !== oldRec.id);
+        }
+        document.getElementById(`item-${oldRec.id}`)?.remove();
+        updateLoadBars(); checkConflicts();
+      }
+      if (eventType === 'UPDATE' && newRec.teacher_id !== _user.id) {
+        document.getElementById(`item-${newRec.id}`)?.remove();
+        for (const day in _items) {
+          _items[day] = _items[day].filter(i => i.id !== newRec.id);
+        }
+        if (!_items[newRec.day_of_week]) _items[newRec.day_of_week] = [];
+        _items[newRec.day_of_week].push(newRec);
+        renderItemCard(newRec);
+        updateLoadBars();
+      }
+    })
+    .subscribe();
+}
+
+// ── Toast ─────────────────────────────────────────────────
+function showToast(msg, type='info') {
+  const colors = { success:'#059669', error:'#DC2626', warning:'#D97706', info:'#1D4ED8' };
+  const t = document.createElement('div');
+  t.dir = 'rtl';
+  t.style.cssText = `
+    position:fixed;bottom:20px;right:20px;z-index:99999;
+    background:${colors[type]||'#1F2937'};color:white;
+    padding:12px 20px;border-radius:10px;
+    font-family:'Tajawal',Arial,sans-serif;font-size:14px;
+    box-shadow:0 4px 16px rgba(0,0,0,.25);max-width:320px;
+  `;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+</script>
+</body>
+</html>
