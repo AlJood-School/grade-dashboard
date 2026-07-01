@@ -231,6 +231,24 @@ async function handleLogin(e) {
 
     document.getElementById('loadingText').textContent = `مرحباً ${result.name_ar || username} 👋`;
     document.getElementById('loadingRole').textContent = `دورك: ${getRoleLabel(role)}`;
+
+    // VARK check — for staff only (teacher, specialist, principal, etc.)
+    const staffRoles = ['teacher','principal','specialist','admin','observer','security','nurse','technician','secretary'];
+    if (staffRoles.includes(role) && result.staff_db_id) {
+      try {
+        const { data: varkRow } = await sb
+          .from('staff_vark_results')
+          .select('id')
+          .eq('staff_db_id', String(result.staff_db_id))
+          .maybeSingle();
+        if (!varkRow) {
+          const sess = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+          sess.vark_pending = true;
+          sessionStorage.setItem('edoos_user', JSON.stringify(sess));
+        }
+      } catch(ve) { /* non-blocking */ }
+    }
+
     setTimeout(() => navigateTo(role), 800);
 
   } catch(err) {
