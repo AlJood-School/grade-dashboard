@@ -183,93 +183,52 @@ function showSuccess(msg) {
 
 async function handleLogin(e) {
   e.preventDefault();
-  const email = document.getElementById('emailInput').value.trim();
-  const pass  = document.getElementById('passInput').value;
+  const username = document.getElementById('emailInput').value.trim();
+  const pass     = document.getElementById('passInput').value;
 
-  if (!email || !pass) { showError('يرجى ملء جميع الحقول / Please fill all fields'); return; }
+  if (!username || !pass) { showError('يرجى ملء جميع الحقول / Please fill all fields'); return; }
 
   const btn = document.getElementById('loginBtn');
   btn.disabled = true;
   btn.textContent = 'جارٍ التحقق... / Verifying...';
   showError('');
-
-  // Show loading
   document.getElementById('loadingScreen').classList.add('show');
 
   try {
     if (!sb) throw new Error('تعذّر الاتصال بالخادم / Server connection failed');
 
-    // Step 1: Build email — append @moe.sch.ae if plain username entered
-    const loginEmail = email.includes('@') ? email : `${email}@moe.sch.ae`;
+    document.getElementById('loadingRole').textContent = '🧠 EduOS يتحقق من هويتك...';
 
-    // Step 2: Supabase Auth (user is anon here — no DB read needed before auth)
-    const { data: authData, error: authError } = await sb.auth.signInWithPassword({ email: loginEmail, password: pass });
-    if (authError) {
-      // Try gmail if moe.sch.ae failed (for admin accounts like noor)
-      if (!email.includes('@') && authError.message.includes('Invalid login credentials')) {
-        const altEmail = `${email}@gmail.com`;
-        const { data: authData2, error: authError2 } = await sb.auth.signInWithPassword({ email: altEmail, password: pass });
-        if (!authError2 && authData2?.user) {
-          // Success with gmail
-          const userId2 = authData2.user.id;
-          document.getElementById('loadingRole').textContent = '🔍 يُحدَّد دورك تلقائياً...';
-          const { data: profile2 } = await sb.from('staff_profiles').select('name_ar,login_role,role_key,school_id').eq('email', altEmail).maybeSingle();
-          if (profile2) {
-            const role2 = profile2.login_role || profile2.role_key || 'admin';
-            saveSession({ id: userId2, name: profile2.name_ar, role: role2, school_id: profile2.school_id });
-            document.getElementById('loadingText').textContent = `مرحباً ${profile2.name_ar} 👋`;
-            navigateTo(role2);
-            return;
-          }
-        }
-      }
-      const msg = authError.message.includes('Invalid login credentials')
-        ? 'كلمة المرور غير صحيحة / Wrong password'
-        : authError.message;
-      throw new Error(msg);
+    // الـ auth يتم عبر RPC على الخادم — لا Supabase Auth — لا DB read على الـ frontend
+    const { data: result, error: rpcError } = await sb.rpc('verify_staff_login', {
+      p_username: username,
+      p_password: pass
+    });
+
+    if (rpcError) throw new Error('خطأ في الاتصال / Connection error: ' + rpcError.message);
+
+    if (!result || !result.success) {
+      const errMap = {
+        not_found:     'اسم المستخدم غير موجود / Username not found',
+        wrong_password:'كلمة المرور غير صحيحة / Wrong password',
+      };
+      throw new Error(errMap[result?.error] || 'بيانات الدخول غير صحيحة / Invalid credentials');
     }
 
-    const userId = authData.user?.id;
-    if (!userId) throw new Error('خطأ في التحقق / Authentication error');
+    // نجح الدخول
+    const role = result.login_role || 'teacher';
+    saveSession({
+      id:       result.id,
+      name:     result.name_ar || result.name_en || username,
+      role:     role,
+      username: result.username,
+      email:    result.email,
+      staff_id: result.staff_id,
+    });
 
-    document.getElementById('loadingRole').textContent = '🔍 يُحدَّد دورك تلقائياً...';
-
-    // Step 3: Now authenticated → query staff_profiles (RLS allows authenticated)
-    let profile = null;
-    {
-      const { data: sp } = await sb
-        .from('staff_profiles')
-        .select('name_ar, login_role, role_key, school_id, email')
-        .eq('email', loginEmail)
-        .maybeSingle();
-      profile = sp;
-    }
-
-    if (profile) {
-      const role = profile.login_role || profile.role_key || 'teacher';
-      saveSession({ id: userId, name: profile.name_ar, role, school_id: profile.school_id });
-      document.getElementById('loadingText').textContent = `مرحباً ${profile.name_ar} 👋`;
-      document.getElementById('loadingRole').textContent = `دورك: ${getRoleLabel(role)}`;
-      navigateTo(role);
-      return;
-    }
-
-    // Step 4: Check students table
-    const { data: student } = await sb
-      .from('students')
-      .select('id, name_ar, class_name')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (student) {
-      saveSession({ id: userId, name: student.name_ar, role: 'student', class_name: student.class_name });
-      document.getElementById('loadingText').textContent = `مرحباً ${student.name_ar} 👋`;
-      document.getElementById('loadingRole').textContent = 'دورك: طالب/ة / Student';
-      navigateTo('student');
-      return;
-    }
-
-    throw new Error('لم يُعثر على ملفك الشخصي / Profile not found — تواصل مع الإدارة');
+    document.getElementById('loadingText').textContent = `مرحباً ${result.name_ar || username} 👋`;
+    document.getElementById('loadingRole').textContent = `دورك: ${getRoleLabel(role)}`;
+    setTimeout(() => navigateTo(role), 800);
 
   } catch(err) {
     document.getElementById('loadingScreen').classList.remove('show');
