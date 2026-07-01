@@ -519,7 +519,7 @@ const sb = window.supabase?.createClient(SB_URL, SB_KEY);
 const session = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
 let teacherId = session?.id || null;
 let teacherData = null;
-let teacherNumericId = null;  // staff.id (employee number — used in schedules)
+let teacherNumericId = session?.staff_db_id || null;  // staff_profiles.staff_db_id — used in schedules
 let teacherClasses = [];       // all classes this teacher teaches
 let allStudents = [];
 
@@ -575,11 +575,7 @@ async function loadTeacherProfile() {
       document.getElementById('greetSub').textContent = `أهلاً ${displayName} — ${hClass} · يوم موفق إن شاء الله`;
       document.getElementById('pillText').textContent = `${hClass || 'فصلي'} · ${new Date().toLocaleTimeString('ar-AE', {hour:'2-digit',minute:'2-digit'})}`;
 
-      // Get numeric staff ID (employee number) for schedule queries
-      if (data.username) {
-        const { data: sr } = await sb.from('staff').select('id').eq('username', data.username).single();
-        teacherNumericId = sr?.id || null;
-      }
+      // staff_db_id already set from session — no extra query needed
 
       // Build class list from homeroom_classes + schedules
       const classSet = new Set();
@@ -606,19 +602,29 @@ async function loadKPIs() {
     document.getElementById('kpiStudents').textContent = stuCount || '—';
     document.getElementById('kpiStudentsDelta').textContent = `طالب/ة`;
 
-    // Today attendance from obs_attendance (what's available)
+    // Today observations from obs_attendance (class field)
     const today = new Date().toISOString().split('T')[0];
     let attCount = 0;
     try {
-      const { count } = await sb.from('obs_attendance').select('*', {count:'exact',head:true}).eq('date', today).eq('status', 'present');
-      attCount = count || 0;
+      if (teacherClasses.length > 0) {
+        const { count } = await sb.from('obs_attendance').select('*', {count:'exact',head:true})
+          .gte('ts', today).lt('ts', today + 'T23:59:59').in('class', teacherClasses);
+        attCount = count || 0;
+      }
     } catch(e2) {}
     const pct = stuCount ? Math.round((attCount / stuCount) * 100) : 0;
     document.getElementById('kpiAttend').textContent = `${pct || '—'}%`;
-    document.getElementById('kpiAttendDelta').textContent = `${attCount} حاضر/ة`;
+    document.getElementById('kpiAttendDelta').textContent = `${attCount} سجّل/ت اليوم`;
 
-    // Pending exit tickets
-    const { count: pendCount } = await sb.from('exit_ticket_responses').select('*', {count:'exact',head:true}).eq('reviewed', false);
+    // Open exit tickets for this teacher's classes
+    let pendCount = 0;
+    try {
+      if (teacherClasses.length > 0) {
+        const { count } = await sb.from('exit_tickets').select('*', {count:'exact',head:true})
+          .eq('is_open', true).in('class_name', teacherClasses);
+        pendCount = count || 0;
+      }
+    } catch(e3) {}
     document.getElementById('kpiPending').textContent = pendCount || '0';
     document.getElementById('kpiPendingDelta').textContent = 'بطاقة خروج / Exit tickets';
 
@@ -764,7 +770,7 @@ function renderStudentsTable(students, avgMap, flagSet) {
     const sb1 = avg ? Math.min(100, Math.round(avg * 0.4 + (att||80) * 0.3 + e * 3)) : null;
     return `<tr>
       <td>${i+1}</td>
-      <td style="font-weight:700;color:var(--text)">${s.full_name||'—'}</td>
+      <td style="font-weight:700;color:var(--text)">${s.name||'—'}</td>
       <td>${s.class_name||'—'}</td>
       <td>${att !== null ? `${att}%` : '—'}</td>
       <td>${avg !== null ? `${avg}%` : '—'}</td>
@@ -789,7 +795,7 @@ async function loadGrades() {
   const cls = document.getElementById('gradeClassFilter')?.value;
   const subj = document.getElementById('gradeSubjectFilter')?.value;
   try {
-    let q = sb.from('student_grades').select('student_id,students!inner(full_name,class_name),grade_type,score,max_score,notes').eq('teacher_id', teacherId);
+    let q = sb.from('student_grades').select('student_id,students!inner(name,class_name),grade_type,score,max_score,notes').eq('teacher_id', teacherId);
     if (cls) q = q.eq('students.class_name', cls);
     if (subj) q = q.eq('grade_type', subj);
     const { data } = await q.limit(200);
