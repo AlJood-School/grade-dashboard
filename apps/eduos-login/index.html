@@ -199,26 +199,30 @@ async function handleLogin(e) {
   try {
     if (!sb) throw new Error('تعذّر الاتصال بالخادم / Server connection failed');
 
-    // Step 1: Resolve username → email from staff_profiles
-    let loginEmail = email;
-    let preProfile  = null;
+    // Step 1: Build email — append @moe.sch.ae if plain username entered
+    const loginEmail = email.includes('@') ? email : `${email}@moe.sch.ae`;
 
-    if (!email.includes('@')) {
-      // Username login — look up email from staff_profiles
-      const { data: sp } = await sb
-        .from('staff_profiles')
-        .select('email, name_ar, login_role, role_key, school_id, username')
-        .eq('username', email)
-        .maybeSingle();
-
-      if (!sp) throw new Error('اسم المستخدم غير موجود / Username not found');
-      loginEmail = sp.email;
-      preProfile  = sp;
-    }
-
-    // Step 2: Supabase Auth
+    // Step 2: Supabase Auth (user is anon here — no DB read needed before auth)
     const { data: authData, error: authError } = await sb.auth.signInWithPassword({ email: loginEmail, password: pass });
     if (authError) {
+      // Try gmail if moe.sch.ae failed (for admin accounts like noor)
+      if (!email.includes('@') && authError.message.includes('Invalid login credentials')) {
+        const altEmail = `${email}@gmail.com`;
+        const { data: authData2, error: authError2 } = await sb.auth.signInWithPassword({ email: altEmail, password: pass });
+        if (!authError2 && authData2?.user) {
+          // Success with gmail
+          const userId2 = authData2.user.id;
+          document.getElementById('loadingRole').textContent = '🔍 يُحدَّد دورك تلقائياً...';
+          const { data: profile2 } = await sb.from('staff_profiles').select('name_ar,login_role,role_key,school_id').eq('email', altEmail).maybeSingle();
+          if (profile2) {
+            const role2 = profile2.login_role || profile2.role_key || 'admin';
+            saveSession({ id: userId2, name: profile2.name_ar, role: role2, school_id: profile2.school_id });
+            document.getElementById('loadingText').textContent = `مرحباً ${profile2.name_ar} 👋`;
+            navigateTo(role2);
+            return;
+          }
+        }
+      }
       const msg = authError.message.includes('Invalid login credentials')
         ? 'كلمة المرور غير صحيحة / Wrong password'
         : authError.message;
@@ -230,15 +234,15 @@ async function handleLogin(e) {
 
     document.getElementById('loadingRole').textContent = '🔍 يُحدَّد دورك تلقائياً...';
 
-    // Step 3: Use pre-fetched profile or query by email
-    let profile = preProfile;
-    if (!profile) {
-      const { data: sp2 } = await sb
+    // Step 3: Now authenticated → query staff_profiles (RLS allows authenticated)
+    let profile = null;
+    {
+      const { data: sp } = await sb
         .from('staff_profiles')
         .select('name_ar, login_role, role_key, school_id, email')
         .eq('email', loginEmail)
         .maybeSingle();
-      profile = sp2;
+      profile = sp;
     }
 
     if (profile) {
