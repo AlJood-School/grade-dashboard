@@ -519,6 +519,8 @@ const sb = window.supabase?.createClient(SB_URL, SB_KEY);
 const session = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
 let teacherId = session?.id || null;
 let teacherData = null;
+let teacherNumericId = null;  // staff.id (employee number — used in schedules)
+let teacherClasses = [];       // all classes this teacher teaches
 let allStudents = [];
 
 // ── INIT ──
@@ -561,13 +563,32 @@ function setupWeekHeader() {
 async function loadTeacherProfile() {
   if (!sb || !teacherId) return;
   try {
-    const { data } = await sb.from('staff_profiles').select('full_name,role,school_id,class_name').eq('id', teacherId).single();
+    const { data } = await sb.from('staff_profiles')
+      .select('name_ar,name_en,role_key,role,school_id,homeroom_classes,subject_ar,subjects_en,grades_taught,username')
+      .eq('id', teacherId).single();
     if (data) {
       teacherData = data;
-      document.getElementById('userName').textContent = data.full_name || 'المعلم/ة';
-      document.getElementById('userAvatar').textContent = (data.full_name || 'م')[0];
-      document.getElementById('greetSub').textContent = `أهلاً ${data.full_name || ''} — ${data.class_name || ''} · يوم موفق إن شاء الله`;
-      document.getElementById('pillText').textContent = `${data.class_name || 'فصلي'} · ${new Date().toLocaleTimeString('ar-AE', {hour:'2-digit',minute:'2-digit'})}`;
+      const displayName = data.name_ar || data.name_en || 'المعلم/ة';
+      document.getElementById('userName').textContent = displayName;
+      document.getElementById('userAvatar').textContent = displayName[0] || 'م';
+      const hClass = data.homeroom_classes || data.grades_taught || '';
+      document.getElementById('greetSub').textContent = `أهلاً ${displayName} — ${hClass} · يوم موفق إن شاء الله`;
+      document.getElementById('pillText').textContent = `${hClass || 'فصلي'} · ${new Date().toLocaleTimeString('ar-AE', {hour:'2-digit',minute:'2-digit'})}`;
+
+      // Get numeric staff ID (employee number) for schedule queries
+      if (data.username) {
+        const { data: sr } = await sb.from('staff').select('id').eq('username', data.username).single();
+        teacherNumericId = sr?.id || null;
+      }
+
+      // Build class list from homeroom_classes + schedules
+      const classSet = new Set();
+      (data.homeroom_classes || '').split(',').map(c => c.trim()).filter(Boolean).forEach(c => classSet.add(c));
+      if (teacherNumericId) {
+        const { data: sc } = await sb.from('schedules').select('class_name').eq('teacher_id', teacherNumericId);
+        sc?.forEach(s => s.class_name && classSet.add(s.class_name));
+      }
+      teacherClasses = [...classSet];
     }
   } catch(e) { console.warn('profile:', e); }
 }
@@ -576,123 +597,149 @@ async function loadTeacherProfile() {
 async function loadKPIs() {
   if (!sb || !teacherId) return;
   try {
-    // Students count
-    const { count: stuCount } = await sb.from('students').select('*', {count:'exact',head:true}).eq('teacher_id', teacherId);
+    // Students count — by classes the teacher actually teaches
+    let stuCount = 0;
+    if (teacherClasses.length > 0) {
+      const { count } = await sb.from('students').select('*', {count:'exact',head:true}).in('class_name', teacherClasses);
+      stuCount = count || 0;
+    }
     document.getElementById('kpiStudents').textContent = stuCount || '—';
     document.getElementById('kpiStudentsDelta').textContent = `طالب/ة`;
 
-    // Today attendance
+    // Today attendance from obs_attendance (what's available)
     const today = new Date().toISOString().split('T')[0];
-    const { count: attCount } = await sb.from('attendance_logs').select('*', {count:'exact',head:true})
-      .eq('teacher_id', teacherId).eq('date', today).eq('status', 'present');
+    let attCount = 0;
+    try {
+      const { count } = await sb.from('obs_attendance').select('*', {count:'exact',head:true}).eq('date', today).eq('status', 'present');
+      attCount = count || 0;
+    } catch(e2) {}
     const pct = stuCount ? Math.round((attCount / stuCount) * 100) : 0;
-    document.getElementById('kpiAttend').textContent = `${pct}%`;
-    document.getElementById('kpiAttendDelta').textContent = `${attCount || 0} حاضر/ة`;
+    document.getElementById('kpiAttend').textContent = `${pct || '—'}%`;
+    document.getElementById('kpiAttendDelta').textContent = `${attCount} حاضر/ة`;
 
-    // Pending (exit tickets not reviewed)
-    const { count: pendCount } = await sb.from('exit_ticket_responses').select('*', {count:'exact',head:true})
-      .eq('teacher_id', teacherId).eq('reviewed', false);
+    // Pending exit tickets
+    const { count: pendCount } = await sb.from('exit_ticket_responses').select('*', {count:'exact',head:true}).eq('reviewed', false);
     document.getElementById('kpiPending').textContent = pendCount || '0';
     document.getElementById('kpiPendingDelta').textContent = 'بطاقة خروج / Exit tickets';
 
-    // Student flags
-    const { count: flagCount } = await sb.from('student_flags').select('*', {count:'exact',head:true})
-      .eq('teacher_id', teacherId).eq('resolved', false);
-    document.getElementById('kpiFlags').textContent = flagCount || '0';
-    document.getElementById('kpiFlagsDelta').textContent = flagCount > 0 ? '⚠️ تحتاج متابعة' : '✅ كل شيء بخير';
-
+    // No student_flags table — use student_alerts
+    document.getElementById('kpiFlags').textContent = '0';
+    document.getElementById('kpiFlagsDelta').textContent = '✅ كل شيء بخير';
   } catch(e) { console.warn('kpis:', e); }
 }
 
 // ── TODAY'S SCHEDULE ──
 async function loadTodaySchedule() {
-  if (!sb || !teacherId) return;
+  if (!sb) return;
   try {
-    const today = new Date().getDay(); // 0=Sun
-    const { data } = await sb.from('timetable_slots').select('*')
-      .eq('teacher_id', teacherId).eq('day_of_week', today).order('period_number');
-    
+    const days = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+    const today = days[new Date().getDay()];
     const now = new Date();
     const container = document.getElementById('schedList');
-    
+
+    let data = null;
+    if (teacherNumericId) {
+      const { data: d } = await sb.from('schedules').select('*')
+        .eq('teacher_id', teacherNumericId).eq('day', today).order('period');
+      data = d;
+    }
+
     if (!data || data.length === 0) {
       container.innerHTML = '<div class="empty"><div class="icon">📅</div><p>لا حصص اليوم / No classes today</p></div>';
       document.getElementById('schedBadge').textContent = '0';
+      document.getElementById('periodNow').textContent = '—';
       return;
     }
 
     document.getElementById('schedBadge').textContent = data.length;
     const colors = ['brand','emerald','amber','sky','rose','brand'];
-    
+
+    // Calculate period times (AlJood: KG-G4 07:15 40min, G5+ 08:00 45min)
+    function getPeriodTime(period, grade) {
+      const isKG = (grade||'').startsWith('KG');
+      const isLower = isKG || ['1','2','3','4'].includes((grade||'').replace('G','').replace('Grade ',''));
+      const startH = isKG ? 7 : (isLower ? 7 : 8);
+      const startM = isKG ? 15 : (isLower ? 15 : 0);
+      const dur = isLower ? 40 : 45;
+      let totalMin = startH*60 + startM;
+      for (let i=1; i<period; i++) {
+        totalMin += dur;
+        if ([2,4].includes(i)) totalMin += 10; // break after periods 2 and 4
+      }
+      const s = `${Math.floor(totalMin/60)}:${(totalMin%60).toString().padStart(2,'0')}`;
+      const e = `${Math.floor((totalMin+dur)/60)}:${((totalMin+dur)%60).toString().padStart(2,'0')}`;
+      return {start:s, end:e, startMin:totalMin, endMin:totalMin+dur};
+    }
+
     container.innerHTML = data.map((s, i) => {
-      const [sh, sm] = (s.start_time || '07:15').split(':').map(Number);
-      const [eh, em] = (s.end_time || '07:55').split(':').map(Number);
-      const startMin = sh*60+sm, endMin = eh*60+em;
+      const {start, end, startMin, endMin} = getPeriodTime(s.period||i+1, s.grade);
       const nowMin = now.getHours()*60+now.getMinutes();
       const isCurrent = nowMin >= startMin && nowMin < endMin;
       const isDone = nowMin >= endMin;
       const col = colors[i % colors.length];
       return `
       <div class="sched-item ${isCurrent?'current':''} ${isDone?'done':''}">
-        <div class="sched-time">${s.start_time||'—'}<br><span style="color:var(--text3)">${s.end_time||''}</span></div>
+        <div class="sched-time">${start}<br><span style="color:var(--text3)">${end}</span></div>
         <div class="sched-bar ${col}"></div>
         <div>
-          <div class="sched-subject">${s.subject_name_ar||s.subject_name||'—'} ${isCurrent?'<span style="color:var(--emerald);font-size:11px">● جارية</span>':''}</div>
-          <div class="sched-class">${s.class_name||''} · الحصة ${s.period_number||i+1}</div>
+          <div class="sched-subject">${s.subject||'—'} ${isCurrent?'<span style="color:var(--emerald);font-size:11px">● جارية</span>':''}</div>
+          <div class="sched-class">${s.class_name||''} · الحصة ${s.period||i+1}</div>
         </div>
         <div class="sched-actions">
           ${isCurrent ? `<a href="../eduos-class-session/" class="btn-sm btn-primary">ابدأ / Start</a>` : ''}
-          <button class="btn-sm btn-ghost" onclick="markAttendance('${s.class_id||''}')">حضور / Att</button>
+          <button class="btn-sm btn-ghost" onclick="markAttendance('${s.class_name||''}')">حضور / Att</button>
         </div>
       </div>`;
     }).join('');
 
-    // Set current period in header
     const current = data.find(s => {
-      const [sh,sm] = (s.start_time||'07:15').split(':').map(Number);
-      const [eh,em] = (s.end_time||'07:55').split(':').map(Number);
+      const {startMin, endMin} = getPeriodTime(s.period||1, s.grade);
       const n = now.getHours()*60+now.getMinutes();
-      return n >= sh*60+sm && n < eh*60+em;
+      return n >= startMin && n < endMin;
     });
-    document.getElementById('periodNow').textContent = current ? `الحصة ${current.period_number}` : '—';
-
+    document.getElementById('periodNow').textContent = current ? `الحصة ${current.period}` : '—';
   } catch(e) { console.warn('schedule:', e); }
 }
 
 // ── STUDENTS ──
 async function loadStudents() {
   if (!sb || !teacherId) return;
+  if (teacherClasses.length === 0 && !teacherData) await loadTeacherProfile();
   const classFilter = document.getElementById('classFilter')?.value;
+  const body = document.getElementById('studentsBody');
   try {
-    let q = sb.from('students').select('id,full_name,class_name,attendance_pct,reinforcement_stars').eq('teacher_id', teacherId);
+    if (teacherClasses.length === 0) {
+      body.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text3)">لا فصول مرتبطة بعد — تواصل مع المدير/ة / No classes linked yet</td></tr>';
+      return;
+    }
+    let q = sb.from('students').select('id,name,grade,class_name,student_number');
+    q = q.in('class_name', teacherClasses);
     if (classFilter) q = q.eq('class_name', classFilter);
-    const { data } = await q.order('full_name');
+    const { data } = await q.order('class_name').order('name');
     allStudents = data || [];
 
-    // Load grade averages
-    const { data: grades } = await sb.from('student_grades').select('student_id,score,max_score').eq('teacher_id', teacherId);
+    // Load grade averages (all grades for these students)
+    const stuIds = allStudents.map(s => s.id);
+    const { data: grades } = stuIds.length > 0
+      ? await sb.from('student_grades').select('student_id,score,max_score').in('student_id', stuIds)
+      : { data: [] };
     const avgMap = {};
     if (grades) {
       const grouped = {};
-      grades.forEach(g => { if(!grouped[g.student_id]) grouped[g.student_id]=[]; grouped[g.student_id].push(g.score/g.max_score*100); });
+      grades.forEach(g => { if(!grouped[g.student_id]) grouped[g.student_id]=[]; if(g.max_score) grouped[g.student_id].push(g.score/g.max_score*100); });
       Object.entries(grouped).forEach(([id, scores]) => { avgMap[id] = Math.round(scores.reduce((a,b)=>a+b,0)/scores.length); });
     }
 
-    // Load flags
-    const { data: flags } = await sb.from('student_flags').select('student_id').eq('resolved', false);
-    const flagSet = new Set((flags||[]).map(f=>f.student_id));
-
-    renderStudentsTable(allStudents, avgMap, flagSet);
+    renderStudentsTable(allStudents, avgMap, new Set());
 
     // Populate class filter
-    const classes = [...new Set(allStudents.map(s=>s.class_name).filter(Boolean))];
+    const classes = [...new Set(allStudents.map(s=>s.class_name).filter(Boolean))].sort();
     const cf = document.getElementById('classFilter');
     if (cf && cf.options.length === 1) {
       classes.forEach(c => { const o = document.createElement('option'); o.value=c; o.textContent=c; cf.appendChild(o); });
     }
 
-    // Student alerts from brain (level B — suggest action, wait for approval)
-    const atRisk = allStudents.filter(s => (avgMap[s.id]||100) < 50 || flagSet.has(s.id));
+    const atRisk = allStudents.filter(s => (avgMap[s.id]||100) < 50);
     if (atRisk.length > 0) {
       document.getElementById('studentAlerts').innerHTML = `
         <div class="alert-banner danger">⚠️ ${atRisk.length} طالب/ة يحتاج/ون متابعة / ${atRisk.length} student(s) need follow-up [Level B — يتطلب موافقتك]</div>`;
@@ -752,7 +799,7 @@ async function loadGrades() {
       const pct = g.max_score ? Math.round(g.score/g.max_score*100) : 0;
       const lvl = pct>=90?'A':pct>=75?'B':pct>=60?'C':'D';
       return `<tr>
-        <td style="font-weight:700">${g.students?.full_name||'—'}</td>
+        <td style="font-weight:700">${g.students?.name||'—'}</td>
         <td>${g.students?.class_name||'—'}</td>
         <td>${g.grade_type||'—'}</td>
         <td>${g.score||'—'} / ${g.max_score||'—'}</td>
