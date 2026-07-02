@@ -583,8 +583,29 @@ const EduTheme = (function(){
     document.body.appendChild(overlay);
   }
 
+  // ── حقن platform-design-system.css تلقائياً ────────────────
+  function injectDesignSystem(){
+    const dsId = 'eduos-design-system-css';
+    if(document.getElementById(dsId)) return; // لا تُحقن مرتين
+    // الرابط النسبي: platform-theme.js → ../platform-design-system.css
+    const link = document.createElement('link');
+    link.id = dsId;
+    link.rel = 'stylesheet';
+    // نحدد المسار بناءً على موقع الـ script الحالي
+    const scripts = Array.from(document.querySelectorAll('script[src]'));
+    const themeScript = scripts.find(s => s.src && s.src.includes('platform-theme'));
+    let base = '../'; // افتراضي: الصفحة في apps/eduos-xxx/
+    if(themeScript){
+      const scriptPath = new URL(themeScript.src);
+      base = scriptPath.href.replace('platform-theme.js', '');
+    }
+    link.href = base + 'platform-design-system.css';
+    document.head.appendChild(link);
+  }
+
   // ── تهيئة عند التحميل ───────────────────────────────────────
   function init(){
+    injectDesignSystem();
     let saved = 'default';
     try { saved = sessionStorage.getItem('eduos_theme') || 'default'; } catch(e){}
     apply(saved);
