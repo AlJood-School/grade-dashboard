@@ -735,7 +735,7 @@ async function loadStudents() {
       body.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text3)">لا فصول مرتبطة بعد — تواصل مع المدير/ة / No classes linked yet</td></tr>';
       return;
     }
-    let q = sb.from('students').select('id,name,grade,class_name,student_number');
+    let q = sb.from('students').select('id,name,name_en,grade,class_name,student_number');
     q = q.in('class_name', teacherClasses);
     if (classFilter) q = q.eq('class_name', classFilter);
     const { data } = await q.order('class_name').order('name');
@@ -787,7 +787,7 @@ function renderStudentsTable(students, avgMap, flagSet) {
     const sb1 = avg ? Math.min(100, Math.round(avg * 0.4 + (att||80) * 0.3 + e * 3)) : null;
     return `<tr>
       <td>${i+1}</td>
-      <td style="font-weight:700;color:var(--text)">${s.name||'—'}</td>
+      <td style="font-weight:700;color:var(--text)">${(window.EduLang?.getLang()==='en' && s.name_en) ? s.name_en : (s.name||'—')}</td>
       <td>${s.class_name||'—'}</td>
       <td>${att !== null ? `${att}%` : '—'}</td>
       <td>${avg !== null ? `${avg}%` : '—'}</td>
@@ -814,7 +814,7 @@ async function loadGrades() {
   const body  = document.getElementById('gradesBody');
   try {
     let q = sb.from('student_grades')
-      .select('id,student_id,students!inner(name,class_name),grade_type,score,max_score,subject,term,notes')
+      .select('id,student_id,students!inner(name,name_en,class_name),grade_type,score,max_score,subject,term,notes')
       .eq('teacher_id', teacherId);
     if (cls)  q = q.eq('students.class_name', cls);
     if (subj) q = q.eq('grade_type', subj);
@@ -832,7 +832,7 @@ async function loadGrades() {
       const pct = g.max_score ? Math.round(g.score / g.max_score * 100) : 0;
       const lvl = pct >= 90 ? 'A' : pct >= 75 ? 'B' : pct >= 60 ? 'C' : 'D';
       return `<tr id="gr-row-${idx}">
-        <td style="font-weight:700">${g.students?.name || '—'}</td>
+        <td style="font-weight:700">${(window.EduLang?.getLang()==='en' && g.students?.name_en) ? g.students.name_en : (g.students?.name || '—')}</td>
         <td>${g.students?.class_name || '—'}</td>
         <td>${g.grade_type || '—'}</td>
         <td>${g.score ?? '—'} / ${g.max_score ?? '—'}</td>
@@ -943,6 +943,21 @@ function switchTab(name, btn) {
   if (name === 'students') loadStudents();
   if (name === 'grades') loadGrades();
 }
+
+// ── Re-render student names when language changes ──
+window.addEventListener('eduos-lang-change', () => {
+  if (allStudents && allStudents.length > 0) {
+    // Re-render with current data — no need to re-fetch
+    const body = document.getElementById('studentsBody');
+    if (body && document.getElementById('panel-students')?.classList.contains('active')) {
+      loadStudents();
+    }
+    // Also reload grades panel if active
+    if (document.getElementById('panel-grades')?.classList.contains('active')) {
+      loadGrades();
+    }
+  }
+});
 
 function viewStudent(id) { window.location.href = `../eduos-student/?id=${id}`; }
 function markAttendance(cls) { window.location.href = `../eduos-attendance/?class=${cls}`; }
