@@ -204,14 +204,19 @@ async function loadChildData(){
   try{
     const studentId=user.student_id;
     // Load student info
-    const [sRes,gRes,aRes]=await Promise.all([
+    const [sRes,gRes,aRes,saRes]=await Promise.all([
       fetch(`${SB_URL}/rest/v1/students?student_id=eq.${studentId}&select=*&limit=1`,{headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`}}),
       fetch(`${SB_URL}/rest/v1/student_grades?student_id=eq.${studentId}&order=created_at.desc&limit=20`,{headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`}}),
-      fetch(`${SB_URL}/rest/v1/attendance_qr_log?student_id=eq.${studentId}&order=scanned_at.desc&limit=30`,{headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`}})
+      fetch(`${SB_URL}/rest/v1/attendance_qr_log?student_id=eq.${studentId}&order=scanned_at.desc&limit=30`,{headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`}}),
+      fetch(`${SB_URL}/rest/v1/student_attendance?student_id=eq.${studentId}&order=date.desc&limit=30`,{headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`}})
     ]);
     const students=await sRes.json().catch(()=>[]);
     const grades=await gRes.json().catch(()=>[]);
-    const attendance=await aRes.json().catch(()=>[]);
+    const qrLog=await aRes.json().catch(()=>[]);
+    const saLog=await saRes.json().catch(()=>[]);
+
+    // Merge attendance: prefer student_attendance (has remote type), fallback to qr_log
+    const attendance=[...saLog.map(a=>({...a,scanned_at:a.recorded_at})),...qrLog];
 
     const student=Array.isArray(students)&&students[0] ? students[0] : {name:user.name||'الطالب/ة',grade:'—',class_name:'—',student_id:studentId};
     const attPct=attendance.length ? Math.round((attendance.filter(a=>a.status==='present').length/attendance.length)*100) : 0;
@@ -226,10 +231,19 @@ async function loadChildData(){
 
 function renderChildHero(student, attPct, attendance){
   const todayStr=today.toISOString().slice(0,10);
-  const todayAtt=attendance.find(a=>a.scanned_at?.slice(0,10)===todayStr);
+  const todayAtt=attendance.find(a=>(a.scanned_at||a.date||'').slice(0,10)===todayStr);
+  const isRemote=todayAtt?.attendance_type==='remote';
   const attColor=attPct>=90?'var(--green)':attPct>=75?'var(--amber)':'var(--red)';
   const attBg=attPct>=90?'var(--gl)':attPct>=75?'var(--al)':'var(--rl)';
   const initial=(student.name||'ط').charAt(0);
+  const todayIcon=todayAtt?.status==='present'?(isRemote?'🏠':'✅'):todayAtt?'❌':'⏳';
+  const todayLabel=todayAtt?.status==='present'
+    ?(isRemote?'حاضر/ة من البيت — تعليم عن بُعد 🏠':'حاضر/ة — وصل/ت في الوقت المحدد')
+    :todayAtt?'غائب/ة اليوم':'لم يُسجَّل حضور اليوم بعد';
+  const todayBadge=todayAtt?.status==='present'
+    ?(isRemote?'🏠 عن بُعد':'حاضر/ة'):'—';
+  const todayBadgeBg=todayAtt?.status==='present'?(isRemote?'#EFF6FF':'var(--gl)'):'var(--al)';
+  const todayBadgeColor=todayAtt?.status==='present'?(isRemote?'#1D4ED8':'var(--green)'):'var(--amber)';
   document.getElementById('childHero').innerHTML=`
     <div class="child-top">
       <div class="child-avatar">${initial}</div>
@@ -244,12 +258,12 @@ function renderChildHero(student, attPct, attendance){
       </div>
     </div>
     <div class="today-status">
-      <div class="ts-icon">${todayAtt?.status==='present'?'✅':todayAtt?'❌':'⏳'}</div>
+      <div class="ts-icon">${todayIcon}</div>
       <div class="ts-text">
         <div class="ts-title">حضور اليوم</div>
-        <div class="ts-sub">${todayAtt?.status==='present'?'حاضر/ة — وصل/ت في الوقت المحدد':todayAtt?'غائب/ة اليوم':'لم يُسجَّل حضور اليوم بعد'}</div>
+        <div class="ts-sub">${todayLabel}</div>
       </div>
-      <span class="ts-badge" style="background:${todayAtt?.status==='present'?'var(--gl)':'var(--al)'};color:${todayAtt?.status==='present'?'var(--green)':'var(--amber)'}">${todayAtt?.status==='present'?'حاضر/ة':'—'}</span>
+      <span class="ts-badge" style="background:${todayBadgeBg};color:${todayBadgeColor}">${todayBadge}</span>
     </div>
   `;
 }

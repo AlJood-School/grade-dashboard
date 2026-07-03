@@ -413,9 +413,50 @@ tr:hover td{background:var(--surface2)}
       <button class="state-btn" onclick="setPlatformState('makeup_exam')"><div class="s-icon">🔄</div><div class="s-name">امتحانات إعادة</div><div class="s-desc">Makeup Exams</div></button>
       <button class="state-btn" onclick="setPlatformState('teacher_dev')"><div class="s-icon">📚</div><div class="s-name">تطوير مهني</div><div class="s-desc">Teacher Development</div></button>
       <button class="state-btn" onclick="setPlatformState('open_day')"><div class="s-icon">🎉</div><div class="s-name">يوم مفتوح</div><div class="s-desc">Open Day</div></button>
+      <button class="state-btn remote-state-btn" id="remoteStateBtn" onclick="toggleRemoteDayPanel()"><div class="s-icon">🏠</div><div class="s-name">تعليم عن بُعد</div><div class="s-desc">Remote Learning</div></button>
     </div>
     <div id="stateResult" style="margin-top:12px"></div>
-    
+
+    <!-- ─── REMOTE DAY PANEL ─── -->
+    <div id="remoteDayPanel" style="display:none;margin-top:20px;background:#EFF6FF;border:2px solid #0EA5E9;border-radius:16px;padding:20px;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        <div style="font-size:28px;">🏠</div>
+        <div>
+          <div style="font-size:16px;font-weight:800;color:#0C4A6E;">إدارة أيام التعليم عن بُعد</div>
+          <div style="font-size:12px;color:#0369A1;">Remote Learning Day Management</div>
+        </div>
+      </div>
+
+      <!-- Today Remote Toggle -->
+      <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid #BAE6FD;">
+        <div style="font-size:13px;font-weight:700;color:#1E293B;margin-bottom:12px;">📅 إعلان يوم بُعد سريع / Quick Declare</div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;">
+          <div>
+            <label style="font-size:12px;color:#475569;display:block;margin-bottom:6px;">التاريخ / Date</label>
+            <input type="date" id="rdDate" style="width:100%;padding:10px 14px;border:1px solid #CBD5E1;border-radius:10px;font-family:'Tajawal',Arial,sans-serif;font-size:14px;">
+          </div>
+          <div id="rdTodayStatus" style="font-size:12px;padding:10px 14px;border-radius:10px;background:#F0FDF4;color:#166534;border:1px solid #BBF7D0;font-weight:700;text-align:center;">
+            جاري الفحص...
+          </div>
+        </div>
+        <div style="margin-top:10px;">
+          <label style="font-size:12px;color:#475569;display:block;margin-bottom:6px;">سبب التعليم عن بُعد / Reason</label>
+          <input type="text" id="rdReason" placeholder="مثال: سوء الطقس / طارئ / قرار وزاري..." style="width:100%;padding:10px 14px;border:1px solid #CBD5E1;border-radius:10px;font-family:'Tajawal',Arial,sans-serif;font-size:14px;">
+        </div>
+        <div style="display:flex;gap:10px;margin-top:12px;">
+          <button onclick="declareRemoteDay()" style="flex:1;padding:12px;background:linear-gradient(135deg,#0EA5E9,#6C3DD6);color:#fff;border:none;border-radius:10px;font-family:'Tajawal',Arial,sans-serif;font-size:14px;font-weight:700;cursor:pointer;">🏠 إعلان يوم بُعد</button>
+          <button onclick="cancelRemoteDay()" style="flex:1;padding:12px;background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:10px;font-family:'Tajawal',Arial,sans-serif;font-size:14px;font-weight:700;cursor:pointer;">✕ إلغاء</button>
+        </div>
+        <div id="rdResult" style="margin-top:10px;font-size:13px;"></div>
+      </div>
+
+      <!-- Upcoming Remote Days -->
+      <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #BAE6FD;">
+        <div style="font-size:13px;font-weight:700;color:#1E293B;margin-bottom:10px;">📋 أيام البُعد المسجَّلة / Registered Remote Days</div>
+        <div id="remoteDaysList" style="font-size:13px;color:#475569;">جاري التحميل...</div>
+      </div>
+    </div>
+
     <p class="sec-title" style="margin-top:24px">📅 الأحداث القادمة / Upcoming Events</p>
     <div id="platformEvents"><div class="skeleton" style="height:120px"></div></div>
   </div>
@@ -675,7 +716,7 @@ function showDetails(id) { showToast(`🔍 تفاصيل الإجراء ${id.slic
 
 async function setPlatformState(state) {
   if (!sb) return;
-  const labels = { normal:'يوم دراسي عادي', exam:'فترة امتحانات', holiday:'إجازة', ramadan:'رمضان', emergency:'طوارئ', national_day:'يوم وطني', makeup_exam:'امتحانات إعادة', teacher_dev:'تطوير مهني', open_day:'يوم مفتوح' };
+  const labels = { normal:'يوم دراسي عادي', exam:'فترة امتحانات', holiday:'إجازة', ramadan:'رمضان', emergency:'طوارئ', national_day:'يوم وطني', makeup_exam:'امتحانات إعادة', teacher_dev:'تطوير مهني', open_day:'يوم مفتوح', remote_learning:'تعليم عن بُعد 🏠' };
   try {
     await sb.from('platform_state').upsert({ id: 1, current_state: state, updated_by: principalId, updated_at: new Date().toISOString() });
     document.querySelectorAll('.state-btn').forEach(b => b.classList.remove('active'));
@@ -729,6 +770,90 @@ async function loadStaff() {
 
 function doLogout() { sessionStorage.removeItem('edoos_user'); window.location.href = '../eduos-login/'; }
 function showToast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2800); }
+
+// ── REMOTE LEARNING DAY ──
+function toggleRemoteDayPanel(){
+  const p=document.getElementById('remoteDayPanel');
+  const show=p.style.display==='none';
+  p.style.display=show?'block':'none';
+  if(show){
+    const today=new Date().toISOString().split('T')[0];
+    document.getElementById('rdDate').value=today;
+    checkTodayRemote(today);
+    loadRemoteDays();
+  }
+}
+
+async function checkTodayRemote(date){
+  const el=document.getElementById('rdTodayStatus');
+  if(!sb){el.textContent='—';return;}
+  const {data}=await sb.from('remote_days').select('id,reason').eq('date',date).eq('is_active',true);
+  if(data&&data.length>0){
+    el.style.background='#EFF6FF'; el.style.color='#1D4ED8'; el.style.borderColor='#BFDBFE';
+    el.textContent='🏠 يوم بُعد مُعلَن';
+  } else {
+    el.style.background='#F0FDF4'; el.style.color='#166534'; el.style.borderColor='#BBF7D0';
+    el.textContent='🏫 يوم حضوري';
+  }
+}
+
+async function declareRemoteDay(){
+  const date=document.getElementById('rdDate').value;
+  const reason=document.getElementById('rdReason').value.trim();
+  const result=document.getElementById('rdResult');
+  if(!date){result.innerHTML='<span style="color:#DC2626;">يرجى تحديد التاريخ</span>';return;}
+  if(!sb){result.innerHTML='<span style="color:#DC2626;">خطأ في الاتصال</span>';return;}
+  const {error}=await sb.from('remote_days').upsert({
+    date, reason:reason||null,
+    declared_by:principalId||null,
+    declared_at:new Date().toISOString(),
+    is_active:true
+  },{onConflict:'date'});
+  if(error){
+    result.innerHTML=`<span style="color:#DC2626;">❌ خطأ: ${error.message}</span>`;
+    return;
+  }
+  result.innerHTML=`<span style="color:#166534;">✅ تم إعلان ${date} يوم تعليم عن بُعد</span>`;
+  document.getElementById('rdReason').value='';
+  checkTodayRemote(date);
+  loadRemoteDays();
+  showToast(`🏠 تم إعلان ${date} يوم تعليم عن بُعد`);
+  // Also set platform state
+  setPlatformState('remote_learning');
+}
+
+async function cancelRemoteDay(){
+  const date=document.getElementById('rdDate').value;
+  if(!date||!sb)return;
+  await sb.from('remote_days').update({is_active:false}).eq('date',date);
+  document.getElementById('rdResult').innerHTML=`<span style="color:#D97706;">⚠️ تم إلغاء يوم البُعد ليوم ${date}</span>`;
+  checkTodayRemote(date);
+  loadRemoteDays();
+  showToast(`🏫 تم إلغاء يوم البُعد ليوم ${date}`);
+}
+
+async function loadRemoteDays(){
+  const el=document.getElementById('remoteDaysList');
+  if(!sb){el.textContent='لا يوجد اتصال';return;}
+  const {data}=await sb.from('remote_days').select('date,reason,is_active,declared_at').order('date',{ascending:false}).limit(10);
+  if(!data||data.length===0){el.textContent='لا توجد أيام بُعد مسجَّلة';return;}
+  el.innerHTML=data.map(d=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #E2E8F0;">
+      <div>
+        <span style="font-weight:700;color:${d.is_active?'#0C4A6E':'#94A3B8'}">${d.date}</span>
+        ${d.reason?`<span style="color:#475569;font-size:12px;margin-right:8px;">— ${d.reason}</span>`:''}
+      </div>
+      <span style="font-size:11px;padding:3px 10px;border-radius:20px;background:${d.is_active?'#DBEAFE':'#F1F5F9'};color:${d.is_active?'#1D4ED8':'#94A3B8'};">${d.is_active?'🏠 نشط':'ملغى'}</span>
+    </div>
+  `).join('');
+}
+
+// Init remote day date to today
+document.addEventListener('DOMContentLoaded',()=>{
+  const inp=document.getElementById('rdDate');
+  if(inp) inp.value=new Date().toISOString().split('T')[0];
+  inp?.addEventListener('change',e=>checkTodayRemote(e.target.value));
+});
 function setupIdleLogout() {
   let timer;
   const reset = () => { clearTimeout(timer); timer=setTimeout(()=>{showToast('⏱️ انتهت الجلسة'); setTimeout(doLogout,2000);}, 15*60*1000); };

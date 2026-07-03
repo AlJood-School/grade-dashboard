@@ -142,11 +142,16 @@ body{font-family:'Tajawal',Arial,sans-serif;background:var(--bg);color:var(--tex
   </div>
 </header>
 
+<!-- REMOTE DAY BANNER -->
+<div id="remoteBanner" style="display:none;background:linear-gradient(135deg,#0EA5E9,#6C3DD6);color:#fff;padding:12px 24px;text-align:center;font-family:'Tajawal',Arial,sans-serif;font-size:15px;font-weight:700;letter-spacing:0.3px;">
+  🏠 يوم تعليم عن بُعد — Remote Learning Day &nbsp;|&nbsp; <span id="remoteReason" style="font-weight:400;font-size:13px;opacity:0.9;"></span>
+</div>
+
 <!-- SETUP SCREEN -->
 <div id="setupScreen">
   <div class="setup-card">
-    <div class="setup-title">📡 ابدأ جلستك الصفية</div>
-    <div class="setup-sub">حدد تفاصيل الحصة وسيتم إعداد كل شيء تلقائياً</div>
+    <div class="setup-title" id="setupTitle">📡 ابدأ جلستك الصفية</div>
+    <div class="setup-sub" id="setupSub">حدد تفاصيل الحصة وسيتم إعداد كل شيء تلقائياً</div>
     <div class="form-grid">
       <div class="form-group">
         <label class="form-label">الصف الدراسي</label>
@@ -193,7 +198,7 @@ body{font-family:'Tajawal',Arial,sans-serif;background:var(--bg);color:var(--tex
         </select>
       </div>
     </div>
-    <button class="start-btn" onclick="startSession()">🚀 ابدأ الجلسة الآن</button>
+    <button class="start-btn" id="startBtn" onclick="startSession()">🚀 ابدأ الجلسة الآن</button>
   </div>
 </div>
 
@@ -287,8 +292,27 @@ function sqpost(path,body){return fetch(`${SB}/rest/v1/${path}`,{method:'POST',h
 function sqpatch(path,body){return fetch(`${SB}/rest/v1/${path}`,{method:'PATCH',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json()).catch(()=>null);}
 
 const user=JSON.parse(sessionStorage.getItem('edoos_user')||'{}');
-let sessionId=null;let timerInterval=null;let startTime=null;
-let students=[];let attendance={};
+let sessionId=null; let timerInterval=null; let startTime=null;
+let students=[]; let attendance={};
+let isRemoteDay=false; let remoteDayId=null;
+
+// ── CHECK REMOTE DAY ──
+async function checkRemoteDay(){
+  const today=new Date().toISOString().split('T')[0];
+  const data=await sq(`remote_days?date=eq.${today}&is_active=eq.true&select=id,reason`);
+  if(Array.isArray(data)&&data.length>0){
+    isRemoteDay=true;
+    remoteDayId=data[0].id;
+    const reason=data[0].reason||'';
+    document.getElementById('remoteBanner').style.display='block';
+    document.getElementById('remoteReason').textContent=reason;
+    document.getElementById('setupTitle').textContent='🏠 ابدأ حصتك — يوم تعليم عن بُعد';
+    document.getElementById('setupSub').textContent='Remote Learning Day — الحضور يُسجَّل رقمياً';
+    document.getElementById('startBtn').textContent='🏠 ابدأ الحصة عن بُعد';
+    document.getElementById('startBtn').style.background='linear-gradient(135deg,#0EA5E9,#6C3DD6)';
+    addLog('🏠 يوم تعليم عن بُعد مُفعَّل','#0EA5E9');
+  }
+}
 
 async function startSession(){
   const cls=document.getElementById('classSelect').value;
@@ -297,33 +321,31 @@ async function startSession(){
   const type=document.getElementById('typeSelect').value;
   if(!cls||!subj){alert('يرجى تحديد الصف والمادة');return;}
 
-  // Create session in DB
   const sess=await sqpost('lesson_sessions',{
-    class_name:cls,subject:subj,topic:topic||null,
-    session_type:type,teacher_id:user.id||null,
-    started_at:new Date().toISOString(),status:'active'
+    class_name:cls, subject:subj, topic:topic||null,
+    session_type:type, teacher_id:user.id||null,
+    teacher_name:user.name||user.name_ar||null,
+    started_at:new Date().toISOString(), status:'active',
+    is_remote:isRemoteDay,
+    remote_day_id:remoteDayId||null
   });
-  if(Array.isArray(sess)&&sess.length>0)sessionId=sess[0].id;
+  if(Array.isArray(sess)&&sess.length>0) sessionId=sess[0].id;
   else sessionId='local-'+Date.now();
 
-  // Update UI
   document.getElementById('setupScreen').style.display='none';
   document.getElementById('liveScreen').style.display='block';
   document.getElementById('sessionTimer').style.display='block';
   document.getElementById('liveActions').style.display='flex';
-  document.getElementById('headerSub').textContent=`${cls} — ${subj}`;
+  document.getElementById('headerSub').textContent=`${cls} — ${subj}${isRemoteDay?' 🏠':''}`;
   document.getElementById('sessionClassName').textContent=`📚 ${cls}`;
-  document.getElementById('sessionSubject').innerHTML=`<span style="color:var(--brand2)">${subj}</span>`;
+  document.getElementById('sessionSubject').innerHTML=`<span style="color:var(--brand2)">${subj}</span>${isRemoteDay?' <span style="background:#0EA5E9;color:#fff;font-size:11px;padding:2px 8px;border-radius:6px;margin-right:6px;">عن بُعد</span>':''}`;
   document.getElementById('sessionTopic').textContent=topic||'';
   document.getElementById('sessionDate').textContent=new Date().toLocaleDateString('ar-AE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
 
-  // Timer
   startTime=Date.now();
   timerInterval=setInterval(updateTimer,1000);
-
-  // Load students
   loadStudents(cls);
-  addLog('بدأت الجلسة الصفية','#10B981');
+  addLog(isRemoteDay?'🏠 بدأت الحصة عن بُعد':'بدأت الجلسة الصفية','#10B981');
 }
 
 function updateTimer(){
@@ -340,10 +362,9 @@ async function loadStudents(cls){
   const data=await sq(`students?select=id,full_name,student_number&class_name=eq.${encodeURIComponent(cls)}&order=full_name`);
   students=Array.isArray(data)?data:[];
   if(students.length===0){
-    grid.innerHTML='<div style="color:var(--text3);font-size:14px;grid-column:1/-1;text-align:center;padding:20px;">لا يوجد طلاب مسجلون في هذا الصف</div>';
+    grid.innerHTML='<div style="color:var(--text3);font-size:14px;grid-column:1/-1;text-align:center;padding:20px;">لا يوجد طلاب/ات مسجلون في هذا الصف</div>';
     return;
   }
-  // Default all to present
   students.forEach(s=>{attendance[s.id]='present';});
   renderStudents();
   document.getElementById('countTotal').textContent=students.length;
@@ -351,12 +372,16 @@ async function loadStudents(cls){
 
 function renderStudents(){
   const grid=document.getElementById('studentGrid');
-  const initials={'present':'✅','absent':'❌','late':'⏰'};
+  const icons={'present':'✅','absent':'❌','late':'⏰'};
+  const presentLabel=isRemoteDay?'متصل/ة':'حاضر/ة';
   grid.innerHTML=students.map(s=>`
     <div class="student-chip ${attendance[s.id]||'present'}" onclick="cycleStatus('${s.id}')" id="chip-${s.id}">
-      <div class="student-avatar">${initials[attendance[s.id]||'present']}</div>
+      <div class="student-avatar">${icons[attendance[s.id]||'present']}</div>
       <div class="student-name">${s.full_name||'طالب/ة'}</div>
-      <div class="student-status status-${attendance[s.id]||'present'}">${attendance[s.id]==='present'?'حاضر/ة':attendance[s.id]==='absent'?'غائب/ة':'متأخر/ة'}</div>
+      <div class="student-status status-${attendance[s.id]||'present'}">${
+        attendance[s.id]==='present'?presentLabel:
+        attendance[s.id]==='absent'?'غائب/ة':'متأخر/ة'
+      }</div>
     </div>
   `).join('');
   updateCounts();
@@ -372,7 +397,7 @@ function cycleStatus(id){
 function markAll(status){
   students.forEach(s=>{attendance[s.id]=status;});
   renderStudents();
-  addLog(`تم تعليم الجميع: ${status==='present'?'حاضر/ة':'غائب/ة'}`,'#F59E0B');
+  addLog(`تم تعليم الجميع: ${status==='present'?(isRemoteDay?'متصل/ة':'حاضر/ة'):'غائب/ة'}`,'#F59E0B');
 }
 
 function updateCounts(){
@@ -384,15 +409,25 @@ function updateCounts(){
 
 async function saveAttendance(){
   const today=new Date().toISOString().split('T')[0];
+  const cls=document.getElementById('sessionClassName').textContent.replace('📚 ','');
   const rows=students.map(s=>({
-    student_id:s.id.toString(),class_name:document.getElementById('sessionClassName').textContent.replace('📚 ',''),
-    date:today,status:attendance[s.id]||'present',session_id:sessionId,
+    student_id:s.id.toString(),
+    class_name:cls,
+    date:today,
+    status:attendance[s.id]||'present',
+    attendance_type:isRemoteDay?'remote':'physical',
+    session_id:(sessionId&&!sessionId.startsWith('local'))?sessionId:null,
+    recorded_by:user.id||null,
     recorded_at:new Date().toISOString()
   }));
   if(rows.length===0)return;
-  await fetch(`${SB}/rest/v1/attendance`,{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},body:JSON.stringify(rows)});
-  addLog(`تم حفظ الحضور (${rows.length} طالب/ة)`,'#10B981');
-  alert('✅ تم حفظ الحضور بنجاح');
+  await fetch(`${SB}/rest/v1/student_attendance`,{
+    method:'POST',
+    headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+    body:JSON.stringify(rows)
+  });
+  addLog(`✅ تم حفظ الحضور (${rows.length} طالب/ة) — ${isRemoteDay?'عن بُعد':'حضوري'}`,'#10B981');
+  alert(`✅ تم حفظ الحضور بنجاح\n${rows.length} طالب/ة — ${isRemoteDay?'🏠 عن بُعد':'🏫 حضوري'}`);
 }
 
 function saveNotes(){
@@ -421,15 +456,16 @@ function openDrive(){window.location.href='/apps/eduos-drive/';}
 async function endSession(){
   if(!confirm('هل أنت/ي متأكد/ة من إنهاء الجلسة؟'))return;
   clearInterval(timerInterval);
-  // Save notes first
   saveNotes();
-  // Update session status
   if(sessionId&&!sessionId.startsWith('local')){
     await sqpatch(`lesson_sessions?id=eq.${sessionId}`,{status:'completed',ended_at:new Date().toISOString()});
   }
   addLog('انتهت الجلسة','#EF4444');
   setTimeout(()=>window.location.href='/apps/eduos-hub/',1500);
 }
+
+// Init
+checkRemoteDay();
 </script>
 </body>
 </html>
