@@ -1,12 +1,14 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- *  EduOS Platform Language Engine  v1.0
+ *  EduOS Platform Language Engine  v2.0  (2026-07-03)
  *  ─────────────────────────────────────────────────────────────
  *  • يُغيِّر كل حرف وكل كلمة وكل جملة — بلا استثناء
- *  • يشمل: الأذكار، الأقوال، الأحاديث، شريط الأخبار، الهيدر،
- *    أسماء الأزرار، العناوين، النصوص الديناميكية
- *  • يحقن زر اللغة تلقائياً في كل صفحة
- *  • يستخدم sessionStorage (لا localStorage)
+ *  • خوارزمية v2: لا استبدال جزئي — لا تلف في الكلمات
+ *  • طبقات الترجمة بالترتيب:
+ *     1. data-ar / data-en attributes
+ *     2. مطابقة نص كاملة من القاموس (EXACT)
+ *     3. فصل نمط "عربي / English" — يبقى الجزء الإنجليزي فقط
+ *     4. استبدال بحدود الكلمة (lookbehind/lookahead regex)
  *  • يُطلق حدث eduos-lang-change عند كل تغيير
  * ═══════════════════════════════════════════════════════════════
  */
@@ -16,160 +18,166 @@ window.EduLang = (function () {
   const STORAGE_KEY = 'eduos_lang';
 
   /* ─────────────────────────────────────────────────────────────
-   * قاموس الترجمة الكامل — كل نص ثابت في المنصة
+   * القاموس — نصوص ثابتة (فقط للمطابقة الكاملة أو الكلمات المستقلة)
    * ──────────────────────────────────────────────────────────── */
   const DICT = {
-    /* ── الهوية ── */
-    'بوابة الجود الذكية'          : 'Al-Jood Smart Portal',
-    'Powered by EduOS'             : 'Powered by EduOS',
-    'منصة EduOS'                   : 'EduOS Platform',
-    'EduOS — منصة التعليم الذكية' : 'EduOS — Smart Education Platform',
+    /* ── هوية المنصة ── */
+    'بوابة الجود الذكية'               : 'Al-Jood Smart Portal',
+    'منصة EduOS'                        : 'EduOS Platform',
+    'EduOS — منصة التعليم الذكية'      : 'EduOS — Smart Education Platform',
     'NAFAS FOR ARTIFICIAL INTELLIGENCE' : 'NAFAS FOR ARTIFICIAL INTELLIGENCE',
+    'جميع الحقوق محفوظة'               : 'All rights reserved',
+    'رخصة'                             : 'License',
 
-    /* ── هيدر / نافبار ── */
-    'جارٍ التحميل...'             : 'Loading...',
-    'جارٍ التحميل'                : 'Loading',
-    'خروج / Logout'               : 'Logout',
-    'خروج'                        : 'Logout',
-    'الإشعارات / Notifications'   : 'Notifications',
-    'الإشعارات'                   : 'Notifications',
+    /* ── هيدر ── */
+    'جارٍ التحميل...'                  : 'Loading...',
+    'جارٍ التحميل'                     : 'Loading',
+    'خروج'                             : 'Logout',
+    'الإشعارات'                        : 'Notifications',
+    'أبلغ عن مشكلة تقنية'             : 'Report Technical Issue',
 
     /* ── أدوار ── */
-    'معلم/ة · Teacher'            : 'Teacher',
-    'معلم/ة'                      : 'Teacher',
-    'مدير/ة · Principal'          : 'Principal',
-    'مدير/ة'                      : 'Principal',
-    'طالب/ة · Student'            : 'Student',
-    'طالب/ة'                      : 'Student',
-    'ولي/ة الأمر · Parent'        : 'Parent',
-    'ولي/ة الأمر'                 : 'Parent',
-    'أخصائي/ة · Specialist'       : 'Specialist',
-    'أخصائي/ة'                    : 'Specialist',
-    'أمن · Security'              : 'Security',
-    'أمن'                         : 'Security',
-    'ممرض/ة · Nurse'              : 'Nurse',
-    'ممرض/ة'                      : 'Nurse',
-    'مساعد/ة · Sub Teacher'       : 'Substitute Teacher',
-    'مدرب/ة رياضي/ة · Coach'      : 'Sports Coach',
-    'مراقب/ة · Observer'          : 'Observer',
-    'سكرتير/ة · Secretary'        : 'Secretary',
-    'تقني/ة · Technician'         : 'Technician',
+    'معلم/ة'                    : 'Teacher',
+    'مدير/ة'                    : 'Principal',
+    'طالب/ة'                    : 'Student',
+    'ولي/ة الأمر'               : 'Parent',
+    'أخصائي/ة'                  : 'Specialist',
+    'أمن'                       : 'Security',
+    'ممرض/ة'                    : 'Nurse',
+    'مساعد/ة'                   : 'Substitute Teacher',
+    'مدرب/ة رياضي/ة'            : 'Sports Coach',
+    'مراقب/ة'                   : 'Observer',
+    'سكرتير/ة'                  : 'Secretary',
+    'تقني/ة'                    : 'Technician',
+    'مسؤول/ة'                   : 'Official',
 
-    /* ── تاب بار شائعة ── */
-    'الرئيسية'         : 'Home',
-    'الدرجات'          : 'Grades',
-    'الحضور'           : 'Attendance',
-    'الجدول'           : 'Schedule',
-    'الطلاب'           : 'Students',
-    'التقارير'         : 'Reports',
-    'الإشعارات'        : 'Notifications',
-    'الإعدادات'        : 'Settings',
-    'التحليلات'        : 'Analytics',
-    'الرسائل'          : 'Messages',
-    'المهام'           : 'Tasks',
-    'الموارد'          : 'Resources',
-    'الفعاليات'        : 'Events',
-    'الشارات'          : 'Badges',
-    'الاستبيانات'      : 'Surveys',
-    'الأنشطة'          : 'Activities',
-    'الملف الشخصي'     : 'Profile',
-    'الدعم'            : 'Support',
-    'الامتحانات'       : 'Exams',
-    'المقررات'         : 'Curriculum',
-    'التقويم'          : 'Calendar',
-    'المكتبة'          : 'Library',
-    'الصحة'            : 'Health',
-    'المالية'          : 'Finance',
+    /* ── تاب بار ── */
+    'الرئيسية'       : 'Home',
+    'الدرجات'        : 'Grades',
+    'الحضور'         : 'Attendance',
+    'الجدول'         : 'Schedule',
+    'الطلاب'         : 'Students',
+    'التقارير'       : 'Reports',
+    'الإعدادات'      : 'Settings',
+    'التحليلات'      : 'Analytics',
+    'الرسائل'        : 'Messages',
+    'المهام'         : 'Tasks',
+    'الموارد'        : 'Resources',
+    'الفعاليات'      : 'Events',
+    'الشارات'        : 'Badges',
+    'الاستبيانات'    : 'Surveys',
+    'الأنشطة'        : 'Activities',
+    'الملف الشخصي'   : 'Profile',
+    'الدعم'          : 'Support',
+    'الامتحانات'     : 'Exams',
+    'المقررات'       : 'Curriculum',
+    'التقويم'        : 'Calendar',
+    'المكتبة'        : 'Library',
+    'الصحة'          : 'Health',
+    'المالية'        : 'Finance',
 
-    /* ── أزرار شائعة ── */
-    'حفظ'              : 'Save',
-    'إلغاء'            : 'Cancel',
-    'تأكيد'            : 'Confirm',
-    'حذف'              : 'Delete',
-    'تعديل'            : 'Edit',
-    'إضافة'            : 'Add',
-    'بحث'              : 'Search',
-    'تصفية'            : 'Filter',
-    'تصدير'            : 'Export',
-    'استيراد'          : 'Import',
-    'طباعة'            : 'Print',
-    'رفع'              : 'Upload',
-    'تحميل'            : 'Download',
-    'تحديث'            : 'Refresh',
-    'مزيد'             : 'More',
-    'عرض الكل'         : 'View All',
-    'التالي'           : 'Next',
-    'السابق'           : 'Previous',
-    'إغلاق'            : 'Close',
-    'موافق'            : 'OK',
-    'إرسال'            : 'Submit',
-    'استمر'            : 'Continue',
-    'رجوع'             : 'Back',
-    'نعم'              : 'Yes',
-    'لا'               : 'No',
+    /* ── أزرار ── */
+    'حفظ'            : 'Save',
+    'إلغاء'          : 'Cancel',
+    'تأكيد'          : 'Confirm',
+    'حذف'            : 'Delete',
+    'تعديل'          : 'Edit',
+    'إضافة'          : 'Add',
+    'بحث'            : 'Search',
+    'تصفية'          : 'Filter',
+    'تصدير'          : 'Export',
+    'استيراد'        : 'Import',
+    'طباعة'          : 'Print',
+    'رفع'            : 'Upload',
+    'تحميل'          : 'Download',
+    'تحديث'          : 'Refresh',
+    'عرض الكل'       : 'View All',
+    'التالي'         : 'Next',
+    'السابق'         : 'Previous',
+    'إغلاق'          : 'Close',
+    'موافق'          : 'OK',
+    'إرسال'          : 'Submit',
+    'استمر'          : 'Continue',
+    'رجوع'           : 'Back',
 
-    /* ── حالات / تسميات ── */
-    'حاضر/ة'           : 'Present',
-    'غائب/ة'           : 'Absent',
-    'متأخر/ة'          : 'Late',
-    'مبرر'             : 'Excused',
-    'غير مبرر'         : 'Unexcused',
-    'نشط/ة'            : 'Active',
-    'غير نشط/ة'        : 'Inactive',
-    'مكتمل'            : 'Completed',
-    'معلق'             : 'Pending',
-    'مرفوض'            : 'Rejected',
-    'موافق عليه'       : 'Approved',
-    'ناجح/ة'           : 'Pass',
-    'راسب/ة'           : 'Fail',
-    'ممتاز'            : 'Excellent',
-    'جيد جداً'         : 'Very Good',
-    'جيد'              : 'Good',
-    'مقبول'            : 'Acceptable',
-    'ضعيف'             : 'Weak',
+    /* ── حالات ── */
+    'حاضر/ة'         : 'Present',
+    'غائب/ة'         : 'Absent',
+    'متأخر/ة'        : 'Late',
+    'مبرر'           : 'Excused',
+    'غير مبرر'       : 'Unexcused',
+    'نشط/ة'          : 'Active',
+    'غير نشط/ة'      : 'Inactive',
+    'مكتمل'          : 'Completed',
+    'معلق'           : 'Pending',
+    'مرفوض'          : 'Rejected',
+    'موافق عليه'     : 'Approved',
+    'ناجح/ة'         : 'Pass',
+    'راسب/ة'         : 'Fail',
+    'ممتاز'          : 'Excellent',
+    'جيد جداً'       : 'Very Good',
+    'جيد'            : 'Good',
+    'مقبول'          : 'Acceptable',
+    'ضعيف'           : 'Weak',
 
-    /* ── فصول / أوقات ── */
-    'الفصل الأول'      : 'Term 1',
-    'الفصل الثاني'     : 'Term 2',
-    'الفصل الثالث'     : 'Term 3',
-    'العام الدراسي'    : 'Academic Year',
-    'الأسبوع'          : 'Week',
-    'اليوم'            : 'Today',
-    'أمس'              : 'Yesterday',
-    'غداً'             : 'Tomorrow',
-    'الأحد'            : 'Sunday',
-    'الاثنين'          : 'Monday',
-    'الثلاثاء'         : 'Tuesday',
-    'الأربعاء'         : 'Wednesday',
-    'الخميس'           : 'Thursday',
-    'الجمعة'           : 'Friday',
-    'السبت'            : 'Saturday',
-    'يناير'            : 'January',
-    'فبراير'           : 'February',
-    'مارس'             : 'March',
-    'أبريل'            : 'April',
-    'مايو'             : 'May',
-    'يونيو'            : 'June',
-    'يوليو'            : 'July',
-    'أغسطس'            : 'August',
-    'سبتمبر'           : 'September',
-    'أكتوبر'           : 'October',
-    'نوفمبر'           : 'November',
-    'ديسمبر'           : 'December',
+    /* ── فصول / زمن ── */
+    'الفصل الأول'    : 'Term 1',
+    'الفصل الثاني'   : 'Term 2',
+    'الفصل الثالث'   : 'Term 3',
+    'العام الدراسي'  : 'Academic Year',
+    'الأسبوع'        : 'Week',
+    'اليوم'          : 'Today',
+    'أمس'            : 'Yesterday',
+    'غداً'           : 'Tomorrow',
+    'الأحد'          : 'Sunday',
+    'الاثنين'        : 'Monday',
+    'الثلاثاء'       : 'Tuesday',
+    'الأربعاء'       : 'Wednesday',
+    'الخميس'         : 'Thursday',
+    'الجمعة'         : 'Friday',
+    'السبت'          : 'Saturday',
+    'يناير'          : 'January',
+    'فبراير'         : 'February',
+    'مارس'           : 'March',
+    'أبريل'          : 'April',
+    'مايو'           : 'May',
+    'يونيو'          : 'June',
+    'يوليو'          : 'July',
+    'أغسطس'          : 'August',
+    'سبتمبر'         : 'September',
+    'أكتوبر'         : 'October',
+    'نوفمبر'         : 'November',
+    'ديسمبر'         : 'December',
 
     /* ── رسائل نظام ── */
     'لا توجد بيانات'           : 'No data available',
     'لا بيانات'                : 'No data',
-    'جارٍ التحميل...'          : 'Loading...',
     'خطأ في التحميل'           : 'Loading error',
     'تم الحفظ بنجاح'           : 'Saved successfully',
     'حدث خطأ'                  : 'An error occurred',
     'جلسة منتهية'              : 'Session expired',
-    'تسجيل دخول'               : 'Sign in',
-    'تسجيل خروج'               : 'Sign out',
     'كلمة المرور'              : 'Password',
     'اسم المستخدم'             : 'Username',
     'البريد الإلكتروني'        : 'Email',
+    'كل شيء بخير'              : 'All good',
+
+    /* ── Quick Actions ── */
+    'تسجيل اليوم'              : 'Record Today',
+    'ابدأ الآن'                : 'Start Now',
+    'تقييم فوري'               : 'Quick Assessment',
+    'نقاط وجوائز'              : 'Points & Rewards',
+    'تواصل مع الأهل'           : 'Contact Parents',
+    'جدول ومتابعة'             : 'Schedule & Track',
+    'تطويري المهني'            : 'My Professional Dev',
+    'جدول اللقاءات'            : 'Meeting Schedule',
+    'إجراءات سريعة'            : 'Quick Actions',
+    'جدولي اليوم'              : 'My Schedule Today',
+    'لا حصص اليوم'             : 'No classes today',
+    'لا حصص'                   : 'No classes',
+    'متطلبات معلّقة'           : 'Pending Tasks',
+    'تنبيهات الطلاب'           : 'Student Alerts',
+    'الحضور اليوم'             : 'Today\'s Attendance',
+    'إجمالي الطلاب'            : 'Total Students',
 
     /* ── منصة - MOTD ── */
     'آية كريمة'                : 'Quranic Verse',
@@ -184,12 +192,13 @@ window.EduLang = (function () {
     'فترة امتحانات'            : 'Exam period',
     'إجازة رسمية'              : 'Official holiday',
     'حدث خاص'                  : 'Special event',
-    'تعليم عن بُعد'            : 'Remote learning day',
+    'تعليم عن بُعد'            : 'Remote learning',
+    'تعليم عن بُعد 🏠'         : 'Remote Learning 🏠',
+    'يوم تعليم عن بُعد 🏠'     : 'Remote Learning Day 🏠',
     'طوارئ'                    : 'Emergency',
+    'حاضر من البيت'            : 'Present from home',
     'تفعيل يوم تعليم عن بُعد' : 'Activate remote learning day',
     'إلغاء يوم البُعد'         : 'Cancel remote day',
-    'حاضر من البيت'            : 'Present from home',
-    'يوم تعليم عن بُعد 🏠'     : 'Remote Learning Day 🏠',
 
     /* ── شريط أخبار ── */
     'حضور مرن للطلاب 16–23 يونيو — وزارة التربية والتعليم'
@@ -208,13 +217,33 @@ window.EduLang = (function () {
       : 'Reminder: Review attendance records before end of term',
     'برنامج تطوير المعلم المهني — التسجيل مفتوح حتى نهاية الشهر'
       : 'Professional Teacher Development — Registration open until month end',
+    'مساء الخير'               : 'Good Afternoon',
+    'صباح الخير'               : 'Good Morning',
+    'مساء النور'               : 'Good Evening',
+    'يوم موفق'                 : 'Have a great day',
+    'يوم موفق إن شاء الله'    : 'Have a great day, God willing',
 
-    /* ── VARK بانر ── */
+    /* ── VARK ── */
     'لم تُكمل/ي استبيان VARK بعد — اعرف/ي أسلوبك في التعلم واحصل/ي على توصيات مخصصة!'
       : 'You haven\'t completed the VARK survey yet — discover your learning style and get personalized recommendations!',
-    'أكمل/ي الاستبيان الآن ← Complete VARK Survey'
-      : 'Complete the survey now → Complete VARK Survey',
+
+    /* ── وقت ── */
+    'اليوم / Today'           : 'Today',
+    'أسبوع'                   : 'Week',
+    'شهر'                     : 'Month',
+    'سنة'                     : 'Year',
+    'العام'                   : 'Year',
+    'الفصل الدراسي'           : 'Term',
+    'الفصل'                   : 'Term',
+    'الحصة الحالية'           : 'Current Period',
+    'الحصة'                   : 'Period',
+    'الفترة'                   : 'Period',
   };
+
+  /* ─────────────────────────────────────────────────────────────
+   * ترتيب القاموس: الأطول أولاً (يمنع الاستبدال الجزئي)
+   * ──────────────────────────────────────────────────────────── */
+  const SORTED_DICT = Object.entries(DICT).sort((a, b) => b[0].length - a[0].length);
 
   /* ─────────────────────────────────────────────────────────────
    * الحالة الداخلية
@@ -223,7 +252,7 @@ window.EduLang = (function () {
   try { _lang = sessionStorage.getItem(STORAGE_KEY) || 'ar'; } catch (e) {}
 
   /* ─────────────────────────────────────────────────────────────
-   * تطبيق اللغة على عناصر data-ar / data-en
+   * data-ar / data-en attributes
    * ──────────────────────────────────────────────────────────── */
   function applyAttributes(lang) {
     const isEn = lang === 'en';
@@ -231,9 +260,6 @@ window.EduLang = (function () {
       const ar = el.getAttribute('data-ar');
       const en = el.getAttribute('data-en') || ar;
       el.textContent = isEn ? en : ar;
-      if (el.tagName !== 'BUTTON') {
-        el.style.direction = isEn ? 'ltr' : 'rtl';
-      }
     });
     document.querySelectorAll('[data-ar-html]').forEach(el => {
       const ar = el.getAttribute('data-ar-html');
@@ -248,10 +274,93 @@ window.EduLang = (function () {
   }
 
   /* ─────────────────────────────────────────────────────────────
-   * ترجمة نصوص ثابتة عبر القاموس (text nodes scan)
-   * يعمل مع الإعلانات الثابتة التي لم تُحوَّل لـ data-ar بعد
+   * STEP 1 — مطابقة نص كاملة من القاموس
+   * إذا كان محتوى الـ node كاملاً = مدخل في القاموس → استبدل
    * ──────────────────────────────────────────────────────────── */
-  // نحفظ النصوص الأصلية عند أول تشغيل
+  function matchExact(text) {
+    const t = text.trim();
+    if (DICT[t]) return text.replace(t, DICT[t]);
+    return null; // لا مطابقة
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+   * STEP 2 — فصل نمط "عربي / English"
+   * "بطاقة الخروج / Exit Ticket" → "Exit Ticket"
+   * "مساء الخير 🌤️ / Good Afternoon" → "Good Afternoon"
+   * ──────────────────────────────────────────────────────────── */
+  function extractEnFromBilingual(text) {
+    // يشترط وجود عربي AND " / " AND إنجليزي
+    if (!/[\u0600-\u06FF]/.test(text)) return null;
+    if (!text.includes(' / ')) return null;
+
+    const parts = text.split(' / ');
+    if (parts.length < 2) return null;
+
+    // نبحث من اليمين عن آخر تقسيم بحيث الجانب الأيسر يحتوي عربي والأيمن يحتوي لاتيني
+    for (let i = parts.length - 1; i >= 1; i--) {
+      const leftSide  = parts.slice(0, i).join(' / ');
+      const rightSide = parts.slice(i).join(' / ');
+      if (/[\u0600-\u06FF]/.test(leftSide) && /[a-zA-Z]/.test(rightSide)) {
+        return rightSide.trim();
+      }
+    }
+    return null;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+   * STEP 3 — استبدال بحدود الكلمة (آمن — لا تلف)
+   * يستخدم lookbehind/lookahead لمنع الاستبدال داخل الكلمات
+   * ──────────────────────────────────────────────────────────── */
+  // هل المتصفح يدعم lookbehind؟
+  let _supportsLookbehind = false;
+  try { new RegExp('(?<![\\u0600-\\u06FF])x'); _supportsLookbehind = true; } catch (e) {}
+
+  function applyWordBoundary(text) {
+    if (!/[\u0600-\u06FF]/.test(text)) return text; // لا عربي
+    let val = text;
+    for (const [ar, en] of SORTED_DICT) {
+      if (!val.includes(ar)) continue;
+      try {
+        if (_supportsLookbehind) {
+          const escaped = ar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          // الكلمة يجب أن لا تكون مسبوقة أو متبوعة بحرف عربي
+          const rex = new RegExp(
+            '(?<![\\u0600-\\u06FF\\u0660-\\u0669])' + escaped +
+            '(?![\\u0600-\\u06FF\\u0660-\\u0669])', 'g'
+          );
+          val = val.replace(rex, en);
+        } else {
+          // Fallback: استبدال كامل النص فقط إذا كانت الكلمة هي كل النص
+          const t = val.trim();
+          if (t === ar) { val = val.replace(ar, en); }
+        }
+      } catch (e) { /* تجاهل الخطأ */ }
+      if (!/[\u0600-\u06FF]/.test(val)) break;
+    }
+    return val;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+   * المحرك الرئيسي: يُطبِّق الطبقات الثلاث على TextNode
+   * ──────────────────────────────────────────────────────────── */
+  function translateTextNode(text) {
+    if (!/[\u0600-\u06FF]/.test(text)) return text; // لا عربي = لا تغيير
+
+    // 1. مطابقة كاملة
+    const exact = matchExact(text);
+    if (exact !== null) return exact;
+
+    // 2. فصل "AR / EN"
+    const bilingualEn = extractEnFromBilingual(text);
+    if (bilingualEn !== null) return bilingualEn;
+
+    // 3. استبدال بحدود الكلمة
+    return applyWordBoundary(text);
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+   * جمع TextNodes التي تحتوي عربي
+   * ──────────────────────────────────────────────────────────── */
   const _originals = new WeakMap();
 
   function snapshotTextNodes(root) {
@@ -260,13 +369,11 @@ window.EduLang = (function () {
       NodeFilter.SHOW_TEXT,
       {
         acceptNode(node) {
-          // تجاهل السكريبت والستايل والتعليقات
           const p = node.parentElement;
           if (!p) return NodeFilter.FILTER_REJECT;
           const tag = p.tagName;
           if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'CODE' || tag === 'PRE')
             return NodeFilter.FILTER_REJECT;
-          // فقط النصوص التي تحتوي على حروف عربية
           if (/[\u0600-\u06FF]/.test(node.nodeValue)) return NodeFilter.FILTER_ACCEPT;
           return NodeFilter.FILTER_REJECT;
         }
@@ -278,41 +385,33 @@ window.EduLang = (function () {
     return nodes;
   }
 
+  /* ─────────────────────────────────────────────────────────────
+   * تطبيق القاموس
+   * ──────────────────────────────────────────────────────────── */
   function applyDictionary(lang) {
     if (lang === 'ar') {
-      // استعادة النصوص الأصلية
       _originals.forEach((orig, node) => {
         if (node.parentNode) node.nodeValue = orig;
       });
       return;
     }
-    // ترجمة EN — نفحص النصوص الحالية
     const nodes = snapshotTextNodes(document.body);
     nodes.forEach(node => {
       if (!_originals.has(node)) _originals.set(node, node.nodeValue);
-      let val = node.nodeValue;
-      // نبحث عن كل مدخل في القاموس ونستبدله
-      Object.entries(DICT).forEach(([ar, en]) => {
-        if (val.includes(ar)) {
-          val = val.split(ar).join(en);
-        }
-      });
-      node.nodeValue = val;
+      const translated = translateTextNode(node.nodeValue);
+      if (translated !== node.nodeValue) node.nodeValue = translated;
     });
   }
 
   /* ─────────────────────────────────────────────────────────────
-   * تحديث اتجاه الصفحة ورقم اللغة
+   * اتجاه الصفحة
    * ──────────────────────────────────────────────────────────── */
   function applyDocumentLang(lang) {
-    const isEn = lang === 'en';
-    document.documentElement.lang = isEn ? 'en' : 'ar';
-    // لا نُغيِّر dir للصفحة كلها — كل عنصر يُدار بنفسه
-    // (لأن بعض الصفحات تعتمد على dir:rtl في CSS)
+    document.documentElement.lang = lang === 'en' ? 'en' : 'ar';
   }
 
   /* ─────────────────────────────────────────────────────────────
-   * تحديث زر اللغة في كل الصفحات
+   * تحديث أزرار اللغة
    * ──────────────────────────────────────────────────────────── */
   function updateLangBtns(lang) {
     document.querySelectorAll('[data-lang-toggle]').forEach(btn => {
@@ -322,16 +421,16 @@ window.EduLang = (function () {
   }
 
   /* ─────────────────────────────────────────────────────────────
-   * حقن زر اللغة في الهيدر تلقائياً
+   * حقن زر اللغة في الهيدر
    * ──────────────────────────────────────────────────────────── */
   function injectLangBtn() {
-    // تجنب التكرار
     if (document.querySelector('[data-lang-toggle]')) return;
 
     const target =
       document.querySelector('.header-right') ||
       document.querySelector('.header-actions') ||
       document.querySelector('#headerRight') ||
+      document.querySelector('.top-actions') ||
       document.querySelector('header');
 
     if (!target) return;
@@ -340,58 +439,47 @@ window.EduLang = (function () {
     btn.setAttribute('data-lang-toggle', '1');
     btn.title = _lang === 'en' ? 'تغيير إلى العربية' : 'Switch to English';
     btn.textContent = _lang === 'en' ? '🌐 العربية' : '🌐 English';
+    btn.className = 'edu-lang-btn';
     btn.style.cssText = `
       font-family: 'Tajawal', Arial, sans-serif;
       font-size: 13px;
       font-weight: 700;
       padding: 6px 14px;
       border-radius: 20px;
-      border: 1.5px solid var(--indigo, #6366f1);
+      border: 1.5px solid var(--brand, #6C3DD6);
       background: transparent;
-      color: var(--indigo, #6366f1);
+      color: var(--brand, #6C3DD6);
       cursor: pointer;
       transition: all .2s;
       letter-spacing: .3px;
       white-space: nowrap;
+      margin: 0 4px;
     `;
-    btn.onmouseover = () => {
-      btn.style.background = 'var(--indigo, #6366f1)';
-      btn.style.color = '#fff';
-    };
-    btn.onmouseout = () => {
-      btn.style.background = 'transparent';
-      btn.style.color = 'var(--indigo, #6366f1)';
-    };
+    btn.onmouseover = () => { btn.style.background = 'var(--brand,#6C3DD6)'; btn.style.color = '#fff'; };
+    btn.onmouseout  = () => { btn.style.background = 'transparent'; btn.style.color = 'var(--brand,#6C3DD6)'; };
     btn.onclick = () => toggle();
 
-    // نُدرج الزر قبل زر الخروج إن وُجد
-    const logoutBtn = target.querySelector('.logout-btn, [onclick*="Logout"], [onclick*="doLogout"]');
-    if (logoutBtn) {
-      target.insertBefore(btn, logoutBtn);
-    } else {
-      target.appendChild(btn);
-    }
+    const logoutBtn = target.querySelector(
+      '.logout-btn, [onclick*="Logout"], [onclick*="doLogout"], [data-logout]'
+    );
+    if (logoutBtn) target.insertBefore(btn, logoutBtn);
+    else           target.appendChild(btn);
   }
 
   /* ─────────────────────────────────────────────────────────────
-   * وظيفة setLang الرئيسية — تُغيِّر كل شيء
+   * setLang — الوظيفة الرئيسية
    * ──────────────────────────────────────────────────────────── */
   function setLang(lang) {
     _lang = lang;
     try { sessionStorage.setItem(STORAGE_KEY, lang); } catch (e) {}
-
     applyDocumentLang(lang);
     applyAttributes(lang);
     applyDictionary(lang);
     updateLangBtns(lang);
-
-    // أطلق الحدث لكل المكونات الديناميكية (MOTD, news ticker, إلخ)
     window.dispatchEvent(new CustomEvent('eduos-lang-change', { detail: { lang } }));
   }
 
-  function toggle() {
-    setLang(_lang === 'ar' ? 'en' : 'ar');
-  }
+  function toggle() { setLang(_lang === 'ar' ? 'en' : 'ar'); }
 
   /* ─────────────────────────────────────────────────────────────
    * MutationObserver — يُطبِّق الترجمة على المحتوى الديناميكي
@@ -403,37 +491,26 @@ window.EduLang = (function () {
       _mutationTimer = setTimeout(() => {
         applyAttributes('en');
         applyDictionary('en');
-      }, 120);
+      }, 150);
     }
   });
 
   /* ─────────────────────────────────────────────────────────────
-   * تهيئة عند تحميل DOM
+   * تهيئة
    * ──────────────────────────────────────────────────────────── */
   function init() {
     injectLangBtn();
     observer.observe(document.body, { childList: true, subtree: true });
-    if (_lang === 'en') {
-      setLang('en'); // طبِّق الترجمة المحفوظة
-    }
+    if (_lang === 'en') setLang('en');
   }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
-    init();
+    // DOM جاهز — ننتظر لحظة لتحميل بقية السكريبتات
+    setTimeout(init, 50);
   }
 
-  /* ─────────────────────────────────────────────────────────────
-   * الواجهة العامة
-   * ──────────────────────────────────────────────────────────── */
-  return {
-    get current() { return _lang; },
-    setLang,
-    toggle,
-    t(ar, en) { return _lang === 'en' ? en : ar; },
-    isEn() { return _lang === 'en'; },
-    addToDict(ar, en) { DICT[ar] = en; },
-  };
+  return { setLang, toggle, getLang: () => _lang };
 
 })();
