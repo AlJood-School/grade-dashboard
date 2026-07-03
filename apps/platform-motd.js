@@ -198,19 +198,12 @@ const TYPE_META = {
     `;
 
     if (isEn && item.textEn) {
-      // وضع إنجليزي: النص العربي الأصلي أعلى (مصغَّر + محجَّم) + الترجمة أدناه
+      // وضع إنجليزي — إنجليزي فقط، لا حرف عربي واحد
       card.innerHTML = `
         <div style="font-size:42px;margin-bottom:12px;filter:drop-shadow(0 0 12px ${meta.color})">${meta.icon}</div>
-        <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;color:${meta.color};opacity:.9;margin-bottom:14px;text-transform:uppercase">${meta.labelEn || meta.label}</div>
-
-        <!-- النص العربي الأصلي — دائماً موجود للحفاظ على الأصالة -->
-        <div style="direction:rtl;font-size:15px;font-weight:600;color:rgba(255,255,255,.45);line-height:1.8;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)">${item.text.replace(/\n/g,'<br>')}</div>
-
-        <!-- الترجمة الإنجليزية المعتمدة — رئيسية -->
-        <div style="font-size:19px;font-weight:700;color:#fff;line-height:1.75;margin-bottom:14px;text-shadow:0 2px 12px rgba(0,0,0,.6);font-style:italic">${(item.textEn||'').replace(/\n/g,'<br>')}</div>
-
-        <div style="font-size:11px;color:${meta.color};opacity:.85;margin-top:4px">${item.refEn || item.ref}</div>
-        <div style="font-size:10px;color:rgba(255,255,255,.3);margin-top:6px">Arabic text preserved as original • Translation for understanding only</div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;color:${meta.color};opacity:.9;margin-bottom:18px;text-transform:uppercase;direction:ltr">${meta.labelEn}</div>
+        <div style="font-size:20px;font-weight:700;color:#fff;line-height:1.75;margin-bottom:16px;text-shadow:0 2px 12px rgba(0,0,0,.6);font-style:italic;direction:ltr">${(item.textEn||'').replace(/\n/g,'<br>')}</div>
+        <div style="font-size:12px;color:${meta.color};opacity:.85;direction:ltr">${item.refEn || ''}</div>
       `;
     } else {
       // وضع عربي: العرض الكلاسيكي

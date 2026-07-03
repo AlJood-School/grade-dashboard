@@ -4,6 +4,26 @@
  * NAFAS FOR ARTIFICIAL INTELLIGENCE © 2026
  */
 
+/* ── تحميل platform-lang.js تلقائياً لكل صفحة ── */
+(function () {
+  if (window.EduLang) return; // محمَّل مسبقاً
+  const s = document.createElement('script');
+  // نحدد المسار بناءً على موقع platform-shield.js
+  const shieldScript = document.querySelector('script[src*="platform-shield"]');
+  let base = '../'; // افتراضي: الصفحة في apps/eduos-xxx/
+  if (shieldScript) {
+    const src = shieldScript.getAttribute('src');
+    // إذا كان المسار نسبياً مثل ../platform-shield.js
+    if (src.startsWith('../')) base = '../';
+    else if (src.includes('/apps/platform-shield')) {
+      base = src.replace('platform-shield.js', '');
+    }
+  }
+  s.src = base + 'platform-lang.js';
+  s.defer = true;
+  document.head.appendChild(s);
+})();
+
 (function () {
   "use strict";
 
