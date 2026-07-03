@@ -161,6 +161,28 @@ window.EduLang = (function () {
     'البريد الإلكتروني'        : 'Email',
     'كل شيء بخير'              : 'All good',
 
+    /* ── تقارير ── */
+    'تقرير الحضور'             : 'Attendance Report',
+    'تقرير الدرجات'            : 'Grades Report',
+    'تقرير السلوك'             : 'Behavior Report',
+    'تقرير الطالب'             : 'Student Report',
+    'تقرير المعلم'             : 'Teacher Report',
+    'تقرير المدرسة'            : 'School Report',
+    'تقرير الأداء'             : 'Performance Report',
+    'تقرير أسبوعي'             : 'Weekly Report',
+    'تقرير شهري'               : 'Monthly Report',
+    'توليد تقرير'              : 'Generate Report',
+    'تقرير'                    : 'Report',
+    'النسبة% / %'              : '%',
+    'النسبة%'                  : 'Att%',
+    'نسبة الحضور'              : 'Attendance Rate',
+    'نسبة'                     : 'Rate',
+    'سجّل/ت'                   : 'Registered',
+    'سجّل'                     : 'Registered',
+    'جارٍ توليد تقرير'         : 'Generating report',
+    'انتقل لصفحة التقارير'     : 'Go to reports page',
+    'تم توليد التقرير'         : 'Report generated',
+
     /* ── Quick Actions ── */
     'تسجيل اليوم'              : 'Record Today',
     'ابدأ الآن'                : 'Start Now',
