@@ -11,6 +11,7 @@
 <script src="../platform-lang.js" defer></script>
 <script src="../platform-motd.js" defer></script>
 <script src="../platform-agent-brain.js" defer></script>
+<script src="../platform-live-clock.js" defer></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -155,6 +156,36 @@ tr:hover td{background:var(--surface2)}
 .skeleton{background:linear-gradient(90deg,var(--border) 25%,var(--surface2) 50%,var(--border) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px}
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 
+/* ── KPI PROGRESS BAR ── */
+.kpi-bar{height:7px;background:rgba(0,0,0,0.08);border-radius:4px;margin-top:10px;overflow:hidden}
+.kpi-bar-fill{height:100%;border-radius:4px;transition:width .8s ease;background:linear-gradient(90deg,var(--emerald),#34D399)}
+.kpi-bar-fill.amber{background:linear-gradient(90deg,var(--amber),#FCD34D)}
+.kpi-bar-fill.rose{background:linear-gradient(90deg,var(--rose),#FB7185)}
+.kpi-bar-fill.brand{background:linear-gradient(90deg,var(--brand),var(--brand2))}
+.kpi-frac{font-size:11px;color:var(--text3);margin-top:4px;font-weight:600}
+
+/* ── KPI ACHIEVEMENT BADGE ── */
+.kpi-achieve{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:800;margin-top:8px}
+.kpi-achieve.full{background:#D1FAE5;color:#065F46}
+.kpi-achieve.warn{background:#FEF3C7;color:#92400E}
+.kpi-achieve.alert{background:#FEE2E2;color:#991B1B}
+
+/* ── LIVE CLOCK PILL ── */
+.clock-pill{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:700;color:#fff;margin-top:10px;backdrop-filter:blur(4px)}
+
+/* ── ATTENDANCE CYCLE GRID ── */
+.att-cycle-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+@media(max-width:900px){.att-cycle-grid{grid-template-columns:repeat(2,1fr)}}
+.att-cycle-card{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center;position:relative}
+.att-cycle-card .acc-pct{font-size:28px;font-weight:900;color:var(--emerald);line-height:1}
+.att-cycle-card .acc-pct.warn{color:var(--amber)}
+.att-cycle-card .acc-pct.alert{color:var(--rose)}
+.att-cycle-card .acc-label{font-size:12px;color:var(--text2);margin-top:4px;font-weight:700}
+.att-cycle-card .acc-frac{font-size:11px;color:var(--text3);margin-top:3px}
+.att-cycle-card .acc-bar{height:6px;background:var(--border);border-radius:3px;margin-top:8px;overflow:hidden}
+.att-cycle-card .acc-bar-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--emerald),#34D399);transition:width .8s ease}
+.acc-badge{position:absolute;top:10px;left:10px;font-size:10px;font-weight:800;background:#D1FAE5;color:#065F46;border-radius:10px;padding:2px 7px}
+
 /* ── ALERT BANNER ── */
 .alert-banner{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:12px;margin-bottom:12px;font-size:13px;font-weight:700}
 .alert-banner.warn{background:var(--amber-lt);border:1px solid rgba(217,119,6,0.25);color:var(--amber)}
@@ -209,6 +240,7 @@ tr:hover td{background:var(--surface2)}
   <div class="welcome-text">
     <h2 id="welcomeMsg">صباح النور 🌤️</h2>
     <p id="welcomeSub">جارٍ تحميل بيانات المدرسة... / Loading school data...</p>
+    <div class="clock-pill" data-live-clock="both"></div>
   </div>
   <div class="welcome-stats">
     <div class="w-stat">
@@ -258,28 +290,38 @@ tr:hover td{background:var(--surface2)}
   <div class="tab-panel active" id="panel-overview">
     <div id="overviewAlerts" style="margin-bottom:16px"></div>
     <div class="grid-4" style="margin-bottom:24px">
+      <!-- طلاب -->
       <div class="kpi b-brand">
         <div class="kpi-icon">👥</div>
         <div class="kpi-val" id="kpiStudents">—</div>
         <div class="kpi-label">إجمالي الطلاب / Total Students</div>
+        <div class="kpi-bar"><div class="kpi-bar-fill brand" id="kpiStudentsBar" style="width:100%"></div></div>
         <span class="kpi-delta neutral" id="kpiStudentsDelta">جارٍ التحميل</span>
       </div>
+      <!-- حضور -->
       <div class="kpi b-emerald">
         <div class="kpi-icon">✅</div>
         <div class="kpi-val" id="kpiAttend">—</div>
+        <div class="kpi-frac" id="kpiAttendFrac"></div>
         <div class="kpi-label">حضور اليوم / Today Attendance</div>
+        <div class="kpi-bar"><div class="kpi-bar-fill" id="kpiAttendBar" style="width:0%"></div></div>
+        <div id="kpiAttendAchieve"></div>
         <span class="kpi-delta up" id="kpiAttendDelta">—</span>
       </div>
+      <!-- كادر -->
       <div class="kpi b-amber">
         <div class="kpi-icon">👩‍🏫</div>
         <div class="kpi-val" id="kpiStaff">—</div>
         <div class="kpi-label">الكادر التعليمي / Staff</div>
+        <div class="kpi-bar"><div class="kpi-bar-fill amber" id="kpiStaffBar" style="width:100%"></div></div>
         <span class="kpi-delta neutral" id="kpiStaffDelta">—</span>
       </div>
+      <!-- تنبيهات -->
       <div class="kpi b-rose">
         <div class="kpi-icon">⚠️</div>
         <div class="kpi-val" id="kpiAlerts">—</div>
         <div class="kpi-label">تنبيهات عاجلة / Urgent Alerts</div>
+        <div id="kpiAlertsAchieve"></div>
         <span class="kpi-delta down" id="kpiAlertsDelta">—</span>
       </div>
     </div>
@@ -369,6 +411,15 @@ tr:hover td{background:var(--surface2)}
   <!-- ─── ATTENDANCE ─── -->
   <div class="tab-panel" id="panel-attendance">
     <p class="sec-title">📋 الحضور اليومي / Daily Attendance</p>
+
+    <!-- شبكة الحلقات — مستوحاة من البوابة القديمة -->
+    <div class="att-cycle-grid" id="attCycleGrid">
+      <div class="att-cycle-card"><div class="acc-pct" id="acc-students">—</div><div class="acc-label">حضور الطلاب</div><div class="acc-frac" id="acc-students-frac"></div><div class="acc-bar"><div class="acc-bar-fill" id="acc-students-bar" style="width:0%"></div></div></div>
+      <div class="att-cycle-card"><div class="acc-pct" id="acc-kg">—</div><div class="acc-label">🌸 الروضة / KG</div><div class="acc-frac" id="acc-kg-frac"></div><div class="acc-bar"><div class="acc-bar-fill" id="acc-kg-bar" style="width:0%"></div></div></div>
+      <div class="att-cycle-card"><div class="acc-pct" id="acc-c1">—</div><div class="acc-label">🟢 الحلقة الأولى / G1-4</div><div class="acc-frac" id="acc-c1-frac"></div><div class="acc-bar"><div class="acc-bar-fill" id="acc-c1-bar" style="width:0%"></div></div></div>
+      <div class="att-cycle-card"><div class="acc-pct" id="acc-c2">—</div><div class="acc-label">🔵 الحلقة الثانية / G5-8</div><div class="acc-frac" id="acc-c2-frac"></div><div class="acc-bar"><div class="acc-bar-fill" id="acc-c2-bar" style="width:0%"></div></div></div>
+    </div>
+
     <div class="grid-3" style="margin-bottom:20px">
       <div class="kpi b-emerald">
         <div class="kpi-icon">✅</div>
@@ -529,14 +580,40 @@ async function loadKPIs() {
       sb.from('student_flags').select('*', {count:'exact',head:true}).eq('resolved', false),
     ]);
     const pct = stuCount ? Math.round((attCount||0)/stuCount*100) : 0;
+    
+    // ── طلاب ──
     document.getElementById('kpiStudents').textContent = stuCount || '—';
-    document.getElementById('kpiStudentsDelta').textContent = `مسجّل/ة`;
+    document.getElementById('kpiStudentsDelta').textContent = `مسجّل/ة · Enrolled`;
+    
+    // ── حضور مع progress bar + شارة ──
     document.getElementById('kpiAttend').textContent = `${pct}%`;
+    document.getElementById('kpiAttendFrac').textContent = `${attCount||0} / ${stuCount||0} حاضر/ة`;
+    const attendBar = document.getElementById('kpiAttendBar');
+    if (attendBar) { attendBar.style.width = pct + '%'; if(pct<75) attendBar.classList.add('rose'); else if(pct<90) attendBar.classList.add('amber'); }
+    const attendAchieve = document.getElementById('kpiAttendAchieve');
+    if (attendAchieve) {
+      if (pct === 100) attendAchieve.innerHTML = '<span class="kpi-achieve full">✅ حضور كامل / Full Attendance</span>';
+      else if (pct >= 95) attendAchieve.innerHTML = '<span class="kpi-achieve full">⭐ ممتاز / Excellent</span>';
+      else if (pct < 75) attendAchieve.innerHTML = '<span class="kpi-achieve alert">⚠️ يحتاج متابعة / Needs Attention</span>';
+      else attendAchieve.innerHTML = '<span class="kpi-achieve warn">📊 مقبول / Acceptable</span>';
+    }
     document.getElementById('kpiAttendDelta').textContent = `${attCount||0} حاضر/ة اليوم`;
+    
+    // ── كادر ──
     document.getElementById('kpiStaff').textContent = staffCount || '—';
-    document.getElementById('kpiStaffDelta').textContent = 'معلم/ة';
+    document.getElementById('kpiStaffDelta').textContent = 'معلم/ة · Teacher';
+    
+    // ── تنبيهات مع شارة ──
     document.getElementById('kpiAlerts').textContent = alertCount || '0';
     document.getElementById('kpiAlertsDelta').textContent = alertCount > 0 ? '⚠️ تحتاج متابعة' : '✅ كل شيء بخير';
+    const alertsAchieve = document.getElementById('kpiAlertsAchieve');
+    if (alertsAchieve) {
+      if (!alertCount) alertsAchieve.innerHTML = '<span class="kpi-achieve full">✅ لا تنبيهات / All Clear</span>';
+      else if (alertCount >= 5) alertsAchieve.innerHTML = '<span class="kpi-achieve alert">🚨 عاجل / Urgent</span>';
+      else alertsAchieve.innerHTML = '<span class="kpi-achieve warn">⚠️ يحتاج مراجعة</span>';
+    }
+    
+    // ── welcome band ──
     document.getElementById('wStudents').textContent = stuCount || '—';
     document.getElementById('wAttend').textContent = `${pct}%`;
     document.getElementById('wPending').textContent = '—'; // updated by loadApprovals
@@ -661,10 +738,13 @@ async function loadAttendance() {
   if (!sb) return;
   try {
     const today = new Date().toISOString().split('T')[0];
-    const { data } = await sb.from('attendance_logs').select('class_name,status').eq('date',today).limit(500);
+    const { data } = await sb.from('attendance_logs').select('class_name,status,student_id').eq('date',today).limit(2000);
     if (!data) return;
     let present=0, absent=0, late=0;
     const cls = {};
+    // حسب الحلقة
+    const cycles = { kg:{p:0,t:0}, c1:{p:0,t:0}, c2:{p:0,t:0} };
+    
     data.forEach(r => {
       if (r.status==='present') present++;
       else if (r.status==='absent') absent++;
@@ -672,14 +752,55 @@ async function loadAttendance() {
       if (!cls[r.class_name]) cls[r.class_name]={present:0,absent:0,late:0,total:0};
       cls[r.class_name].total++;
       cls[r.class_name][r.status] = (cls[r.class_name][r.status]||0)+1;
+      // تصنيف الحلقة من اسم الفصل (KG1A, 1A-8C)
+      const cn = (r.class_name||'').toUpperCase();
+      const gradeMatch = cn.match(/^(\d+)/);
+      const grade = gradeMatch ? parseInt(gradeMatch[1]) : 0;
+      if (cn.includes('KG')) { cycles.kg.t++; if(r.status==='present') cycles.kg.p++; }
+      else if (grade >= 1 && grade <= 4) { cycles.c1.t++; if(r.status==='present') cycles.c1.p++; }
+      else if (grade >= 5) { cycles.c2.t++; if(r.status==='present') cycles.c2.p++; }
     });
+    
     document.getElementById('attPresent').textContent = present;
     document.getElementById('attAbsent').textContent = absent;
     document.getElementById('attLate').textContent = late;
-    document.getElementById('attBody').innerHTML = Object.entries(cls).map(([name,v]) => {
+    
+    // ── شبكة الحلقات مع progress bars ──
+    function fillCycleCard(idPfx, p, t) {
+      const pct = t ? Math.round(p/t*100) : 0;
+      const cls2 = pct>=90?'':'pct<75?"alert":"warn"';
+      const el = document.getElementById('acc-'+idPfx);
+      if (el) { el.textContent = pct+'%'; el.className = 'acc-pct' + (pct<75?' alert':pct<90?' warn':''); }
+      const frac = document.getElementById('acc-'+idPfx+'-frac');
+      if (frac) frac.textContent = `${p} / ${t}`;
+      const bar = document.getElementById('acc-'+idPfx+'-bar');
+      if (bar) { bar.style.width = pct+'%'; if(pct<75) { bar.style.background='linear-gradient(90deg,var(--rose),#FB7185)'; } else if(pct<90){ bar.style.background='linear-gradient(90deg,var(--amber),#FCD34D)'; } }
+      // شارة حضور كامل
+      const card = el?.closest('.att-cycle-card');
+      if (card && pct===100) { let b=card.querySelector('.acc-badge'); if(!b){b=document.createElement('span');b.className='acc-badge';card.appendChild(b);} b.textContent='✅ كامل'; }
+    }
+    fillCycleCard('students', present, present+absent+late);
+    fillCycleCard('kg', cycles.kg.p, cycles.kg.t);
+    fillCycleCard('c1', cycles.c1.p, cycles.c1.t);
+    fillCycleCard('c2', cycles.c2.p, cycles.c2.t);
+    
+    document.getElementById('attBody').innerHTML = Object.entries(cls).sort((a,b)=>a[0].localeCompare(b[0])).map(([name,v]) => {
       const pct = Math.round(v.present/v.total*100||0);
-      return `<tr><td style="font-weight:700">${name}</td><td>—</td><td>${v.present}</td><td>${v.absent}</td><td><span class="chip ${pct>=90?'chip-green':pct>=75?'chip-amber':'chip-red'}">${pct}%</span></td><td><span class="chip ${pct>=90?'chip-green':'chip-amber'}">${pct>=90?'ممتاز':'مقبول'}</span></td></tr>`;
-    }).join('');
+      const barColor = pct>=90?'var(--emerald)':pct>=75?'var(--amber)':'var(--rose)';
+      return `<tr>
+        <td style="font-weight:700">${name}</td>
+        <td>—</td>
+        <td style="font-weight:700;color:var(--emerald)">${v.present}</td>
+        <td style="color:var(--rose)">${v.absent}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;min-width:50px"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px"></div></div>
+            <span class="chip ${pct>=90?'chip-green':pct>=75?'chip-amber':'chip-red'}">${pct}%</span>
+          </div>
+        </td>
+        <td><span class="chip ${pct>=90?'chip-green':'chip-amber'}">${pct>=90?'✅ ممتاز':'📊 مقبول'}</span></td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text3)">لا بيانات حضور اليوم / No attendance data today</td></tr>';
   } catch(e) { console.warn('attendance:', e); }
 }
 
