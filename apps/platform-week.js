@@ -24,8 +24,8 @@ const EDOOS_ACADEMIC_CALENDAR = {
     { name: 'نهاية العام',     start: '2026-07-03', end: '2026-08-31' },
   ],
 
-  // ── عطلة نهاية الأسبوع: الجمعة والسبت ──────────────────────
-  weekendDays: [5, 6], // 5=Friday, 6=Saturday (JS: 0=Sun..6=Sat)
+  // ── عطلة نهاية الأسبوع: الأحد والسبت (مدرسة الجود: الدوام الاثنين–الجمعة) ──
+  weekendDays: [0, 6], // 0=Sunday, 6=Saturday (JS: 0=Sun..6=Sat) — AlJood: Mon–Fri
 };
 
 /**
