@@ -7,11 +7,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="../platform-lang.js" defer></script>
 <script src="../platform-shield.js" defer></script>
 <script src="../platform-agent-brain.js" defer></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Tajawal',Arial,sans-serif;background:#F8FAFC;color:#111827;min-height:100vh;}
+  body{
+    margin: 0;
+    padding: 0;font-family:'Tajawal',Arial,sans-serif;background:#F8FAFC;color:#111827;min-height:100vh;}
 
   /* Header */
   .app-header{
@@ -156,6 +159,19 @@
   .ai-loading{text-align:center;padding:24px;color:#6C3DD6;}
   @keyframes spin{to{transform:rotate(360deg)}}
   .spinner{width:32px;height:32px;border:3px solid #EDE9FE;border-top-color:#6C3DD6;border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px;}
+
+  /* Lesson builder */
+  .lesson-builder{margin-top:14px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;overflow:hidden;}
+  .lesson-builder-header{padding:10px 14px;background:#F3F4F6;border-bottom:1px solid #E5E7EB;display:flex;justify-content:space-between;align-items:center;}
+  .lesson-builder-title{font-size:13px;font-weight:700;color:#374151;}
+  .lesson-table{width:100%;border-collapse:collapse;}
+  .lesson-table th{font-size:11px;font-weight:700;color:#6B7280;padding:7px 10px;background:#F9FAFB;border-bottom:1px solid #E5E7EB;text-align:right;}
+  .lesson-table td{padding:6px 8px;border-bottom:1px solid #F3F4F6;vertical-align:middle;}
+  .lesson-table tr:last-child td{border-bottom:none;}
+  .lesson-table input,.lesson-table select{border:1px solid #E5E7EB;border-radius:6px;padding:5px 8px;font-size:12px;font-family:'Tajawal',Arial,sans-serif;background:white;width:100%;}
+  .lesson-row-num{font-size:11px;font-weight:700;color:#9CA3AF;text-align:center;min-width:28px;}
+  .lesson-triggers-badge{font-size:10px;background:#FEF3C7;color:#D97706;border-radius:4px;padding:2px 6px;white-space:nowrap;}
+  .lesson-builder-footer{padding:10px 14px;border-top:1px solid #E5E7EB;display:flex;gap:8px;align-items:center;}
 </style>
 </head>
 <body>
@@ -284,8 +300,15 @@
       </div>
     </div>
 
-    <!-- Step 2: Unit details -->
+    <!-- Step 2: Unit details + lesson sequence builder -->
     <div id="step-2" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="font-size:15px;font-weight:800;color:#111827;">تفصيل الوحدات وتسلسل الدروس</div>
+        <button class="btn btn-success btn-sm" onclick="saveLessonSequence()" style="width:auto;">💾 حفظ خريطة الدروس</button>
+      </div>
+      <div style="background:#EDE9FE;border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13px;color:#4C1D95;">
+        📚 أدخلي تسلسل الدروس لكل وحدة — سيُستخدَم لملء المسار الأسبوعي تلقائياً وتنبيهك بمواعيد التقييم.
+      </div>
       <div id="unit-details-list">
         <div style="text-align:center;padding:40px;color:#9CA3AF;">
           انتهِ من الخطوة الأولى أولاً لتظهر تفاصيل الوحدات هنا
@@ -530,37 +553,215 @@ function renderPlan(totalWeeks) {
   renderWeeklyDetail();
 }
 
+// ── _lessonData: unitIdx → [{title, type, triggers, periods}] ──
+let _lessonData = {};
+
 function renderUnitDetails() {
   const { units = [] } = _plan;
-  document.getElementById('unit-details-list').innerHTML = units.map(u => `
-    <div style="background:white;border-radius:12px;border:1px solid #E5E7EB;padding:20px;margin-bottom:16px;border-top:4px solid ${u.color};">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-        <div style="font-size:16px;font-weight:800;color:#111827;">${u.unit_name}</div>
-        <span style="background:${u.color}20;color:${u.color};padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;">
-          الأسبوع ${u.week_start} – ${u.week_end}
-        </span>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;">
-        <div style="background:#F9FAFB;border-radius:8px;padding:12px;text-align:center;">
-          <div style="font-size:22px;font-weight:800;color:${u.color};">${u.weeks_allocated}</div>
-          <div style="font-size:11px;color:#6B7280;">أسبوع</div>
-        </div>
-        <div style="background:#F9FAFB;border-radius:8px;padding:12px;text-align:center;">
-          <div style="font-size:22px;font-weight:800;color:#111827;">${u.lessons_count || '—'}</div>
-          <div style="font-size:11px;color:#6B7280;">درس</div>
-        </div>
-        <div style="background:#F9FAFB;border-radius:8px;padding:12px;text-align:center;">
-          <div style="font-size:14px;font-weight:700;color:#111827;">${u.pages_from ? `${u.pages_from}–${u.pages_to}` : '—'}</div>
-          <div style="font-size:11px;color:#6B7280;">الصفحات</div>
-        </div>
-      </div>
-      ${u.objectives?.length ? `
-      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">الأهداف:</div>
-      <ul style="font-size:13px;color:#374151;padding-right:16px;line-height:1.8;">
-        ${u.objectives.map(o => `<li>${o}</li>`).join('')}
-      </ul>` : ''}
-    </div>
-  `).join('') || '<div style="text-align:center;padding:40px;color:#9CA3AF;">لا توجد وحدات بعد</div>';
+  if (!units.length) {
+    document.getElementById('unit-details-list').innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;">لا توجد وحدات بعد</div>';
+    return;
+  }
+
+  // Load existing lesson data from curriculum_map if available (async)
+  loadExistingLessonSequence();
+
+  document.getElementById('unit-details-list').innerHTML = units.map((u, uidx) => {
+    const color  = u.color || '#6C3DD6';
+    const pages  = u.pages_from ? (u.pages_from + '–' + u.pages_to) : '—';
+    const weeks  = u.week_start + '–' + u.week_end;
+
+    return '<div style="background:white;border-radius:12px;border:1px solid #E5E7EB;padding:20px;margin-bottom:16px;border-top:4px solid ' + color + ';">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'
+      + '<div style="font-size:16px;font-weight:800;color:#111827;">' + u.unit_name + '</div>'
+      + '<span style="background:' + color + '20;color:' + color + ';padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;">الأسبوع ' + weeks + '</span>'
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;">'
+      + '<div style="background:#F9FAFB;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:800;color:' + color + ';">' + (u.weeks_allocated||'—') + '</div><div style="font-size:11px;color:#6B7280;">أسبوع</div></div>'
+      + '<div style="background:#F9FAFB;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:800;color:#111827;" id="lessons-count-' + uidx + '">' + (u.lessons_count||'—') + '</div><div style="font-size:11px;color:#6B7280;">درس</div></div>'
+      + '<div style="background:#F9FAFB;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:14px;font-weight:700;color:#111827;">' + pages + '</div><div style="font-size:11px;color:#6B7280;">الصفحات</div></div>'
+      + '</div>'
+
+      // Lesson sequence builder
+      + '<div class="lesson-builder" id="lesson-builder-' + uidx + '">'
+      + '<div class="lesson-builder-header">'
+      + '<span class="lesson-builder-title">📖 تسلسل الدروس — ' + u.unit_name + '</span>'
+      + '<button onclick="addLessonRow(' + uidx + ')" style="font-size:12px;background:#EDE9FE;color:#6C3DD6;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-family:\'Tajawal\',Arial,sans-serif;">+ إضافة درس</button>'
+      + '</div>'
+      + '<table class="lesson-table"><thead><tr>'
+      + '<th style="width:30px;">#</th>'
+      + '<th>عنوان الدرس</th>'
+      + '<th style="width:110px;">النوع</th>'
+      + '<th style="width:140px;">يستدعي تقييماً</th>'
+      + '<th style="width:60px;">فترات</th>'
+      + '<th style="width:30px;"></th>'
+      + '</tr></thead>'
+      + '<tbody id="lesson-rows-' + uidx + '"></tbody>'
+      + '</table>'
+      + '<div class="lesson-builder-footer">'
+      + '<span style="font-size:11px;color:#9CA3AF;" id="lesson-count-badge-' + uidx + '">0 درس</span>'
+      + '</div>'
+      + '</div>'
+
+      + '</div>';
+  }).join('');
+
+  // Initialize lesson data structure for each unit
+  units.forEach((_, uidx) => {
+    if (!_lessonData[uidx]) _lessonData[uidx] = [];
+    renderLessonRows(uidx);
+  });
+}
+
+function renderLessonRows(unitIdx) {
+  const tbody = document.getElementById('lesson-rows-' + unitIdx);
+  if (!tbody) return;
+  const rows = _lessonData[unitIdx] || [];
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:16px;font-size:12px;color:#9CA3AF;">اضغطي "+ إضافة درس" لبدء تسلسل الدروس</td></tr>';
+  } else {
+    tbody.innerHTML = rows.map((row, ridx) => {
+      const isAssessment = row.item_type === 'exam' || row.item_type === 'quiz';
+      return '<tr id="lesson-row-' + unitIdx + '-' + ridx + '">'
+        + '<td class="lesson-row-num">' + (ridx + 1) + '</td>'
+        + '<td><input type="text" value="' + (row.lesson_title||'').replace(/"/g,'&quot;') + '" placeholder="عنوان الدرس..." onchange="updateLessonField(' + unitIdx + ',' + ridx + ',\'lesson_title\',this.value)" style="min-width:160px;"></td>'
+        + '<td><select onchange="updateLessonField(' + unitIdx + ',' + ridx + ',\'item_type\',this.value)">'
+        + ['lesson','quiz','exam','project','activity','review'].map(t => {
+            const labels = {lesson:'📖 درس', quiz:'❓ قصير', exam:'📝 اختبار', project:'🔬 مشروع', activity:'🎨 نشاط', review:'🔄 مراجعة'};
+            return '<option value="' + t + '"' + (row.item_type === t ? ' selected' : '') + '>' + (labels[t]||t) + '</option>';
+          }).join('')
+        + '</select></td>'
+        + '<td style="text-align:center;">'
+        + (isAssessment
+          ? '<span class="lesson-triggers-badge">⚡ بعد الدرس ' + ridx + '</span>'
+          : '<label style="font-size:12px;color:#6B7280;cursor:pointer;"><input type="checkbox" ' + (row.triggers_assessment ? 'checked' : '') + ' onchange="updateLessonField(' + unitIdx + ',' + ridx + ',\'triggers_assessment\',this.checked)" style="width:auto;margin-left:4px;"> يستدعي تقييم</label>')
+        + '</td>'
+        + '<td><input type="number" value="' + (row.estimated_periods||1) + '" min="1" max="4" onchange="updateLessonField(' + unitIdx + ',' + ridx + ',\'estimated_periods\',Number(this.value))"></td>'
+        + '<td><button onclick="removeLessonRow(' + unitIdx + ',' + ridx + ')" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:14px;" title="حذف">✕</button></td>'
+        + '</tr>';
+    }).join('');
+  }
+
+  // Update count badge
+  const badge = document.getElementById('lesson-count-badge-' + unitIdx);
+  if (badge) badge.textContent = rows.length + ' درس';
+
+  // Update unit lessons_count stat
+  const countEl = document.getElementById('lessons-count-' + unitIdx);
+  if (countEl && rows.length) countEl.textContent = rows.length;
+}
+
+function addLessonRow(unitIdx) {
+  if (!_lessonData[unitIdx]) _lessonData[unitIdx] = [];
+  _lessonData[unitIdx].push({lesson_title:'', item_type:'lesson', triggers_assessment:false, estimated_periods:1});
+  renderLessonRows(unitIdx);
+}
+
+function removeLessonRow(unitIdx, rowIdx) {
+  if (!_lessonData[unitIdx]) return;
+  _lessonData[unitIdx].splice(rowIdx, 1);
+  renderLessonRows(unitIdx);
+}
+
+function updateLessonField(unitIdx, rowIdx, field, value) {
+  if (!_lessonData[unitIdx]) return;
+  if (!_lessonData[unitIdx][rowIdx]) return;
+  _lessonData[unitIdx][rowIdx][field] = value;
+  // Re-render to update triggers badge
+  if (field === 'item_type') renderLessonRows(unitIdx);
+}
+
+async function saveLessonSequence() {
+  const { units = [] } = _plan;
+  if (!units.length) { showToast('أنشئ الخطة أولاً', 'warning'); return; }
+
+  const subj    = document.getElementById('s-subject').value.trim();
+  const classId = document.getElementById('s-class').value;
+  const term    = Number(document.getElementById('s-term').value);
+  if (!subj || !classId) { showToast('أدخلي المادة والصف أولاً', 'warning'); return; }
+
+  // Build flat list of all lessons with unit context
+  const allRows = [];
+  units.forEach((u, uidx) => {
+    const rows = _lessonData[uidx] || [];
+    rows.forEach((row, ridx) => {
+      if (!row.lesson_title) return;
+      allRows.push({
+        subject:     subj,
+        grade:       classId,
+        term,
+        unit_number: uidx + 1,
+        unit_name:   u.unit_name,
+        lesson_number: ridx + 1,
+        lesson_title:  row.lesson_title,
+        item_type:     row.item_type || 'lesson',
+        triggers_assessment: !!(row.triggers_assessment || row.item_type === 'exam' || row.item_type === 'quiz'),
+        assessment_type:     (row.item_type === 'exam' || row.item_type === 'quiz') ? row.item_type : null,
+        estimated_periods:   row.estimated_periods || 1,
+        teacher_id:  _user.id,
+        school_id:   _user.school_id || null,
+        updated_at:  new Date().toISOString(),
+      });
+    });
+  });
+
+  if (!allRows.length) { showToast('أضيفي دروساً أولاً', 'warning'); return; }
+
+  // Delete existing then re-insert
+  await _supabase.from('curriculum_map')
+    .delete().eq('subject', subj).eq('grade', classId).eq('term', term).eq('teacher_id', _user.id);
+
+  const { error } = await _supabase.from('curriculum_map').insert(allRows);
+  if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+
+  // Also save lessons_sequence to semester_plans
+  const totalLessons = allRows.filter(r => r.item_type === 'lesson').length;
+  const lessonsJson  = allRows.map(r => ({
+    lesson_number: r.lesson_number,
+    lesson_title: r.lesson_title,
+    item_type: r.item_type,
+    unit_name: r.unit_name,
+    triggers_assessment: r.triggers_assessment,
+    estimated_periods: r.estimated_periods,
+  }));
+  await _supabase.from('semester_plans')
+    .update({ lessons_sequence: lessonsJson, total_lessons: totalLessons })
+    .eq('teacher_id', _user.id).eq('subject_name', subj).eq('class_id', classId)
+    .eq('academic_year', '2025-2026').eq('term', term);
+
+  showToast('✅ تم حفظ خريطة الدروس (' + allRows.length + ' عنصر)', 'success');
+}
+
+async function loadExistingLessonSequence() {
+  const subj    = document.getElementById('s-subject').value.trim();
+  const classId = document.getElementById('s-class').value;
+  const term    = Number(document.getElementById('s-term').value);
+  if (!subj || !classId || !_user.id) return;
+
+  const { data } = await _supabase.from('curriculum_map')
+    .select('*').eq('subject', subj).eq('grade', classId).eq('term', term)
+    .eq('teacher_id', _user.id).order('unit_number').order('lesson_number');
+
+  if (!data || !data.length) return;
+
+  // Group by unit_number
+  _lessonData = {};
+  const { units = [] } = _plan;
+  data.forEach(row => {
+    const uidx = (row.unit_number - 1);
+    if (!_lessonData[uidx]) _lessonData[uidx] = [];
+    _lessonData[uidx].push({
+      lesson_title:        row.lesson_title,
+      item_type:           row.item_type,
+      triggers_assessment: row.triggers_assessment,
+      estimated_periods:   row.estimated_periods,
+    });
+  });
+
+  // Re-render rows
+  units.forEach((_, uidx) => renderLessonRows(uidx));
+  showToast('📚 تم تحميل تسلسل الدروس المحفوظ (' + data.length + ' عنصر)', 'info');
 }
 
 function renderWeeklyDetail() {
