@@ -242,7 +242,8 @@ const TYPE_META = {
 
   // أول ظهور بعد 5 ثوانٍ، ثم كل دقيقتين
   setTimeout(showNext, 5000);
-  setInterval(showNext, 120000);
+  // PAUSED — re-enable after portal inspection
+  // setInterval(showNext, 120000);
 
   window.EduMOTD = window.EduMOTD || {};
   window.EduMOTD.showNow = showNext;
