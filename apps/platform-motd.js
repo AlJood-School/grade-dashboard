@@ -241,7 +241,8 @@ const TYPE_META = {
   }
 
   // أول ظهور بعد 5 ثوانٍ، ثم كل دقيقتين
-  setTimeout(showNext, 5000);
+  // PAUSED — re-enable after portal inspection
+  // setTimeout(showNext, 5000);
   // PAUSED — re-enable after portal inspection
   // setInterval(showNext, 120000);
 
