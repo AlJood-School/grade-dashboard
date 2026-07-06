@@ -689,15 +689,15 @@ async function loadOverview() {
         </div>`).join('') || '<div class="empty"><p>لا بيانات / No data</p></div>';
     }
     // Urgent flags
-    const { data: flags } = await sb.from('student_flags').select('id,description,severity,created_at,students!inner(name_ar,class_name)').eq('resolved', false).order('created_at',{ascending:false}).limit(5);
+    const { data: flags } = await sb.from('behavior_incidents').select('id,description,degree,created_at,student_name,class_name').order('created_at',{ascending:false}).limit(5);
     document.getElementById('urgentFlags').innerHTML = (flags||[]).map(f => `
       <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--rose-lt);border:1px solid rgba(225,29,72,0.2);border-radius:10px;margin-bottom:8px">
         <span>⚠️</span>
         <div>
-          <div style="font-weight:800;font-size:13px;color:var(--text)">${f.students?.name_ar||'—'} · ${f.students?.class_name||''}</div>
+          <div style="font-weight:800;font-size:13px;color:var(--text)">${f.student_name||'—'} · ${f.class_name||''}</div>
           <div style="font-size:12px;color:var(--text2)">${f.description||'—'}</div>
         </div>
-        <span class="chip ${f.severity==='high'?'chip-red':f.severity==='medium'?'chip-amber':'chip-green'}" style="margin-right:auto">${f.severity||'—'}</span>
+        <span class="chip ${f.degree>=3?'chip-red':f.degree>=2?'chip-amber':'chip-green'}" style="margin-right:auto">درجة ${f.degree||'—'}</span>
       </div>`).join('') || '<div class="empty" style="padding:20px"><p>لا تنبيهات / No flags ✅</p></div>';
   } catch(e) { console.warn('overview:', e); }
 }
@@ -706,9 +706,9 @@ async function loadAllStudents() {
   if (!sb) return;
   const cls = document.getElementById('stuClassFilter')?.value;
   try {
-    let q = sb.from('students').select('id,name_ar,name_en,class_name,attendance_pct,reinforcement_stars');
+    let q = sb.from('students').select('id,name,name_en,grade,class_name,student_number');
     if (cls) q = q.eq('class_name', cls);
-    const { data } = await q.order('name_ar').limit(300);
+    const { data } = await q.order('name').limit(300);
     allStudentsData = data||[];
     const classes = [...new Set(allStudentsData.map(s=>s.class_name).filter(Boolean))];
     const cf = document.getElementById('stuClassFilter');
@@ -880,12 +880,12 @@ function switchTab(name, btn) {
 async function loadStaff() {
   if (!sb) return;
   try {
-    const { data } = await sb.from('staff_profiles').select('id,name_ar,role,class_name').order('name_ar').limit(100);
+    const { data } = await sb.from('staff_profiles').select('id,name_ar,role_key,role_title_ar,subject_ar,homeroom_classes').order('name_ar').limit(100);
     document.getElementById('staffBody').innerHTML = (data||[]).map((s,i) => `<tr>
       <td>${i+1}</td>
       <td style="font-weight:700;color:var(--text)">${s.name_ar||'—'}</td>
-      <td>${s.role||'—'}</td>
-      <td>${s.class_name||'—'}</td>
+      <td>${s.role_title_ar||s.role_key||'—'}</td>
+      <td>${Array.isArray(s.homeroom_classes)?s.homeroom_classes.join(', '):(s.homeroom_classes||s.subject_ar||'—')}</td>
       <td>—</td><td>—</td>
       <td><span class="chip chip-green">نشط/ة / Active</span></td>
     </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">لا بيانات / No data</td></tr>';
