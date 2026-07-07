@@ -345,23 +345,67 @@
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(7,20,20,0.82);
-    backdrop-filter: blur(4px);
+    background: rgba(7,20,20,0.93);
+    backdrop-filter: blur(6px);
     z-index: 1000;
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
+    text-align: center;
+    padding: 24px;
   }
   .loading-overlay.show { display: flex; }
   .loading-spinner {
-    width: 48px; height: 48px;
+    width: 52px; height: 52px;
     border: 3px solid rgba(201,168,76,0.3);
     border-top-color: var(--gold);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
+    margin-bottom: 8px;
   }
-  .loading-text { color: var(--gold-light); font-size: 15px; font-weight: 500; }
+  .loading-greeting {
+    color: var(--gold);
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .loading-name {
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: 600;
+    margin-top: -4px;
+  }
+  .loading-role-lbl {
+    color: rgba(255,255,255,0.55);
+    font-size: 13px;
+    margin-top: 2px;
+    border: 1px solid rgba(201,168,76,0.3);
+    padding: 3px 14px;
+    border-radius: 20px;
+  }
+  .loading-text { color: var(--gold-light); font-size: 14px; font-weight: 500; margin-top: 6px; }
+
+  /* Farewell overlay */
+  .farewell-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(7,20,20,0.97);
+    backdrop-filter: blur(8px);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 14px;
+    text-align: center;
+    padding: 24px;
+  }
+  .farewell-overlay.show { display: flex; }
+  .farewell-icon { font-size: 52px; margin-bottom: 4px; }
+  .farewell-title { color: var(--gold); font-size: 24px; font-weight: 700; }
+  .farewell-sub { color: rgba(255,255,255,0.75); font-size: 16px; line-height: 1.7; max-width: 320px; }
+  .farewell-dots { color: rgba(201,168,76,0.5); font-size: 13px; margin-top: 8px; }
 
   /* Mobile */
   @media (max-width: 520px) {
@@ -374,9 +418,20 @@
 </head>
 <body>
 
-<!-- Loading overlay -->
+<!-- Farewell overlay (logout / session expiry) -->
+<div class="farewell-overlay" id="farewellOverlay">
+  <div class="farewell-icon" id="farewellIcon">🌙</div>
+  <div class="farewell-title" id="farewellTitle">في حفظ الله ورعايته</div>
+  <div class="farewell-sub" id="farewellSub">نراكِ في الجلسة القادمة بإذن الله 🤍<br>تم تسجيل الخروج بأمان</div>
+  <div class="farewell-dots" id="farewellDots">جارٍ العودة لصفحة الدخول…</div>
+</div>
+
+<!-- Loading overlay (post-login transition) -->
 <div class="loading-overlay" id="loadingOverlay">
   <div class="loading-spinner"></div>
+  <div class="loading-greeting" id="loadingGreeting"></div>
+  <div class="loading-name" id="loadingName"></div>
+  <div class="loading-role-lbl" id="loadingRoleLbl"></div>
   <div class="loading-text" id="loadingText">جارٍ التحقق من هويتك…</div>
 </div>
 
@@ -736,15 +791,28 @@ async function doLogin() {
       return;
     }
 
-    // 4 — Show role badge & redirect
+    // 4 — Show warm welcome & redirect
     const labels = currentLang === 'ar' ? ROLE_LABELS_AR : ROLE_LABELS_EN;
     document.getElementById('roleIcon').textContent  = '✅';
     document.getElementById('roleLabel').textContent = labels[roleKey] || roleKey;
     document.getElementById('roleBadge').classList.add('show');
-    document.getElementById('loadingText').textContent = `${labels[roleKey] || roleKey} — ${s.roleRedirect}`;
+
+    // Get user first name from session
+    const _session = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+    const _fullNameAr = _session.full_name || '';
+    const _fullNameEn = _session.name_en || '';
+    const _firstName = currentLang === 'ar'
+      ? (_fullNameAr.split(' ')[0] || _fullNameAr)
+      : (_fullNameEn.split(' ')[0] || _fullNameAr.split(' ')[0] || '');
+
+    const _greeting = getTimeGreeting(currentLang);
+    document.getElementById('loadingGreeting').textContent = _greeting.text;
+    document.getElementById('loadingName').textContent = _firstName ? `${_greeting.prefix}${_firstName}` : '';
+    document.getElementById('loadingRoleLbl').textContent = labels[roleKey] || roleKey;
+    document.getElementById('loadingText').textContent = currentLang === 'ar' ? 'جارٍ التوجيه إلى لوحتك…' : 'Redirecting to your dashboard…';
 
     const route = ROLE_ROUTES[roleKey] || '../eduos-hub/index.html';
-    setTimeout(() => { window.location.href = route; }, 900);
+    setTimeout(() => { window.location.href = route; }, 1800);
 
   } catch (err) {
     console.error(err);
@@ -777,10 +845,70 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Enter') doLogin();
 });
 
-/* Auto-idle logout (15 min) */
+/* ── Time-based greeting ── */
+function getTimeGreeting(lang) {
+  const h = new Date().getHours();
+  if (lang === 'en') {
+    if (h >= 5  && h < 12) return { text: 'Good Morning ☀️',   prefix: '' };
+    if (h >= 12 && h < 17) return { text: 'Good Afternoon 🌤️', prefix: '' };
+    if (h >= 17 && h < 21) return { text: 'Good Evening 🌅',   prefix: '' };
+    return { text: 'Good Night 🌙', prefix: '' };
+  }
+  if (h >= 5  && h < 12) return { text: 'صباح الخير 🌅',  prefix: '' };
+  if (h >= 12 && h < 17) return { text: 'مساء الخير ☀️',  prefix: '' };
+  if (h >= 17 && h < 21) return { text: 'مساء النور 🌆',  prefix: '' };
+  return { text: 'طابت ليلتك 🌙', prefix: '' };
+}
+
+/* ── Farewell overlay ── */
+function showFarewell(reason) {
+  const isAr = (currentLang || 'ar') === 'ar';
+  const icon = document.getElementById('farewellIcon');
+  const title = document.getElementById('farewellTitle');
+  const sub = document.getElementById('farewellSub');
+  const dots = document.getElementById('farewellDots');
+  if (reason === 'idle') {
+    if (icon) icon.textContent = '⏰';
+    title.textContent = isAr ? 'انتهت جلستك تلقائياً' : 'Session expired';
+    sub.innerHTML = isAr
+      ? 'تم تسجيل خروجك تلقائياً لحمايتك 🔒<br>نراكِ في الجلسة القادمة بإذن الله 🤍'
+      : 'You were logged out automatically for your security 🔒<br>See you next time!';
+  } else {
+    if (icon) icon.textContent = '🌙';
+    title.textContent = isAr ? 'في حفظ الله ورعايته' : 'Goodbye!';
+    sub.innerHTML = isAr
+      ? 'نراكِ في الجلسة القادمة بإذن الله 🤍<br>تم تسجيل الخروج بأمان'
+      : 'See you next time! Logged out safely.';
+  }
+  dots.textContent = isAr ? 'جارٍ العودة لصفحة الدخول…' : 'Returning to login…';
+  document.getElementById('farewellOverlay').classList.add('show');
+}
+
+/* ── Check for ?bye param on page load ── */
+(function checkByeParam() {
+  const p = new URLSearchParams(window.location.search);
+  const bye = p.get('bye');
+  if (bye) {
+    sessionStorage.removeItem('edoos_user');
+    showFarewell(bye === 'idle' ? 'idle' : 'manual');
+    setTimeout(() => {
+      document.getElementById('farewellOverlay').classList.remove('show');
+      // Clean URL
+      history.replaceState({}, '', window.location.pathname);
+    }, 3500);
+  }
+})();
+
+/* ── Auto-idle logout (15 min) ── */
 let idleTimer;
 const IDLE_MS = 15 * 60 * 1000;
-function resetIdle() { clearTimeout(idleTimer); idleTimer = setTimeout(() => { sessionStorage.removeItem('edoos_user'); }, IDLE_MS); }
+function resetIdle() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    sessionStorage.removeItem('edoos_user');
+    window.location.href = 'index.html?bye=idle';
+  }, IDLE_MS);
+}
 ['mousemove','keydown','click','touchstart'].forEach(ev => document.addEventListener(ev, resetIdle));
 resetIdle();
 </script>

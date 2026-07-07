@@ -536,3 +536,23 @@ window.EduLang = (function () {
   return { setLang, toggle, getLang: () => _lang };
 
 })();
+
+/* ═══════════════════════════════════════════════════════════════
+ * eduosLogout — دالة الخروج الموحّدة لكل الصفحات
+ * الاستخدام: eduosLogout() من أي صفحة
+ * ══════════════════════════════════════════════════════════════ */
+window.eduosLogout = function() {
+  sessionStorage.removeItem('edoos_user');
+  // Find login page relative to current location
+  const depth = window.location.pathname.split('/').filter(Boolean).length;
+  const prefix = depth > 1 ? '../'.repeat(depth - 1) : './';
+  // Try common paths
+  const candidates = [
+    prefix + 'eduos-login/index.html?bye=manual',
+    '../eduos-login/index.html?bye=manual',
+    '/apps/eduos-login/index.html?bye=manual',
+    'index.html?bye=manual'
+  ];
+  // Navigate to first candidate (always use relative path)
+  window.location.href = '../eduos-login/index.html?bye=manual';
+};
