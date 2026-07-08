@@ -148,6 +148,30 @@ function getSchoolWeekShort(date) {
 }
 
 // ── تصدير للاستخدام في Node.js إن لزم ───────────────────────
+
+/**
+ * getPlatformWeek() — اختصار موحَّد لجميع الصفحات
+ * يُرجع: { week, term, weekNum, termNum, termName, label, shortLabel, isHoliday, holidayName }
+ */
+function getPlatformWeek(date) {
+  const info = getEduOSWeekInfo(date);
+  return {
+    week:      info.isHoliday ? (info.holidayName || 'إجازة') : info.weekNum,
+    term:      info.semesterName || ('الفصل ' + info.semesterNum),
+    weekNum:   info.weekNum,
+    termNum:   info.semesterNum,
+    termName:  info.semesterName,
+    label:     info.label,
+    shortLabel: info.shortLabel,
+    isHoliday: info.isHoliday,
+    holidayName: info.holidayName,
+  };
+}
+if (typeof window !== 'undefined') window.getPlatformWeek = getPlatformWeek;
+if (typeof module !== 'undefined') {
+  module.exports.getPlatformWeek = getPlatformWeek;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = { EDOOS_ACADEMIC_CALENDAR, getEduOSWeekInfo, getSchoolWeekLabel, getSchoolWeekShort };
 }
