@@ -717,56 +717,58 @@ async function doLogin() {
       userId    = authData.user?.id;
     }
 
-    // 2 — Detect role from staff_profiles
-    const staffRes = await fetch(
-      `${SB_URL}/rest/v1/staff_profiles?username=eq.${encodeURIComponent(uInput)}&select=id,role_key,name_ar,name_en,staff_db_id`,
-      { headers: { 'apikey': SBKEY, 'Authorization': `Bearer ${SBKEY}` } }
-    );
+    // 2 — Verify via Edge Function (handles staff + parent, SHA-256 comparison)
+    const verifyRes = await fetch(`${SB_URL}/functions/v1/eduos-login-verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SBKEY}`,
+      },
+      body: JSON.stringify({ username: uInput, password: pInput })
+    });
 
-    if (staffRes.ok) {
-      const staffData = await staffRes.json();
-      if (staffData.length > 0) {
-        const staff = staffData[0];
-        roleKey = staff.role_key;
+    if (verifyRes.ok) {
+      const vd = await verifyRes.json();
+      if (vd.ok) {
+        roleKey = vd.role_key;
 
-        // Verify password via staff edge function (SHA-256 comparison)
-        const verifyRes = await fetch(`${SB_URL}/functions/v1/eduos-login-verify`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${SBKEY}`,
-          },
-          body: JSON.stringify({ username: uInput, password: pInput })
-        });
-
-        if (!verifyRes.ok) {
-          // Edge function error — reject
-          showError(s.errInvalid);
-          return;
+        if (roleKey === 'parent') {
+          // Parent session
+          sessionStorage.setItem('edoos_user', JSON.stringify({
+            username: uInput,
+            role: 'parent',
+            role_key: 'parent',
+            full_name: vd.name_ar,
+            name: vd.name_ar,
+            name_en: vd.name_en,
+            parent_id: vd.parent_id,
+            id: vd.parent_id,
+            db_id: vd.parent_id,
+            national_id: uInput,
+            student_ids: vd.student_ids || [],
+            token: authToken,
+            ts: Date.now(),
+            loginTime: Date.now(),
+          }));
+        } else {
+          // Staff session
+          sessionStorage.setItem('edoos_user', JSON.stringify({
+            username: uInput,
+            role: roleKey,
+            role_key: roleKey,
+            full_name: vd.name_ar,
+            name_en: vd.name_en,
+            staff_db_id: vd.staff_db_id,
+            token: authToken,
+            ts: Date.now(),
+            loginTime: Date.now(),
+          }));
         }
-
-        const vd = await verifyRes.json();
-        if (!vd.ok) {
-          showError(s.errInvalid);
-          return;
-        }
-
-        roleKey = vd.role_key || roleKey;
-
-        // Save session
-        sessionStorage.setItem('edoos_user', JSON.stringify({
-          id: vd.id || staff.id,
-          username: uInput,
-          role: roleKey,
-          role_key: roleKey,
-          full_name: vd.name_ar || staff.name_ar,
-          name_en: vd.name_en || staff.name_en,
-          staff_db_id: vd.staff_db_id || staff.staff_db_id,
-          token: authToken,
-          ts: Date.now(),
-          loginTime: Date.now(),
-        }));
+      } else if (vd.error === 'account_inactive') {
+        showError(s.errInvalid);
+        return;
       }
+      // If vd.ok is false but no specific error → could be student/unknown → continue to step 3
     }
 
     // 3 — Try students table if still no role
@@ -792,56 +794,6 @@ async function doLogin() {
             grade: stu.grade,
             class_name: stu.class_name,
             class_id: stu.class_name,
-            token: authToken,
-            ts: Date.now(),
-            loginTime: Date.now(),
-          }));
-        }
-      }
-    }
-
-    // 4 — Try parent_credentials if still no role
-    if (!roleKey) {
-      const parRes = await fetch(
-        `${SB_URL}/rest/v1/parent_credentials?national_id=eq.${encodeURIComponent(uInput)}&select=id,national_id,student_ids,password_hash`,
-        { headers: { 'apikey': SBKEY, 'Authorization': `Bearer ${SBKEY}` } }
-      );
-      if (parRes.ok) {
-        const parData = await parRes.json();
-        if (parData.length > 0) {
-          const par = parData[0];
-          // SHA-256 hash the password and compare
-          const encoder = new TextEncoder();
-          const data = encoder.encode(pInput);
-          const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-          const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2,'0')).join('');
-          if (hashHex !== par.password_hash) {
-            showError(s.errInvalid);
-            return;
-          }
-          roleKey = 'parent';
-          // Fetch parent name from parents table
-          let parName = '', parNameEn = '';
-          const nameRes = await fetch(
-            `${SB_URL}/rest/v1/parents?national_id=eq.${encodeURIComponent(uInput)}&select=name_ar,name_en`,
-            { headers: { 'apikey': SBKEY, 'Authorization': `Bearer ${SBKEY}` } }
-          );
-          if (nameRes.ok) {
-            const nameData = await nameRes.json();
-            if (nameData.length > 0) { parName = nameData[0].name_ar || ''; parNameEn = nameData[0].name_en || ''; }
-          }
-          sessionStorage.setItem('edoos_user', JSON.stringify({
-            username: uInput,
-            role: 'parent',
-            role_key: 'parent',
-            full_name: parName,
-            name: parName,
-            name_en: parNameEn,
-            parent_id: par.id,
-            id: par.id,
-            db_id: par.id,
-            national_id: uInput,
-            student_ids: par.student_ids || [],
             token: authToken,
             ts: Date.now(),
             loginTime: Date.now(),
