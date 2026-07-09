@@ -782,12 +782,66 @@ async function doLogin() {
           const stu = stuData[0];
           sessionStorage.setItem('edoos_user', JSON.stringify({
             username: uInput,
+            role: 'student',
             role_key: 'student',
             full_name: stu.name,
+            name: stu.name,
             name_en: stu.name_en,
             student_id: stu.id,
+            id: stu.id,
             grade: stu.grade,
-            class: stu.class,
+            class_name: stu.class_name,
+            class_id: stu.class_name,
+            token: authToken,
+            ts: Date.now(),
+            loginTime: Date.now(),
+          }));
+        }
+      }
+    }
+
+    // 4 — Try parent_credentials if still no role
+    if (!roleKey) {
+      const parRes = await fetch(
+        `${SB_URL}/rest/v1/parent_credentials?national_id=eq.${encodeURIComponent(uInput)}&select=id,national_id,student_ids,password_hash`,
+        { headers: { 'apikey': SBKEY, 'Authorization': `Bearer ${SBKEY}` } }
+      );
+      if (parRes.ok) {
+        const parData = await parRes.json();
+        if (parData.length > 0) {
+          const par = parData[0];
+          // SHA-256 hash the password and compare
+          const encoder = new TextEncoder();
+          const data = encoder.encode(pInput);
+          const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+          const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2,'0')).join('');
+          if (hashHex !== par.password_hash) {
+            showError(s.errInvalid);
+            return;
+          }
+          roleKey = 'parent';
+          // Fetch parent name from parents table
+          let parName = '', parNameEn = '';
+          const nameRes = await fetch(
+            `${SB_URL}/rest/v1/parents?national_id=eq.${encodeURIComponent(uInput)}&select=name_ar,name_en`,
+            { headers: { 'apikey': SBKEY, 'Authorization': `Bearer ${SBKEY}` } }
+          );
+          if (nameRes.ok) {
+            const nameData = await nameRes.json();
+            if (nameData.length > 0) { parName = nameData[0].name_ar || ''; parNameEn = nameData[0].name_en || ''; }
+          }
+          sessionStorage.setItem('edoos_user', JSON.stringify({
+            username: uInput,
+            role: 'parent',
+            role_key: 'parent',
+            full_name: parName,
+            name: parName,
+            name_en: parNameEn,
+            parent_id: par.id,
+            id: par.id,
+            db_id: par.id,
+            national_id: uInput,
+            student_ids: par.student_ids || [],
             token: authToken,
             ts: Date.now(),
             loginTime: Date.now(),
