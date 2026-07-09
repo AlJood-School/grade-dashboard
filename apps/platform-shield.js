@@ -28,8 +28,9 @@
   "use strict";
 
   const SHIELD_VERSION = "1.0.0";
-  const REPORT_ENDPOINT = "https://zuyizaiugpmhmeycqton.supabase.co/functions/v1/report-bug";
-  const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTU1MjI4MDAsImV4cCI6MjAzMTA5ODgwMH0.Vf4uGJDwvAg1V3n0h1OAtW35A1FMKbEXRaGzFxXfx48";
+  const _sbUrl = window.EduOS?.SB_URL || '';
+  const REPORT_ENDPOINT = _sbUrl ? _sbUrl + "/functions/v1/report-bug" : '';
+  const ANON_KEY = window.EduOS?.SB_KEY || '';
   const SLOW_PAGE_THRESHOLD = 3000; // 3 ثوانٍ
 
   // بيانات المستخدم الحالي من sessionStorage
