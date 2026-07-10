@@ -5,7 +5,40 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>طباعة الجدول — EduOS</title>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet"/>
-<script src="/apps/platform-autologout.js"></script>
+<script src="/apps/platform-autologout.js">
+function getYTFilter() {
+  var sel = document.getElementById('selYearTerm');
+  if (!sel || sel.value === 'active' || !sel.value) return 'is_active=eq.true';
+  var parts = sel.value.split('|');
+  if (parts.length === 2) return 'academic_year=eq.' + encodeURIComponent(parts[0]) + '&term=eq.' + parts[1];
+  return 'is_active=eq.true';
+}
+
+async function loadYearTerms(reload) {
+  try {
+    var SB = (window.EduOS && window.EduOS.SB_URL) || 'https://xdkiktwuuwghvzcukvew.supabase.co';
+    var KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+    var r = await fetch(SB + '/rest/v1/schedules?' + getYTFilter() + '&select=academic_year,term,is_active&order=academic_year.desc,term.desc&limit=500', {headers:{'apikey':KEY,'Authorization':'Bearer '+KEY}});
+    var rows = r.ok ? await r.json() : [];
+    var seen = {}, opts = [];
+    rows.forEach(function(row) {
+      if (!row.academic_year) return;
+      var key = row.academic_year + '|' + row.term;
+      if (!seen[key]) { seen[key]=true; opts.push(row); }
+    });
+    var sel = document.getElementById('selYearTerm');
+    while (sel.options.length > 1) sel.remove(1);
+    opts.forEach(function(o) {
+      var opt = document.createElement('option');
+      opt.value = o.academic_year + '|' + o.term;
+      opt.textContent = 'الفصل ' + o.term + ' — ' + o.academic_year + (o.is_active ? ' ✓ ساري' : '');
+      sel.appendChild(opt);
+    });
+    if (reload) generate();
+  } catch(e) {}
+}
+
+</script>
 <script src="/apps/platform-config.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -88,6 +121,13 @@ td{padding:8px 6px;border:1px solid var(--border);text-align:center;vertical-ali
 </header>
 
 <div class="controls">
+    <div class="ctrl-group">
+      <label class="ctrl-label">📅 السنة/الفصل | Year/Term</label>
+      <select id="selYearTerm" onchange="loadYearTerms(true)" style="padding:7px 12px;border:1.5px solid #D1D5DB;border-radius:8px;font-family:inherit;font-size:14px;font-weight:700">
+        <option value="active">الجدول الساري — Current Active</option>
+      </select>
+    </div>
+
   <div class="mode-tabs">
     <button class="mode-tab active" data-mode="class">📚 بحسب الصف | By Class</button>
     <button class="mode-tab" data-mode="teacher">👤 بحسب المعلم | By Teacher</button>

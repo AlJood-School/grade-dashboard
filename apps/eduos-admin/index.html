@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>مركز الإدارة — EduOS</title>
+<title>Admin Center · مركز الإدارة — EduOS</title>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet">
 <script src="../platform-lang.js" defer></script>
 <script src="/apps/platform-shield.js" defer></script>
@@ -430,8 +430,6 @@ tr:hover td{background:#F8FAFC;}
 </div>
 
 <script>
-const SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
-const SB_KEY = window.EduOS && window.EduOS.SB_KEY;
 
 // ── Auth ──
 const sess = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
@@ -463,8 +461,8 @@ document.addEventListener('DOMContentLoaded', function() {
 // ── DB helpers ──
 async function dbGet(table, params) {
   try {
-    const r = await fetch(SB_URL + '/rest/v1/' + table + '?' + (params || ''), {
-      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Prefer': 'count=exact' }
+    const r = await fetch((window.EduOS?window.EduOS.SB_URL:'') + '/rest/v1/' + table + '?' + (params || ''), {
+      headers: { 'apikey': (window.EduOS?window.EduOS.SB_KEY:''), 'Authorization': 'Bearer ' + (window.EduOS?window.EduOS.SB_KEY:''), 'Prefer': 'count=exact' }
     });
     const data = await r.json();
     const ct = r.headers.get('content-range');
@@ -474,9 +472,9 @@ async function dbGet(table, params) {
 
 async function dbPost(table, body) {
   try {
-    const r = await fetch(SB_URL + '/rest/v1/' + table, {
+    const r = await fetch((window.EduOS?window.EduOS.SB_URL:'') + '/rest/v1/' + table, {
       method: 'POST',
-      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      headers: { 'apikey': (window.EduOS?window.EduOS.SB_KEY:''), 'Authorization': 'Bearer ' + (window.EduOS?window.EduOS.SB_KEY:''), 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
       body: JSON.stringify(body)
     });
     return r.ok;
@@ -485,9 +483,9 @@ async function dbPost(table, body) {
 
 async function dbPatch(table, id, body) {
   try {
-    const r = await fetch(SB_URL + '/rest/v1/' + table + '?id=eq.' + id, {
+    const r = await fetch((window.EduOS?window.EduOS.SB_URL:'') + '/rest/v1/' + table + '?id=eq.' + id, {
       method: 'PATCH',
-      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' },
+      headers: { 'apikey': (window.EduOS?window.EduOS.SB_KEY:''), 'Authorization': 'Bearer ' + (window.EduOS?window.EduOS.SB_KEY:''), 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
     return r.ok;
@@ -542,10 +540,10 @@ function roleBadge(r) {
 async function loadOverview() {
   try {
     const [staff, students, parents, schedules] = await Promise.all([
-      dbGet('staff_profiles', 'select=id,role_key,role&limit=500'),
+      dbGet('staff_profiles', 'select=id,role_key&limit=500'),
       dbGet('students', 'select=id,student_number,class_name&limit=2000'),
       dbGet('parents', 'select=id&limit=2000'),
-      dbGet('schedules', 'select=id&limit=1&head=true')
+      dbGet('schedules', 'is_active=eq.true&select=id&limit=1&head=true')
     ]);
 
     const staffList = staff.data;
@@ -607,7 +605,7 @@ async function loadOverview() {
 // ── STAFF ──
 var allStaff = [];
 async function loadStaff() {
-  var res = await dbGet('staff_profiles', 'select=id,name_ar,name_en,username,role_key,role,subject_ar,homeroom_classes,is_active&order=name_ar.asc&limit=500');
+  var res = await dbGet('staff_profiles', 'select=id,name_ar,name_en,username,role_key,subject,department,is_active&order=name_ar.asc&limit=500');
   allStaff = res.data;
   renderStaff(allStaff);
   document.getElementById('staffCount').textContent = 'إجمالي: ' + allStaff.length + ' موظف/ة';
@@ -625,10 +623,10 @@ function renderStaff(list) {
     return;
   }
   document.getElementById('staffBody').innerHTML = list.map(function(s) {
-    var effectiveRole = s.role_key || s.role || 'staff';
+    var effectiveRole = s.role_key || 'staff';
     var isActive = s.is_active !== false;
     var safeName = (s.name_ar || '').replace(/'/g, '').replace(/"/g, '');
-    return '<tr><td><strong>' + (s.name_ar || s.name_en || '—') + '</strong>' + (s.name_en ? '<div style="font-size:11px;color:var(--text3)">' + s.name_en + '</div>' : '') + '</td><td style="color:var(--text3);font-family:monospace;font-size:12px">' + (s.username || '—') + '</td><td>' + roleBadge(effectiveRole) + '</td><td>' + (s.subject_ar || '<span style="color:var(--text3)">—</span>') + '</td><td>' + (s.homeroom_classes || '<span style="color:var(--text3)">—</span>') + '</td><td><span class="badge ' + (isActive ? 'b-green' : 'b-red') + '">' + (isActive ? 'نشط/ة' : 'موقوف/ة') + '</span></td><td><button class="btn btn-outline btn-sm" data-id="' + s.id + '" data-name="' + safeName + '" data-role="' + effectiveRole + '" onclick="openEditRole(this)">تعديل الدور</button></td></tr>';
+    return '<tr><td><strong>' + (s.name_ar || s.name_en || '—') + '</strong>' + (s.name_en ? '<div style="font-size:11px;color:var(--text3)">' + s.name_en + '</div>' : '') + '</td><td style="color:var(--text3);font-family:monospace;font-size:12px">' + (s.username || '—') + '</td><td>' + roleBadge(effectiveRole) + '</td><td>' + (s.subject || '<span style="color:var(--text3)">—</span>') + '</td><td>' + (s.department || '<span style="color:var(--text3)">—</span>') + '</td><td><span class="badge ' + (isActive ? 'b-green' : 'b-red') + '">' + (isActive ? 'نشط/ة' : 'موقوف/ة') + '</span></td><td><button class="btn btn-outline btn-sm" data-id="' + s.id + '" data-name="' + safeName + '" data-role="' + effectiveRole + '" onclick="openEditRole(this)">تعديل الدور</button></td></tr>';
   }).join('');
 }
 
@@ -639,8 +637,8 @@ function filterStaff() {
     return (s.name_ar || '').toLowerCase().includes(q) ||
            (s.name_en || '').toLowerCase().includes(q) ||
            (s.username || '').toLowerCase().includes(q) ||
-           (s.role_key || s.role || '').toLowerCase().includes(q) ||
-           (s.subject_ar || '').includes(q);
+           (s.role_key || '').toLowerCase().includes(q) ||
+           (s.subject || '').includes(q);
   }));
 }
 
@@ -692,7 +690,7 @@ async function loadStudents() {
 
 // ── ROLES ──
 async function loadRoles() {
-  var res = await dbGet('staff_profiles', 'select=id,name_ar,username,role_key,role&limit=500');
+  var res = await dbGet('staff_profiles', 'select=id,name_ar,username,role_key&limit=500');
   var list = res.data;
 
   var roleCounts = {};
@@ -784,7 +782,7 @@ async function loadSystem() {
   } catch(e) { checks.push({ label: 'students', ok: false, sub: 'خطأ' }); }
 
   try {
-    var r3 = await dbGet('schedules', 'select=id&limit=1&head=true');
+    var r3 = await dbGet('schedules', 'is_active=eq.true&select=id&limit=1&head=true');
     checks.push({ label: 'schedules', ok: true, sub: r3.count + ' صف' });
   } catch(e) { checks.push({ label: 'schedules', ok: false, sub: 'خطأ' }); }
 
@@ -793,7 +791,7 @@ async function loadSystem() {
     checks.push({ label: 'parents', ok: true, sub: r4.count + ' سجل' });
   } catch(e) { checks.push({ label: 'parents', ok: false, sub: 'خطأ' }); }
 
-  checks.push({ label: 'SB_KEY', ok: !!SB_KEY, sub: SB_KEY ? 'موجود ✅' : 'مفقود ❌' });
+  checks.push({ label: '(window.EduOS?window.EduOS.SB_KEY:'')', ok: !!(window.EduOS?window.EduOS.SB_KEY:''), sub: (window.EduOS?window.EduOS.SB_KEY:'') ? 'موجود ✅' : 'مفقود ❌' });
   checks.push({ label: 'Session', ok: !!sess.username, sub: sess.username || '—' });
 
   document.getElementById('statusGrid').innerHTML = checks.map(function(c) {
@@ -864,9 +862,8 @@ async function saveNewStaff() {
     name_en: document.getElementById('newNameEn').value.trim() || null,
     username: username,
     role_key: roleKey,
-    role: roleKey,
-    subject_ar: document.getElementById('newSubject').value.trim() || null,
-    homeroom_classes: document.getElementById('newClass').value.trim() || null,
+    subject: document.getElementById('newSubject').value.trim() || null,
+    department: document.getElementById('newClass').value.trim() || null,
     is_active: true
   };
 
@@ -882,7 +879,7 @@ async function saveNewStaff() {
 async function saveRoleEdit() {
   var id = document.getElementById('editId').value;
   var roleKey = document.getElementById('editRole').value;
-  var ok = await dbPatch('staff_profiles', id, { role_key: roleKey, role: roleKey });
+  var ok = await dbPatch('staff_profiles', id, { role_key: roleKey });
   if (ok) {
     showAlert('editAlert', 'تم تحديث الدور بنجاح ✅', 'ok');
     setTimeout(function() { closeModal('editRoleModal'); loadStaff(); if (document.getElementById('panel-roles').classList.contains('active')) loadRoles(); }, 1200);

@@ -159,6 +159,16 @@ select:focus,input:focus{outline:none;border-color:var(--primary)}
     <div class="stat-card"><div class="stat-icon">⚠️</div><div><div class="stat-num" id="statConflicts">—</div><div class="stat-label">تعارض</div></div></div>
   </div>
 
+
+  <!-- YEAR/TERM SELECTOR -->
+  <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:12px 20px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <span style="font-size:13px;font-weight:700;color:#374151">🗓️ السنة والفصل | Year & Term:</span>
+    <select id="selYearTerm" onchange="onYearTermChange()" style="padding:7px 14px;border:1.5px solid #D1D5DB;border-radius:8px;font-family:inherit;font-size:14px;font-weight:700;min-width:220px">
+      <option value="active">الجدول الساري — Current Active</option>
+    </select>
+    <span id="ytLabel" style="font-size:12px;color:#6B7280"></span>
+  </div>
+
   <!-- TODAY -->
   <div id="tab-today" class="panel active">
     <div class="card">
@@ -256,20 +266,62 @@ async function get(table, params='') {
   return r.ok?r.json():[];
 }
 
+
+/* Returns query param string for current year/term selection */
+function getYTFilter() {
+  var sel = document.getElementById('selYearTerm');
+  if (!sel || sel.value === 'active' || !sel.value) return 'is_active=eq.true';
+  var parts = sel.value.split('|');
+  if (parts.length === 2) return 'academic_year=eq.' + encodeURIComponent(parts[0]) + '&term=eq.' + parts[1];
+  return 'is_active=eq.true';
+}
+
+async function loadYearTerms() {
+  try {
+    const rows = await get('schedules','select=academic_year,term,is_active&order=academic_year.desc,term.desc&limit=500');
+    var seen = {};
+    var opts = [];
+    rows.forEach(function(r) {
+      if (!r.academic_year) return;
+      var key = r.academic_year + '|' + r.term;
+      if (!seen[key]) {
+        seen[key] = true;
+        opts.push({ key: key, year: r.academic_year, term: r.term, active: r.is_active });
+      }
+    });
+    var sel = document.getElementById('selYearTerm');
+    // Remove all except first option
+    while (sel.options.length > 1) sel.remove(1);
+    opts.forEach(function(o) {
+      var label = 'الفصل ' + o.term + ' — ' + o.year + (o.active ? ' ✓ ساري' : '');
+      var opt = document.createElement('option');
+      opt.value = o.key;
+      opt.textContent = label;
+      sel.appendChild(opt);
+    });
+    var lbl = document.getElementById('ytLabel');
+    if (opts.length > 0) lbl.textContent = opts.length + ' فصل محفوظ';
+  } catch(e) {}
+}
+
+async function onYearTermChange() {
+  await Promise.all([loadClasses(), loadTeachers(), loadTodaySlots(), loadWeekTable()]);
+}
+
 async function init() {
   const now = new Date();
   const dayNames=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
   document.getElementById('hdrMeta').textContent = `${dayNames[now.getDay()]} ${now.toLocaleDateString('ar-AE')}`;
   document.getElementById('todayLabel').textContent = `— ${dayNames[now.getDay()]}`;
 
-  await Promise.all([loadClasses(), loadTeachers(), loadTodaySlots(), loadWeekTable()]);
+  await Promise.all([loadYearTerms(), loadClasses(), loadTeachers(), loadTodaySlots(), loadWeekTable()]);
   checkSubstituteAlerts();
   detectConflicts();
 }
 
 async function loadClasses() {
   try {
-    const rows = await get('schedules','select=class_name&order=class_name&limit=200');
+    const rows = await get('schedules', getYTFilter() + '&select=class_name&order=class_name&limit=200');
     const unique = [...new Set(rows.map(r=>r.class_name).filter(Boolean))].sort();
     const sel = document.getElementById('selClass');
     unique.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o); });
@@ -293,7 +345,7 @@ async function loadTodaySlots() {
   document.getElementById('todaySlots').innerHTML='<div class="loading"><div class="spinner"></div></div>';
 
   try {
-    const slots = await get('schedules',`day_index=eq.${dayIndex}&select=period_index,subject,teacher_name,class_name&order=period_index&limit=50`);
+    const slots = await get('schedules', getYTFilter() + `&day_index=eq.${dayIndex}&select=period_index,subject,teacher_name,class_name&order=period_index&limit=50`);
 
     if (!slots || slots.length===0) { document.getElementById('statSubjects').textContent='0'; document.getElementById('statHours').textContent='0'; document.getElementById('statDone').textContent='0'; document.getElementById('todaySlots').innerHTML='<div style="padding:40px;text-align:center;color:var(--text2)">لا حصص مجدولة اليوم</div>'; return; }
 
@@ -324,7 +376,7 @@ async function loadTodaySlots() {
 async function loadWeekTable() {
   document.getElementById('weekTableWrap').innerHTML='<div class="loading"><div class="spinner"></div></div>';
   try {
-    const slots = await get('schedules','select=day_index,period_index,subject,teacher_name,class_name&order=day_index,period_index&limit=500');
+    const slots = await get('schedules', getYTFilter() + '&select=day_index,period_index,subject,teacher_name,class_name&order=day_index,period_index&limit=500');
     if(!slots||slots.length===0){ document.getElementById('weekTableWrap').innerHTML='<div style="padding:40px;text-align:center;color:var(--text2)">لا جدول أسبوعي مُدخَل حتى الآن</div>'; return; }
 
     const periods = [...new Set(slots.map(s=>s.period_index))].sort((a,b)=>a-b);
@@ -353,7 +405,7 @@ async function loadClassTable() {
   if(!classId) return;
   document.getElementById('classTableWrap').innerHTML='<div class="loading"><div class="spinner"></div></div>';
   try {
-    const slots=await get('schedules',`class_name=eq.${encodeURIComponent(classId)}&select=day_index,period_index,subject,teacher_name,class_name&order=day_index,period_index&limit=60`);
+    const slots=await get('schedules', getYTFilter() + `&class_name=eq.${encodeURIComponent(classId)}&select=day_index,period_index,subject,teacher_name,class_name&order=day_index,period_index&limit=60`);
     renderTimetableHTML(slots,'classTableWrap');
   } catch(e){ document.getElementById('classTableWrap').innerHTML='<div style="padding:20px;text-align:center;color:var(--text2)">لا بيانات</div>'; }
 }
@@ -363,7 +415,7 @@ async function loadTeacherTable() {
   if(!tid) return;
   document.getElementById('teacherTableWrap').innerHTML='<div class="loading"><div class="spinner"></div></div>';
   try {
-    const slots=await get('schedules',`staff_db_id=eq.${encodeURIComponent(tid)}&select=day_index,period_index,subject,teacher_name,class_name&order=day_index,period_index&limit=60`);
+    const slots=await get('schedules', getYTFilter() + `&staff_db_id=eq.${encodeURIComponent(tid)}&select=day_index,period_index,subject,teacher_name,class_name&order=day_index,period_index&limit=60`);
     renderTimetableHTML(slots,'teacherTableWrap',true);
   } catch(e){ document.getElementById('teacherTableWrap').innerHTML='<div style="padding:20px;text-align:center;color:var(--text2)">لا بيانات</div>'; }
 }
@@ -386,7 +438,7 @@ function renderTimetableHTML(slots, containerId, showClass=false) {
 async function detectConflicts() {
   document.getElementById('statConflicts').textContent='—';
   try {
-    const slots=await get('schedules','select=day_index,period_index,staff_db_id,class_name&limit=500');
+    const slots=await get('schedules', getYTFilter() + '&select=day_index,period_index,staff_db_id,class_name&limit=500');
     const seen={}; const conflicts=[];
     slots.forEach(s=>{
       ['teacher','class'].forEach(type=>{

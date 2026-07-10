@@ -199,6 +199,31 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
     </div>
 
     <div class="card">
+      <div class="card-title">🗓️ السنة الدراسية والفصل — Academic Year & Term</div>
+      <div class="field-row">
+        <div class="fg">
+          <label>السنة الدراسية — Academic Year</label>
+          <select id="academicYear" style="padding:8px 12px;border:1.5px solid #D1D5DB;border-radius:8px;font-family:inherit;font-size:14px;font-weight:700">
+            <option value="2026-2027">2026–2027</option>
+            <option value="2025-2026">2025–2026</option>
+            <option value="2027-2028">2027–2028</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>الفصل الدراسي — Term</label>
+          <select id="termNumber" style="padding:8px 12px;border:1.5px solid #D1D5DB;border-radius:8px;font-family:inherit;font-size:14px;font-weight:700">
+            <option value="1">الفصل الأول — Term 1</option>
+            <option value="2">الفصل الثاني — Term 2</option>
+            <option value="3">الفصل الثالث — Term 3</option>
+          </select>
+        </div>
+      </div>
+      <div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:10px 14px;font-size:13px;color:#92400E">
+        ⚠️ عند الحفظ: الجدول السابق لنفس الفصل والسنة يُحفظ في الأرشيف ويمكن مشاهدته لاحقاً — لن يُحذف.
+      </div>
+    </div>
+
+    <div class="card">
       <div class="card-title">📅 أيام الدوام — School Days</div>
       <div class="chips-row" id="dayChips">
         <div class="chip selected" data-day="الاثنين">الاثنين</div>
@@ -1147,16 +1172,23 @@ async function saveTimetable() {
       }
     });
   });
+  var selYear = (document.getElementById('academicYear') || {value:'2026-2027'}).value;
+  var selTerm = parseInt((document.getElementById('termNumber') || {value:'1'}).value);
+  /* Add academic_year + term + is_active to each row */
+  rows.forEach(function(r) { r.academic_year = selYear; r.term = selTerm; r.is_active = true; });
   try {
-    /* Delete existing */
+    /* Archive existing — mark is_active=false (do NOT delete) */
     var clsList = classes.map(function(c){return '"'+c+'"';}).join(',');
-    await sbFetch('schedules?class_name=in.(' + clsList + ')', { method:'DELETE', headers:{'Prefer':'return=minimal'} });
+    await sbFetch(
+      'schedules?class_name=in.(' + clsList + ')&academic_year=eq.' + selYear + '&term=eq.' + selTerm + '&is_active=eq.true',
+      { method:'PATCH', headers:{'Prefer':'return=minimal'}, body: JSON.stringify({is_active: false}) }
+    );
     /* Insert new */
     if (rows.length > 0) {
       var res = await sbFetch('schedules', { method:'POST', headers:{'Prefer':'return=minimal'}, body: JSON.stringify(rows) });
       if (res.ok || res.status === 201) {
         showToast('\u062A\u0645 \u062D\u0641\u0638 ' + rows.length + ' \u062D\u0635\u0629 \u0628\u0646\u062C\u0627\u062D \u2713','ok');
-        showAlert('genAlert','al-ok','\u2713 \u062A\u0645 \u062D\u0641\u0638 ' + rows.length + ' \u062D\u0635\u0629 \u0644\u0640 ' + classes.length + ' \u0641\u0635\u0644');
+        showAlert('genAlert','al-ok','\u2713 \u062A\u0645 \u062D\u0641\u0638 ' + rows.length + ' \u062D\u0635\u0629 \u0644\u0640 ' + classes.length + ' \u0641\u0635\u0644 (' + selYear + ' \u2013 \u0641\u0635\u0644 ' + selTerm + ')');
       } else {
         showToast('\u062E\u0637\u0623 \u0641\u064A \u0627\u0644\u062D\u0641\u0638','err');
       }
