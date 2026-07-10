@@ -80,6 +80,20 @@ a{text-decoration:none;color:inherit}
 .nb-ok{background:#D1FAE5;color:#065F46}
 .nb-warn{background:#FEF3C7;color:#92400E}
 .nb-over{background:#FEE2E2;color:#991B1B}
+/* ── Multi-Teacher Assignment ── */
+.ta-list{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.ta-row{background:#fff;border:1.5px solid #E5E7EB;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:7px}
+.ta-row-hdr{display:flex;align-items:center;gap:8px}
+.ta-row-hdr select{flex:1;padding:7px 10px;border:1.5px solid #E5E7EB;border-radius:8px;font-family:inherit;font-size:13px;background:#fff;color:#1F2937}
+.ta-row-hdr select:focus{outline:none;border-color:#6C3DD6}
+.ta-clschips{display:flex;flex-wrap:wrap;gap:5px;padding:4px 0}
+.ta-cls-chip{padding:4px 11px;border-radius:14px;border:1.5px solid #E5E7EB;background:#fff;color:#374151;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:all .12s}
+.ta-cls-chip.sel{background:#EDE9FE;border-color:#6C3DD6;color:#5B21B6}
+.ta-unassigned{font-size:11px;font-weight:700;margin-top:4px;min-height:16px;padding:3px 0}
+.ta-add-btn{width:100%;padding:7px;border:2px dashed #D1D5DB;border-radius:9px;background:#FAFAFA;color:#6B7280;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s}
+.ta-add-btn:hover{border-color:#6C3DD6;color:#5B21B6;background:#F5F3FF}
+.ta-nasab{font-size:11px;font-weight:700;padding:3px 9px;border-radius:7px;display:inline-block;margin-top:2px}
+.acard-full{grid-column:1/-1}
 /* ── Preview ── */
 .prev-wrap{background:#F0F4F8;border-radius:14px;padding:20px;margin-top:18px}
 .tt-card{background:#fff;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,.09);overflow:hidden;max-width:920px;margin:0 auto}
@@ -649,90 +663,262 @@ function addSubject() {
   renderSubjectsTable();
 }
 
-/* ── Step 3 ── */
+/* ── Step 3: Multi-Teacher Assignment ── */
+function sanitizeId(str) {
+  return (str || '').replace(/\s+/g,'_').replace(/[^\w]/g,'X');
+}
+
 function renderAssignGrid() {
   var grid = document.getElementById('assignGrid');
   grid.innerHTML = '';
+
+  /* Migrate old single-teacher entries to new array format */
+  STATE.subjects.forEach(function(s) {
+    var existing = STATE.teacherMap[s.name];
+    if (!existing) {
+      STATE.teacherMap[s.name] = [];
+    } else if (!Array.isArray(existing)) {
+      /* Convert old format to new */
+      STATE.teacherMap[s.name] = existing.isVacant ? [] : [{ teacherId: existing.teacherId, teacherNameAr: existing.teacherNameAr, isVacant: false, classes: [] }];
+    }
+  });
+
   STATE.subjects.forEach(function(s) {
     var bg = s.color || getSubjectColor(s.name);
     var tc = s.tcolor || getSubjectTColor(s.name);
     var card = document.createElement('div');
-    card.className = 'acard';
+    card.className = 'acard acard-full';
+    card.dataset.subj = s.name;
 
     var badge = document.createElement('div');
     badge.className = 'sbadge';
     badge.style.background = bg;
     badge.style.color = tc;
-    badge.textContent = s.name;
+    badge.style.marginBottom = '10px';
+    badge.textContent = s.name + ' (' + (s.ppw||2) + ' حصة/أسبوع)';
     card.appendChild(badge);
 
-    var sel = document.createElement('select');
-    sel.className = 'tsel';
-    sel.dataset.subj = s.name;
-    var optVacant = document.createElement('option');
-    optVacant.value = '__vacant__';
-    optVacant.textContent = '🔲 شاغر — Vacant';
-    sel.appendChild(optVacant);
-    STATE.teachers.forEach(function(t) {
-      var opt = document.createElement('option');
-      opt.value = t.username || '';
-      opt.dataset.nameAr = t.name_ar || '';
-      opt.textContent = (t.name_ar || '') + (t.subject ? ' (' + t.subject + ')' : '');
-      if (STATE.teacherMap[s.name] && STATE.teacherMap[s.name].teacherId === t.username) opt.selected = true;
-      sel.appendChild(opt);
-    });
-    if (STATE.teacherMap[s.name]) sel.value = STATE.teacherMap[s.name].teacherId || '__vacant__';
-    sel.addEventListener('change', function() {
-      var subj = this.dataset.subj;
-      var val = this.value;
-      var opt = this.options[this.selectedIndex];
-      STATE.teacherMap[subj] = val === '__vacant__'
-        ? { teacherId: null, teacherNameAr: 'شاغر', isVacant: true }
-        : { teacherId: val, teacherNameAr: opt.dataset.nameAr || val, isVacant: false };
-      updateNasabRow(this.closest('.acard'), subj);
-    });
-    card.appendChild(sel);
+    var taList = document.createElement('div');
+    taList.className = 'ta-list';
+    taList.id = 'talist_' + sanitizeId(s.name);
+    card.appendChild(taList);
 
-    var nsRow = document.createElement('div');
-    nsRow.className = 'nsb-row';
-    nsRow.id = 'nsb_' + s.name.replace(/\s+/g,'_');
-    card.appendChild(nsRow);
+    var unassignedEl = document.createElement('div');
+    unassignedEl.className = 'ta-unassigned';
+    unassignedEl.id = 'taunassigned_' + sanitizeId(s.name);
+    card.appendChild(unassignedEl);
+
+    var addBtn = document.createElement('button');
+    addBtn.className = 'ta-add-btn';
+    addBtn.textContent = '+ إضافة معلمة لهذه المادة — Add Teacher';
+    addBtn.dataset.subj = s.name;
+    addBtn.addEventListener('click', function() {
+      addTeacherRow(this.dataset.subj);
+    });
+    card.appendChild(addBtn);
 
     grid.appendChild(card);
-  });
-  updateAllNasab();
-}
-
-function updateAllNasab() {
-  STATE.subjects.forEach(function(s) {
-    var card = document.querySelector('[data-subj="' + s.name + '"]');
-    if (card) updateNasabRow(card.closest('.acard'), s.name);
+    renderTeacherRows(s.name);
+    updateUnassignedLabel(s.name);
   });
 }
 
-function updateNasabRow(card, subjName) {
-  var nsRow = card.querySelector('.nsb-row');
-  if (!nsRow) return;
-  var info = STATE.teacherMap[subjName];
-  if (!info || info.isVacant) { nsRow.innerHTML = '<span class="nsb-label">📌 شاغر — Vacant</span>'; return; }
-  var load = calcTeacherLoad(info.teacherId);
-  var maxN = 25;
-  var status = load < maxN - 3 ? 'ok' : load < maxN ? 'warn' : 'over';
-  var cls2 = status === 'ok' ? 'nb-ok' : status === 'warn' ? 'nb-warn' : 'nb-over';
-  var icon = status === 'ok' ? '✓' : status === 'warn' ? '⚠️' : '🔴';
-  nsRow.innerHTML = '<span class="nsb-label">نصاب المعلمة:</span>' +
-    '<span class="nsb-val">' + load + '/' + maxN + '</span>' +
-    '<span class="nsb-badge ' + cls2 + '">' + icon + ' ' + (status === 'ok' ? 'مناسب' : status === 'warn' ? 'قارب الحد' : 'تجاوز') + '</span>';
+function renderTeacherRows(subjName) {
+  var list = document.getElementById('talist_' + sanitizeId(subjName));
+  if (!list) return;
+  list.innerHTML = '';
+  var assignments = STATE.teacherMap[subjName] || [];
+  assignments.forEach(function(asgn, ri) {
+    list.appendChild(buildTeacherRow(subjName, ri, asgn));
+  });
+}
+
+function buildTeacherRow(subjName, rowIdx, asgn) {
+  var row = document.createElement('div');
+  row.className = 'ta-row';
+
+  /* Header: teacher dropdown + remove button */
+  var hdr = document.createElement('div');
+  hdr.className = 'ta-row-hdr';
+
+  var sel = document.createElement('select');
+  var optVacant = document.createElement('option');
+  optVacant.value = '__vacant__';
+  optVacant.textContent = 'شاغر — Vacant';
+  sel.appendChild(optVacant);
+  STATE.teachers.forEach(function(t) {
+    var opt = document.createElement('option');
+    opt.value = t.username || '';
+    opt.dataset.nameAr = t.name_ar || '';
+    opt.textContent = (t.name_ar || '') + (t.subject ? ' (' + t.subject + ')' : '');
+    sel.appendChild(opt);
+  });
+  if (asgn.teacherId) sel.value = asgn.teacherId; else sel.value = '__vacant__';
+  sel.addEventListener('change', function() {
+    var opt = this.options[this.selectedIndex];
+    var assignments = STATE.teacherMap[subjName];
+    if (assignments && assignments[rowIdx] !== undefined) {
+      if (this.value === '__vacant__') {
+        assignments[rowIdx].teacherId = null;
+        assignments[rowIdx].teacherNameAr = 'شاغر';
+        assignments[rowIdx].isVacant = true;
+      } else {
+        assignments[rowIdx].teacherId = this.value;
+        assignments[rowIdx].teacherNameAr = opt.dataset.nameAr || this.value;
+        assignments[rowIdx].isVacant = false;
+      }
+    }
+    renderNasabBadge(subjName, rowIdx, row);
+  });
+  hdr.appendChild(sel);
+
+  var removeBtn = document.createElement('button');
+  removeBtn.className = 'btn btn-danger btn-sm';
+  removeBtn.textContent = '× حذف';
+  removeBtn.style.flexShrink = '0';
+  removeBtn.addEventListener('click', function() {
+    STATE.teacherMap[subjName].splice(rowIdx, 1);
+    renderTeacherRows(subjName);
+    updateUnassignedLabel(subjName);
+  });
+  hdr.appendChild(removeBtn);
+  row.appendChild(hdr);
+
+  /* Class chips */
+  var chipsWrap = document.createElement('div');
+  chipsWrap.className = 'ta-clschips';
+  var clsLabel = document.createElement('span');
+  clsLabel.style.cssText = 'font-size:11px;color:#6B7280;font-weight:700;width:100%;margin-bottom:3px';
+  clsLabel.textContent = 'الصفوف المُسنَدة لهذه المعلمة:';
+  chipsWrap.appendChild(clsLabel);
+  STATE.selectedClasses.forEach(function(cls) {
+    var chip = document.createElement('button');
+    chip.className = 'ta-cls-chip' + (asgn.classes && asgn.classes.indexOf(cls) > -1 ? ' sel' : '');
+    chip.textContent = cls;
+    chip.addEventListener('click', function() {
+      var assignments = STATE.teacherMap[subjName];
+      if (!assignments || assignments[rowIdx] === undefined) return;
+      if (!assignments[rowIdx].classes) assignments[rowIdx].classes = [];
+      var clsList = assignments[rowIdx].classes;
+      var idx = clsList.indexOf(cls);
+      if (idx > -1) { clsList.splice(idx, 1); this.classList.remove('sel'); }
+      else { clsList.push(cls); this.classList.add('sel'); }
+      updateUnassignedLabel(subjName);
+      renderNasabBadge(subjName, rowIdx, row);
+    });
+    chipsWrap.appendChild(chip);
+  });
+
+  /* "تحديد الكل / إلغاء الكل" for this row */
+  var qBtns = document.createElement('div');
+  qBtns.style.cssText = 'display:flex;gap:5px;margin-top:4px;width:100%';
+  var qAll = document.createElement('button');
+  qAll.className = 'btn btn-secondary btn-sm';
+  qAll.textContent = 'تحديد الكل';
+  qAll.style.fontSize = '11px';
+  qAll.addEventListener('click', function() {
+    var assignments = STATE.teacherMap[subjName];
+    if (!assignments || assignments[rowIdx] === undefined) return;
+    assignments[rowIdx].classes = STATE.selectedClasses.slice();
+    renderTeacherRows(subjName);
+    updateUnassignedLabel(subjName);
+  });
+  var qNone = document.createElement('button');
+  qNone.className = 'btn btn-secondary btn-sm';
+  qNone.textContent = 'إلغاء الكل';
+  qNone.style.fontSize = '11px';
+  qNone.addEventListener('click', function() {
+    var assignments = STATE.teacherMap[subjName];
+    if (!assignments || assignments[rowIdx] === undefined) return;
+    assignments[rowIdx].classes = [];
+    renderTeacherRows(subjName);
+    updateUnassignedLabel(subjName);
+  });
+  qBtns.appendChild(qAll);
+  qBtns.appendChild(qNone);
+  chipsWrap.appendChild(qBtns);
+  row.appendChild(chipsWrap);
+
+  /* Nasab badge */
+  var nasabEl = document.createElement('div');
+  nasabEl.className = 'ta-nasab';
+  row.appendChild(nasabEl);
+  renderNasabBadge(subjName, rowIdx, row);
+
+  return row;
+}
+
+function addTeacherRow(subjName) {
+  if (!STATE.teacherMap[subjName]) STATE.teacherMap[subjName] = [];
+  STATE.teacherMap[subjName].push({ teacherId: null, teacherNameAr: 'شاغر', isVacant: true, classes: [] });
+  renderTeacherRows(subjName);
+  updateUnassignedLabel(subjName);
+}
+
+function renderNasabBadge(subjName, rowIdx, rowEl) {
+  var nasabEl = rowEl.querySelector('.ta-nasab');
+  if (!nasabEl) return;
+  var assignments = STATE.teacherMap[subjName];
+  if (!assignments || !assignments[rowIdx] || assignments[rowIdx].isVacant) {
+    nasabEl.textContent = '';
+    return;
+  }
+  var asgn = assignments[rowIdx];
+  var clsCount = (asgn.classes || []).length;
+  var ppw = 0;
+  STATE.subjects.forEach(function(s) { if (s.name === subjName) ppw = s.ppw || 0; });
+  var estLoad = clsCount * ppw;
+  nasabEl.textContent = 'النصاب التقديري: ' + estLoad + ' حصة/أسبوع (' + clsCount + ' صف × ' + ppw + ')';
+  if (estLoad > 24) { nasabEl.style.background = '#FEE2E2'; nasabEl.style.color = '#991B1B'; }
+  else if (estLoad > 18) { nasabEl.style.background = '#FEF3C7'; nasabEl.style.color = '#92400E'; }
+  else { nasabEl.style.background = '#D1FAE5'; nasabEl.style.color = '#065F46'; }
+}
+
+function updateUnassignedLabel(subjName) {
+  var el = document.getElementById('taunassigned_' + sanitizeId(subjName));
+  if (!el) return;
+  var assignments = STATE.teacherMap[subjName] || [];
+  var assignedCls = [];
+  assignments.forEach(function(a) { (a.classes || []).forEach(function(c) { assignedCls.push(c); }); });
+  var unassigned = STATE.selectedClasses.filter(function(c) { return assignedCls.indexOf(c) < 0; });
+  if (unassigned.length === 0) {
+    el.textContent = '✓ جميع الصفوف مُعيَّنة — All classes assigned';
+    el.style.color = '#065F46';
+  } else {
+    el.textContent = '⚠️ صفوف بدون معلمة: ' + unassigned.join(', ');
+    el.style.color = '#DC2626';
+  }
+}
+
+function updateAllNasab() { /* kept for compatibility */ }
+function updateNasabRow() { /* kept for compatibility */ }
+
+/* Lookup: get teacher info for a specific class+subject pair */
+function getTeacherForClass(subjName, className) {
+  var assignments = STATE.teacherMap[subjName];
+  if (!assignments || !assignments.length) return { teacherId: null, teacherNameAr: 'شاغر', isVacant: true };
+  for (var i = 0; i < assignments.length; i++) {
+    var a = assignments[i];
+    if (a.classes && a.classes.indexOf(className) > -1) {
+      return a.isVacant
+        ? { teacherId: null, teacherNameAr: 'شاغر', isVacant: true }
+        : { teacherId: a.teacherId, teacherNameAr: a.teacherNameAr || 'شاغر', isVacant: false };
+    }
+  }
+  return { teacherId: null, teacherNameAr: 'شاغر', isVacant: true };
 }
 
 function calcTeacherLoad(teacherId) {
-  if (!teacherId || !STATE.timetable) return 0;
+  if (!teacherId) return 0;
   var count = 0;
-  var tt = STATE.timetable;
-  Object.keys(tt).forEach(function(cls) {
-    STATE.selectedDays.forEach(function(day) {
-      for (var p = 1; p <= STATE.periodsPerDay; p++) {
-        if (tt[cls][day] && tt[cls][day][p] && tt[cls][day][p].teacherId === teacherId) count++;
+  Object.keys(STATE.teacherMap).forEach(function(subj) {
+    var assignments = STATE.teacherMap[subj];
+    if (!Array.isArray(assignments)) return;
+    var ppw = 0;
+    STATE.subjects.forEach(function(s) { if (s.name === subj) ppw = s.ppw || 0; });
+    assignments.forEach(function(a) {
+      if (a.teacherId === teacherId && !a.isVacant) {
+        count += (a.classes || []).length * ppw;
       }
     });
   });
@@ -750,7 +936,25 @@ function generateTimetable() {
 
   if (!classes.length) { showAlert('genAlert','al-err','يرجى تحديد فصل واحد على الأقل'); return; }
   if (!STATE.subjects.length) { showAlert('genAlert','al-err','يرجى إضافة مادة واحدة على الأقل'); return; }
-  clearAlert('genAlert');
+
+  /* Warn about unassigned classes but allow generation */
+  var unassignedWarnings = [];
+  STATE.subjects.forEach(function(s) {
+    var assignments = STATE.teacherMap[s.name];
+    if (!Array.isArray(assignments) || assignments.length === 0) {
+      unassignedWarnings.push(s.name + ': جميع الصفوف شاغرة');
+      return;
+    }
+    var assignedCls = [];
+    assignments.forEach(function(a) { (a.classes || []).forEach(function(c) { assignedCls.push(c); }); });
+    var missing = classes.filter(function(c) { return assignedCls.indexOf(c) < 0; });
+    if (missing.length) unassignedWarnings.push(s.name + ': ' + missing.join(',') + ' بدون معلمة');
+  });
+  if (unassignedWarnings.length) {
+    showAlert('genAlert','al-warn','⚠️ ملاحظة — سيُوزَّع الجدول وبعض الصفوف ستظهر شاغرة:<br>' + unassignedWarnings.join('<br>'));
+  } else {
+    clearAlert('genAlert');
+  }
 
   document.getElementById('btnGenerate').disabled = true;
   document.getElementById('btnReGen').disabled = true;
@@ -782,7 +986,7 @@ function runGenerate(classes, days, ppd) {
   var singleTasks = [];
   classes.forEach(function(cls) {
     STATE.subjects.forEach(function(s) {
-      var info = STATE.teacherMap[s.name] || { teacherId:null, teacherNameAr:'شاغر', isVacant:true };
+      var info = getTeacherForClass(s.name, cls);
       var pairs = s.isDouble ? Math.floor((s.ppw||2) / 2) : 0;
       var singles = s.isDouble ? ((s.ppw||2) % 2) : (s.ppw||2);
       for (var di = 0; di < pairs; di++) {
