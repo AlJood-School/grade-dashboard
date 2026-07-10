@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>الجدول الدراسي — EduOS</title>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet"/>
+<script src="../platform-config.js"></script>
 <script src="/apps/platform-week.js"></script>
 <script src="/apps/platform-motd.js"></script>
 <script src="/apps/platform-autologout.js"></script>
@@ -12,7 +13,9 @@
 <script src="/apps/platform-agent-brain.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Tajawal',Arial,sans-serif;background:#F0F4F8;color:#1e293b;min-height:100vh;direction:rtl}
+body{
+    margin: 0;
+    padding: 0;font-family:'Tajawal',Arial,sans-serif;background:#F0F4F8;color:#1e293b;min-height:100vh;direction:rtl}
 :root{--primary:#6C3DD6;--secondary:#22D3EE;--card:#fff;--bg:#F0F4F8;--border:#e2e8f0;--text:#1e293b;--text2:#64748b}
 
 .hdr{background:linear-gradient(135deg,#6C3DD6,#22D3EE);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(108,61,214,.25)}
@@ -229,11 +232,11 @@ select:focus,input:focus{outline:none;border-color:var(--primary)}
 <div class="toast" id="toast"></div>
 
 <script>
-const SB = 'https://zuyizaiugpmhmeycqton.supabase.co';
-const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDk3NTYxNzcsImV4cCI6MjAyNTMzMjE3N30.LSbSGlMPy8TGlGDDFVaVWGYnZ-N_9schRKPD69FQNPU';
+const SB = (window.EduOS && window.EduOS.SB_URL) || '';
+const KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
 
-const DAYS = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس'];
-const DAYS_EN = ['Sun','Mon','Tue','Wed','Thu'];
+const DAYS = ['الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+const DAYS_EN = ['Mon','Tue','Wed','Thu','Fri'];
 const COLORS = {arabic:'arabic',math:'math',science:'science',english:'english',islamic:'islamic',pe:'pe',art:'art',social:'social'};
 
 function colorClass(subj='') {
@@ -266,20 +269,19 @@ async function init() {
 
 async function loadClasses() {
   try {
-    const classes = await get('classes','select=id,name,grade_level&order=grade_level,name&limit=50');
+    const rows = await get('schedules','select=class_name&order=class_name&limit=200');
+    const unique = [...new Set(rows.map(r=>r.class_name).filter(Boolean))].sort();
     const sel = document.getElementById('selClass');
-    classes.forEach(c=>{
-      const o=document.createElement('option'); o.value=c.id; o.textContent=c.name||`الصف ${c.grade_level}`; sel.appendChild(o);
-    });
+    unique.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o); });
   } catch(e){}
 }
 
 async function loadTeachers() {
   try {
-    const teachers = await get('staff_profiles','select=id,full_name&role=eq.teacher&order=full_name&limit=60');
+    const teachers = await get('staff_profiles','select=staff_db_id,name_ar&role_key=eq.teacher&order=name_ar&limit=100');
     const sel = document.getElementById('selTeacher');
     teachers.forEach(t=>{
-      const o=document.createElement('option'); o.value=t.id; o.textContent=t.full_name||'معلم/ة'; sel.appendChild(o);
+      const o=document.createElement('option'); o.value=t.staff_db_id||t.id; o.textContent=t.name_ar||'معلم/ة'; sel.appendChild(o);
     });
   } catch(e){}
 }
@@ -291,28 +293,23 @@ async function loadTodaySlots() {
   document.getElementById('todaySlots').innerHTML='<div class="loading"><div class="spinner"></div></div>';
 
   try {
-    const slots = await get('timetable_slots',`day_of_week=eq.${dayIndex}&select=period_number,subject_name,teacher_name,room,start_time,end_time,class_id&order=period_number&limit=12`);
+    const slots = await get('schedules',`day_index=eq.${dayIndex}&select=period_index,subject,teacher_name,class_name&order=period_index&limit=50`);
 
     if (!slots || slots.length===0) { document.getElementById('statSubjects').textContent='0'; document.getElementById('statHours').textContent='0'; document.getElementById('statDone').textContent='0'; document.getElementById('todaySlots').innerHTML='<div style="padding:40px;text-align:center;color:var(--text2)">لا حصص مجدولة اليوم</div>'; return; }
 
-    document.getElementById('statSubjects').textContent = [...new Set(slots.map(s=>s.subject_name))].length;
+    document.getElementById('statSubjects').textContent = [...new Set(slots.map(s=>s.subject))].length;
     document.getElementById('statHours').textContent = slots.length;
+    document.getElementById('statDone').textContent = '0';
 
     const html = slots.map(s=>{
-      const [sh,sm] = (s.start_time||'07:15').split(':').map(Number);
-      const [eh,em] = (s.end_time||'07:55').split(':').map(Number);
-      const startMin = sh*60+sm, endMin = eh*60+em;
-      const isCurrent = currentHour>=startMin && currentHour<endMin;
-      const isDone = currentHour>=endMin;
-      const badge = isCurrent?'<span class="slot-badge badge-now">🔴 الآن</span>':isDone?'<span class="slot-badge badge-done">✅ انتهت</span>':'<span class="slot-badge badge-next">⏳ قادمة</span>';
-      return `<div class="today-slot ${isCurrent?'current':''}">
-        <div class="slot-num">${s.period_number||'•'}</div>
+      return `<div class="today-slot">
+        <div class="slot-num">${s.period_index||'•'}</div>
         <div class="slot-info">
-          <div class="slot-name">${s.subject_name||'—'}</div>
-          <div class="slot-details">${s.teacher_name||''} ${s.room?'· '+s.room:''} ${s.class_id?'· '+s.class_id:''}</div>
+          <div class="slot-name">${s.subject||'—'}</div>
+          <div class="slot-details">${s.teacher_name||''} ${s.class_name?'· '+s.class_name:''}</div>
         </div>
-        <div class="slot-time">${s.start_time||''}–${s.end_time||''}</div>
-        ${badge}
+        <div class="slot-time">الحصة ${s.period_index||''}</div>
+        <span class="slot-badge badge-next">⏳ قادمة</span>
       </div>`;
     }).join('');
 
@@ -327,19 +324,19 @@ async function loadTodaySlots() {
 async function loadWeekTable() {
   document.getElementById('weekTableWrap').innerHTML='<div class="loading"><div class="spinner"></div></div>';
   try {
-    const slots = await get('timetable_slots','select=day_of_week,period_number,subject_name,teacher_name,room,class_id&order=day_of_week,period_number&limit=200');
+    const slots = await get('schedules','select=day_index,period_index,subject,teacher_name,class_name&order=day_index,period_index&limit=500');
     if(!slots||slots.length===0){ document.getElementById('weekTableWrap').innerHTML='<div style="padding:40px;text-align:center;color:var(--text2)">لا جدول أسبوعي مُدخَل حتى الآن</div>'; return; }
 
-    const periods = [...new Set(slots.map(s=>s.period_number))].sort();
+    const periods = [...new Set(slots.map(s=>s.period_index))].sort((a,b)=>a-b);
     const byDayPeriod = {};
-    slots.forEach(s=>{ const k=`${s.day_of_week}_${s.period_number}`; if(!byDayPeriod[k]) byDayPeriod[k]=[]; byDayPeriod[k].push(s); });
+    slots.forEach(s=>{ const k=`${s.day_index}_${s.period_index}`; if(!byDayPeriod[k]) byDayPeriod[k]=[]; byDayPeriod[k].push(s); });
 
     let html = `<table class="tt-table"><thead><tr><th>الحصة</th>${DAYS.map((d,i)=>`<th>${d}<br><span style="font-size:.7rem;opacity:.8">${DAYS_EN[i]}</span></th>`).join('')}</tr></thead><tbody>`;
     periods.forEach(p=>{
       html += `<tr><td class="tt-time">الحصة ${p}</td>`;
       [0,1,2,3,4].forEach(d=>{
         const key=`${d}_${p}`; const s=byDayPeriod[key]?.[0];
-        if(s) html+=`<td><div class="slot ${colorClass(s.subject_name)}"><div class="slot-subj">${s.subject_name}</div><div class="slot-teacher">${s.teacher_name||''}</div><div class="slot-room">${s.room||''}</div></div></td>`;
+        if(s) html+=`<td><div class="slot ${colorClass(s.subject||'')}"><div class="slot-subj">${s.subject||''}</div><div class="slot-teacher">${s.teacher_name||''}</div><div class="slot-room">${s.class_name||''}</div></div></td>`;
         else html+=`<td><div class="slot empty">—</div></td>`;
       });
       html+='</tr>';
@@ -356,7 +353,7 @@ async function loadClassTable() {
   if(!classId) return;
   document.getElementById('classTableWrap').innerHTML='<div class="loading"><div class="spinner"></div></div>';
   try {
-    const slots=await get('timetable_slots',`class_id=eq.${classId}&select=day_of_week,period_number,subject_name,teacher_name,room,start_time,end_time&order=day_of_week,period_number&limit=60`);
+    const slots=await get('schedules',`class_name=eq.${encodeURIComponent(classId)}&select=day_index,period_index,subject,teacher_name,class_name&order=day_index,period_index&limit=60`);
     renderTimetableHTML(slots,'classTableWrap');
   } catch(e){ document.getElementById('classTableWrap').innerHTML='<div style="padding:20px;text-align:center;color:var(--text2)">لا بيانات</div>'; }
 }
@@ -366,20 +363,20 @@ async function loadTeacherTable() {
   if(!tid) return;
   document.getElementById('teacherTableWrap').innerHTML='<div class="loading"><div class="spinner"></div></div>';
   try {
-    const slots=await get('timetable_slots',`teacher_id=eq.${tid}&select=day_of_week,period_number,subject_name,class_id,room,start_time,end_time&order=day_of_week,period_number&limit=60`);
+    const slots=await get('schedules',`staff_db_id=eq.${encodeURIComponent(tid)}&select=day_index,period_index,subject,teacher_name,class_name&order=day_index,period_index&limit=60`);
     renderTimetableHTML(slots,'teacherTableWrap',true);
   } catch(e){ document.getElementById('teacherTableWrap').innerHTML='<div style="padding:20px;text-align:center;color:var(--text2)">لا بيانات</div>'; }
 }
 
 function renderTimetableHTML(slots, containerId, showClass=false) {
   if(!slots||slots.length===0){ document.getElementById(containerId).innerHTML='<div style="padding:30px;text-align:center;color:var(--text2)">لا بيانات لهذا الاختيار</div>'; return; }
-  const periods=[...new Set(slots.map(s=>s.period_number))].sort();
+  const periods=[...new Set(slots.map(s=>s.period_index))].sort((a,b)=>a-b);
   const byDP={};
-  slots.forEach(s=>{ const k=`${s.day_of_week}_${s.period_number}`; byDP[k]=s; });
+  slots.forEach(s=>{ const k=`${s.day_index}_${s.period_index}`; byDP[k]=s; });
   let html=`<table class="tt-table"><thead><tr><th>الحصة</th>${DAYS.map((d,i)=>`<th>${d}</th>`).join('')}</tr></thead><tbody>`;
   periods.forEach(p=>{
     html+=`<tr><td class="tt-time">الحصة ${p}</td>`;
-    [0,1,2,3,4].forEach(d=>{ const s=byDP[`${d}_${p}`]; html+=s?`<td><div class="slot ${colorClass(s.subject_name)}"><div class="slot-subj">${s.subject_name}</div>${showClass?`<div class="slot-teacher">${s.class_id||''}</div>`:''}<div class="slot-room">${s.room||''}</div></div></td>`:`<td><div class="slot empty">—</div></td>`; });
+    [0,1,2,3,4].forEach(d=>{ const s=byDP[`${d}_${p}`]; html+=s?`<td><div class="slot ${colorClass(s.subject||'')}"><div class="slot-subj">${s.subject||''}</div>${showClass?`<div class="slot-teacher">${s.class_name||''}</div>`:''}<div class="slot-room">${s.teacher_name||''}</div></div></td>`:`<td><div class="slot empty">—</div></td>`; });
     html+='</tr>';
   });
   html+='</tbody></table>';
@@ -389,12 +386,12 @@ function renderTimetableHTML(slots, containerId, showClass=false) {
 async function detectConflicts() {
   document.getElementById('statConflicts').textContent='—';
   try {
-    const slots=await get('timetable_slots','select=day_of_week,period_number,teacher_id,class_id&limit=500');
+    const slots=await get('schedules','select=day_index,period_index,staff_db_id,class_name&limit=500');
     const seen={}; const conflicts=[];
     slots.forEach(s=>{
       ['teacher','class'].forEach(type=>{
-        const key=`${type}_${type==='teacher'?s.teacher_id:s.class_id}_${s.day_of_week}_${s.period_number}`;
-        if(seen[key]) conflicts.push({type,id:type==='teacher'?s.teacher_id:s.class_id,day:DAYS[s.day_of_week],period:s.period_number});
+        const key=`${type}_${type==='teacher'?s.staff_db_id:s.class_name}_${s.day_index}_${s.period_index}`;
+        if(seen[key]) conflicts.push({type,id:type==='teacher'?s.staff_db_id:s.class_name,day:DAYS[s.day_index],period:s.period_index});
         else seen[key]=s;
       });
     });
