@@ -252,6 +252,10 @@ tr:hover td { background: #FAFBFC; }
     <div class="sb-item" data-tab="history" onclick="switchTab('history', this)">
       <span class="sb-icon">📋</span> السجل | History
     </div>
+    <div class="sb-label">الجدول</div>
+    <div class="sb-item" data-tab="timetable" onclick="switchTab('timetable', this)">
+      <span class="sb-icon">📅</span> جداولي | My Timetable
+    </div>
   </nav>
 
   <main class="main">
@@ -325,6 +329,15 @@ tr:hover td { background: #FAFBFC; }
       <div class="card">
         <div class="card-title">📋 السجل الكامل | Full History</div>
         <div id="historyList"><div class="empty"><div class="empty-icon">⏳</div>جاري التحميل...</div></div>
+      </div>
+    </div>
+
+    <!-- TAB: TIMETABLE -->
+    <div id="tab-timetable" class="tab-content">
+      <div class="page-title">📅 جداولي الأسبوعي | My Weekly Timetable</div>
+      <div class="card">
+        <div class="card-title">📅 الجدول الأسبوعي | Weekly Schedule</div>
+        <div id="subTimetableWrap"><div class="empty"><div class="empty-icon">⏳</div>جارٍ التحميل...</div></div>
       </div>
     </div>
 
@@ -522,6 +535,34 @@ async function loadHistory() {
 }
 
 // --- NAV ---
+async function loadSubTimetable() {
+  var wrap = document.getElementById('subTimetableWrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div>جارٍ التحميل...</div>';
+  var u = getUser();
+  var myId = u.id || '';
+  if (!myId) { wrap.innerHTML = '<div class="empty"><div class="empty-icon">📭</div>لا جلسة | No session</div>'; return; }
+  var DAYS=['الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+  var DAYS_EN=['Mon','Tue','Wed','Thu','Fri'];
+  var rows = await dbGet('schedules','select=day,period,class_name,subject&teacher_id=eq.'+myId+'&order=period&limit=60');
+  if(!rows||!rows.length){
+    wrap.innerHTML='<div class="empty"><div class="empty-icon">📭</div>لا جدول مسجّل لك/ِ | No timetable assigned</div>';return;
+  }
+  var map={}; var maxP=0;
+  rows.forEach(function(s){if(!map[s.day])map[s.day]={};map[s.day][s.period]=s;if(s.period>maxP)maxP=s.period;});
+  var periods=[]; for(var i=1;i<=maxP;i++)periods.push(i);
+  var html='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th style="padding:8px;background:#f5f5f5;border:1px solid #ddd">الحصة</th>';
+  DAYS.forEach(function(d,i){html+='<th style="padding:8px;background:#f5f5f5;border:1px solid #ddd">'+d+'<br><span style="font-size:11px;color:#888">'+DAYS_EN[i]+'</span></th>';});
+  html+='</tr></thead><tbody>';
+  periods.forEach(function(p){
+    html+='<tr><td style="padding:8px;border:1px solid #ddd;font-weight:700;text-align:center">ح'+p+'</td>';
+    DAYS.forEach(function(d){var s=map[d]&&map[d][p];html+='<td style="padding:8px;border:1px solid #ddd">'+(s?'<div style="font-weight:700">'+s.subject+'</div><div style="font-size:12px;color:#666">'+s.class_name+'</div>':'<span style="color:#aaa">—</span>')+'</td>';});
+    html+='</tr>';
+  });
+  html+='</tbody></table></div>';
+  wrap.innerHTML=html;
+}
+
 function switchTab(name, el) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.sb-item').forEach(s => s.classList.remove('active'));
@@ -530,6 +571,7 @@ function switchTab(name, el) {
 
   if (name === 'my-subs') loadMySubs();
   if (name === 'history') loadHistory();
+  if (name === 'timetable') loadSubTimetable();
 }
 
 // --- TOAST ---

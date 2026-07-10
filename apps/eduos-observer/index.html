@@ -437,19 +437,39 @@ async function loadAttendance() {
 
 // --- SCHEDULE ---
 async function loadSchedule() {
-  const rows = await dbGet('schedules', 'select=grade,section,day,period,subject&order=grade,day,period&limit=100');
+  var DAYS=['الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+  var DAYS_EN=['Mon','Tue','Wed','Thu','Fri'];
+  const rows = await dbGet('schedules', 'select=class_name,day,period,subject,teacher_name&order=class_name,period&limit=300');
   const el = document.getElementById('schedTable');
   if (!rows.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🗓</div>لا بيانات</div>'; return; }
-  el.innerHTML = `<div class="tbl-wrap"><table>
-    <thead><tr><th>الصف | Grade</th><th>الفصل</th><th>اليوم | Day</th><th>الحصة | Period</th><th>المادة | Subject</th></tr></thead>
-    <tbody>${rows.map(r => `<tr>
-      <td>${r.grade || '—'}</td>
-      <td>${r.section || '—'}</td>
-      <td>${r.day || '—'}</td>
-      <td>${r.period || '—'}</td>
-      <td style="font-weight:700">${r.subject || '—'}</td>
-    </tr>`).join('')}</tbody>
-  </table></div>`;
+  // group by class_name
+  var classes={};
+  rows.forEach(function(r){
+    var c=r.class_name||'—';
+    if(!classes[c])classes[c]={};
+    if(!classes[c][r.day])classes[c][r.day]={};
+    classes[c][r.day][r.period]=r;
+  });
+  var maxP=0; rows.forEach(function(r){if(r.period>maxP)maxP=r.period;});
+  var periods=[]; for(var i=1;i<=maxP;i++)periods.push(i);
+  var classList=Object.keys(classes).sort();
+  var html='';
+  classList.forEach(function(cls){
+    html+='<div style="margin-bottom:24px"><div style="font-weight:800;font-size:15px;color:var(--brand);margin-bottom:8px">'+cls+'</div>';
+    html+='<div class="tbl-wrap"><table><thead><tr><th>الحصة</th>';
+    DAYS.forEach(function(d,i){html+='<th>'+d+' | '+DAYS_EN[i]+'</th>';});
+    html+='</tr></thead><tbody>';
+    periods.forEach(function(p){
+      html+='<tr><td style="font-weight:700;text-align:center">ح'+p+'</td>';
+      DAYS.forEach(function(d){
+        var s=classes[cls][d]&&classes[cls][d][p];
+        html+='<td>'+(s?'<div style="font-weight:700">'+s.subject+'</div><div style="font-size:11px;color:var(--text3)">'+( s.teacher_name||'')+'</div>':'<span style="color:var(--text3)">—</span>')+'</td>';
+      });
+      html+='</tr>';
+    });
+    html+='</tbody></table></div></div>';
+  });
+  el.innerHTML=html;
 }
 
 // --- NAV ---

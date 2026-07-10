@@ -188,8 +188,8 @@ label.lbl{display:block;font-size:13px;font-weight:700;color:var(--text2);margin
       <!-- SCHEDULE -->
       <div class="tab-panel" id="panel-schedule">
         <div class="card">
-          <div class="card-header"><div class="card-title">📅 جدول الصيانة | Maintenance Schedule</div></div>
-          <div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">الجدول الدوري قيد الإعداد | Periodic schedule coming soon</div></div>
+          <div class="card-header"><div class="card-title">📅 الجدول المدرسي | School Timetable</div></div>
+          <div id="techSchedWrap"><div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-text">جارٍ التحميل... / Loading...</div></div></div>
         </div>
       </div>
 
@@ -209,7 +209,7 @@ function switchPanel(name){
   document.querySelectorAll('.snav').forEach(s=>s.classList.remove('active'));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   const nav=document.querySelector('.snav[data-panel="'+name+'"]');if(nav)nav.classList.add('active');
   const panel=document.getElementById('panel-'+name);if(panel)panel.classList.add('active');
-  if(name==='requests')loadRequests();if(name==='inventory')loadInventory();
+  if(name==='requests')loadRequests();if(name==='inventory')loadInventory();if(name==='schedule')loadTechSchedule();
 }
 async function init(){
   try{user=JSON.parse(sessionStorage.getItem('edoos_user'));}catch(e){}
@@ -254,6 +254,34 @@ async function loadRequests(){
   '</tbody></table></div>';
 }
 async function markDone(id){const ok=await dbPatch('maintenance_requests','id=eq.'+id,{status:'completed'});if(ok){toast('✅ تم | Done');loadRequests();await loadKPIs();}else toast('❌ خطأ | Error');}
+async function loadTechSchedule(){
+  var wrap=document.getElementById('techSchedWrap');
+  if(!wrap)return;
+  wrap.innerHTML='<div class="spinner-wrap"><div class="spinner"></div></div>';
+  var DAYS=['الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+  var DAYS_EN=['Mon','Tue','Wed','Thu','Fri'];
+  var rows=await dbGet('schedules','select=class_name,day,period,subject&order=class_name,period&limit=300');
+  if(!rows||!rows.length){empty('techSchedWrap','لا جدول مسجّل | No timetable');return;}
+  var classes={};
+  rows.forEach(function(r){var c=r.class_name||'—';if(!classes[c])classes[c]={};if(!classes[c][r.day])classes[c][r.day]={};classes[c][r.day][r.period]=r;});
+  var maxP=0; rows.forEach(function(r){if(r.period>maxP)maxP=r.period;});
+  var periods=[]; for(var i=1;i<=maxP;i++)periods.push(i);
+  var classList=Object.keys(classes).sort();
+  var html='<div style="overflow-x:auto">';
+  classList.forEach(function(cls){
+    html+='<div style="margin-bottom:20px"><div style="font-weight:800;font-size:14px;color:var(--brand);margin-bottom:6px">'+cls+'</div><table style="width:100%;border-collapse:collapse"><thead><tr><th style="padding:6px 10px;background:#f5f5f5;border:1px solid #ddd;font-size:12px">ح</th>';
+    DAYS.forEach(function(d,i){html+='<th style="padding:6px 10px;background:#f5f5f5;border:1px solid #ddd;font-size:12px">'+DAYS_EN[i]+'</th>';});
+    html+='</tr></thead><tbody>';
+    periods.forEach(function(p){
+      html+='<tr><td style="padding:6px 10px;border:1px solid #ddd;font-weight:700;text-align:center;font-size:12px">'+p+'</td>';
+      DAYS.forEach(function(d){var s=classes[cls][d]&&classes[cls][d][p];html+='<td style="padding:6px 10px;border:1px solid #ddd;font-size:12px">'+(s?s.subject:'<span style="color:#ccc">—</span>')+'</td>';});
+      html+='</tr>';
+    });
+    html+='</tbody></table></div>';
+  });
+  html+='</div>';
+  wrap.innerHTML=html;
+}
 async function loadInventory(){
   document.getElementById('inventoryList').innerHTML='<div class="spinner-wrap"><div class="spinner"></div></div>';
   const data=await dbGet('maintenance_inventory','select=item_name,quantity,unit,location,last_updated&order=item_name&limit=100');
