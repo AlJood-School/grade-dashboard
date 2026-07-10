@@ -156,14 +156,15 @@ function getSchoolWeekShort(date) {
 function getPlatformWeek(date) {
   const info = getEduOSWeekInfo(date);
   return {
-    week:      info.isHoliday ? (info.holidayName || 'إجازة') : info.weekNum,
-    term:      info.semesterName || ('الفصل ' + info.semesterNum),
-    weekNum:   info.weekNum,
-    termNum:   info.semesterNum,
-    termName:  info.semesterName,
-    label:     info.label,
+    week:       info.isHoliday ? (info.holidayName || 'إجازة') : info.weekNum,
+    term:       info.semesterName || ('الفصل ' + info.semesterNum),
+    weekNum:    info.weekNum,
+    totalWeeks: info.totalWeeks,
+    termNum:    info.semesterNum,
+    termName:   info.semesterName,
+    label:      info.label,
     shortLabel: info.shortLabel,
-    isHoliday: info.isHoliday,
+    isHoliday:  info.isHoliday,
     holidayName: info.holidayName,
   };
 }
@@ -175,3 +176,58 @@ if (typeof module !== 'undefined') {
 if (typeof module !== 'undefined') {
   module.exports = { EDOOS_ACADEMIC_CALENDAR, getEduOSWeekInfo, getSchoolWeekLabel, getSchoolWeekShort };
 }
+
+// ══════════════════════════════════════════════════════════════════
+//  loadCalendarFromDB — يقرأ التقويم الأكاديمي من جدول academic_calendar
+//  ويُحدِّث EDOOS_ACADEMIC_CALENDAR تلقائياً
+//  الاستخدام:  await window.loadCalendarFromDB(supabaseClient)
+//  بعدها:      window.getPlatformWeek() يعمل بالبيانات الحقيقية للمدرسة
+// ══════════════════════════════════════════════════════════════════
+async function loadCalendarFromDB(sb) {
+  if (!sb) return false;
+  try {
+    const { data, error } = await sb
+      .from('academic_calendar')
+      .select('*')
+      .order('academic_year', { ascending: false })
+      .order('term_number');
+
+    if (error || !data || data.length === 0) return false;
+
+    // أحدث سنة دراسية في الجدول
+    const latestYear = data[0].academic_year;
+    const terms = data.filter(r => r.academic_year === latestYear);
+
+    // تحويل إلى صيغة EDOOS_ACADEMIC_CALENDAR
+    const semesters = terms.map(t => {
+      const startD = new Date(t.start_date);
+      const endD   = new Date(t.end_date);
+      const diffMs = endD - startD;
+      const weeks  = Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000));
+      return {
+        num:   t.term_number,
+        name:  t.term_name_ar || ('الفصل ' + t.term_number),
+        nameEn: t.term_name_en || ('Term ' + t.term_number),
+        start: t.start_date,
+        end:   t.end_date,
+        weeks
+      };
+    });
+
+    // تحديث الكالندر الحالي
+    EDOOS_ACADEMIC_CALENDAR.year      = latestYear;
+    EDOOS_ACADEMIC_CALENDAR.semesters = semesters;
+
+    // حفظ كل السنوات لعرضها في dropdown
+    const allYears = [...new Set(data.map(r => r.academic_year))];
+    EDOOS_ACADEMIC_CALENDAR.allYears = allYears;
+    EDOOS_ACADEMIC_CALENDAR.allTerms = data;
+
+    return true;
+  } catch(e) {
+    console.warn('[EduOS Week] DB load failed, using fallback calendar:', e.message);
+    return false;
+  }
+}
+
+if (typeof window !== 'undefined') window.loadCalendarFromDB = loadCalendarFromDB;

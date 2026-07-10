@@ -605,7 +605,7 @@ let allStudentsData = [];
 document.addEventListener('DOMContentLoaded', async () => {
   if (!session?.id) { window.location.href = '../eduos-login/'; return; }
   setupGreeting();
-  setupWeek();
+  await setupWeek();
   await Promise.all([loadKPIs(), loadApprovals(), loadOverview()]);
   setupIdleLogout();
   setInterval(loadApprovals, 60000);
@@ -620,12 +620,30 @@ function setupGreeting() {
   document.getElementById('userName').textContent = session.name || 'المدير/ة';
   document.getElementById('userAvatar').textContent = (session.name || 'م')[0];
 }
-function setupWeek() {
+async function setupWeek() {
+  // قراءة التقويم من DB أولاً — إذا فشل يسقط على التقويم الافتراضي
+  if (sb && window.loadCalendarFromDB) await window.loadCalendarFromDB(sb);
+
   if (window.getPlatformWeek) {
     const w = window.getPlatformWeek();
-    document.getElementById('wWeek').textContent = `${w.week || '—'}`;
-    document.getElementById('welcomeSub').textContent = `الفصل ${w.term || '—'} · الأسبوع ${w.week || '—'} · العام 2025–2026`;
-  } else setTimeout(setupWeek, 800);
+    const cal = window.EDOOS_ACADEMIC_CALENDAR;
+    const academicYear = cal ? cal.year : '—';
+
+    if (w.isHoliday) {
+      // خارج الفصول — اعرض العام الدراسي القادم وموعد البداية
+      const nextTerm = cal && cal.semesters ? cal.semesters[0] : null;
+      const nextStart = nextTerm ? new Date(nextTerm.start).toLocaleDateString('ar-AE', {day:'numeric',month:'long'}) : '';
+      document.getElementById('wWeek').textContent = '—';
+      document.getElementById('welcomeSub').textContent =
+        nextStart
+          ? `العام ${academicYear} · يبدأ ${nextStart}`
+          : `العام الدراسي ${academicYear}`;
+    } else {
+      document.getElementById('wWeek').textContent = w.weekNum || '—';
+      document.getElementById('welcomeSub').textContent =
+        `${w.term} · الأسبوع ${w.weekNum} من ${w.totalWeeks || '—'} · ${academicYear}`;
+    }
+  }
 }
 
 async function loadKPIs() {
