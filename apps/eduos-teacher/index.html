@@ -4,7 +4,9 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Teacher OS — بوابة الجود الذكية</title>
+<!-- EduOS Teacher Portal v2.1 -->
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet"/>
+<script src="../platform-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../platform-shield.js" defer></script>
 <script src="../platform-week.js" defer></script>
@@ -348,6 +350,13 @@ tr:hover td{background:var(--surface2)}
         <span class="snav-sub">Planning</span>
       </span>
     </button>
+    <button id="nav-timetable" class="snav" onclick="switchPanel('timetable')">
+      <span class="snav-icon">📅</span>
+      <span class="snav-text">
+        <span class="snav-label">جداولي</span>
+        <span class="snav-sub">My Timetable</span>
+      </span>
+    </button>
     <button id="nav-comms" class="snav" onclick="switchPanel('comms')">
       <span class="snav-icon">💬</span>
       <span class="snav-text">
@@ -632,6 +641,16 @@ tr:hover td{background:var(--surface2)}
       </div>
     </div>
 
+    <!-- ══════════════════════════════ TIMETABLE ══════════════════════════════ -->
+    <div class="tab-panel" id="panel-timetable">
+      <p class="sec-title">📅 جداولي الأسبوعي / My Weekly Timetable</p>
+      <div id="teacherTimetableWrap" style="overflow-x:auto"></div>
+      <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap">
+        <a href="../eduos-timetable/" target="_blank" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:var(--brand);color:#fff;border-radius:10px;font-weight:700;text-decoration:none;font-size:14px">🗓 جدول المدرسة الكامل | Full School Timetable</a>
+        <a href="../eduos-timetable-pdf/" target="_blank" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:var(--surface2);color:var(--brand);border:1px solid var(--border);border-radius:10px;font-weight:700;text-decoration:none;font-size:14px">🖨 طباعة | Print</a>
+      </div>
+    </div>
+
     <!-- ══════════════════════════════ COMMS ══════════════════════════════ -->
     <div class="tab-panel" id="panel-comms">
       <p class="sec-title">💬 التواصل / Communication</p>
@@ -714,12 +733,10 @@ tr:hover td{background:var(--surface2)}
 
 <script>
 // ── CONFIG ──
-const SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
 const _k1='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9';
 const _k2='eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0';
 const _k3='FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
-const SB_KEY = [_k1,_k2,_k3].join('.');
-const sb = window.supabase?.createClient(SB_URL, SB_KEY);
+const sb = window.supabase?.createClient((window.EduOS?window.EduOS.SB_URL:''), (window.EduOS?window.EduOS.SB_KEY:''));
 
 // ── SESSION ──
 const session = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
@@ -846,7 +863,7 @@ async function loadTeacherProfile() {
   if (!sb || !teacherId) return;
   try {
     const { data } = await sb.from('staff_profiles')
-      .select('name_ar,name_en,role_key,role,homeroom_classes,subject_ar,subjects_en,grades_taught,username,staff_db_id')
+      .select('name_ar,name_en,role_key,department,subject,subjects_en,grades_taught,username,staff_db_id')
       .eq('id', teacherId).single();
     if (!data) return;
     teacherData = data;
@@ -854,10 +871,10 @@ async function loadTeacherProfile() {
     const displayName = data.name_ar || data.name_en || 'المعلم/ة';
     document.getElementById('userName').textContent = displayName;
     document.getElementById('userAvatar').textContent = displayName[0] || 'م';
-    const hClass = data.homeroom_classes || data.grades_taught || '';
+    const hClass = data.department || data.grades_taught || '';
     document.getElementById('greetSub').textContent = 'أهلاً ' + displayName + (hClass ? ' — ' + hClass : '') + ' · يوم موفق إن شاء الله';
     const classSet = new Set();
-    (data.homeroom_classes||'').split(',').map(c=>c.trim()).filter(Boolean).forEach(c=>classSet.add(c));
+    (data.department||'').split(',').map(c=>c.trim()).filter(Boolean).forEach(c=>classSet.add(c));
     if (teacherNumericId) {
       const { data: sc } = await sb.from('schedules').select('class_name').eq('teacher_id', teacherNumericId);
       (sc||[]).forEach(s => s.class_name && classSet.add(s.class_name));
@@ -1353,6 +1370,7 @@ function switchPanel(name) {
   if (name === 'grades') loadGrades();
   if (name === 'planning') { loadWeeklyTrack(); }
   if (name === 'comms') { loadMessages(); }
+  if (name === 'timetable') { loadTeacherTimetable(); }
   window.location.hash = name;
 }
 
@@ -1421,6 +1439,51 @@ function markAttendance(cls) { window.location.href = '../eduos-attendance/?clas
 function openNotif() { switchPanel('comms'); switchCommTab('ai'); }
 function goProfile() { window.location.href = '../eduos-pdp/'; }
 function doLogout() { sessionStorage.removeItem('edoos_user'); window.location.href = '../eduos-login/'; }
+
+async function loadTeacherTimetable() {
+  var wrap = document.getElementById('teacherTimetableWrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="padding:24px;color:var(--text2)">جارٍ التحميل... / Loading...</div>';
+  var DAYS = ['الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+  var DAYS_EN = ['Mon','Tue','Wed','Thu','Fri'];
+  var teacherName = encodeURIComponent(user.name_ar || '');
+  if (!teacherName) { wrap.innerHTML = '<div style="padding:24px;color:var(--text2)">لا بيانات | No data</div>'; return; }
+  var data = await dbGet('schedules', 'teacher_name=eq.' + teacherName + '&select=day,period,class_name,subject&order=period&limit=60');
+  if (!data || data.length === 0) {
+    wrap.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text2)">لا جدول مسجّل لهذا المعلم/ة | No timetable found</div>';
+    return;
+  }
+  var map = {};
+  var maxPeriod = 0;
+  data.forEach(function(s) {
+    if (!map[s.day]) map[s.day] = {};
+    map[s.day][s.period] = s;
+    if (s.period > maxPeriod) maxPeriod = s.period;
+  });
+  var periods = [];
+  for (var i = 1; i <= maxPeriod; i++) periods.push(i);
+  var html = '<table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr>';
+  html += '<th style="padding:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text2)">الحصة</th>';
+  DAYS.forEach(function(d, i) { html += '<th style="padding:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text2)">' + d + '<br><span style="font-size:11px;color:var(--text3)">' + DAYS_EN[i] + '</span></th>'; });
+  html += '</tr></thead><tbody>';
+  periods.forEach(function(p) {
+    html += '<tr><td style="padding:10px;border:1px solid var(--border);font-weight:700;text-align:center;background:var(--surface2);color:var(--brand)">ح' + p + '</td>';
+    DAYS.forEach(function(d) {
+      var s = map[d] && map[d][p];
+      if (s) {
+        html += '<td style="padding:10px;border:1px solid var(--border);background:linear-gradient(135deg,rgba(108,61,214,0.06),rgba(34,211,238,0.04))">' +
+          '<div style="font-weight:700;color:var(--text)">' + (s.subject || '—') + '</div>' +
+          '<div style="font-size:12px;color:var(--text2);margin-top:2px">' + (s.class_name || '') + '</div>' +
+          '</td>';
+      } else {
+        html += '<td style="padding:10px;border:1px solid var(--border);color:var(--text3);text-align:center">—</td>';
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');

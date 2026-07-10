@@ -489,7 +489,7 @@ select.field:focus{outline:none;border-color:var(--brand)}
 <div class="toast" id="toast"></div>
 
 <script>
-const SB = window.EduOS?.SB_URL || 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SB = window.EduOS?.SB_URL || '';
 const KEY = window.EduOS?.SB_KEY || '';
 
 let user = null;
@@ -601,23 +601,21 @@ async function loadMotd() {
 
 // ── TODAY SCHEDULE ──
 async function loadTodaySchedule() {
-  const day = new Date().getDay();
-  const data = await dbGet('schedules', 'class_id=eq.' + encodeURIComponent(user.class_id || '') + '&day_of_week=eq.' + day + '&select=period_number,subject_name,teacher_name,room,start_time,end_time&order=period_number&limit=10');
-  const el = document.getElementById('todaySchedule');
+  var DAY_MAP = {1:'الاثنين',2:'الثلاثاء',3:'الأربعاء',4:'الخميس',5:'الجمعة'};
+  var todayAr = DAY_MAP[new Date().getDay()] || '';
+  var el = document.getElementById('todaySchedule');
+  if (!todayAr) { empty('todaySchedule', 'لا حصص — عطلة | No school today'); return; }
+  var cls = encodeURIComponent(user.class_name || '');
+  if (!cls) { empty('todaySchedule', 'لا فصل محدد | No class'); return; }
+  var data = await dbGet('schedules', 'class_name=eq.' + cls + '&day=eq.' + encodeURIComponent(todayAr) + '&select=period,subject,teacher_name&order=period&limit=10');
   if (!data || data.length === 0) { empty('todaySchedule', 'لا حصص مسجّلة لليوم | No classes today'); return; }
-  const now = new Date();
-  const cur = now.getHours() * 60 + now.getMinutes();
-  el.innerHTML = data.map(s => {
-    const parts = (s.start_time || '07:00').split(':').map(Number);
-    const eParts = (s.end_time || '07:40').split(':').map(Number);
-    const isNow = cur >= parts[0] * 60 + parts[1] && cur < eParts[0] * 60 + eParts[1];
-    return '<div class="period-row' + (isNow ? ' now' : '') + '">' +
-      '<div class="period-badge">' + s.period_number + '</div>' +
+  el.innerHTML = data.map(function(s) {
+    return '<div class="period-row">' +
+      '<div class="period-badge">' + (s.period || '—') + '</div>' +
       '<div class="period-info">' +
-        '<div class="period-subj">' + (s.subject_name || '—') + '</div>' +
-        '<div class="period-meta">' + (s.teacher_name || '') + (s.room ? ' · ' + s.room : '') + '</div>' +
+        '<div class="period-subj">' + (s.subject || '—') + '</div>' +
+        '<div class="period-meta">' + (s.teacher_name || '') + '</div>' +
       '</div>' +
-      '<div class="period-time">' + (s.start_time || '') + '–' + (s.end_time || '') + (isNow ? '<br><span class="now-badge">الآن</span>' : '') + '</div>' +
     '</div>';
   }).join('');
 }
@@ -684,32 +682,33 @@ async function loadGrades() {
 // ── SCHEDULE (full weekly) ──
 async function loadSchedule() {
   spinner('fullSchedule');
-  const days = ['الأحد | Sun', 'الاثنين | Mon', 'الثلاثاء | Tue', 'الأربعاء | Wed', 'الخميس | Thu'];
-  const data = await dbGet('schedules', 'class_id=eq.' + encodeURIComponent(user.class_id || '') + '&select=day_of_week,period_number,subject_name,start_time,end_time&order=day_of_week,period_number&limit=60');
+  var DAYS = ['الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+  var DAYS_EN = ['Mon','Tue','Wed','Thu','Fri'];
+  var cls = encodeURIComponent(user.class_name || '');
+  if (!cls) { empty('fullSchedule', 'لا فصل محدد | No class'); return; }
+  var data = await dbGet('schedules', 'class_name=eq.' + cls + '&select=day,period,subject&order=period&limit=60');
   if (!data || data.length === 0) { empty('fullSchedule', 'لا جدول مسجّل | No timetable'); return; }
 
-  // Build map [day][period]
-  const map = {};
-  let maxPeriod = 0;
-  data.forEach(s => {
-    if (!map[s.day_of_week]) map[s.day_of_week] = {};
-    map[s.day_of_week][s.period_number] = s;
-    if (s.period_number > maxPeriod) maxPeriod = s.period_number;
+  var map = {};
+  var maxPeriod = 0;
+  data.forEach(function(s) {
+    if (!map[s.day]) map[s.day] = {};
+    map[s.day][s.period] = s;
+    if (s.period > maxPeriod) maxPeriod = s.period;
   });
 
-  // Get unique periods from Sunday=0 to Thursday=4 (days 0-4 in UAE, but actual UAE = Mon-Fri = 1-5)
-  const schoolDays = [0, 1, 2, 3, 4]; // adjust as needed
-  const periods = Array.from({ length: maxPeriod }, (_, i) => i + 1);
+  var periods = [];
+  for (var i = 1; i <= maxPeriod; i++) periods.push(i);
 
-  let html = '<div class="week-table-wrap"><table class="week-table"><thead><tr><th>الحصة</th>';
-  days.forEach(d => { html += '<th>' + d + '</th>'; });
+  var html = '<div class="week-table-wrap"><table class="week-table"><thead><tr><th>الحصة</th>';
+  DAYS.forEach(function(d, i) { html += '<th>' + d + ' | ' + DAYS_EN[i] + '</th>'; });
   html += '</tr></thead><tbody>';
 
-  periods.forEach(p => {
+  periods.forEach(function(p) {
     html += '<tr><td class="period-col">ح' + p + '</td>';
-    schoolDays.forEach(d => {
-      const s = map[d] && map[d][p];
-      html += '<td>' + (s ? '<div class="subj-cell">' + (s.subject_name || '—') + '</div>' : '<span style="color:var(--text3)">—</span>') + '</td>';
+    DAYS.forEach(function(d) {
+      var s = map[d] && map[d][p];
+      html += '<td>' + (s ? '<div class="subj-cell">' + (s.subject || '—') + '</div>' : '<span style="color:var(--text3)">—</span>') + '</td>';
     });
     html += '</tr>';
   });
