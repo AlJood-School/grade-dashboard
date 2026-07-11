@@ -168,7 +168,10 @@ function getPlatformWeek(date) {
     holidayName: info.holidayName,
   };
 }
-if (typeof window !== 'undefined') window.getPlatformWeek = getPlatformWeek;
+if (typeof window !== 'undefined') {
+  window.getPlatformWeek = getPlatformWeek;
+  window.EDOOS_ACADEMIC_CALENDAR = EDOOS_ACADEMIC_CALENDAR;
+}
 if (typeof module !== 'undefined') {
   module.exports.getPlatformWeek = getPlatformWeek;
 }
