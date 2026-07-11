@@ -245,13 +245,12 @@ async function init(){
   await loadKPIs();
 }
 async function loadKPIs(){
-  const [staff,students,leaves,parents]=await Promise.all([
+  const [staff,leaves,stuCount]=await Promise.all([
     dbGet('staff_profiles','select=id,role_key&limit=200'),
-    dbGet('students','select=id,class_id&limit=200'),
     dbGet('staff_leaves','select=id,status&limit=200'),
-    dbGet('students','select=count&limit=1')
+    (async()=>{try{const r=await fetch(`${SB}/rest/v1/students?select=id`,{headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Prefer':'count=exact','Range-Unit':'items','Range':'0-0'}});return parseInt(r.headers.get('content-range')?.split('/')[1]||'0');}catch{return 0;}})()
   ]);
-  const sc=staff?staff.length:0;const stc=students?students.length:0;const lc=leaves?leaves.filter(l=>l.status==='pending').length:0;
+  const sc=staff?staff.length:0;const stc=stuCount||0;const lc=leaves?leaves.filter(l=>l.status==='pending').length:0;
   document.getElementById('kpiStaff').textContent=sc;document.getElementById('kpiStudents').textContent=stc;document.getElementById('kpiLeaves').textContent=lc;document.getElementById('kpiParents').textContent='—';
   document.getElementById('statStaff').textContent=sc;document.getElementById('statStudents').textContent=stc;document.getElementById('statLeaves').textContent=lc;
   if(lc>0){document.getElementById('leaveBadge').textContent=lc;document.getElementById('leaveBadge').style.display='inline-block';}
@@ -287,22 +286,22 @@ function filterStaff(){const q=document.getElementById('staffSearch').value.toLo
 
 async function loadStudents(){
   document.getElementById('studentList').innerHTML='<div class="spinner-wrap"><div class="spinner"></div></div>';
-  const data=await dbGet('students','select=id,name,class_id,national_id&order=class_id,name&limit=1200');
+  const data=await dbGet('students','select=id,name,class_name,national_id&order=class_name,name&limit=1200');
   if(!data||data.length===0){empty('studentList','لا طلاب | No students');return;}
   allStudents=data;
   // Populate class filter
-  const classes=[...new Set(data.map(s=>s.class_id).filter(Boolean))].sort();
+  const classes=[...new Set(data.map(s=>s.class_name).filter(Boolean))].sort();
   const cf=document.getElementById('classFilter');cf.innerHTML='<option value="">كل الصفوف | All</option>'+classes.map(c=>'<option value="'+c+'">'+c+'</option>').join('');
   renderStudents(data);
 }
 function renderStudents(data){
   document.getElementById('studentList').innerHTML='<div class="tbl-wrap"><table><thead><tr><th>الاسم | Name</th><th>الصف | Class</th><th>رقم الهوية | ID</th></tr></thead><tbody>'+
-  data.slice(0,200).map(s=>'<tr><td><strong>'+(s.name||'—')+'</strong></td><td>'+(s.class_id||'—')+'</td><td style="direction:ltr;text-align:left">'+(s.national_id||'—')+'</td></tr>').join('')+
+  data.slice(0,200).map(s=>'<tr><td><strong>'+(s.name||'—')+'</strong></td><td>'+(s.class_name||'—')+'</td><td style="direction:ltr;text-align:left">'+(s.national_id||'—')+'</td></tr>').join('')+
   '</tbody></table></div>';
 }
 function filterStudents(){
   const q=document.getElementById('studentSearch').value.toLowerCase();const cls=document.getElementById('classFilter').value;
-  renderStudents(allStudents.filter(s=>(q?(s.name||'').toLowerCase().includes(q):true)&&(cls?s.class_id===cls:true)));
+  renderStudents(allStudents.filter(s=>(q?(s.name||'').toLowerCase().includes(q):true)&&(cls?s.class_name===cls:true)));
 }
 
 async function loadLeaves(){
