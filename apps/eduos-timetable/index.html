@@ -242,6 +242,33 @@ select:focus,input:focus{outline:none;border-color:var(--primary)}
 
 <div class="toast" id="toast"></div>
 
+<!-- Modal: استبدال شاغر -->
+<div id="replaceModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:28px;max-width:480px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.2);direction:rtl">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+      <span style="font-size:1.8rem">⚠️</span>
+      <div>
+        <div style="font-size:1.1rem;font-weight:800;color:#1e293b">استبدال منصب شاغر</div>
+        <div id="rmSlotInfo" style="font-size:.82rem;color:#64748b;margin-top:2px"></div>
+      </div>
+    </div>
+    <div style="background:#FFF3E0;border:1.5px dashed #FB8C00;border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:.85rem;color:#92400e">
+      تعيين معلم/ة لهذا المنصب لا يُحذف السجل التاريخي — يُعدَّل اسم المعلم/ة فقط.
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:.82rem;font-weight:700;color:#374151;display:block;margin-bottom:6px">اختر المعلم/ة البديلة:</label>
+      <select id="rmTeacherSel" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:.9rem">
+        <option value="">جاري التحميل...</option>
+      </select>
+    </div>
+    <div id="rmConflictWarn" style="display:none;background:#FEE2E2;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:.82rem;color:#991b1b;font-weight:600"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="closeReplaceModal()" style="padding:10px 20px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-family:Tajawal,Arial,sans-serif;font-weight:600">إلغاء</button>
+      <button id="rmConfirmBtn" onclick="confirmReplace()" style="padding:10px 24px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:Tajawal,Arial,sans-serif;font-weight:700">تأكيد التعيين ✅</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const SB = (window.EduOS && window.EduOS.SB_URL) || '';
 const KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
@@ -378,12 +405,12 @@ async function loadTodaySlots() {
 async function loadWeekTable() {
   document.getElementById('weekTableWrap').innerHTML='<div class="loading"><div class="spinner"></div></div>';
   try {
-    const slots = await get('schedules', getYTFilter() + '&select=day_index,period_index,subject,teacher_name,class_name&order=day_index,period_index&limit=500');
+    const slots = await get('schedules', getYTFilter() + '&select=day,period,subject,teacher_name,class_name&order=period&limit=500');
     if(!slots||slots.length===0){ document.getElementById('weekTableWrap').innerHTML='<div style="padding:40px;text-align:center;color:var(--text2)">لا جدول أسبوعي مُدخَل حتى الآن</div>'; return; }
 
-    const periods = [...new Set(slots.map(s=>s.period_index))].sort((a,b)=>a-b);
+    const periods = [...new Set(slots.map(s=>s.period))].sort((a,b)=>a-b);
     const byDayPeriod = {};
-    slots.forEach(s=>{ const k=`${s.day_index}_${s.period_index}`; if(!byDayPeriod[k]) byDayPeriod[k]=[]; byDayPeriod[k].push(s); });
+    slots.forEach(s=>{ const di=DAYS.indexOf(s.day); const k=`${di}_${s.period}`; if(!byDayPeriod[k]) byDayPeriod[k]=[]; byDayPeriod[k].push(s); });
 
     let html = `<table class="tt-table"><thead><tr><th>الحصة</th>${DAYS.map((d,i)=>`<th>${d}<br><span style="font-size:.7rem;opacity:.8">${DAYS_EN[i]}</span></th>`).join('')}</tr></thead><tbody>`;
     periods.forEach(p=>{
@@ -480,6 +507,97 @@ function switchTab(n){
   document.getElementById(`tab-${n}`).classList.add('active');
 }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
+
+// === استبدال شاغر ===
+let _rmData = {};
+
+async function openReplaceModal(el) {
+  _rmData = {
+    id: el.dataset.sid,
+    subject: el.dataset.subj,
+    cls: el.dataset.cls,
+    day: el.dataset.day,
+    period: el.dataset.period
+  };
+  document.getElementById('rmSlotInfo').textContent =
+    _rmData.cls + ' — ' + _rmData.subject + ' — ' + _rmData.day + ' الحصة ' + _rmData.period;
+  document.getElementById('rmConflictWarn').style.display='none';
+  document.getElementById('replaceModal').style.display='flex';
+
+  // تحميل المعلمات المطابقة للمادة
+  const sel = document.getElementById('rmTeacherSel');
+  sel.innerHTML = '<option value="">جاري التحميل...</option>';
+  try {
+    const all = await get('staff_profiles',
+      'select=staff_db_id,name_ar,subject&is_active=eq.true&role_key=in.(teacher,sub_teacher)&order=name_ar&limit=200');
+    const subj = (_rmData.subject||'').toLowerCase();
+    const matched = all.filter(t=>{
+      const ts = (t.subject||'').toLowerCase();
+      return !ts || ts.split(',').some(x=>subj.includes(x.trim())||x.trim().includes(subj));
+    });
+    const list = matched.length ? matched : all;
+    sel.innerHTML = '<option value="">— اختر معلم/ة —</option>' +
+      list.map(t=>`<option value="${t.staff_db_id}">${t.name_ar||'معلم'} ${t.subject?'('+t.subject+')':''}</option>`).join('');
+
+    sel.addEventListener('change', async function() {
+      if(!this.value) return;
+      document.getElementById('rmConflictWarn').style.display='none';
+      // فحص التعارض: هل لديها حصة في نفس اليوم + الحصة؟
+      const conf = await get('schedules',
+        getYTFilter() + '&teacher_id=eq.'+encodeURIComponent(this.value)+
+        '&day=eq.'+encodeURIComponent(_rmData.day)+'&period=eq.'+_rmData.period+'&limit=5');
+      if(conf && conf.length>0) {
+        document.getElementById('rmConflictWarn').style.display='block';
+        document.getElementById('rmConflictWarn').textContent =
+          '⚠️ تعارض: هذه المعلمة لديها حصة في ' + _rmData.day + ' الحصة ' + _rmData.period +
+          ' (صف ' + (conf[0].class_name||'—') + ')';
+      }
+    });
+  } catch(e) { sel.innerHTML='<option value="">خطأ في التحميل</option>'; }
+}
+
+function closeReplaceModal() {
+  document.getElementById('replaceModal').style.display='none';
+  _rmData = {};
+}
+
+async function confirmReplace() {
+  const sel = document.getElementById('rmTeacherSel');
+  const teacherId = sel.value;
+  const teacherName = sel.options[sel.selectedIndex]?.textContent?.split(' (')[0] || '';
+  if(!teacherId) { showToast('اختر معلم/ة أولاً'); return; }
+
+  const btn = document.getElementById('rmConfirmBtn');
+  btn.textContent='جاري التحديث...'; btn.disabled=true;
+
+  try {
+    // تحديث في DB عبر Supabase REST
+    const SB = (window.EduOS && window.EduOS.SB_URL) || '';
+    const KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+    let url = SB + '/rest/v1/schedules?';
+    if(_rmData.id) url += 'id=eq.' + encodeURIComponent(_rmData.id);
+    else url += 'class_name=eq.'+encodeURIComponent(_rmData.cls)+'&day=eq.'+encodeURIComponent(_rmData.day)+'&period=eq.'+_rmData.period+'&teacher_name=eq.شاغر';
+
+    const res = await fetch(url, {
+      method:'PATCH',
+      headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body: JSON.stringify({teacher_name: teacherName.trim(), teacher_id: teacherId})
+    });
+    if(res.ok || res.status===204) {
+      showToast('✅ تم تعيين ' + teacherName + ' في المنصب الشاغر');
+      closeReplaceModal();
+      // إعادة تحميل الجدول
+      const activePanel = document.querySelector('.panel.active');
+      if(activePanel && activePanel.id==='panel-class') loadClassTable();
+      else if(activePanel && activePanel.id==='panel-week') loadWeekTable();
+      else if(activePanel && activePanel.id==='panel-teacher') loadTeacherTable();
+    } else {
+      showToast('خطأ في التحديث — حاول مرة أخرى');
+    }
+  } catch(e) { showToast('خطأ في الاتصال'); }
+  btn.textContent='تأكيد التعيين ✅'; btn.disabled=false;
+}
+
 init();
 </script>
 </body>
