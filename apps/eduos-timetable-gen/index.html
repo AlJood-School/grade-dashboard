@@ -131,6 +131,7 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
 /* ── Alerts ── */
 .alert{padding:11px 15px;border-radius:9px;font-size:14px;margin-bottom:11px}
 .al-warn{background:#FEF3C7;color:#92400E;border:1px solid #FDE68A}
+.al-error{background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;font-weight:600}
 .al-err{background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5}
 .al-ok{background:#D1FAE5;color:#065F46;border:1px solid #6EE7B7}
 .al-info{background:#DBEAFE;color:#1E40AF;border:1px solid #93C5FD}
@@ -874,7 +875,7 @@ function buildTeacherRow(subjName, rowIdx, asgn) {
   chipsWrap.className = 'ta-clschips';
   var clsLabel = document.createElement('span');
   clsLabel.style.cssText = 'font-size:11px;color:#6B7280;font-weight:700;width:100%;margin-bottom:3px';
-  clsLabel.innerHTML = 'الصفوف المُسنَدة: <span style="color:#6C3DD6;font-weight:400">(اتركها فارغة = تغطي جميع الفصول)</span>';
+  clsLabel.innerHTML = 'الصفوف المُسنَدة: <span style="color:#DC2626;font-weight:600">⚠️ اختر الفصول المُسنَدة (مطلوب لتوليد الجدول)</span>';
   chipsWrap.appendChild(clsLabel);
   STATE.selectedClasses.forEach(function(cls) {
     var chip = document.createElement('button');
@@ -963,13 +964,13 @@ function updateUnassignedLabel(subjName) {
   var el = document.getElementById('taunassigned_' + sanitizeId(subjName));
   if (!el) return;
   var assignments = STATE.teacherMap[subjName] || [];
-  /* If any non-vacant teacher has empty classes[] → covers ALL classes (fallback rule) */
-  var hasFullCover = assignments.some(function(a) {
+  /* Check if any non-vacant teacher has empty classes[] → must select classes */
+  var hasEmptyChips = assignments.some(function(a) {
     return !a.isVacant && (!a.classes || a.classes.length === 0);
   });
-  if (hasFullCover) {
-    el.textContent = '✓ جميع الصفوف مُعيَّنة (تغطية كاملة) — All classes assigned';
-    el.style.color = '#065F46';
+  if (hasEmptyChips) {
+    el.textContent = '⚠️ معلمة لم تُحدَّد فصولها — يجب تحديد الفصول قبل التوليد';
+    el.style.color = '#DC2626';
     return;
   }
   var assignedCls = [];
@@ -1000,15 +1001,7 @@ function getTeacherForClass(subjName, className) {
         : { teacherId: a.teacherId, teacherNameAr: a.teacherNameAr || 'شاغر', isVacant: false };
     }
   }
-  /* Second pass: fallback — teacher with no classes specified covers all classes */
-  for (var j = 0; j < assignments.length; j++) {
-    var b = assignments[j];
-    if (!b.classes || b.classes.length === 0) {
-      return b.isVacant
-        ? { teacherId: null, teacherNameAr: 'شاغر', isVacant: true }
-        : { teacherId: b.teacherId, teacherNameAr: b.teacherNameAr || 'شاغر', isVacant: false };
-    }
-  }
+  /* No match found — return شاغر (empty chips = unassigned, not full-cover) */
   return { teacherId: null, teacherNameAr: 'شاغر', isVacant: true };
 }
 
@@ -1045,23 +1038,33 @@ function generateTimetable() {
 
   /* Warn about unassigned classes but allow generation */
   var unassignedWarnings = [];
+  var blockingErrors = [];
   STATE.subjects.forEach(function(s) {
     var assignments = STATE.teacherMap[s.name];
     if (!Array.isArray(assignments) || assignments.length === 0) {
       unassignedWarnings.push(s.name + ': جميع الصفوف شاغرة');
       return;
     }
-    /* If any non-vacant teacher has empty classes[] → covers ALL classes → no warning */
-    var hasFullCover = assignments.some(function(a) {
+    /* BLOCK: any non-vacant teacher with empty classes[] must select classes first */
+    var emptyChipTeachers = assignments.filter(function(a) {
       return !a.isVacant && (!a.classes || a.classes.length === 0);
     });
-    if (hasFullCover) return;
+    if (emptyChipTeachers.length > 0) {
+      emptyChipTeachers.forEach(function(a) {
+        blockingErrors.push('📌 ' + s.name + ' — ' + (a.teacherNameAr || 'معلمة') + ': لم تُحدَّد الفصول');
+      });
+      return;
+    }
     /* Only warn for classes truly not covered by any teacher assignment */
     var assignedCls = [];
     assignments.forEach(function(a) { (a.classes || []).forEach(function(c) { assignedCls.push(c); }); });
     var missing = classes.filter(function(c) { return assignedCls.indexOf(c) < 0; });
     if (missing.length) unassignedWarnings.push(s.name + ': ' + missing.join(',') + ' بدون معلمة');
   });
+  if (blockingErrors.length) {
+    showAlert('genAlert','al-error','🚫 لا يمكن توليد الجدول — يجب تحديد الفصول لكل معلمة أولاً:<br><br>' + blockingErrors.join('<br>'));
+    return;
+  }
   if (unassignedWarnings.length) {
     showAlert('genAlert','al-warn','⚠️ ملاحظة — سيُوزَّع الجدول وبعض الصفوف ستظهر شاغرة:<br>' + unassignedWarnings.join('<br>'));
   } else {
