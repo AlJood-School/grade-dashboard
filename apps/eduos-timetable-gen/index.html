@@ -135,6 +135,29 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
 .al-err{background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5}
 .al-ok{background:#D1FAE5;color:#065F46;border:1px solid #6EE7B7}
 .al-info{background:#DBEAFE;color:#1E40AF;border:1px solid #93C5FD}
+/* ══ Assignment Matrix ══ */
+.cam-card{background:#F8F7FF;border:1.5px solid #EDE9FE;border-radius:14px;padding:18px;margin-bottom:14px}
+.cam-hdr{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.cam-badge{padding:5px 14px;border-radius:20px;font-size:14px;font-weight:800}
+.cam-ppw{font-size:12px;color:#6B7280;font-weight:600}
+.cam-summary{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;min-height:24px}
+.cam-sum-item{font-size:12px;font-weight:700;padding:3px 10px;border-radius:8px}
+.cam-sum-assigned{background:#D1FAE5;color:#065F46}
+.cam-sum-vacant{background:#FEF3C7;color:#92400E}
+.cam-sum-pending{background:#E5E7EB;color:#374151}
+.cam-bulk{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px;padding:10px 12px;background:#fff;border-radius:10px;align-items:center;border:1px solid #E5E7EB}
+.cam-bulk-label{font-size:12px;color:#6B7280;font-weight:700;white-space:nowrap}
+.cam-bulk-sel{padding:6px 10px;border:1.5px solid #D1D5DB;border-radius:8px;font-family:inherit;font-size:12px;background:#fff;color:#1F2937;flex:1;min-width:160px;max-width:260px}
+.cam-bulk-sel:focus{outline:none;border-color:#6C3DD6}
+.cam-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:7px}
+.cam-row{display:flex;align-items:center;gap:6px;background:#fff;border-radius:9px;padding:7px 9px;border:1.5px solid #E5E7EB;transition:border-color .15s}
+.cam-row:hover{border-color:#A78BFA}
+.cam-cls{min-width:36px;font-size:11px;font-weight:800;text-align:center;padding:3px 7px;border-radius:7px;flex-shrink:0}
+.cam-sel{flex:1;padding:5px 6px;border:1px solid #E5E7EB;border-radius:7px;font-family:inherit;font-size:12px;background:#fff;color:#1F2937;min-width:0}
+.cam-sel:focus{outline:none;border-color:#6C3DD6}
+.cam-status{font-size:15px;flex-shrink:0;line-height:1;width:18px;text-align:center}
+.cam-status.st-pending{opacity:.35}
+
 /* ── Print Actions ── */
 .print-acts{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
 /* ── Step panels ── */
@@ -475,7 +498,7 @@ var STATE = {
     {name:'تربية بدنية', ppw:2, isDouble:true,  color:'#CFFAFE', tcolor:'#155E75'}
   ],
   teachers: [],
-  teacherMap: {},
+  classAssignments: {},
   timetable: null,
   activeClass: null,
   dragSrc: null
@@ -749,278 +772,246 @@ function addSubject() {
   renderSubjectsTable();
 }
 
-/* ── Step 3: Multi-Teacher Assignment ── */
+/* ── Step 3: Smart Assignment Matrix ── */
 function sanitizeId(str) {
   return (str || '').replace(/\s+/g,'_').replace(/[^\w]/g,'X');
 }
 
-function renderAssignGrid() {
+function initClassAssignments() {
+  STATE.subjects.forEach(function(s) {
+    if (!STATE.classAssignments[s.name]) STATE.classAssignments[s.name] = {};
+    STATE.selectedClasses.forEach(function(cls) {
+      if (!STATE.classAssignments[s.name][cls]) {
+        STATE.classAssignments[s.name][cls] = { status: 'pending', teacherId: null, teacherNameAr: null };
+      }
+    });
+  });
+}
+
+function updateCamSummary(subjName) {
+  var el = document.getElementById('cam_summary_' + sanitizeId(subjName));
+  if (!el) return;
+  var assigned = 0, vacant = 0, pending = 0;
+  STATE.selectedClasses.forEach(function(cls) {
+    var ca = (STATE.classAssignments[subjName] || {})[cls];
+    if (!ca || ca.status === 'pending') pending++;
+    else if (ca.status === 'vacant') vacant++;
+    else assigned++;
+  });
+  el.innerHTML =
+    (assigned > 0 ? '<span class="cam-sum-item cam-sum-assigned">\u2705 ' + assigned + ' \u0645\u0639\u064a\u0651\u064e\u0646\u0629</span>' : '') +
+    (vacant  > 0 ? '<span class="cam-sum-item cam-sum-vacant">\uD83D\uDFE0 ' + vacant  + ' \u0634\u0627\u063a\u0631</span>' : '') +
+    (pending > 0 ? '<span class="cam-sum-item cam-sum-pending">\u26AA ' + pending + ' \u0628\u0627\u0646\u062a\u0638\u0627\u0631</span>' : '');
+}
+
+function setCamRowStatus(subjName, cls) {
+  var ca = (STATE.classAssignments[subjName] || {})[cls];
+  var stEl  = document.getElementById('cam_st_'  + sanitizeId(subjName) + '_' + sanitizeId(cls));
+  var rowEl = document.getElementById('cam_row_' + sanitizeId(subjName) + '_' + sanitizeId(cls));
+  if (!stEl) return;
+  if (!ca || ca.status === 'pending') {
+    stEl.textContent = '\u26AA'; stEl.className = 'cam-status st-pending';
+    if (rowEl) rowEl.style.borderColor = '#E5E7EB';
+  } else if (ca.status === 'vacant') {
+    stEl.textContent = '\uD83D\uDFE0'; stEl.className = 'cam-status st-vacant';
+    if (rowEl) rowEl.style.borderColor = '#F59E0B';
+  } else {
+    stEl.textContent = '\u2705'; stEl.className = 'cam-status st-assigned';
+    if (rowEl) rowEl.style.borderColor = '#10B981';
+  }
+  updateCamSummary(subjName);
+}
+
+function renderAssignMatrix() {
   var grid = document.getElementById('assignGrid');
   grid.innerHTML = '';
-
-  /* Migrate old single-teacher entries to new array format */
-  STATE.subjects.forEach(function(s) {
-    var existing = STATE.teacherMap[s.name];
-    if (!existing) {
-      STATE.teacherMap[s.name] = [];
-    } else if (!Array.isArray(existing)) {
-      /* Convert old format to new */
-      STATE.teacherMap[s.name] = existing.isVacant ? [] : [{ teacherId: existing.teacherId, teacherNameAr: existing.teacherNameAr, isVacant: false, classes: [] }];
-    }
-  });
+  initClassAssignments();
 
   STATE.subjects.forEach(function(s) {
     var bg = s.color || getSubjectColor(s.name);
     var tc = s.tcolor || getSubjectTColor(s.name);
     var card = document.createElement('div');
-    card.className = 'acard acard-full';
-    card.dataset.subj = s.name;
+    card.className = 'acard acard-full cam-card';
 
-    var badge = document.createElement('div');
-    badge.className = 'sbadge';
-    badge.style.background = bg;
-    badge.style.color = tc;
-    badge.style.marginBottom = '10px';
-    badge.textContent = s.name + ' (' + (s.ppw||2) + ' حصة/أسبوع)';
-    card.appendChild(badge);
+    /* ── Header ── */
+    var hdr = document.createElement('div');
+    hdr.className = 'cam-hdr';
+    var badge = document.createElement('span');
+    badge.className = 'cam-badge';
+    badge.style.background = bg; badge.style.color = tc;
+    badge.textContent = s.name;
+    var ppwLbl = document.createElement('span');
+    ppwLbl.className = 'cam-ppw';
+    ppwLbl.textContent = (s.ppw || 2) + ' \u062d\u0635\u0629/\u0623\u0633\u0628\u0648\u0639';
+    hdr.appendChild(badge); hdr.appendChild(ppwLbl);
+    card.appendChild(hdr);
 
-    var taList = document.createElement('div');
-    taList.className = 'ta-list';
-    taList.id = 'talist_' + sanitizeId(s.name);
-    card.appendChild(taList);
+    /* ── Summary ── */
+    var summary = document.createElement('div');
+    summary.className = 'cam-summary';
+    summary.id = 'cam_summary_' + sanitizeId(s.name);
+    card.appendChild(summary);
 
-    var unassignedEl = document.createElement('div');
-    unassignedEl.className = 'ta-unassigned';
-    unassignedEl.id = 'taunassigned_' + sanitizeId(s.name);
-    card.appendChild(unassignedEl);
+    /* ── Bulk actions ── */
+    var bulk = document.createElement('div');
+    bulk.className = 'cam-bulk';
+    var blkLbl = document.createElement('span');
+    blkLbl.className = 'cam-bulk-label';
+    blkLbl.textContent = '\u062a\u0639\u064a\u064a\u0646 \u0633\u0631\u064a\u0639:';
+    bulk.appendChild(blkLbl);
 
-    var addBtn = document.createElement('button');
-    addBtn.className = 'ta-add-btn';
-    addBtn.textContent = '+ إضافة معلمة لهذه المادة — Add Teacher';
-    addBtn.dataset.subj = s.name;
-    addBtn.addEventListener('click', function() {
-      addTeacherRow(this.dataset.subj);
+    var blkSel = document.createElement('select');
+    blkSel.className = 'cam-bulk-sel';
+    blkSel.dataset.subj = s.name;
+    var o0 = document.createElement('option'); o0.value = ''; o0.textContent = '-- \u0627\u062e\u062a\u0631 \u0645\u0639\u0644\u0645\u0629 --'; blkSel.appendChild(o0);
+    STATE.teachers.forEach(function(t) {
+      var o = document.createElement('option');
+      o.value = t.username || ''; o.dataset.nameAr = t.name_ar || '';
+      o.textContent = (t.name_ar || '') + (t.subject ? ' (' + t.subject + ')' : '');
+      blkSel.appendChild(o);
     });
-    card.appendChild(addBtn);
+    bulk.appendChild(blkSel);
 
+    var blkApply = document.createElement('button');
+    blkApply.className = 'btn btn-primary btn-sm';
+    blkApply.textContent = '\u2190 \u0639\u064a\u0651\u0646 \u0628\u0647 \u0643\u0644 \u0627\u0644\u0628\u0627\u0646\u062a\u0638\u0627\u0631';
+    blkApply.dataset.subj = s.name;
+    blkApply.addEventListener('click', function() {
+      var subj = this.dataset.subj;
+      var sel = this.closest('.cam-bulk').querySelector('.cam-bulk-sel');
+      if (!sel || !sel.value) { showToast('\u0627\u062e\u062a\u0627\u0631\u064a \u0645\u0639\u0644\u0645\u0629 \u0623\u0648\u0644\u0627\u064b', 'err'); return; }
+      var tId = sel.value, tName = sel.options[sel.selectedIndex].dataset.nameAr || tId;
+      STATE.selectedClasses.forEach(function(cls) {
+        var ca = (STATE.classAssignments[subj] || {})[cls];
+        if (!ca || ca.status === 'pending') {
+          STATE.classAssignments[subj][cls] = { status: 'assigned', teacherId: tId, teacherNameAr: tName };
+          var rs = document.getElementById('cam_sel_' + sanitizeId(subj) + '_' + sanitizeId(cls));
+          if (rs) rs.value = tId;
+          setCamRowStatus(subj, cls);
+        }
+      });
+    });
+    bulk.appendChild(blkApply);
+
+    var blkVacant = document.createElement('button');
+    blkVacant.className = 'btn btn-sm';
+    blkVacant.style.cssText = 'background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;font-family:inherit;font-weight:700;cursor:pointer;border-radius:9px;padding:5px 12px;font-size:13px';
+    blkVacant.textContent = '\uD83D\uDFE0 \u0639\u064a\u0651\u0646 \u0643\u0644 \u0627\u0644\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0634\u0627\u063a\u0631\u0627\u064b';
+    blkVacant.dataset.subj = s.name;
+    blkVacant.addEventListener('click', function() {
+      var subj = this.dataset.subj;
+      STATE.selectedClasses.forEach(function(cls) {
+        var ca = (STATE.classAssignments[subj] || {})[cls];
+        if (!ca || ca.status === 'pending') {
+          STATE.classAssignments[subj][cls] = { status: 'vacant', teacherId: null, teacherNameAr: '\u0634\u0627\u063a\u0631' };
+          var rs = document.getElementById('cam_sel_' + sanitizeId(subj) + '_' + sanitizeId(cls));
+          if (rs) rs.value = '__vacant__';
+          setCamRowStatus(subj, cls);
+        }
+      });
+    });
+    bulk.appendChild(blkVacant);
+
+    var blkReset = document.createElement('button');
+    blkReset.className = 'btn btn-secondary btn-sm';
+    blkReset.textContent = '\u21ba \u0625\u0639\u0627\u062f\u0629 \u0636\u0628\u0637 \u0627\u0644\u0643\u0644';
+    blkReset.dataset.subj = s.name;
+    blkReset.addEventListener('click', function() {
+      var subj = this.dataset.subj;
+      STATE.selectedClasses.forEach(function(cls) {
+        STATE.classAssignments[subj][cls] = { status: 'pending', teacherId: null, teacherNameAr: null };
+        var rs = document.getElementById('cam_sel_' + sanitizeId(subj) + '_' + sanitizeId(cls));
+        if (rs) rs.value = '';
+        setCamRowStatus(subj, cls);
+      });
+    });
+    bulk.appendChild(blkReset);
+    card.appendChild(bulk);
+
+    /* ── Class grid ── */
+    var camGrid = document.createElement('div');
+    camGrid.className = 'cam-grid';
+    STATE.selectedClasses.forEach(function(cls) {
+      var ca = STATE.classAssignments[s.name][cls] || { status: 'pending' };
+      var row = document.createElement('div');
+      row.className = 'cam-row';
+      row.id = 'cam_row_' + sanitizeId(s.name) + '_' + sanitizeId(cls);
+
+      var clsBadge = document.createElement('span');
+      clsBadge.className = 'cam-cls';
+      clsBadge.style.background = bg; clsBadge.style.color = tc;
+      clsBadge.textContent = cls;
+      row.appendChild(clsBadge);
+
+      var rowSel = document.createElement('select');
+      rowSel.className = 'cam-sel';
+      rowSel.id = 'cam_sel_' + sanitizeId(s.name) + '_' + sanitizeId(cls);
+      rowSel.dataset.subj = s.name; rowSel.dataset.cls = cls;
+
+      var opP = document.createElement('option'); opP.value = ''; opP.textContent = '\u26AA \u0627\u062e\u062a\u0631...'; rowSel.appendChild(opP);
+      var opV = document.createElement('option'); opV.value = '__vacant__'; opV.textContent = '\uD83D\uDFE0 \u0634\u0627\u063a\u0631'; rowSel.appendChild(opV);
+      STATE.teachers.forEach(function(t) {
+        var op = document.createElement('option'); op.value = t.username || ''; op.dataset.nameAr = t.name_ar || '';
+        op.textContent = t.name_ar || t.username; rowSel.appendChild(op);
+      });
+
+      if (ca.status === 'vacant') rowSel.value = '__vacant__';
+      else if (ca.status === 'assigned' && ca.teacherId) rowSel.value = ca.teacherId;
+      else rowSel.value = '';
+
+      rowSel.addEventListener('change', function() {
+        var subj = this.dataset.subj, cls = this.dataset.cls;
+        if (!STATE.classAssignments[subj]) STATE.classAssignments[subj] = {};
+        if (this.value === '') {
+          STATE.classAssignments[subj][cls] = { status: 'pending', teacherId: null, teacherNameAr: null };
+        } else if (this.value === '__vacant__') {
+          STATE.classAssignments[subj][cls] = { status: 'vacant', teacherId: null, teacherNameAr: '\u0634\u0627\u063a\u0631' };
+        } else {
+          var opt = this.options[this.selectedIndex];
+          STATE.classAssignments[subj][cls] = { status: 'assigned', teacherId: this.value, teacherNameAr: opt.dataset.nameAr || this.value };
+        }
+        setCamRowStatus(subj, cls);
+      });
+      row.appendChild(rowSel);
+
+      var stEl = document.createElement('span');
+      stEl.id = 'cam_st_' + sanitizeId(s.name) + '_' + sanitizeId(cls);
+      stEl.className = 'cam-status';
+      row.appendChild(stEl);
+
+      camGrid.appendChild(row);
+    });
+    card.appendChild(camGrid);
     grid.appendChild(card);
-    renderTeacherRows(s.name);
-    updateUnassignedLabel(s.name);
+
+    /* Init status icons */
+    STATE.selectedClasses.forEach(function(cls) { setCamRowStatus(s.name, cls); });
   });
 }
 
-function renderTeacherRows(subjName) {
-  var list = document.getElementById('talist_' + sanitizeId(subjName));
-  if (!list) return;
-  list.innerHTML = '';
-  var assignments = STATE.teacherMap[subjName] || [];
-  assignments.forEach(function(asgn, ri) {
-    list.appendChild(buildTeacherRow(subjName, ri, asgn));
-  });
-}
+function renderAssignGrid() { renderAssignMatrix(); } /* backward compat */
 
-function buildTeacherRow(subjName, rowIdx, asgn) {
-  var row = document.createElement('div');
-  row.className = 'ta-row';
-
-  /* Header: teacher dropdown + remove button */
-  var hdr = document.createElement('div');
-  hdr.className = 'ta-row-hdr';
-
-  var sel = document.createElement('select');
-  var optVacant = document.createElement('option');
-  optVacant.value = '__vacant__';
-  optVacant.textContent = 'شاغر — Vacant';
-  sel.appendChild(optVacant);
-  STATE.teachers.forEach(function(t) {
-    var opt = document.createElement('option');
-    opt.value = t.username || '';
-    opt.dataset.nameAr = t.name_ar || '';
-    opt.textContent = (t.name_ar || '') + (t.subject ? ' (' + t.subject + ')' : '');
-    sel.appendChild(opt);
-  });
-  if (asgn.teacherId) sel.value = asgn.teacherId; else sel.value = '__vacant__';
-  sel.addEventListener('change', function() {
-    var opt = this.options[this.selectedIndex];
-    var assignments = STATE.teacherMap[subjName];
-    if (assignments && assignments[rowIdx] !== undefined) {
-      if (this.value === '__vacant__') {
-        assignments[rowIdx].teacherId = null;
-        assignments[rowIdx].teacherNameAr = 'شاغر';
-        assignments[rowIdx].isVacant = true;
-      } else {
-        assignments[rowIdx].teacherId = this.value;
-        assignments[rowIdx].teacherNameAr = opt.dataset.nameAr || this.value;
-        assignments[rowIdx].isVacant = false;
-      }
-    }
-    renderNasabBadge(subjName, rowIdx, row);
-  });
-  hdr.appendChild(sel);
-
-  var removeBtn = document.createElement('button');
-  removeBtn.className = 'btn btn-danger btn-sm';
-  removeBtn.textContent = '× حذف';
-  removeBtn.style.flexShrink = '0';
-  removeBtn.addEventListener('click', function() {
-    STATE.teacherMap[subjName].splice(rowIdx, 1);
-    renderTeacherRows(subjName);
-    updateUnassignedLabel(subjName);
-  });
-  hdr.appendChild(removeBtn);
-  row.appendChild(hdr);
-
-  /* Class chips */
-  var chipsWrap = document.createElement('div');
-  chipsWrap.className = 'ta-clschips';
-  var clsLabel = document.createElement('span');
-  clsLabel.style.cssText = 'font-size:11px;color:#6B7280;font-weight:700;width:100%;margin-bottom:3px';
-  clsLabel.innerHTML = 'الصفوف المُسنَدة: <span style="color:#DC2626;font-weight:600">⚠️ اختر الفصول المُسنَدة (مطلوب لتوليد الجدول)</span>';
-  chipsWrap.appendChild(clsLabel);
-  STATE.selectedClasses.forEach(function(cls) {
-    var chip = document.createElement('button');
-    chip.className = 'ta-cls-chip' + (asgn.classes && asgn.classes.indexOf(cls) > -1 ? ' sel' : '');
-    chip.textContent = cls;
-    chip.addEventListener('click', function() {
-      var assignments = STATE.teacherMap[subjName];
-      if (!assignments || assignments[rowIdx] === undefined) return;
-      if (!assignments[rowIdx].classes) assignments[rowIdx].classes = [];
-      var clsList = assignments[rowIdx].classes;
-      var idx = clsList.indexOf(cls);
-      if (idx > -1) { clsList.splice(idx, 1); this.classList.remove('sel'); }
-      else { clsList.push(cls); this.classList.add('sel'); }
-      updateUnassignedLabel(subjName);
-      renderNasabBadge(subjName, rowIdx, row);
-    });
-    chipsWrap.appendChild(chip);
-  });
-
-  /* "تحديد الكل / إلغاء الكل" for this row */
-  var qBtns = document.createElement('div');
-  qBtns.style.cssText = 'display:flex;gap:5px;margin-top:4px;width:100%';
-  var qAll = document.createElement('button');
-  qAll.className = 'btn btn-secondary btn-sm';
-  qAll.textContent = 'تحديد الكل';
-  qAll.style.fontSize = '11px';
-  qAll.addEventListener('click', function() {
-    var assignments = STATE.teacherMap[subjName];
-    if (!assignments || assignments[rowIdx] === undefined) return;
-    assignments[rowIdx].classes = STATE.selectedClasses.slice();
-    renderTeacherRows(subjName);
-    updateUnassignedLabel(subjName);
-  });
-  var qNone = document.createElement('button');
-  qNone.className = 'btn btn-secondary btn-sm';
-  qNone.textContent = 'إلغاء الكل';
-  qNone.style.fontSize = '11px';
-  qNone.addEventListener('click', function() {
-    var assignments = STATE.teacherMap[subjName];
-    if (!assignments || assignments[rowIdx] === undefined) return;
-    assignments[rowIdx].classes = [];
-    renderTeacherRows(subjName);
-    updateUnassignedLabel(subjName);
-  });
-  qBtns.appendChild(qAll);
-  qBtns.appendChild(qNone);
-  chipsWrap.appendChild(qBtns);
-  row.appendChild(chipsWrap);
-
-  /* Nasab badge */
-  var nasabEl = document.createElement('div');
-  nasabEl.className = 'ta-nasab';
-  row.appendChild(nasabEl);
-  renderNasabBadge(subjName, rowIdx, row);
-
-  return row;
-}
-
-function addTeacherRow(subjName) {
-  if (!STATE.teacherMap[subjName]) STATE.teacherMap[subjName] = [];
-  STATE.teacherMap[subjName].push({ teacherId: null, teacherNameAr: 'شاغر', isVacant: true, classes: [] });
-  renderTeacherRows(subjName);
-  updateUnassignedLabel(subjName);
-}
-
-function renderNasabBadge(subjName, rowIdx, rowEl) {
-  var nasabEl = rowEl.querySelector('.ta-nasab');
-  if (!nasabEl) return;
-  var assignments = STATE.teacherMap[subjName];
-  if (!assignments || !assignments[rowIdx] || assignments[rowIdx].isVacant) {
-    nasabEl.textContent = '';
-    return;
-  }
-  var asgn = assignments[rowIdx];
-  var clsCount = (asgn.classes || []).length;
-  var ppw = 0;
-  STATE.subjects.forEach(function(s) { if (s.name === subjName) ppw = s.ppw || 0; });
-  var estLoad = clsCount * ppw;
-  nasabEl.textContent = 'النصاب التقديري: ' + estLoad + ' حصة/أسبوع (' + clsCount + ' صف × ' + ppw + ')';
-  if (estLoad > 24) { nasabEl.style.background = '#FEE2E2'; nasabEl.style.color = '#991B1B'; }
-  else if (estLoad > 18) { nasabEl.style.background = '#FEF3C7'; nasabEl.style.color = '#92400E'; }
-  else { nasabEl.style.background = '#D1FAE5'; nasabEl.style.color = '#065F46'; }
-}
-
-function updateUnassignedLabel(subjName) {
-  var el = document.getElementById('taunassigned_' + sanitizeId(subjName));
-  if (!el) return;
-  var assignments = STATE.teacherMap[subjName] || [];
-  /* Check if any non-vacant teacher has empty classes[] → must select classes */
-  var hasEmptyChips = assignments.some(function(a) {
-    return !a.isVacant && (!a.classes || a.classes.length === 0);
-  });
-  if (hasEmptyChips) {
-    el.textContent = '⚠️ معلمة لم تُحدَّد فصولها — يجب تحديد الفصول قبل التوليد';
-    el.style.color = '#DC2626';
-    return;
-  }
-  var assignedCls = [];
-  assignments.forEach(function(a) { (a.classes || []).forEach(function(c) { assignedCls.push(c); }); });
-  var unassigned = STATE.selectedClasses.filter(function(c) { return assignedCls.indexOf(c) < 0; });
-  if (unassigned.length === 0) {
-    el.textContent = '✓ جميع الصفوف مُعيَّنة — All classes assigned';
-    el.style.color = '#065F46';
-  } else {
-    el.textContent = '⚠️ صفوف بدون معلمة: ' + unassigned.join(', ');
-    el.style.color = '#DC2626';
-  }
-}
-
-function updateAllNasab() { /* kept for compatibility */ }
-function updateNasabRow() { /* kept for compatibility */ }
-
-/* Lookup: get teacher info for a specific class+subject pair */
 function getTeacherForClass(subjName, className) {
-  var assignments = STATE.teacherMap[subjName];
-  if (!assignments || !assignments.length) return { teacherId: null, teacherNameAr: 'شاغر', isVacant: true };
-  /* First pass: exact class match */
-  for (var i = 0; i < assignments.length; i++) {
-    var a = assignments[i];
-    if (a.classes && a.classes.length > 0 && a.classes.indexOf(className) > -1) {
-      return a.isVacant
-        ? { teacherId: null, teacherNameAr: 'شاغر', isVacant: true }
-        : { teacherId: a.teacherId, teacherNameAr: a.teacherNameAr || 'شاغر', isVacant: false };
-    }
-  }
-  /* No match found — return شاغر (empty chips = unassigned, not full-cover) */
-  return { teacherId: null, teacherNameAr: 'شاغر', isVacant: true };
+  var ca = (STATE.classAssignments[subjName] || {})[className];
+  if (!ca || ca.status === 'pending') return { teacherId: null, teacherNameAr: '\u0634\u0627\u063a\u0631', isVacant: true };
+  if (ca.status === 'vacant')         return { teacherId: null, teacherNameAr: '\u0634\u0627\u063a\u0631', isVacant: true };
+  return { teacherId: ca.teacherId, teacherNameAr: ca.teacherNameAr || '\u0634\u0627\u063a\u0631', isVacant: false };
 }
 
 function calcTeacherLoad(teacherId) {
   if (!teacherId) return 0;
   var count = 0;
-  Object.keys(STATE.teacherMap).forEach(function(subj) {
-    var assignments = STATE.teacherMap[subj];
-    if (!Array.isArray(assignments)) return;
+  Object.keys(STATE.classAssignments).forEach(function(subj) {
     var ppw = 0;
     STATE.subjects.forEach(function(s) { if (s.name === subj) ppw = s.ppw || 0; });
-    assignments.forEach(function(a) {
-      if (a.teacherId === teacherId && !a.isVacant) {
-        count += (a.classes || []).length * ppw;
-      }
+    Object.keys(STATE.classAssignments[subj] || {}).forEach(function(cls) {
+      var ca = (STATE.classAssignments[subj] || {})[cls];
+      if (ca && ca.status === 'assigned' && ca.teacherId === teacherId) count += ppw;
     });
   });
   return count;
 }
+
 
 /* ── Generator ── */
 function generateTimetable() {
@@ -1036,40 +1027,32 @@ function generateTimetable() {
   if (!classes.length) { showAlert('genAlert','al-err','يرجى تحديد فصل واحد على الأقل'); return; }
   if (!STATE.subjects.length) { showAlert('genAlert','al-err','يرجى إضافة مادة واحدة على الأقل'); return; }
 
-  /* Warn about unassigned classes but allow generation */
-  var unassignedWarnings = [];
-  var blockingErrors = [];
+  /* Smart assignment check — pending slots auto-become شاغر */
+  var pendingCount = 0;
   STATE.subjects.forEach(function(s) {
-    var assignments = STATE.teacherMap[s.name];
-    if (!Array.isArray(assignments) || assignments.length === 0) {
-      unassignedWarnings.push(s.name + ': جميع الصفوف شاغرة');
-      return;
-    }
-    /* BLOCK: any non-vacant teacher with empty classes[] must select classes first */
-    var emptyChipTeachers = assignments.filter(function(a) {
-      return !a.isVacant && (!a.classes || a.classes.length === 0);
+    classes.forEach(function(cls) {
+      var ca = (STATE.classAssignments[s.name] || {})[cls];
+      if (!ca || ca.status === 'pending') pendingCount++;
     });
-    if (emptyChipTeachers.length > 0) {
-      emptyChipTeachers.forEach(function(a) {
-        blockingErrors.push('📌 ' + s.name + ' — ' + (a.teacherNameAr || 'معلمة') + ': لم تُحدَّد الفصول');
-      });
-      return;
-    }
-    /* Only warn for classes truly not covered by any teacher assignment */
-    var assignedCls = [];
-    assignments.forEach(function(a) { (a.classes || []).forEach(function(c) { assignedCls.push(c); }); });
-    var missing = classes.filter(function(c) { return assignedCls.indexOf(c) < 0; });
-    if (missing.length) unassignedWarnings.push(s.name + ': ' + missing.join(',') + ' بدون معلمة');
   });
-  if (blockingErrors.length) {
-    showAlert('genAlert','al-error','🚫 لا يمكن توليد الجدول — يجب تحديد الفصول لكل معلمة أولاً:<br><br>' + blockingErrors.join('<br>'));
+
+  if (pendingCount > 0 && !STATE._genConfirmed) {
+    var pendingHtml = '\u26AA <strong>' + pendingCount + ' \u062e\u0627\u0646\u0629</strong> (\u0645\u0627\u062f\u0629 \u00d7 \u0641\u0635\u0644) \u0644\u0645 \u062a\u064f\u0639\u064a\u0651\u0646 \u0628\u0639\u062f \u2014 \u0633\u062a\u064f\u0639\u0627\u0645\u064e\u0644 \u062a\u0644\u0642\u0627\u0626\u064a\u0627\u064b <strong>\u0634\u0627\u063a\u0631\u0629</strong> \u0641\u064a \u0627\u0644\u062c\u062f\u0648\u0644.' +
+      '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button class="btn btn-primary btn-sm" id="btnConfirmGen">\u2713 \u0645\u062a\u0627\u0628\u0639\u0629 \u0648\u062a\u0648\u0644\u064a\u062f \u0627\u0644\u062c\u062f\u0648\u0644</button>' +
+      '<button class="btn btn-secondary btn-sm" id="btnCancelGen">\u0639\u064f\u062f \u0644\u0644\u0645\u0631\u0627\u062c\u0639\u0629</button>' +
+      '</div>';
+    showAlert('genAlert', 'al-warn', pendingHtml);
+    setTimeout(function() {
+      var btn = document.getElementById('btnConfirmGen');
+      if (btn) btn.addEventListener('click', function() { STATE._genConfirmed = true; generateTimetable(); });
+      var btnC = document.getElementById('btnCancelGen');
+      if (btnC) btnC.addEventListener('click', function() { clearAlert('genAlert'); });
+    }, 0);
     return;
   }
-  if (unassignedWarnings.length) {
-    showAlert('genAlert','al-warn','⚠️ ملاحظة — سيُوزَّع الجدول وبعض الصفوف ستظهر شاغرة:<br>' + unassignedWarnings.join('<br>'));
-  } else {
-    clearAlert('genAlert');
-  }
+  STATE._genConfirmed = false;
+  clearAlert('genAlert');
 
   /* Build per-class ppd maps for multi-stage */
   STATE.classPpdMap = {};
@@ -1598,7 +1581,7 @@ function goToStep(n) {
   }
   if (n === 3) {
     if (STATE.subjects.filter(function(s){return s.name.trim();}).length === 0) { showToast('\u0623\u0636\u0641 \u0645\u0627\u062F\u0629 \u0648\u0627\u062D\u062F\u0629 \u0639\u0644\u0649 \u0627\u0644\u0623\u0642\u0644','err'); return; }
-    renderAssignGrid();
+    renderAssignMatrix();
   }
 
   STATE.step = n;
