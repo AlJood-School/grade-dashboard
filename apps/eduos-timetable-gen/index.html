@@ -348,6 +348,34 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
       </div>
     </div>
 
+    <div class="card" id="curriculumSystemCard">
+      <div class="card-title">📖 نظام التعليم — Curriculum System</div>
+      <div class="field-row">
+        <div class="fg">
+          <label>النظام التعليمي — System</label>
+          <select id="curriculumSystemSel" style="padding:8px 12px;border:1.5px solid #D1D5DB;border-radius:8px;font-family:inherit;font-size:14px;font-weight:700">
+            <option value="MOE">وزارة التربية والتعليم (MOE) — الخطة 2026-27</option>
+            <option value="CBSE">CBSE — المنهج الهندي (NEP 2020)</option>
+            <option value="IB_MYP">IB — MYP (G6-G10)</option>
+            <option value="IB_DP">IB — Diploma Programme (G11-G12)</option>
+            <option value="Cambridge">Cambridge / British</option>
+            <option value="KHDA_Mandatory">KHDA — المتطلبات الإلزامية (دبي)</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>تجاوز نطاق الصفوف (اختياري)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="number" id="gradeOverrideFrom" min="0" max="12" placeholder="من" style="width:70px;padding:8px;border:1.5px solid #D1D5DB;border-radius:8px;font-family:inherit;font-size:13px">
+            <span style="color:#6B7280;font-size:13px">إلى</span>
+            <input type="number" id="gradeOverrideTo" min="0" max="12" placeholder="إلى" style="width:70px;padding:8px;border:1.5px solid #D1D5DB;border-radius:8px;font-family:inherit;font-size:13px">
+          </div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#6B7280;margin-top:6px;line-height:1.6">
+        💡 عند الانتقال إلى "المواد" سيُعرض عليك استيراد قائمة المواد الرسمية من قاعدة البيانات وفق هذا النظام — مع إمكانية التعديل اليدوي.
+      </div>
+    </div>
+
     <div class="card" id="fridayCard">
       <div class="card-title">🕌 إعداد يوم الجمعة — Friday Setup</div>
       <div class="field-row">
@@ -378,12 +406,18 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
     <div class="card">
       <div class="card-title">📚 المواد الدراسية — Subjects</div>
       <div id="subjAlert"></div>
+      <div id="subjImportBanner"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" id="btnImportSubjects" onclick="importSubjectsFromDB()">📥 استيراد من قاعدة البيانات</button>
+        <span id="subjSystemLabel" style="font-size:12px;font-weight:700;color:#6B7280"></span>
+      </div>
       <table class="subj-tbl">
         <thead>
           <tr>
             <th>اسم المادة</th>
             <th>حصص/أسبوع</th>
             <th>حصتان متتاليتان</th>
+            <th>توافق لائحي</th>
             <th>اللون</th>
             <th></th>
           </tr>
@@ -501,7 +535,11 @@ var STATE = {
   classAssignments: {},
   timetable: null,
   activeClass: null,
-  dragSrc: null
+  dragSrc: null,
+  curriculumSystem: 'MOE',
+  dbRules: [],
+  softRules: [],
+  subjectsLoadedFromDB: false
 };
 
 /* ── Helpers ── */
@@ -628,6 +666,107 @@ async function loadTeachers() {
   } catch(e) { STATE.teachers = []; }
 }
 
+/* ── Detect grade range from selected classes ── */
+function detectGradeRange(classes) {
+  var grades = (classes || []).map(function(cls) {
+    if (/^KG/i.test(cls)) return 0;
+    var m = String(cls).match(/^(\d+)/);
+    return m ? parseInt(m[1]) : null;
+  }).filter(function(g) { return g !== null; });
+  if (!grades.length) return { from: 1, to: 8 };
+  return { from: Math.min.apply(null, grades), to: Math.max.apply(null, grades) };
+}
+
+/* ── Load soft rules from DB ── */
+async function loadSoftRulesFromDB() {
+  try {
+    var res = await sbFetch('timetable_soft_rules?active=eq.true&order=severity,rule_category');
+    var data = await res.json();
+    STATE.softRules = data || [];
+  } catch(e) { STATE.softRules = []; }
+}
+
+/* ── Load subjects from curriculum_period_rules ── */
+async function importSubjectsFromDB() {
+  var sys = (document.getElementById('curriculumSystemSel') || {}).value || 'MOE';
+  STATE.curriculumSystem = sys;
+
+  /* Grade range — from override or auto-detect */
+  var gFromEl = document.getElementById('gradeOverrideFrom');
+  var gToEl   = document.getElementById('gradeOverrideTo');
+  var autoRange = detectGradeRange(STATE.selectedClasses);
+  var gFrom = (gFromEl && gFromEl.value !== '') ? parseInt(gFromEl.value) : autoRange.from;
+  var gTo   = (gToEl   && gToEl.value   !== '') ? parseInt(gToEl.value)   : autoRange.to;
+
+  var btn = document.getElementById('btnImportSubjects');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ جارٍ الاستيراد...'; }
+
+  try {
+    var res = await sbFetch(
+      'curriculum_period_rules?system=eq.' + encodeURIComponent(sys) +
+      '&grade_from=lte.' + gTo +
+      '&grade_to=gte.' + gFrom +
+      '&is_mandatory=eq.true' +
+      '&order=grade_from,subject_ar'
+    );
+    var data = await res.json();
+    if (!data || !data.length) {
+      showAlert('subjAlert', 'al-warn', '⚠️ لا توجد قواعد لهذا النظام في قاعدة البيانات — يمكنك إضافة المواد يدوياً');
+      if (btn) { btn.disabled = false; btn.textContent = '📥 استيراد من قاعدة البيانات'; }
+      return;
+    }
+
+    /* Collapse duplicate subjects — take max min_periods */
+    var seen = {};
+    data.forEach(function(r) {
+      var key = r.subject_ar;
+      if (!seen[key]) {
+        seen[key] = { name: r.subject_ar, ppw: r.min_periods || 2, isDouble: r.double_period_required || false, minPeriods: r.min_periods, maxPeriods: r.max_periods, ruleId: r.id, system: r.system, sourceDoc: r.source_document, notes: r.notes };
+      } else {
+        /* If same subject appears in multiple grade ranges, take the one closest to our range */
+        if ((r.min_periods || 0) > seen[key].ppw) seen[key].ppw = r.min_periods || seen[key].ppw;
+        if (r.double_period_required) seen[key].isDouble = true;
+      }
+    });
+
+    var subjects = Object.values(seen).map(function(s) {
+      return { name: s.name, ppw: s.ppw || 2, isDouble: s.isDouble, color: getSubjectColor(s.name), tcolor: getSubjectTColor(s.name), minPeriods: s.minPeriods, maxPeriods: s.maxPeriods, ruleId: s.ruleId, sourceDoc: s.sourceDoc, notes: s.notes };
+    });
+
+    STATE.subjects = subjects;
+    STATE.dbRules = data;
+    STATE.subjectsLoadedFromDB = true;
+
+    /* Update system label */
+    var sysNames = { 'MOE': 'وزارة التربية والتعليم — الخطة الدراسية 2026-27', 'CBSE': 'CBSE NEP 2020', 'IB_MYP': 'IB MYP', 'IB_DP': 'IB DP', 'Cambridge': 'Cambridge International', 'KHDA_Mandatory': 'KHDA المتطلبات الإلزامية' };
+    var lbl = document.getElementById('subjSystemLabel');
+    if (lbl) lbl.textContent = 'المصدر: ' + (sysNames[sys] || sys) + ' | صفوف ' + gFrom + '–' + gTo + ' | ' + subjects.length + ' مادة';
+
+    var banner = document.getElementById('subjImportBanner');
+    if (banner) banner.innerHTML = '<div class="alert al-ok" style="margin-bottom:10px">✅ تم استيراد ' + subjects.length + ' مادة من قاعدة البيانات — المصدر: ' + (sysNames[sys] || sys) + '<br><span style="font-size:11px;opacity:.8">يمكنك تعديل عدد الحصص — ستظهر أيقونة ⚠️ إذا خالفت الحد الرسمي</span></div>';
+
+    renderSubjectsTable();
+    showToast('تم الاستيراد: ' + subjects.length + ' مادة ✓', 'ok');
+  } catch(e) {
+    showAlert('subjAlert', 'al-err', '❌ خطأ في الاستيراد: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📥 استيراد من قاعدة البيانات'; }
+  }
+}
+
+/* ── Check subject compliance against DB rules ── */
+function checkSubjectCompliance(subjName, ppw) {
+  if (!STATE.subjectsLoadedFromDB || !STATE.dbRules.length) return null;
+  var rules = STATE.dbRules.filter(function(r) { return r.subject_ar === subjName; });
+  if (!rules.length) return null;
+  var rule = rules[0];
+  var min = rule.min_periods; var max = rule.max_periods;
+  if (min === null && max === null) return { status: 'info', label: 'مرن', color: '#6B7280', bg: '#F3F4F6' };
+  if (min !== null && ppw < min) return { status: 'under', label: 'أقل من الحد — الحد الأدنى ' + min, color: '#991B1B', bg: '#FEE2E2' };
+  if (max !== null && ppw > max) return { status: 'over', label: 'أعلى من الحد — الحد الأقصى ' + max, color: '#92400E', bg: '#FEF3C7' };
+  return { status: 'ok', label: '✓ ضمن النطاق (' + min + (max && max !== min ? '–' + max : '') + ')', color: '#065F46', bg: '#D1FAE5' };
+}
+
 /* ── Step 1 ── */
 function renderClassChips() {
   var wrap = document.getElementById('classChips');
@@ -747,6 +886,18 @@ function renderSubjectsTable() {
     });
     tdDbl.appendChild(dblBtn);
 
+    /* ── Compliance badge ── */
+    var tdComp = document.createElement('td');
+    var comp = checkSubjectCompliance(s.name, s.ppw || 2);
+    if (comp) {
+      var badge = document.createElement('span');
+      badge.style.cssText = 'font-size:11px;font-weight:700;padding:3px 9px;border-radius:7px;background:' + comp.bg + ';color:' + comp.color + ';display:inline-block;white-space:nowrap';
+      badge.textContent = comp.label;
+      tdComp.appendChild(badge);
+    } else {
+      tdComp.innerHTML = '<span style="font-size:11px;color:#9CA3AF">—</span>';
+    }
+
     var tdColor = document.createElement('td');
     var dot = document.createElement('div');
     dot.className = 'color-dot';
@@ -762,7 +913,7 @@ function renderSubjectsTable() {
     delBtn.addEventListener('click', function() { STATE.subjects.splice(parseInt(this.dataset.i),1); renderSubjectsTable(); });
     tdDel.appendChild(delBtn);
 
-    tr.appendChild(tdName); tr.appendChild(tdPpw); tr.appendChild(tdDbl); tr.appendChild(tdColor); tr.appendChild(tdDel);
+    tr.appendChild(tdName); tr.appendChild(tdPpw); tr.appendChild(tdDbl); tr.appendChild(tdComp); tr.appendChild(tdColor); tr.appendChild(tdDel);
     tbody.appendChild(tr);
   });
 }
@@ -1577,7 +1728,16 @@ function goToStep(n) {
     document.querySelectorAll('#dayChips .chip.selected').forEach(function(c){ STATE.selectedDays.push(c.dataset.day); });
     if (STATE.selectedClasses.length === 0) { showToast('\u0627\u062E\u062A\u0631\u064A \u0641\u0635\u0644\u0627\u064B \u0648\u0627\u062D\u062F\u0627\u064B \u0639\u0644\u0649 \u0627\u0644\u0623\u0642\u0644','err'); return; }
     if (STATE.selectedDays.length === 0) { showToast('\u0627\u062E\u062A\u0631\u064A \u064A\u0648\u0645\u0627\u064B \u0648\u0627\u062D\u062F\u0627\u064B \u0639\u0644\u0649 \u0627\u0644\u0623\u0642\u0644','err'); return; }
+    /* Sync curriculum system */
+    var sysSel = document.getElementById('curriculumSystemSel');
+    if (sysSel) STATE.curriculumSystem = sysSel.value;
+    /* Reset import flag if classes changed */
+    STATE.subjectsLoadedFromDB = false;
     renderSubjectsTable();
+    /* Show system label */
+    var sysNames = { 'MOE': 'وزارة التربية والتعليم — الخطة 2026-27', 'CBSE': 'CBSE NEP 2020', 'IB_MYP': 'IB MYP', 'IB_DP': 'IB DP', 'Cambridge': 'Cambridge', 'KHDA_Mandatory': 'KHDA' };
+    var lbl = document.getElementById('subjSystemLabel');
+    if (lbl) lbl.textContent = 'النظام المحدد: ' + (sysNames[STATE.curriculumSystem] || STATE.curriculumSystem) + ' — اضغط "استيراد" لتحميل المواد الرسمية';
   }
   if (n === 3) {
     if (STATE.subjects.filter(function(s){return s.name.trim();}).length === 0) { showToast('\u0623\u0636\u0641 \u0645\u0627\u062F\u0629 \u0648\u0627\u062D\u062F\u0629 \u0639\u0644\u0649 \u0627\u0644\u0623\u0642\u0644','err'); return; }
@@ -1608,6 +1768,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   loadClasses();
   loadTeachers();
+  loadSoftRulesFromDB();
 
   /* Load saved config if any */
   sbFetch('app_settings?key=eq.timetable_config&select=value&limit=1')
