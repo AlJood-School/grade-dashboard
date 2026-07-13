@@ -874,7 +874,7 @@ function buildTeacherRow(subjName, rowIdx, asgn) {
   chipsWrap.className = 'ta-clschips';
   var clsLabel = document.createElement('span');
   clsLabel.style.cssText = 'font-size:11px;color:#6B7280;font-weight:700;width:100%;margin-bottom:3px';
-  clsLabel.textContent = 'الصفوف المُسنَدة لهذه المعلمة:';
+  clsLabel.innerHTML = 'الصفوف المُسنَدة: <span style="color:#6C3DD6;font-weight:400">(اتركها فارغة = تغطي جميع الفصول)</span>';
   chipsWrap.appendChild(clsLabel);
   STATE.selectedClasses.forEach(function(cls) {
     var chip = document.createElement('button');
@@ -963,6 +963,15 @@ function updateUnassignedLabel(subjName) {
   var el = document.getElementById('taunassigned_' + sanitizeId(subjName));
   if (!el) return;
   var assignments = STATE.teacherMap[subjName] || [];
+  /* If any non-vacant teacher has empty classes[] → covers ALL classes (fallback rule) */
+  var hasFullCover = assignments.some(function(a) {
+    return !a.isVacant && (!a.classes || a.classes.length === 0);
+  });
+  if (hasFullCover) {
+    el.textContent = '✓ جميع الصفوف مُعيَّنة (تغطية كاملة) — All classes assigned';
+    el.style.color = '#065F46';
+    return;
+  }
   var assignedCls = [];
   assignments.forEach(function(a) { (a.classes || []).forEach(function(c) { assignedCls.push(c); }); });
   var unassigned = STATE.selectedClasses.filter(function(c) { return assignedCls.indexOf(c) < 0; });
@@ -1042,6 +1051,12 @@ function generateTimetable() {
       unassignedWarnings.push(s.name + ': جميع الصفوف شاغرة');
       return;
     }
+    /* If any non-vacant teacher has empty classes[] → covers ALL classes → no warning */
+    var hasFullCover = assignments.some(function(a) {
+      return !a.isVacant && (!a.classes || a.classes.length === 0);
+    });
+    if (hasFullCover) return;
+    /* Only warn for classes truly not covered by any teacher assignment */
     var assignedCls = [];
     assignments.forEach(function(a) { (a.classes || []).forEach(function(c) { assignedCls.push(c); }); });
     var missing = classes.filter(function(c) { return assignedCls.indexOf(c) < 0; });
