@@ -698,7 +698,7 @@ async function doLogin() {
     valid = false;
   }
   // الطلاب يسجلون بالرقم فقط بدون كلمة مرور — لا نشترط كلمة المرور للأرقام
-  var isStudentNumber = /^\d{5,}$/.test(uInput);
+  var isStudentNumber = /^[A-Za-z]?\d{3,}$/.test(uInput);
   if (!pInput && !isStudentNumber) {
     document.getElementById('err-pass').classList.add('show');
     document.getElementById('password').classList.add('error');
@@ -744,8 +744,20 @@ async function doLogin() {
       body: JSON.stringify({ username: uInput, password: pInput })
     });
 
+    if (verifyRes.status === 429) {
+      const vd = await verifyRes.json().catch(()=>({}));
+      const lockMsg = vd.message || 'عدد كبير من المحاولات الخاطئة. الحساب مقفل مؤقتاً. حاول بعد 30 دقيقة.';
+      showError(lockMsg);
+      return;
+    }
+
     if (verifyRes.ok) {
       const vd = await verifyRes.json();
+      if (!vd.ok && vd.error === 'too_many_attempts') {
+        const lockMsg = vd.message || 'الحساب مقفل مؤقتاً. حاول بعد 30 دقيقة.';
+        showError(lockMsg);
+        return;
+      }
       if (vd.ok) {
         roleKey = vd.role_key;
 
@@ -794,7 +806,7 @@ async function doLogin() {
     if (!roleKey) {
       // Query only canonical columns guaranteed across all EduOS schools
       const stuRes = await fetch(
-        `${(window.EduOS?window.EduOS.SB_URL:'')}/rest/v1/students?student_number=eq.${encodeURIComponent(uInput)}&select=id,name,class_name,grade,name_en`,
+        `${(window.EduOS?window.EduOS.SB_URL:'')}/rest/v1/students?student_number=eq.${encodeURIComponent(uInput)}&select=id,name,class_name,grade`,
         { headers: { 'apikey': SBKEY, 'Authorization': `Bearer ${SBKEY}` } }
       );
       if (stuRes.ok) {
