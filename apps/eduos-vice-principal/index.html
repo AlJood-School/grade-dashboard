@@ -405,14 +405,23 @@ function setupWeek() {
   } else { setTimeout(setupWeek, 800); }
 }
 
+
+async function getAttDate() {
+  try {
+    var res = await sb.from('student_attendance').select('date').order('date',{ascending:false}).limit(1);
+    if (res.data && res.data.length && res.data[0].date) return res.data[0].date;
+  } catch(e) {}
+  return new Date().toISOString().split('T')[0];
+}
+
 async function loadKPIs() {
   if (!sb) return;
   try {
-    var today = new Date().toISOString().split('T')[0];
+    var attDate = await getAttDate();
     var weekAgo = new Date(Date.now() - 7*24*3600*1000).toISOString().split('T')[0];
     var stuRes = await sb.from('students').select('*', {count:'exact', head:true});
-    var staffRes = await sb.from('staff_profiles').select('*', {count:'exact', head:true}).eq('role_key', 'teacher');
-    var attRes = await sb.from('attendance_logs').select('*', {count:'exact', head:true}).eq('date', today).eq('status', 'present');
+    var staffRes = await sb.from('staff_profiles').select('id', {count:'exact', head:true}).eq('role_key', 'teacher');
+    var attRes = await sb.from('student_attendance').select('*', {count:'exact', head:true}).eq('date', attDate).eq('status', 'present');
     var incRes = await sb.from('behavior_incidents').select('*', {count:'exact', head:true}).gte('created_at', weekAgo);
     var stuCount = stuRes.count || 0;
     var staffCount = staffRes.count || 0;
@@ -472,8 +481,8 @@ async function loadApprovals() {
 async function loadOverviewCards() {
   if (!sb) return;
   try {
-    var today = new Date().toISOString().split('T')[0];
-    var attRes = await sb.from('attendance_logs').select('class_name, status').eq('date', today).limit(500);
+    var attDate = await getAttDate();
+    var attRes = await sb.from('student_attendance').select('class_name, status').eq('date', attDate).limit(500);
     var attData = attRes.data || [];
     var cls = {};
     attData.forEach(function(r) {
@@ -557,8 +566,8 @@ function filterStu() {
 async function loadAttendance() {
   if (!sb) return;
   try {
-    var today = new Date().toISOString().split('T')[0];
-    var res = await sb.from('attendance_logs').select('class_name,status,student_id').eq('date',today).limit(2000);
+    var attDate = await getAttDate();
+    var res = await sb.from('student_attendance').select('class_name,status,student_id').eq('date',attDate).limit(2000);
     var data = res.data || [];
     var present=0, absent=0, late=0;
     var cls = {};
