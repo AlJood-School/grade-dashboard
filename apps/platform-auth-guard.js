@@ -105,6 +105,7 @@
     // ── إضافات الفحص الأمني 24 يونيو 2026 ──
     'eduos-appraisal':             ['admin','principal'],
     'eduos-regulatory-dashboard':  ['admin','principal'],
+    'eduos-elective-admin':        ['admin','principal','vice_principal','secretary'],
     'eduos-broadcasting':  ['admin','principal','media'],
     'eduos-calendar':      ['admin','principal','teacher','sub_teacher','support'],
     'eduos-news':          ['admin','principal','media','teacher'],
