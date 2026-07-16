@@ -287,6 +287,7 @@ tr:hover td{background:var(--surface2)}
         <span class="snav-label">&#x62A;&#x639;&#x64A;&#x64A;&#x646; &#x627;&#x644;&#x645;&#x639;&#x644;&#x645;&#x627;&#x62A;</span>
         <span class="snav-sub">Teacher Assignments</span>
       </span>
+      <span class="snav-badge" id="snavVacantBadge" style="display:none;background:#DC2626">0</span>
     </button>
 
     <button class="snav" data-panel="analytics" onclick="showPanel('analytics',this)">
@@ -604,6 +605,17 @@ tr:hover td{background:var(--surface2)}
         </div>
         <div id="assignListWrap" style="color:#94A3B8;font-size:14px">&#x62C;&#x627;&#x631;&#x64A; &#x627;&#x644;&#x62A;&#x62D;&#x645;&#x64A;&#x644;...</div>
       </div>
+
+      <!-- Vacant Positions Card -->
+      <div style="background:#FFF5F5;border-radius:14px;border:2px solid #FEE2E2;padding:22px;margin-top:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <span style="font-size:20px">&#x26A0;&#xFE0F;</span>
+          <div style="font-size:15px;font-weight:800;color:#DC2626">&#x627;&#x644;&#x645;&#x646;&#x627;&#x635;&#x628; &#x627;&#x644;&#x634;&#x627;&#x63A;&#x631;&#x629; / Vacant Positions</div>
+          <span id="vacantBadge" style="background:#DC2626;color:#fff;border-radius:12px;padding:2px 10px;font-size:12px;font-weight:800;display:none">0</span>
+          <button onclick="loadVacantSlots()" style="margin-right:auto;background:#F1F5F9;border:none;border-radius:8px;padding:5px 12px;font-family:Tajawal,Arial,sans-serif;font-size:12px;cursor:pointer;color:#475569;font-weight:700">&#x1F504; &#x62A;&#x62D;&#x62F;&#x64A;&#x62B;</button>
+        </div>
+        <div id="vacantSlotsWrap" style="color:#94A3B8;font-size:14px">&#x62C;&#x627;&#x631;&#x64A; &#x627;&#x644;&#x62A;&#x62D;&#x645;&#x64A;&#x644;...</div>
+      </div>
     </div>
 
     <!-- PANEL: ANALYTICS -->
@@ -845,6 +857,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await Promise.all([loadKPIs(), loadApprovals(), loadOverview()]);
   loadAppraisalBadge();
   setInterval(loadAppraisalBadge, 60000);
+  loadVacantSlots();
   setupIdleLogout();
   setInterval(loadApprovals, 60000);
 });
@@ -1591,6 +1604,54 @@ function loadRemoteDays() {
     if (!r.data || !r.data.length) { el.textContent = 'لا أيام مسجّلة / None registered'; return; }
     el.innerHTML = r.data.map(function(d){ return '<div style="padding:8px 12px;background:#F0F9FF;border-radius:8px;margin-bottom:6px;font-weight:700">' + d.date + (d.reason ? ' — ' + d.reason : '') + '</div>'; }).join('');
   }).catch(function(){ el.textContent = '—'; });
+}
+
+// ── Vacant Positions ─────────────────────────────────────────────────────
+async function loadVacantSlots() {
+  var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+  var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+  var wrap = document.getElementById('vacantSlotsWrap');
+  if (!SB_URL || !SB_KEY) return;
+  if (wrap) wrap.innerHTML = '<div style="color:#94A3B8">جاري التحميل...</div>';
+  try {
+    var r = await fetch(
+      SB_URL + '/rest/v1/schedules?teacher_name=ilike.*' + encodeURIComponent('شاغر') + '*&is_active=eq.true&select=subject,class_name,grade&order=subject',
+      { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } }
+    );
+    var rows = await r.json();
+    var vb = document.getElementById('vacantBadge');
+    var nb = document.getElementById('snavVacantBadge');
+    if (!Array.isArray(rows) || rows.length === 0) {
+      if (wrap) wrap.innerHTML = '<div style="color:#16A34A;font-weight:700;text-align:center;padding:20px">&#x2705; لا مناصب شاغرة حالياً</div>';
+      if (vb) vb.style.display = 'none';
+      if (nb) nb.style.display = 'none';
+      return;
+    }
+    var grouped = {};
+    rows.forEach(function(row) {
+      var subj = row.subject || 'غير محدد';
+      if (!grouped[subj]) grouped[subj] = { periods: 0, classes: {} };
+      grouped[subj].periods++;
+      if (row.class_name) grouped[subj].classes[row.class_name] = true;
+    });
+    var total = rows.length;
+    var html = '<div style="display:flex;flex-direction:column;gap:8px">';
+    Object.keys(grouped).sort().forEach(function(subj) {
+      var g = grouped[subj];
+      var classList = Object.keys(g.classes).sort().join('، ') || '—';
+      html += '<div style="background:#fff;border:1px solid #FEE2E2;border-radius:10px;padding:12px 16px;display:flex;align-items:flex-start;gap:12px">';
+      html += '<span style="background:#FEE2E2;color:#DC2626;font-weight:800;font-size:13px;padding:4px 10px;border-radius:8px;white-space:nowrap">' + g.periods + ' حصة</span>';
+      html += '<div><div style="font-weight:700;color:#1E293B;font-size:14px">' + subj + '</div>';
+      html += '<div style="font-size:12px;color:#64748B;margin-top:3px">الفصول: ' + classList + '</div></div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    if (wrap) wrap.innerHTML = html;
+    if (vb) { vb.textContent = total; vb.style.display = ''; }
+    if (nb) { nb.textContent = total; nb.style.display = ''; }
+  } catch(e) {
+    if (wrap) wrap.innerHTML = '<div style="color:#DC2626">خطأ في التحميل</div>';
+  }
 }
 
 function loadStaff() {
