@@ -217,6 +217,8 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
     </div>
   </div>
   <div class="hdr-acts">
+      <button class="btn btn-ghost" onclick="showDraftsPanel()" title="المسودات المحفوظة">📂 مسوداتي</button>
+      <button class="btn btn-ghost" onclick="saveDraft()" title="حفظ كمسودة">💾 حفظ مسودة</button>
     <button class="btn btn-ghost btn-sm" onclick="window.history.back()">&#8594; رجوع</button>
     <button class="btn btn-ghost btn-sm" onclick="openPrintPage()">🖨️ طباعة</button>
   </div>
@@ -522,14 +524,17 @@ var STATE = {
   classPpdMap: {},
   classFridayPpdMap: {},
   subjects: [
-    {name:'لغة عربية', ppw:5, isDouble:false, color:'#D1FAE5', tcolor:'#065F46'},
-    {name:'رياضيات', ppw:5, isDouble:false, color:'#E0E7FF', tcolor:'#3730A3'},
-    {name:'علوم', ppw:3, isDouble:false, color:'#DBEAFE', tcolor:'#1E40AF'},
-    {name:'لغة إنجليزية', ppw:5, isDouble:false, color:'#FEF9C3', tcolor:'#92400E'},
-    {name:'اجتماعيات', ppw:2, isDouble:false, color:'#FCE7F3', tcolor:'#9D174D'},
-    {name:'تربية إسلامية', ppw:3, isDouble:false, color:'#FEF3C7', tcolor:'#78350F'},
-    {name:'تربية فنية', ppw:2, isDouble:true,  color:'#EDE9FE', tcolor:'#5B21B6'},
-    {name:'تربية بدنية', ppw:2, isDouble:true,  color:'#CFFAFE', tcolor:'#155E75'}
+    {name:'لغة عربية',              ppw:6, isDouble:true,  color:'#D1FAE5', tcolor:'#065F46'},
+    {name:'رياضيات',                ppw:5, isDouble:true,  color:'#E0E7FF', tcolor:'#3730A3'},
+    {name:'علوم',                   ppw:4, isDouble:true,  color:'#DBEAFE', tcolor:'#1E40AF'},
+    {name:'لغة إنجليزية',           ppw:5, isDouble:false, color:'#FEF9C3', tcolor:'#92400E'},
+    {name:'اجتماعيات',             ppw:3, isDouble:false, color:'#FCE7F3', tcolor:'#9D174D'},
+    {name:'تربية إسلامية',          ppw:3, isDouble:false, color:'#FEF3C7', tcolor:'#78350F'},
+    {name:'تربية بدنية والصحة',     ppw:2, isDouble:true,  color:'#CFFAFE', tcolor:'#155E75'},
+    {name:'CCDI',                   ppw:2, isDouble:true,  color:'#FDE68A', tcolor:'#92400E'},
+    {name:'الذكاء الاصطناعي والتكنولوجيا', ppw:2, isDouble:false, color:'#E0F2FE', tcolor:'#0369A1'},
+    {name:'تربية فنية',             ppw:1, isDouble:false, color:'#EDE9FE', tcolor:'#5B21B6'},
+    {name:'موسيقى',                 ppw:1, isDouble:false, color:'#FCE7F3', tcolor:'#9D174D'}
   ],
   teachers: [],
   classAssignments: {},
@@ -1895,8 +1900,9 @@ function renderStageCards(){
     card.className='stage-card';
     card.innerHTML=
       '<div class="stage-card-hdr">'+
-        '<span class="stage-badge">'+stage.name+'</span>'+
-        '<input type="text" value="'+stage.name+'" style="border:none;background:transparent;font-weight:800;font-size:15px;color:#6C3DD6;flex:1;margin:0 10px;outline:none;min-width:0" placeholder="اسم المرحلة" data-sid="'+stage.id+'" data-field="name">'+
+        '<span style="font-size:18px;margin-left:4px">🏫</span>'+
+        '<input type="text" value="'+stage.name+'" style="border:none;border-bottom:2px solid #6C3DD6;background:transparent;font-weight:800;font-size:16px;color:#1F2937;flex:1;margin:0 10px;outline:none;min-width:100px;padding:2px 6px" placeholder="اسم الحلقة — اكتب هنا للتغيير" data-sid="'+stage.id+'" data-field="name" title="اكتب لتغيير اسم الحلقة">'+
+        '<span style="font-size:11px;color:#9CA3AF;margin-left:6px;white-space:nowrap">✎ قابل للتعديل</span>'+
         '<button onclick="removeStageCard('+stage.id+')" style="background:#FEE2E2;border:none;border-radius:6px;padding:4px 10px;color:#DC2626;cursor:pointer;font-size:12px;white-space:nowrap">حذف ✕</button>'+
       '</div>'+
       '<div class="field-row" style="flex-wrap:wrap">'+
@@ -2074,6 +2080,162 @@ function buildMiniClassCard(cls,stage){
 }
 
 
+
+/* ════════════════════════════════════════════════
+   DRAFT SYSTEM — حفظ واسترجاع المسودات
+════════════════════════════════════════════════ */
+var DRAFTS_STATE = { list: [], loading: false };
+
+async function loadDraftsList() {
+  var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+  var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+  if (!SB_URL) return;
+  try {
+    var res = await fetch(SB_URL + '/rest/v1/timetable_drafts?select=id,name,description,created_at,academic_year,term&order=created_at.desc&limit=20', {
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+    });
+    if (!res.ok) return;
+    DRAFTS_STATE.list = await res.json();
+    renderDraftsList();
+  } catch(e) { console.warn('Drafts load error', e); }
+}
+
+async function saveDraft() {
+  var name = prompt('اسم المسودة:', 'مسودة ' + new Date().toLocaleDateString('ar-AE'));
+  if (!name) return;
+  var desc = prompt('وصف مختصر (اختياري):', '');
+  var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+  var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+  var user = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+  var draft = {
+    name: name,
+    description: desc || '',
+    academic_year: '2026-2027',
+    term: 1,
+    stage_config: STATE.multiStage ? STATE.stages : [STATE.stages[0]],
+    subjects_config: STATE.subjects,
+    class_assignments: STATE.classAssignments,
+    timetable_data: STATE.timetable,
+    created_by: user.id || null
+  };
+  try {
+    var res = await fetch(SB_URL + '/rest/v1/timetable_drafts', {
+      method: 'POST',
+      headers: {
+        'apikey': SB_KEY,
+        'Authorization': 'Bearer ' + SB_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(draft)
+    });
+    if (res.ok || res.status === 201) {
+      showDraftToast('تم حفظ المسودة: ' + name, '#10B981');
+      loadDraftsList();
+    } else {
+      showDraftToast('خطأ في الحفظ — ' + res.status, '#EF4444');
+    }
+  } catch(e) {
+    showDraftToast('خطأ في الاتصال', '#EF4444');
+  }
+}
+
+async function loadDraft(id) {
+  var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+  var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+  try {
+    var res = await fetch(SB_URL + '/rest/v1/timetable_drafts?id=eq.' + id + '&select=*', {
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+    });
+    var rows = await res.json();
+    if (!rows || !rows[0]) return;
+    var d = rows[0];
+    if (d.stage_config) { STATE.stages = d.stage_config; renderStageCards(); }
+    if (d.subjects_config) { STATE.subjects = d.subjects_config; renderSubjects(); }
+    if (d.class_assignments) STATE.classAssignments = d.class_assignments;
+    if (d.timetable_data) { STATE.timetable = d.timetable_data; }
+    hideDraftsPanel();
+    showDraftToast('تم تحميل المسودة: ' + d.name, '#6C3DD6');
+    goToStep(1);
+  } catch(e) {
+    showDraftToast('خطأ في التحميل', '#EF4444');
+  }
+}
+
+async function deleteDraft(id, name) {
+  if (!confirm('حذف المسودة: ' + name + '؟')) return;
+  var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+  var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+  try {
+    await fetch(SB_URL + '/rest/v1/timetable_drafts?id=eq.' + id, {
+      method: 'DELETE',
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+    });
+    loadDraftsList();
+  } catch(e) {}
+}
+
+function renderDraftsList() {
+  var cont = document.getElementById('draftsList');
+  if (!cont) return;
+  if (!DRAFTS_STATE.list.length) {
+    cont.innerHTML = '<div style="text-align:center;color:#9CA3AF;padding:24px">لا توجد مسودات محفوظة</div>';
+    return;
+  }
+  cont.innerHTML = DRAFTS_STATE.list.map(function(d) {
+    var dt = new Date(d.created_at).toLocaleDateString('ar-AE', {year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    return '<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border:1.5px solid #E5E7EB;border-radius:10px;margin-bottom:8px;background:#FAFAFA">' +
+      '<div style="flex:1">' +
+        '<div style="font-weight:800;color:#1F2937;font-size:14px">' + d.name + '</div>' +
+        (d.description ? '<div style="font-size:12px;color:#6B7280;margin-top:2px">' + d.description + '</div>' : '') +
+        '<div style="font-size:11px;color:#9CA3AF;margin-top:4px">📅 ' + dt + '</div>' +
+      '</div>' +
+      '<button onclick="loadDraft(' + d.id + ')" class="btn btn-primary btn-sm">تحميل</button>' +
+      '<button onclick="deleteDraft(' + d.id + ','' + d.name.replace(/'/g,'') + '')" class="btn btn-sm" style="background:#FEE2E2;color:#DC2626;border:none">حذف</button>' +
+    '</div>';
+  }).join('');
+}
+
+function showDraftsPanel() {
+  var panel = document.getElementById('draftsPanel');
+  if (panel) { panel.style.display = 'flex'; loadDraftsList(); }
+}
+
+function hideDraftsPanel() {
+  var panel = document.getElementById('draftsPanel');
+  if (panel) panel.style.display = 'none';
+}
+
+function showDraftToast(msg, color) {
+  var t = document.getElementById('draftToast');
+  if (!t) return;
+  t.textContent = msg;
+  t.style.background = color || '#10B981';
+  t.style.display = 'block';
+  setTimeout(function() { t.style.display = 'none'; }, 3000);
+}
+
 </script>
+
+<!-- Drafts Panel Overlay -->
+<div id="draftsPanel" style="display:none;position:fixed;inset:0;z-index:9000;align-items:center;justify-content:center;background:rgba(0,0,0,.5)">
+  <div style="background:#fff;border-radius:18px;width:600px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <div style="background:linear-gradient(135deg,#6C3DD6,#22D3EE);padding:18px 24px;display:flex;align-items:center;justify-content:space-between">
+      <div style="font-weight:800;font-size:18px;color:#fff">📂 المسودات المحفوظة</div>
+      <button onclick="hideDraftsPanel()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:18px;cursor:pointer;width:32px;height:32px;border-radius:50%">✕</button>
+    </div>
+    <div style="padding:18px 24px;flex:1;overflow-y:auto">
+      <p style="font-size:13px;color:#6B7280;margin-bottom:14px">احفظ أكثر من سيناريو للجدول المدرسي وارجع إليها في أي وقت. كل مسودة تحتفظ بإعدادات الحلقات والمواد والتعيينات والجدول المولَّد.</p>
+      <div id="draftsList"><div style="text-align:center;color:#9CA3AF;padding:24px">جارٍ التحميل...</div></div>
+    </div>
+    <div style="padding:14px 24px;border-top:1px solid #E5E7EB;display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-primary" onclick="saveDraft()">💾 حفظ مسودة جديدة</button>
+      <button class="btn btn-secondary" onclick="hideDraftsPanel()">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- Draft Toast -->
+<div id="draftToast" style="display:none;position:fixed;bottom:24px;right:24px;z-index:9999;padding:12px 22px;border-radius:10px;color:#fff;font-weight:700;font-size:14px;box-shadow:0 4px 20px rgba(0,0,0,.2)"></div>
 </body>
 </html>
