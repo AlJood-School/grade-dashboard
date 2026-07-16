@@ -297,12 +297,32 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
       </div>
     </div>
 
+    <div class="card" id="assemblyCard">
+      <div class="card-title">🕖 الطابور الصباحي — Morning Assembly</div>
+      <div class="field-row" style="align-items:center;flex-wrap:wrap">
+        <div class="fg" style="min-width:140px">
+          <label>وقت البداية — Start</label>
+          <input type="time" id="assemblyStart" value="07:00">
+        </div>
+        <div class="fg" style="min-width:140px">
+          <label>وقت النهاية — End</label>
+          <input type="time" id="assemblyEnd" value="07:10">
+        </div>
+        <div class="fg" style="min-width:180px;display:flex;align-items:center;gap:10px;padding-top:20px">
+          <input type="checkbox" id="assemblyEnabled" checked style="width:18px;height:18px;cursor:pointer">
+          <label for="assemblyEnabled" style="cursor:pointer;font-weight:600">تفعيل الطابور في الجدول</label>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#6B7280;margin-top:6px">📌 يُحدَّد من قِبَل المدير / نائب المدير فقط &nbsp;|&nbsp; Configured by Principal / Vice-Principal only</div>
+    </div>
+
     <div class="card">
       <div class="card-title">⏰ الحصص والأوقات — Periods & Times</div>
       <div class="field-row">
         <div class="fg">
           <label>وقت بداية اليوم — Day Start</label>
-          <input type="time" id="startTime" value="07:30">
+          <input type="time" id="startTime" value="07:15">
+          <div id="startTimeHint" style="font-size:11px;color:#059669;margin-top:4px;display:none">✅ تلقائي من نهاية الطابور</div>
         </div>
         <div class="fg">
           <label>عدد الحصص في اليوم — Periods/Day</label>
@@ -517,8 +537,9 @@ var STATE = {
   periodsPerDay: 7,
   fridayPeriodsPerDay: 4,
   periodDuration: 45,
-  startTime: '07:30',
+  startTime: '07:15',
   breaks: [],
+  morningAssembly: { enabled: true, start: '07:00', end: '07:10', nameAr: 'الطابور الصباحي' },
   multiStage: false,
   stages: [],
   classPpdMap: {},
@@ -601,6 +622,9 @@ function getSubjectTColor(name) {
 
 function computeSchedule() {
   var rows = [];
+  if (STATE.morningAssembly && STATE.morningAssembly.enabled) {
+    rows.push({ type:'assembly', nameAr: STATE.morningAssembly.nameAr || 'الطابور الصباحي', startTime: STATE.morningAssembly.start || '07:00', endTime: STATE.morningAssembly.end || '07:10' });
+  }
   var cur = timeToMins(STATE.startTime);
   var dur = parseInt(STATE.periodDuration) || 45;
   var breaks = STATE.breaks.slice().sort(function(a,b){ return parseInt(a.afterPeriod)-parseInt(b.afterPeriod); });
@@ -1542,11 +1566,21 @@ function renderPreview(cls) {
   var tbody = document.createElement('tbody');
   schedule.forEach(function(row) {
     var tr = document.createElement('tr');
+    if (row.type === 'assembly') {
+      tr.className = 'brow';
+      var btd = document.createElement('td');
+      btd.colSpan = days.length + 1;
+      btd.innerHTML = '🌅 ' + row.nameAr + ' &nbsp;|&nbsp; ' + row.startTime + ' – ' + row.endTime;
+      btd.style.cssText = 'background:#FFF7ED;color:#92400E;font-weight:700;text-align:center;padding:8px;font-size:13px';
+      tr.appendChild(btd);
+      tbody.appendChild(tr);
+      return;
+    }
     if (row.type === 'break') {
       tr.className = 'brow';
       var btd = document.createElement('td');
       btd.colSpan = days.length + 1;
-      btd.innerHTML = '\u2615 ' + row.nameAr + ' &nbsp;|&nbsp; ' + row.startTime + ' \u2013 ' + row.endTime;
+      btd.innerHTML = '☕ ' + row.nameAr + ' &nbsp;|&nbsp; ' + row.startTime + ' – ' + row.endTime;
       tr.appendChild(btd);
     } else {
       /* Time cell */
@@ -1720,8 +1754,23 @@ async function saveTimetable() {
       }
     }
     /* Save config to app_settings */
-    var cfg = JSON.stringify({ startTime:STATE.startTime, periodDuration:STATE.periodDuration, periodsPerDay:STATE.periodsPerDay, fridayPeriodsPerDay:STATE.fridayPeriodsPerDay||4, breaks:STATE.breaks });
+    /* Save assembly settings */
+    var asmStart = document.getElementById('assemblyStart') ? document.getElementById('assemblyStart').value : '07:00';
+    var asmEnd = document.getElementById('assemblyEnd') ? document.getElementById('assemblyEnd').value : '07:10';
+    var asmEnabled = document.getElementById('assemblyEnabled') ? document.getElementById('assemblyEnabled').checked : true;
+    /* Auto-set first period start = assembly end */
+    if (asmEnabled && asmEnd) {
+      var stEl = document.getElementById('startTime');
+      if (stEl) { stEl.value = asmEnd; STATE.startTime = asmEnd; }
+    }
+    STATE.morningAssembly = { enabled: asmEnabled, start: asmStart, end: asmEnd, nameAr: 'الطابور الصباحي' };
+    var cfg = JSON.stringify({ startTime:STATE.startTime, periodDuration:STATE.periodDuration, periodsPerDay:STATE.periodsPerDay, fridayPeriodsPerDay:STATE.fridayPeriodsPerDay||4, breaks:STATE.breaks, morningAssembly:STATE.morningAssembly });
     await sbFetch('app_settings', { method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify({key:'timetable_config', value:cfg}) });
+    /* Save assembly to app_settings keys */
+    await sbFetch('app_settings', { method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify({key:'morning_assembly_start', value:asmStart}) });
+    await sbFetch('app_settings', { method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify({key:'morning_assembly_end', value:asmEnd}) });
+    await sbFetch('app_settings', { method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify({key:'morning_assembly_enabled', value:String(asmEnabled)}) });
+    await sbFetch('app_settings', { method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify({key:'first_period_start', value:STATE.startTime}) });
   } catch(e) {
     showToast('\u062E\u0637\u0623: ' + e.message,'err');
   }
@@ -1794,6 +1843,33 @@ function goToStep(n) {
 }
 
 /* ── Init ── */
+/* Auto-sync: assembly end → first period start */
+function syncAssemblyToStart() {
+  var endEl = document.getElementById('assemblyEnd');
+  var startEl = document.getElementById('startTime');
+  var enabledEl = document.getElementById('assemblyEnabled');
+  var hintEl = document.getElementById('startTimeHint');
+  if (!endEl || !startEl || !enabledEl) return;
+  var enabled = enabledEl.checked;
+  if (enabled && endEl.value) {
+    startEl.value = endEl.value;
+    startEl.style.background = '#F0FDF4';
+    startEl.style.color = '#059669';
+    startEl.setAttribute('readonly', 'readonly');
+    if (hintEl) hintEl.style.display = 'block';
+    /* sync all stages */
+    if (STATE.stages && STATE.stages.length) {
+      STATE.stages.forEach(function(st) { st.startTime = endEl.value; });
+      if (typeof renderStageCards === 'function') renderStageCards();
+    }
+  } else {
+    startEl.removeAttribute('readonly');
+    startEl.style.background = '';
+    startEl.style.color = '';
+    if (hintEl) hintEl.style.display = 'none';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   /* Default breaks */
   if (STATE.breaks.length === 0) {
@@ -1807,6 +1883,13 @@ document.addEventListener('DOMContentLoaded', function() {
   loadTeachers();
   loadSoftRulesFromDB();
 
+  /* Wire assembly auto-sync listeners */
+  var _asmEnd = document.getElementById('assemblyEnd');
+  var _asmEnabled = document.getElementById('assemblyEnabled');
+  if (_asmEnd) _asmEnd.addEventListener('change', syncAssemblyToStart);
+  if (_asmEnabled) _asmEnabled.addEventListener('change', syncAssemblyToStart);
+  syncAssemblyToStart();
+
   /* Load saved config if any */
   sbFetch('app_settings?key=eq.timetable_config&select=value&limit=1')
     .then(function(r){ return r.json(); })
@@ -1819,6 +1902,13 @@ document.addEventListener('DOMContentLoaded', function() {
           if (cfg.periodsPerDay) document.getElementById('periodsPerDay').value = cfg.periodsPerDay;
           if (cfg.fridayPeriodsPerDay) { document.getElementById('fridayPeriodsPerDay').value = cfg.fridayPeriodsPerDay; STATE.fridayPeriodsPerDay = cfg.fridayPeriodsPerDay; }
           if (cfg.breaks && cfg.breaks.length) { STATE.breaks = cfg.breaks; renderBreaksTable(); }
+          syncAssemblyToStart();
+          if (cfg.morningAssembly) {
+            STATE.morningAssembly = cfg.morningAssembly;
+            if (document.getElementById('assemblyStart')) document.getElementById('assemblyStart').value = cfg.morningAssembly.start || '07:00';
+            if (document.getElementById('assemblyEnd')) document.getElementById('assemblyEnd').value = cfg.morningAssembly.end || '07:10';
+            if (document.getElementById('assemblyEnabled')) document.getElementById('assemblyEnabled').checked = (cfg.morningAssembly.enabled !== false);
+          }
         } catch(e) {}
       }
     }).catch(function(){});
@@ -1860,7 +1950,10 @@ function getClassFridayPpd(cls){
 
 function computeScheduleForStage(stage){
   var rows=[];
-  var cur=timeToMins(stage.startTime||'07:30');
+  if (STATE.morningAssembly && STATE.morningAssembly.enabled) {
+    rows.push({ type:'assembly', nameAr: STATE.morningAssembly.nameAr || 'الطابور الصباحي', startTime: STATE.morningAssembly.start || '07:00', endTime: STATE.morningAssembly.end || '07:10' });
+  }
+  var cur=timeToMins(stage.startTime||'07:15');
   var dur=parseInt(stage.periodDuration)||45;
   var breaks=(stage.breaks||[]).slice().sort(function(a,b){return parseInt(a.afterPeriod)-parseInt(b.afterPeriod);});
   for(var p=1;p<=stage.periodsPerDay;p++){
@@ -2186,6 +2279,7 @@ async function loadDraft(id) {
     if (d.subjects_config) { STATE.subjects = d.subjects_config; renderSubjects(); }
     if (d.class_assignments) STATE.classAssignments = d.class_assignments;
     if (d.timetable_data) { STATE.timetable = d.timetable_data; }
+    syncAssemblyToStart();
     hideDraftsPanel();
     showDraftToast('تم تحميل المسودة: ' + d.name, '#6C3DD6');
     goToStep(1);
