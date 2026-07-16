@@ -539,6 +539,7 @@ var STATE = {
   periodDuration: 45,
   startTime: '07:15',
   breaks: [],
+  fridayBreaks: [],
   morningAssembly: { enabled: true, start: '07:00', end: '07:10', nameAr: 'الطابور الصباحي' },
   multiStage: false,
   stages: [],
@@ -620,15 +621,18 @@ function getSubjectTColor(name) {
   return map[getSubjectColor(name)] || '#374151';
 }
 
-function computeSchedule() {
+function computeSchedule(day) {
+  var isFri = (day === 'الجمعة');
+  var ppd = isFri ? (STATE.fridayPeriodsPerDay||4) : STATE.periodsPerDay;
   var rows = [];
-  if (STATE.morningAssembly && STATE.morningAssembly.enabled) {
+  if (!isFri && STATE.morningAssembly && STATE.morningAssembly.enabled) {
     rows.push({ type:'assembly', nameAr: STATE.morningAssembly.nameAr || 'الطابور الصباحي', startTime: STATE.morningAssembly.start || '07:00', endTime: STATE.morningAssembly.end || '07:10' });
   }
   var cur = timeToMins(STATE.startTime);
   var dur = parseInt(STATE.periodDuration) || 45;
-  var breaks = STATE.breaks.slice().sort(function(a,b){ return parseInt(a.afterPeriod)-parseInt(b.afterPeriod); });
-  for (var p = 1; p <= STATE.periodsPerDay; p++) {
+  var breaksArr = isFri ? (STATE.fridayBreaks||[]) : (STATE.breaks||[]);
+  var breaks = breaksArr.slice().sort(function(a,b){ return parseInt(a.afterPeriod)-parseInt(b.afterPeriod); });
+  for (var p = 1; p <= ppd; p++) {
     var end = cur + dur;
     rows.push({ type:'period', period:p, startTime:minsToTime(cur), endTime:minsToTime(end) });
     cur = end;
@@ -638,7 +642,7 @@ function computeSchedule() {
     }
     if (brk) {
       var bd = parseInt(brk.duration || 20);
-      rows.push({ type:'break', nameAr: brk.nameAr || 'استراحة', startTime:minsToTime(cur), endTime:minsToTime(cur + bd) });
+      rows.push({ type:'break', nameAr: brk.nameAr || 'استراحة', afterPeriod:p, startTime:minsToTime(cur), endTime:minsToTime(cur + bd) });
       cur += bd;
     }
   }
@@ -1578,10 +1582,32 @@ function renderPreview(cls) {
     }
     if (row.type === 'break') {
       tr.className = 'brow';
-      var btd = document.createElement('td');
-      btd.colSpan = days.length + 1;
-      btd.innerHTML = '☕ ' + row.nameAr + ' &nbsp;|&nbsp; ' + row.startTime + ' – ' + row.endTime;
-      tr.appendChild(btd);
+      var fridayInDays = STATE.selectedDays.indexOf('الجمعة') >= 0;
+      var stgCls = getStageForClass(cls);
+      var fridayBrksArr = stgCls ? (stgCls.fridayBreaks||[]) : (STATE.fridayBreaks||[]);
+      var friBrkMatch = fridayBrksArr.some(function(fb){ return parseInt(fb.afterPeriod) === row.afterPeriod; });
+      if (fridayInDays && !friBrkMatch) {
+        var timeTd2 = document.createElement('td');
+        timeTd2.className = 'tcell-time';
+        timeTd2.textContent = row.startTime + '-' + row.endTime;
+        tr.appendChild(timeTd2);
+        days.forEach(function(d2) {
+          var btd2 = document.createElement('td');
+          if (d2 === 'الجمعة') {
+            btd2.style.cssText = 'text-align:center;color:#CBD5E1;font-size:13px;background:#F8FAFC';
+            btd2.textContent = '—';
+          } else {
+            btd2.style.cssText = 'text-align:center;background:#FEF9C3;color:#92400E;font-weight:700;font-size:13px;padding:8px';
+            btd2.innerHTML = '☕ ' + row.nameAr;
+          }
+          tr.appendChild(btd2);
+        });
+      } else {
+        var btd = document.createElement('td');
+        btd.colSpan = days.length + 1;
+        btd.innerHTML = '☕ ' + row.nameAr + ' &nbsp;|&nbsp; ' + row.startTime + ' – ' + row.endTime;
+        tr.appendChild(btd);
+      }
     } else {
       /* Time cell */
       var timeTd = document.createElement('td');
@@ -1948,21 +1974,24 @@ function getClassFridayPpd(cls){
   return s?(s.fridayPpd||4):(STATE.fridayPeriodsPerDay||4);
 }
 
-function computeScheduleForStage(stage){
+function computeScheduleForStage(stage, day){
+  var isFri = (day === 'الجمعة');
+  var ppd = isFri ? (stage.fridayPpd||4) : stage.periodsPerDay;
   var rows=[];
-  if (STATE.morningAssembly && STATE.morningAssembly.enabled) {
+  if (!isFri && STATE.morningAssembly && STATE.morningAssembly.enabled) {
     rows.push({ type:'assembly', nameAr: STATE.morningAssembly.nameAr || 'الطابور الصباحي', startTime: STATE.morningAssembly.start || '07:00', endTime: STATE.morningAssembly.end || '07:10' });
   }
   var cur=timeToMins(stage.startTime||'07:15');
   var dur=parseInt(stage.periodDuration)||45;
-  var breaks=(stage.breaks||[]).slice().sort(function(a,b){return parseInt(a.afterPeriod)-parseInt(b.afterPeriod);});
-  for(var p=1;p<=stage.periodsPerDay;p++){
+  var breaksArr = isFri ? (stage.fridayBreaks||[]) : (stage.breaks||[]);
+  var breaks=breaksArr.slice().sort(function(a,b){return parseInt(a.afterPeriod)-parseInt(b.afterPeriod);});
+  for(var p=1;p<=ppd;p++){
     var end=cur+dur;
     rows.push({type:'period',period:p,startTime:minsToTime(cur),endTime:minsToTime(end)});
     cur=end;
     var brk=null;
     for(var bi=0;bi<breaks.length;bi++){ if(parseInt(breaks[bi].afterPeriod)===p){brk=breaks[bi];break;} }
-    if(brk){ var bd=parseInt(brk.duration||20); rows.push({type:'break',nameAr:brk.nameAr||'استراحة',startTime:minsToTime(cur),endTime:minsToTime(cur+bd)}); cur+=bd; }
+    if(brk){ var bd=parseInt(brk.duration||20); rows.push({type:'break',nameAr:brk.nameAr||'استراحة',afterPeriod:p,startTime:minsToTime(cur),endTime:minsToTime(cur+bd)}); cur+=bd; }
   }
   return rows;
 }
@@ -2042,6 +2071,44 @@ function renderStageCards(){
       el.addEventListener('change',function(){updateStageField(parseInt(this.dataset.sid),this.dataset.field,this.value);});
       el.addEventListener('input',function(){updateStageField(parseInt(this.dataset.sid),this.dataset.field,this.value);});
     });
+    (function addFridayBreaksUI(s){
+      var fbrks=s.fridayBreaks||[];
+      var sec=document.createElement('div');
+      sec.style.cssText='margin-top:12px;background:#F0FDF4;border:1.5px solid #BBF7D0;border-radius:10px;padding:12px';
+      var lbl=document.createElement('div');
+      lbl.style.cssText='font-size:12px;font-weight:800;color:#065F46;margin-bottom:8px';
+      lbl.textContent='ساعة استراحات يوم الجمعة';
+      sec.appendChild(lbl);
+      if(!fbrks.length){
+        var nd=document.createElement('div');
+        nd.style.cssText='font-size:13px;color:#6B7280;font-style:italic';
+        nd.textContent='لا استراحة — حصص متواصلة';
+        sec.appendChild(nd);
+      }else{
+        fbrks.forEach(function(fb,fi){
+          var rw=document.createElement('div');
+          rw.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:5px;font-size:13px';
+          rw.innerHTML='☕ <strong>'+(fb.nameAr||'استراحة')+'</strong> — بعد الحصة <strong>'+fb.afterPeriod+'</strong> — <span style="color:#065F46">'+fb.duration+' دقيقة</span>';
+          var del=document.createElement('button');
+          del.style.cssText='background:#FEE2E2;border:none;border-radius:5px;padding:2px 8px;color:#DC2626;cursor:pointer;font-size:11px;font-family:inherit';
+          del.textContent='حذف';
+          del.addEventListener('click',(function(idx){return function(){s.fridayBreaks.splice(idx,1);renderStageCards();};})(fi));
+          rw.appendChild(del);
+          sec.appendChild(rw);
+        });
+      }
+      var ab=document.createElement('button');
+      ab.style.cssText='margin-top:6px;padding:4px 12px;background:#10B981;color:#fff;border:none;border-radius:7px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer';
+      ab.textContent='+ إضافة';
+      ab.addEventListener('click',function(){
+        if(!s.fridayBreaks)s.fridayBreaks=[];
+        var ap=parseInt(prompt('بعد أي حصة؟ (1–8)','2'));
+        var dr=parseInt(prompt('مدة بالدقيقة','20'));
+        if(ap&&dr){s.fridayBreaks.push({afterPeriod:ap,duration:dr,nameAr:'استراحة'});renderStageCards();}
+      });
+      sec.appendChild(ab);
+      card.appendChild(sec);
+    })(stage);
     cont.appendChild(card);
   });
 }
