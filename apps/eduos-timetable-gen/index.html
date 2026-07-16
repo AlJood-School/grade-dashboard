@@ -933,6 +933,38 @@ function sanitizeId(str) {
   return (str || '').replace(/\s+/g,'_').replace(/[^\w]/g,'X');
 }
 
+/* ── Auto-load from teacher_assignments DB ── */
+async function loadDBAssignmentsThenRender() {
+  var grid = document.getElementById('assignGrid');
+  if (grid) grid.innerHTML = '<div style="padding:48px;text-align:center;color:#6C3DD6;font-size:15px;font-weight:700">&#x23F3; &#x62C;&#x627;&#x631;&#x64A; &#x627;&#x633;&#x62A;&#x64A;&#x631;&#x627;&#x62F; &#x627;&#x644;&#x62A;&#x639;&#x64A;&#x64A;&#x646;&#x627;&#x62A; &#x645;&#x646; &#x642;&#x627;&#x639;&#x62F;&#x629; &#x627;&#x644;&#x628;&#x64A;&#x627;&#x646;&#x627;&#x62A;...</div>';
+  var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+  var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+  var dbCount = 0;
+  try {
+    var res = await fetch(
+      SB_URL + '/rest/v1/teacher_assignments?is_active=eq.true&select=staff_db_id,teacher_name_ar,subject,class_name',
+      {headers: {'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY}}
+    );
+    var dbRows = await res.json();
+    if (Array.isArray(dbRows)) {
+      dbRows.forEach(function(r) {
+        if (!r.subject || !r.class_name) return;
+        if (!STATE.classAssignments[r.subject]) STATE.classAssignments[r.subject] = {};
+        STATE.classAssignments[r.subject][r.class_name] = {
+          status: 'assigned',
+          teacherId: r.staff_db_id,
+          teacherNameAr: r.teacher_name_ar || r.staff_db_id
+        };
+        dbCount++;
+      });
+    }
+  } catch(e) { /* silent — proceed without DB data */ }
+  renderAssignMatrix();
+  if (dbCount > 0) {
+    showToast('\u2705 \u062a\u0645 \u0627\u0633\u062a\u064a\u0631\u0627\u062f ' + dbCount + ' \u062a\u0639\u064a\u064a\u0646 \u0645\u0646 \u0642\u0627\u0639\u062f\u0629 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a \u062a\u0644\u0642\u0627\u0626\u064a\u0627\u064b');
+  }
+}
+
 function initClassAssignments() {
   STATE.subjects.forEach(function(s) {
     if (!STATE.classAssignments[s.name]) STATE.classAssignments[s.name] = {};
@@ -1746,7 +1778,7 @@ function goToStep(n) {
   }
   if (n === 3) {
     if (STATE.subjects.filter(function(s){return s.name.trim();}).length === 0) { showToast('\u0623\u0636\u0641 \u0645\u0627\u062F\u0629 \u0648\u0627\u062D\u062F\u0629 \u0639\u0644\u0649 \u0627\u0644\u0623\u0642\u0644','err'); return; }
-    renderAssignMatrix();
+    loadDBAssignmentsThenRender();
   }
 
   STATE.step = n;

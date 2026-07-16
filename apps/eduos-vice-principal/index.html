@@ -141,6 +141,13 @@ body{overflow:hidden}
         <span class="snav-sub">Timetable</span>
       </span>
     </button>
+    <button class="snav" data-panel="assign" onclick="showPanel('assign',this)">
+      <span class="snav-icon">&#x1F4CB;</span>
+      <span class="snav-text">
+        <span class="snav-label">&#x62A;&#x639;&#x64A;&#x64A;&#x646; &#x627;&#x644;&#x645;&#x639;&#x644;&#x645;&#x627;&#x62A;</span>
+        <span class="snav-sub">Teacher Assignments</span>
+      </span>
+    </button>
     <button class="snav" data-panel="approvals" onclick="showPanel('approvals',this)">
       <span class="snav-icon">&#x23F3;</span>
       <span class="snav-text">
@@ -668,6 +675,131 @@ function showPanel(name, btn) {
   if (name==='behavior') loadBehavior();
   if (name==='analytics') loadAnalytics();
   if (name==='timetable') loadVpTimetableStatus();
+}
+
+/* ===== TEACHER ASSIGNMENTS ===== */
+var _assignPanelInited = false;
+window.loadAssignPanel = async function() {
+  if (!_assignPanelInited) {
+    _assignPanelInited = true;
+    await Promise.all([populateTeacherDD(), populateSubjectDD(), populateClassDD()]);
+  }
+  refreshAssignList();
+};
+async function populateTeacherDD() {
+  var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+  var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+  var sel = document.getElementById('assignTeacherSel'); if (!sel) return;
+  try {
+    var res = await fetch(SB_URL + '/rest/v1/staff_profiles?is_active=eq.true&order=name_ar&select=staff_db_id,name_ar,subject', {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+    var rows = await res.json(); if (!Array.isArray(rows)) return;
+    rows.forEach(function(r) {
+      var o = document.createElement('option'); o.value = r.staff_db_id || '';
+      o.textContent = (r.name_ar || r.staff_db_id || '-') + (r.subject ? ' (' + r.subject + ')' : '');
+      o.dataset.nameAr = r.name_ar || ''; sel.appendChild(o);
+    });
+  } catch(e) {}
+}
+async function populateSubjectDD() {
+  var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+  var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+  var sel = document.getElementById('assignSubjectSel'); if (!sel) return;
+  try {
+    var res = await fetch(SB_URL + '/rest/v1/schedules?is_active=eq.true&select=subject&order=subject', {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+    var rows = await res.json(); if (!Array.isArray(rows)) return;
+    var seen = {};
+    rows.forEach(function(r) {
+      if (r.subject && !seen[r.subject]) {
+        seen[r.subject] = true; var o = document.createElement('option');
+        o.value = r.subject; o.textContent = r.subject; sel.appendChild(o);
+      }
+    });
+  } catch(e) {}
+}
+async function populateClassDD() {
+  var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+  var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+  var sel = document.getElementById('assignClassSel'); if (!sel) return;
+  try {
+    var res = await fetch(SB_URL + '/rest/v1/students?select=class_name&order=class_name', {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+    var rows = await res.json(); if (!Array.isArray(rows)) return;
+    var seen = {};
+    rows.forEach(function(r) {
+      if (r.class_name && !seen[r.class_name]) {
+        seen[r.class_name] = true; var o = document.createElement('option');
+        o.value = r.class_name; o.textContent = r.class_name; sel.appendChild(o);
+      }
+    });
+  } catch(e) {}
+}
+window.refreshAssignList = async function() {
+  var el = document.getElementById('assignListWrap'); if (!el) return;
+  el.innerHTML = '<div style="color:var(--text3);padding:24px;text-align:center">&#x62C;&#x627;&#x631;&#x64A;...</div>';
+  var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+  var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+  try {
+    var aySel = document.getElementById('assignYearSel');
+    var ay = aySel ? aySel.value : '2026-2027';
+    var res = await fetch(SB_URL + '/rest/v1/teacher_assignments?is_active=eq.true&academic_year=eq.' + ay + '&order=subject,class_name&select=id,staff_db_id,teacher_name_ar,subject,class_name,academic_year', {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+    var rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) {
+      el.innerHTML = '<div style="color:var(--text3);padding:40px;text-align:center">&#x644;&#x627; &#x628;&#x64A;&#x627;&#x646;&#x627;&#x62A;</div>'; return;
+    }
+    var html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:14px">';
+    html += '<thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">';
+    html += '<th style="padding:10px 14px;text-align:right;font-weight:800">&#x627;&#x644;&#x645;&#x627;&#x62F;&#x629;</th>';
+    html += '<th style="padding:10px 14px;text-align:right;font-weight:800">&#x627;&#x644;&#x641;&#x635;&#x644;</th>';
+    html += '<th style="padding:10px 14px;text-align:right;font-weight:800">&#x627;&#x644;&#x645;&#x639;&#x644;&#x645;&#x629;</th>';
+    html += '<th style="padding:10px 14px;text-align:right;font-weight:800">&#x627;&#x644;&#x633;&#x646;&#x629;</th>';
+    html += '<th style="padding:10px 14px;text-align:center;font-weight:800">&#x62D;&#x630;&#x641;</th>';
+    html += '</tr></thead><tbody>';
+    rows.forEach(function(r) {
+      html += '<tr style="border-bottom:1px solid var(--border)">';
+      html += '<td style="padding:10px 14px;font-weight:800;color:var(--brand)">' + (r.subject||'-') + '</td>';
+      html += '<td style="padding:10px 14px;font-weight:700">' + (r.class_name||'-') + '</td>';
+      html += '<td style="padding:10px 14px">' + (r.teacher_name_ar||r.staff_db_id||'-') + '</td>';
+      html += '<td style="padding:10px 14px;font-size:12px;color:var(--text3)">' + (r.academic_year||'-') + '</td>';
+      html += '<td style="padding:10px 14px;text-align:center"><button class="del-assign-btn" data-id="' + r.id + '" style="background:#FEE2E2;color:#DC2626;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:700">&#x62D;&#x630;&#x641;</button></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    el.innerHTML = html;
+    el.querySelectorAll('.del-assign-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() { deleteAssignment(this.dataset.id); });
+    });
+  } catch(e) { el.innerHTML = '<div style="color:#EF4444;padding:20px">&#x62E;&#x637;&#x623;</div>'; }
+};
+window.saveAssignment = async function() {
+  var tSel = document.getElementById('assignTeacherSel');
+  var sSel = document.getElementById('assignSubjectSel');
+  var cSel = document.getElementById('assignClassSel');
+  var aySel = document.getElementById('assignYearSel');
+  if (!tSel.value) { alert('&#x64A;&#x631;&#x62C;&#x649; &#x627;&#x62E;&#x62A;&#x64A;&#x627;&#x631; &#x627;&#x644;&#x645;&#x639;&#x644;&#x645;&#x629;'); return; }
+  if (!sSel.value) { alert('&#x64A;&#x631;&#x62C;&#x649; &#x627;&#x62E;&#x62A;&#x64A;&#x627;&#x631; &#x627;&#x644;&#x645;&#x627;&#x62F;&#x629;'); return; }
+  if (!cSel.value) { alert('&#x64A;&#x631;&#x62C;&#x649; &#x627;&#x62E;&#x62A;&#x64A;&#x627;&#x631; &#x627;&#x644;&#x641;&#x635;&#x644;'); return; }
+  var btn = document.getElementById('saveAssignBtn'); var orig = btn.innerHTML;
+  btn.innerHTML = '...'; btn.disabled = true;
+  var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+  var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+  var tNameAr = (tSel.options[tSel.selectedIndex].dataset.nameAr) || tSel.value;
+  var ay = aySel ? aySel.value : '2026-2027';
+  try {
+    var res = await fetch(SB_URL + '/rest/v1/teacher_assignments', {
+      method:'POST',
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+      body:JSON.stringify({staff_db_id:tSel.value,teacher_name_ar:tNameAr,subject:sSel.value,class_name:cSel.value,academic_year:ay,is_active:true})
+    });
+    btn.innerHTML = orig; btn.disabled = false;
+    if (res.ok || res.status === 201) { tSel.value=''; sSel.value=''; cSel.value=''; window.refreshAssignList(); }
+    else { var e2 = await res.text(); alert('&#x62E;&#x637;&#x623; ' + res.status + ': ' + e2); }
+  } catch(e) { btn.innerHTML=orig; btn.disabled=false; alert('&#x62E;&#x637;&#x623; &#x634;&#x628;&#x643;&#x629;'); }
+};
+async function deleteAssignment(id) {
+  if (!confirm('&#x62D;&#x630;&#x641; &#x647;&#x630;&#x627; &#x627;&#x644;&#x62A;&#x639;&#x64A;&#x64A;&#x646;&#x61F;')) return;
+  var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+  var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+  try { await fetch(SB_URL + '/rest/v1/teacher_assignments?id=eq.' + encodeURIComponent(id), {method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}); window.refreshAssignList(); }
+  catch(e) { alert('&#x62E;&#x637;&#x623;'); }
 }
 
 function doLogout() { sessionStorage.removeItem('edoos_user'); window.location.href = '../eduos-login/'; }
