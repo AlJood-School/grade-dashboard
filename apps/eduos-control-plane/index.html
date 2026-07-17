@@ -155,6 +155,80 @@ body{font-family:'Tajawal',Arial,sans-serif;background:#0D1A1A;color:#E8E3DC;min
 </style>
 </head>
 <body>
+<!-- ══ NAFAS PASSWORD GATE ══ -->
+<div id="nafasGate" style="display:none;position:fixed;inset:0;z-index:99999;background:#060e0e;display:flex;align-items:center;justify-content:center;font-family:'Tajawal',Arial,sans-serif">
+  <div style="background:#0D1A1A;border:1px solid rgba(212,168,75,.3);border-radius:20px;padding:48px 40px;width:380px;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+    <div style="width:64px;height:64px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 20px">🔐</div>
+    <div style="font-size:22px;font-weight:900;color:#D4A84B;margin-bottom:4px">NAFAS Control</div>
+    <div style="font-size:14px;color:rgba(255,255,255,.4);margin-bottom:28px">منطقة مقيّدة — NAFAS FOR ARTIFICIAL INTELLIGENCE</div>
+    <input id="gateInput" type="password" placeholder="أدخل كلمة المرور" autocomplete="off"
+      style="width:100%;padding:14px 16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;color:#E8E3DC;font-size:16px;font-family:'Tajawal',Arial,sans-serif;outline:none;margin-bottom:12px;direction:ltr;text-align:center"
+      onkeydown="if(event.key==='Enter')gateSubmit()">
+    <div id="gateError" style="color:#f87171;font-size:13px;min-height:20px;margin-bottom:8px"></div>
+    <button onclick="gateSubmit()"
+      style="width:100%;padding:14px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);border:none;border-radius:12px;color:#fff;font-size:16px;font-weight:800;cursor:pointer;font-family:'Tajawal',Arial,sans-serif">
+      دخول &#8592;
+    </button>
+    <div style="margin-top:20px;font-size:12px;color:rgba(255,255,255,.25)">© 2026 NAFAS FOR ARTIFICIAL INTELLIGENCE · CN-6573712</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const HASH    = '4c412010a855301a3e0741f63a784786f37f88e7adc7a4bfa13b614686666d3c';
+  const KEY     = 'nafas_ctrl_auth';
+  const MAX_AGE = 4 * 60 * 60 * 1000; // 4 ساعات بالمللي ثانية
+  let _failCount = 0;
+
+  async function sha256(str){
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+
+  function isSessionValid(){
+    try {
+      const raw = sessionStorage.getItem(KEY);
+      if (!raw) return false;
+      const obj = JSON.parse(raw);
+      // يجب أن يكون موقوتاً وضمن MAX_AGE
+      if (!obj || !obj.ts || !obj.ok) return false;
+      return (Date.now() - obj.ts) < MAX_AGE;
+    } catch { return false; }
+  }
+
+  async function gateSubmit(){
+    if (_failCount >= 5) {
+      document.getElementById('gateError').textContent = 'تم تجاوز عدد المحاولات — أعد تحميل الصفحة';
+      return;
+    }
+    const val = document.getElementById('gateInput').value;
+    const h   = await sha256(val);
+    if(h === HASH){
+      _failCount = 0;
+      // نخزن كائناً موقوتاً — ليس مجرد '1' قابل للتزوير
+      sessionStorage.setItem(KEY, JSON.stringify({ ok: true, ts: Date.now() }));
+      document.getElementById('nafasGate').style.display = 'none';
+    } else {
+      _failCount++;
+      const err = document.getElementById('gateError');
+      err.textContent = `كلمة المرور غير صحيحة (${_failCount}/5)`;
+      document.getElementById('gateInput').value = '';
+      setTimeout(()=>err.textContent='', 2500);
+    }
+  }
+  window.gateSubmit = gateSubmit;
+
+  if(!isSessionValid()){
+    sessionStorage.removeItem(KEY); // امسح أي قيمة قديمة أو مزوَّرة
+    document.getElementById('nafasGate').style.display = 'flex';
+    setTimeout(()=>document.getElementById('gateInput').focus(), 100);
+  } else {
+    document.getElementById('nafasGate').style.display = 'none';
+  }
+})();
+</script>
+<!-- ══ END GATE ══ -->
+
 
 <!-- Header -->
 <div class="header">
@@ -290,8 +364,6 @@ const CP = window.EduOS || {};
 const _c1='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.';
 const _c2='eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind1d3dmc2Jhc2toanRlZ3RyYW90Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyODU0MDYsImV4cCI6MjA5ODg2MTQwNn0.';
 const _c3='JQgRajxz0bu19s0IrvrTjAdugoRty4-m2arz6UZBiGk';
-const SB_URL = CP.SB_URL || 'https://wuwwfsbaskhjtegtraot.supabase.co';
-const SB_KEY = CP.SB_KEY || _c1+_c2+_c3;
 
 // ── Live Clock ──
 function updateClock(){
@@ -307,8 +379,8 @@ let filterState = 'all';
 
 async function loadSchools(){
   try{
-    const res = await fetch(SB_URL+'/rest/v1/schools?select=*&order=created_at.desc',{
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+    const res = await fetch((window.EduOS?window.EduOS.SB_URL:'')+'/rest/v1/schools?select=*&order=created_at.desc',{
+      headers:{'apikey':(window.EduOS?window.EduOS.SB_KEY:''),'Authorization':'Bearer '+(window.EduOS?window.EduOS.SB_KEY:'')}
     });
     if(!res.ok) throw new Error(res.statusText);
     const data = await res.json();
@@ -317,20 +389,10 @@ async function loadSchools(){
     updateKPIs(data);
     loadActivity();
   }catch(e){
-    // Show demo data if DB not yet configured
-    allSchools = getDemoSchools();
-    renderSchools(allSchools);
-    updateKPIs(allSchools);
-    renderDemoActivity();
+    console.error('loadSchools error:', e);
+    const grid = document.getElementById('schoolsGrid');
+    if(grid) grid.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:48px;color:rgba(255,100,100,.6);font-size:15px">تعذّر تحميل البيانات — تحقق من الاتصال</div>';
   }
-}
-
-function getDemoSchools(){
-  return [
-    {id:1,name_ar:'مدرسة الجود',name_en:'Al Jood School',subdomain:'aljood',country:'UAE',city:'أبوظبي',status:'active',student_count:1047,staff_count:108,health_score:94,last_sync:'منذ دقيقتين',education_system:'ADEK',grade_range:'KG1–12',supabase_ref:'zuyizaiugpmhmeycqton',created_at:'2026-01-15'},
-    {id:2,name_ar:'مدرسة الطموح',name_en:'Al Tomouh School',subdomain:'altomouh',country:'UAE',city:'أبوظبي',status:'pending',student_count:0,staff_count:0,health_score:0,last_sync:'لم تتم بعد',education_system:'ADEK',grade_range:'KG1–12',supabase_ref:'',created_at:'2026-07-05'},
-    {id:3,name_ar:'مدرسة ناهل',name_en:'Nahel School',subdomain:'nahel',country:'UAE',city:'الشارقة',status:'pending',student_count:0,staff_count:0,health_score:0,last_sync:'لم تتم بعد',education_system:'MOE',grade_range:'G1–12',supabase_ref:'',created_at:'2026-07-05'}
-  ];
 }
 
 function renderSchools(schools){
@@ -348,7 +410,7 @@ function schoolCardHTML(s){
   const badgeText = {active:'نشطة ✅',pending:'قيد الإعداد ⏳',error:'تنبيه ⚠️',inactive:'متوقفة'}[s.status]||s.status;
   const healthColor = s.health_score>=80?'health-good':s.health_score>=50?'health-warn':'health-bad';
   return `
-<div class="school-card status-${s.status}" onclick="openSchoolDetail(${s.id})">
+<div class="school-card status-${s.status}" onclick="openSchoolDetail('${s.id}')">
   <div class="sc-header">
     <div class="sc-logo">${s.status==='active'?'🏫':'🏗️'}</div>
     <span class="sc-badge ${badgeClass}">${badgeText}</span>
@@ -375,8 +437,8 @@ function schoolCardHTML(s){
   </div>`:''}
   <div class="sc-actions">
     <button class="sc-btn sc-btn-open" onclick="event.stopPropagation();openSchool('${s.subdomain}')">🔗 فتح</button>
-    <button class="sc-btn sc-btn-sync" onclick="event.stopPropagation();syncSchool(${s.id},'${s.name_ar}')">🔄 مزامنة</button>
-    <button class="sc-btn sc-btn-settings" onclick="event.stopPropagation();openSchoolDetail(${s.id})">⚙️</button>
+    <button class="sc-btn sc-btn-sync" onclick="event.stopPropagation();syncSchool('${s.id}','${s.name_ar}')">🔄 مزامنة</button>
+    <button class="sc-btn sc-btn-settings" onclick="event.stopPropagation();openSchoolDetail('${s.id}')">⚙️</button>
   </div>
   <div class="sc-last-sync">آخر مزامنة: ${s.last_sync||'—'}</div>
 </div>`;
@@ -562,3 +624,4 @@ loadSchools();
 </script>
 </body>
 </html>
+
