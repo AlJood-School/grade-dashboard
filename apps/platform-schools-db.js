@@ -299,4 +299,4 @@ const SCHOOLS_STATS = {
   emirates:    [...new Set(SCHOOLS_DB.map(s => s.emirate))].length,
 };
 
-console.log(`📚 Schools DB loaded: ${SCHOOLS_STATS.total} schools | Gov: ${SCHOOLS_STATS.government} | Private: ${SCHOOLS_STATS.private} | Intl: ${SCHOOLS_STATS.intl}`);
+// Schools DB loaded (stats suppressed for security)

@@ -10,6 +10,7 @@
 <script src="/apps/platform-week.js"></script>
 <script src="/apps/platform-autologout.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/apps/platform-auth-guard.js"></script>
 <style>
 :root {
   --bg: #F0F4F8;
@@ -486,10 +487,28 @@ function switchTab(name, el) {
   if (name === 'schedule') loadSchedule();
 }
 
+// M-01 Fix: Periodic server-side JWT re-validation every 5 minutes
+async function verifySessionWithServer() {
+  try {
+    const user = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+    const token = user.token || '';
+    if (!token) return; // observers without JWT rely on timer
+    const sbUrl = (window.EduOS && window.EduOS.SB_URL) ? window.EduOS.SB_URL : '';
+    const sbKey = (window.EduOS && window.EduOS.SB_KEY) ? window.EduOS.SB_KEY : '';
+    if (!sbUrl) return;
+    const res = await fetch(sbUrl + '/auth/v1/user', {
+      headers: { 'apikey': sbKey, 'Authorization': 'Bearer ' + token }
+    });
+    if (res.status === 401) { doLogout(); }
+  } catch (e) { /* شبكة معطلة — لا نعاقب */ }
+}
+setInterval(verifySessionWithServer, 5 * 60 * 1000); // كل 5 دقائق
+
 // --- INIT ---
 initWeek();
 startTimer();
 loadOverview();
+verifySessionWithServer(); // تحقق فوري عند التحميل
 </script>
 </body>
 </html>

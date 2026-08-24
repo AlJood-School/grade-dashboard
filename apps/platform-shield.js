@@ -33,6 +33,16 @@
   const ANON_KEY = window.EduOS?.SB_KEY || '';
   const SLOW_PAGE_THRESHOLD = 3000; // 3 ثوانٍ
 
+  // L-04: Rate limiting — max 3 reports per 5 minutes per tab
+  let _reportTimestamps = [];
+  function _isRateLimited() {
+    const now = Date.now();
+    _reportTimestamps = _reportTimestamps.filter(t => now - t < 5 * 60 * 1000);
+    if (_reportTimestamps.length >= 3) return true;
+    _reportTimestamps.push(now);
+    return false;
+  }
+
   // بيانات المستخدم الحالي من sessionStorage
   function getCurrentUser() {
     try {
@@ -45,6 +55,10 @@
 
   // إرسال البلاغ للـ Edge Function
   async function sendReport(data) {
+    if (_isRateLimited()) {
+      // صامت — لا نُعلم المخترق أن الحد وُصل
+      return;
+    }
     try {
       const user = getCurrentUser();
       const payload = {
@@ -332,7 +346,7 @@
   function init() {
     injectReportButton();
     setTimeout(checkLinks, 1500); // بعد تحميل الروابط
-    console.log(`[EduOS Shield v${SHIELD_VERSION}] منظومة الجودة الذاتية تعمل ✅`);
+    // Shield v${SHIELD_VERSION} active (suppressed for security)
   }
 
   if (document.readyState === "loading") {
