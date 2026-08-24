@@ -26,6 +26,10 @@ a{text-decoration:none;color:inherit}
 .btn-ghost{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.4)}.btn-ghost:hover{background:rgba(255,255,255,.25)}
 .btn-danger{background:#EF4444;color:#fff}.btn-danger:hover{background:#DC2626}
 .btn-sm{padding:5px 12px;font-size:13px;border-radius:7px}
+.alt-row{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#F9FAFB;border-radius:8px;border:1px solid #E5E7EB}
+.alt-name{flex:1;font-weight:600;color:#1F2937;font-size:14px}
+.alt-ok{font-size:12px;color:#059669;white-space:nowrap;background:#D1FAE5;padding:2px 8px;border-radius:12px}
+.alt-warn{font-size:12px;color:#D97706;white-space:nowrap;background:#FEF3C7;padding:2px 8px;border-radius:12px}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 /* ── Wizard Bar ── */
 .wiz-bar{background:#fff;border-bottom:1px solid #E5E7EB;padding:0 24px;display:flex;overflow-x:auto;gap:0}
@@ -577,6 +581,7 @@ var STATE = {
   timetable: null,
   activeClass: null,
   dragSrc: null,
+  teacherPreferences: {},
   curriculumSystem: 'MOE',
   dbRules: [],
   softRules: [],
@@ -711,6 +716,17 @@ async function loadTeachers() {
     var data = await res.json();
     STATE.teachers = (data || []).filter(function(t){ return t.name_ar; });
   } catch(e) { STATE.teachers = []; }
+}
+
+async function loadTeacherPreferences() {
+  try {
+    var res = await sbFetch('teacher_preferences?select=staff_db_id,preferred_days,preferred_periods,avoid_days,avoid_first_period');
+    var data = await res.json();
+    STATE.teacherPreferences = {};
+    (data || []).forEach(function(p) {
+      STATE.teacherPreferences[p.staff_db_id] = p;
+    });
+  } catch(e) { STATE.teacherPreferences = {}; }
 }
 
 /* ── Detect grade range from selected classes ── */
@@ -1933,6 +1949,142 @@ function findTeacherConflicts(tt, classes, days, ppd, fridayPpd) {
   return conflicts;
 }
 
+/* ── Find alternative teachers for a conflicting slot ── */
+function findAlternatives(subject, targetCls, day, period, excludeTeacherId) {
+  var candidates = {};
+  var isTargetKG = /^KG/i.test(targetCls);
+  var tt = STATE.timetable;
+  var allClasses = STATE.selectedClasses || [];
+  var assignMap = STATE.classAssignments[subject] || {};
+
+  /* collect candidates assigned to this subject */
+  Object.keys(assignMap).forEach(function(cls) {
+    var ca = assignMap[cls];
+    if (ca && ca.teacherId && ca.status === 'assigned' && ca.teacherId !== '\u0634\u0627\u063a\u0631') {
+      candidates[ca.teacherId] = ca.teacherNameAr || ca.teacherId;
+    }
+  });
+
+  var results = [];
+  Object.keys(candidates).forEach(function(tid) {
+    if (tid === excludeTeacherId) return;
+
+    /* KG gate — detect if teacher is KG-only or non-KG-only */
+    var teacherCls = Object.keys(assignMap).filter(function(c) {
+      return assignMap[c] && assignMap[c].teacherId === tid;
+    });
+    var kgOnly   = teacherCls.length > 0 && teacherCls.every(function(c) { return /^KG/i.test(c); });
+    var nonKGOnly = teacherCls.length > 0 && teacherCls.every(function(c) { return !/^KG/i.test(c); });
+    if (isTargetKG && nonKGOnly) return;
+    if (!isTargetKG && kgOnly) return;
+
+    /* Time conflict check */
+    var busy = false;
+    allClasses.forEach(function(c) {
+      if (c === targetCls) return;
+      var sl = tt[c] && tt[c][day] && tt[c][day][period];
+      if (sl && sl.teacherId === tid) busy = true;
+    });
+    if (busy) return;
+
+    /* Preference check */
+    var pref = STATE.teacherPreferences[tid];
+    var prefWarning = null;
+    if (pref) {
+      var avoidDays    = pref.avoid_days || [];
+      var preferDays   = pref.preferred_days || [];
+      var preferPeriods = pref.preferred_periods || [];
+      if (avoidDays.indexOf(day) > -1) {
+        prefWarning = '\u062A\u062A\u062C\u0646\u0628 \u0647\u0630\u0627 \u0627\u0644\u064A\u0648\u0645';
+      } else if (pref.avoid_first_period && period === 1) {
+        prefWarning = '\u062A\u062A\u062C\u0646\u0628 \u0627\u0644\u062D\u0635\u0629 \u0627\u0644\u0623\u0648\u0644\u0649';
+      } else if (preferDays.length > 0 && preferDays.indexOf(day) === -1) {
+        prefWarning = '\u062E\u0627\u0631\u062C \u0623\u064A\u0627\u0645\u0647\u0627 \u0627\u0644\u0645\u0641\u0636\u0644\u0629';
+      }
+    }
+
+    results.push({ teacherId: tid, teacherName: candidates[tid], prefWarning: prefWarning });
+  });
+
+  /* Sort: available (no warning) first */
+  results.sort(function(a, b) { return (a.prefWarning ? 1 : 0) - (b.prefWarning ? 1 : 0); });
+  return results;
+}
+
+/* ── Alternatives Modal ── */
+var _pendingSwap = null;
+
+function showAlternativesModal(conflictTname, subject, srcCls, srcDay, srcPeriod, dstCls, dstDay, dstPeriod, srcSlot, dstSlot) {
+  _pendingSwap = { srcCls: srcCls, srcDay: srcDay, srcPeriod: srcPeriod,
+                   dstCls: dstCls, dstDay: dstDay, dstPeriod: dstPeriod,
+                   srcSlot: srcSlot, dstSlot: dstSlot };
+
+  var alts = findAlternatives(subject, dstCls, dstDay, dstPeriod, srcSlot && srcSlot.teacherId);
+
+  var infoEl = document.getElementById('altConflictInfo');
+  var listEl = document.getElementById('altList');
+
+  infoEl.innerHTML = '<strong>' + conflictTname + '</strong> \u0645\u0639\u064A\u0646/\u0629 \u0641\u064A \u0641\u0635\u0644 \u0622\u062E\u0631 \u0628\u0646\u0641\u0633 \u0627\u0644\u0648\u0642\u062A<br>'
+    + '\u0627\u0644\u0645\u0627\u062F\u0629: <strong>' + subject + '</strong>'
+    + ' \u2014 \u0641\u0635\u0644: <strong>' + dstCls + '</strong>'
+    + ' \u2014 ' + dstDay + ' \u062D' + dstPeriod;
+
+  if (alts.length === 0) {
+    listEl.innerHTML = '<div style="color:#6B7280;padding:12px;text-align:center">'
+      + '\u0644\u0627 \u064A\u0648\u062C\u062F \u0628\u062F\u0627\u0626\u0644 \u0645\u062A\u0627\u062D\u0629 \u0644\u0647\u0630\u0647 \u0627\u0644\u062D\u0635\u0629</div>';
+  } else {
+    var html = '';
+    alts.forEach(function(a) {
+      html += '<div class="alt-row">';
+      html += '<span class="alt-name">' + a.teacherName + '</span>';
+      if (a.prefWarning) {
+        html += '<span class="alt-warn">\u26A0\uFE0F ' + a.prefWarning + '</span>';
+      } else {
+        html += '<span class="alt-ok">\u2705 \u0645\u062A\u0627\u062D/\u0629</span>';
+      }
+      html += '<button class="btn btn-primary btn-sm"'
+        + ' data-tid="' + a.teacherId + '" data-tname="' + a.teacherName + '"'
+        + ' onclick="applyAlternative(this.dataset.tid, this.dataset.tname)">'
+        + '\u0627\u062E\u062A\u0631</button>';
+      html += '</div>';
+    });
+    listEl.innerHTML = html;
+  }
+
+  document.getElementById('altModal').style.display = 'flex';
+}
+
+function closeAltModal() {
+  document.getElementById('altModal').style.display = 'none';
+  _pendingSwap = null;
+}
+
+function applyAlternative(newTid, newTname) {
+  if (!_pendingSwap) return;
+  var sw = _pendingSwap;
+  var tt = STATE.timetable;
+  var newSlot = sw.srcSlot ? Object.assign({}, sw.srcSlot, { teacherId: newTid, teacherNameAr: newTname, isVacant: false }) : null;
+  tt[sw.dstCls][sw.dstDay][sw.dstPeriod] = newSlot;
+  tt[sw.srcCls][sw.srcDay][sw.srcPeriod] = sw.dstSlot || null;
+  Object.keys(tt).forEach(function(c){ Object.keys(tt[c]).forEach(function(d){ Object.keys(tt[c][d]).forEach(function(p){ if(tt[c][d][p]) tt[c][d][p].consecutiveWarn=null; }); }); });
+  closeAltModal();
+  renderPreview(STATE.activeClass);
+  showToast('\u2705 \u062A\u0645 \u062A\u0639\u064A\u064A\u0646 ' + newTname + ' \u0628\u062F\u064A\u0644\u0627\u064B', 'ok');
+}
+
+function markAltVacant() {
+  if (!_pendingSwap) return;
+  var sw = _pendingSwap;
+  var tt = STATE.timetable;
+  var vacSlot = sw.srcSlot ? Object.assign({}, sw.srcSlot, { teacherId: null, teacherNameAr: '\u0634\u0627\u063a\u0631', isVacant: true }) : null;
+  tt[sw.dstCls][sw.dstDay][sw.dstPeriod] = vacSlot;
+  tt[sw.srcCls][sw.srcDay][sw.srcPeriod] = sw.dstSlot || null;
+  Object.keys(tt).forEach(function(c){ Object.keys(tt[c]).forEach(function(d){ Object.keys(tt[c][d]).forEach(function(p){ if(tt[c][d][p]) tt[c][d][p].consecutiveWarn=null; }); }); });
+  closeAltModal();
+  renderPreview(STATE.activeClass);
+  showToast('\u26A0\uFE0F \u062A\u0645 \u062A\u0639\u064A\u064A\u0646 \u0627\u0644\u062E\u0644\u064A\u0629 \u0643\u0634\u0627\u063A\u0631', 'warn');
+}
+
 /* ── Drag & Drop ── */
 function enableDragDrop() {
   document.querySelectorAll('.scell').forEach(function(cell) {
@@ -1978,7 +2130,13 @@ function enableDragDrop() {
           });
         }
         if (conflictFound) {
-          showToast('⚠️ تعارض: المعلم/ة موجود/ة بالفعل في حصة أخرى بنفس الوقت — الإبدال ملغى', 'err');
+          var ctid = srcTid || dstTid;
+          var ctname = (srcSlot && srcSlot.teacherNameAr) || (dstSlot && dstSlot.teacherNameAr) || ctid || '';
+          var csubj  = (srcSlot && srcSlot.subject) || (dstSlot && dstSlot.subject) || '';
+          showAlternativesModal(ctname, csubj,
+            STATE.dragSrc.cls, STATE.dragSrc.day, STATE.dragSrc.period,
+            dst.cls, dst.day, dst.period,
+            srcSlot, dstSlot);
           return;
         }
       }
@@ -2353,6 +2511,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   loadClasses();
   loadTeachers();
+  loadTeacherPreferences();
   loadSoftRulesFromDB();
   checkSavedStageConfig();
   checkExistingSchedule();
@@ -2878,5 +3037,17 @@ function showDraftToast(msg, color) {
 
 <!-- Draft Toast -->
 <div id="draftToast" style="display:none;position:fixed;bottom:24px;right:24px;z-index:9999;padding:12px 22px;border-radius:10px;color:#fff;font-weight:700;font-size:14px;box-shadow:0 4px 20px rgba(0,0,0,.2)"></div>
+<!-- ── Alternatives Modal ── -->
+<div id="altModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;direction:rtl">
+  <div style="background:#fff;border-radius:16px;padding:28px 32px;max-width:540px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:80vh;overflow-y:auto">
+    <h3 style="margin:0 0 12px;color:#1F2937;font-size:18px;font-weight:700">&#x26A0;&#xFE0F; &#x062A;&#x639;&#x627;&#x631;&#x636; &#x2014; &#x627;&#x62E;&#x62A;&#x631; &#x628;&#x62F;&#x64A;&#x644;&#x627;&#x64B;</h3>
+    <div id="altConflictInfo" style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:14px;line-height:1.7;color:#92400E"></div>
+    <div id="altList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
+      <button class="btn btn-secondary btn-sm" onclick="markAltVacant()">&#x62A;&#x631;&#x643; &#x627;&#x644;&#x62E;&#x644;&#x64A;&#x629; &#x634;&#x627;&#x63A;&#x631;&#x629;</button>
+      <button class="btn btn-danger btn-sm" onclick="closeAltModal()">&#x625;&#x644;&#x63A;&#x627;&#x621;</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
