@@ -10,6 +10,7 @@
 <script src="/apps/platform-week.js"></script>
 <script src="/apps/platform-autologout.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/apps/platform-auth-guard.js"></script>
 <style>
 :root {
   --bg: #F0F4F8;
@@ -520,7 +521,7 @@ async function loadChildData(id) {
 // --- GRADES ---
 let gradesData = [];
 async function loadGrades(id) {
-  gradesData = await dbGet('student_grades', `select=subject,grade,term&student_id=eq.${id}&order=subject`);
+  gradesData = await dbGet('student_grades', `select=subject,score,max_score,term&student_id=eq.${id}&order=subject`);
   renderGrades();
 }
 
@@ -532,13 +533,13 @@ function renderGrades() {
       <table>
         <thead><tr><th>المادة | Subject</th><th>الفصل | Term</th><th>الدرجة | Grade</th><th>التقدير | Rating</th></tr></thead>
         <tbody>${gradesData.map(g => {
-          const pct = parseFloat(g.grade) || 0;
+          const pct = g.max_score > 0 ? Math.round((g.score / g.max_score) * 100) : 0;
           const badge = pct >= 90 ? 'badge-green' : pct >= 75 ? 'badge-blue' : pct >= 60 ? 'badge-amber' : 'badge-red';
           const label = pct >= 90 ? 'ممتاز | Excellent' : pct >= 75 ? 'جيد جداً | V.Good' : pct >= 60 ? 'جيد | Good' : 'دون المتوسط';
           return `<tr>
             <td style="font-weight:700">${g.subject || '—'}</td>
             <td>${g.term || '—'}</td>
-            <td style="font-weight:800;font-size:17px">${g.grade || '—'}</td>
+            <td style="font-weight:800;font-size:17px">${g.score !== null && g.score !== undefined ? g.score + '/' + g.max_score : '—'}</td>
             <td><span class="badge ${badge}">${label}</span></td>
           </tr>`;
         }).join('')}</tbody>
@@ -549,7 +550,7 @@ function renderGrades() {
 // --- ATTENDANCE ---
 let attData = [];
 async function loadAttendance(id) {
-  attData = await dbGet('attendance', `select=date,status,notes&student_id=eq.${id}&order=date.desc&limit=30`);
+  attData = await dbGet('student_attendance', `select=date,status,notes&student_id=eq.${id}&order=date.desc&limit=30`);
   renderAttendance();
 }
 
@@ -561,8 +562,8 @@ function renderAttendance() {
       <table>
         <thead><tr><th>التاريخ | Date</th><th>الحالة | Status</th><th>ملاحظات | Notes</th></tr></thead>
         <tbody>${attData.map(a => {
-          const badge = a.status === 'present' ? 'badge-green' : a.status === 'absent' ? 'badge-red' : 'badge-amber';
-          const label = a.status === 'present' ? '✅ حاضر/ة | Present' : a.status === 'absent' ? '❌ غائب/ة | Absent' : '⏰ متأخر/ة | Late';
+          const badge = (a.status === 'حاضر' || a.status === 'present') ? 'badge-green' : (a.status === 'غائب' || a.status === 'absent') ? 'badge-red' : 'badge-amber';
+          const label = (a.status === 'حاضر' || a.status === 'present') ? '✅ حاضر/ة | Present' : (a.status === 'غائب' || a.status === 'absent') ? '❌ غائب/ة | Absent' : '⏰ متأخر/ة | Late';
           return `<tr>
             <td>${a.date || '—'}</td>
             <td><span class="badge ${badge}">${label}</span></td>
@@ -576,7 +577,7 @@ function renderAttendance() {
 // --- BEHAVIOR ---
 let behData = [];
 async function loadBehavior(id) {
-  behData = await dbGet('behavior_incidents', `select=date,type,description,points&student_id=eq.${id}&order=date.desc&limit=20`);
+  behData = await dbGet('behavior_incidents', `select=created_at,violation_type,description,degree&student_id=eq.${id}&order=created_at.desc&limit=20`);
   renderBehavior();
 }
 
@@ -588,13 +589,13 @@ function renderBehavior() {
       <table>
         <thead><tr><th>التاريخ | Date</th><th>النوع | Type</th><th>الوصف | Description</th><th>النقاط | Points</th></tr></thead>
         <tbody>${behData.map(b => {
-          const pts = parseInt(b.points) || 0;
-          const badge = pts > 0 ? 'badge-green' : 'badge-red';
+          const deg = b.degree != null ? (b.degree === 1 ? 'خفيف' : b.degree === 2 ? 'متوسط' : b.degree >= 3 ? 'شديد' : b.degree) : '—';
+          const badge = b.degree === 1 ? 'badge-amber' : b.degree >= 2 ? 'badge-red' : 'badge-green';
           return `<tr>
-            <td>${b.date || '—'}</td>
-            <td><span class="badge badge-blue">${b.type || '—'}</span></td>
+            <td>${(b.created_at||'').slice(0,10) || '—'}</td>
+            <td><span class="badge badge-blue">${b.violation_type || '—'}</span></td>
             <td>${b.description || '—'}</td>
-            <td><span class="badge ${badge}">${pts > 0 ? '+' : ''}${pts}</span></td>
+            <td><span class="badge ${badge}">${deg}</span></td>
           </tr>`;
         }).join('')}</tbody>
       </table>
@@ -603,32 +604,132 @@ function renderBehavior() {
 
 // --- SCHEDULE ---
 async function loadSchedule(id) {
-  // get student's section
-  const child = children.find(c => c.id === id);
+  var child = children.find(function(c) { return c.student_id === id; });
   if (!child) return;
-  const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
-  const rows = await dbGet('schedules', `select=day,period,subject,staff_id&section=eq.${child.section}&grade=eq.${child.grade}&order=day,period`);
-  const el = document.getElementById('schedTable');
-  if (!rows.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🗓</div>لا بيانات</div>'; return; }
+  var el = document.getElementById('schedTable');
+  if (!child.class_name) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🗓</div>لا يوجد فصل مرتبط بهذا الطالب</div>';
+    return;
+  }
+  el.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div>جاري التحميل...</div>';
 
-  // group by day
-  const byDay = {};
-  rows.forEach(r => { if (!byDay[r.day]) byDay[r.day] = []; byDay[r.day].push(r); });
-  el.innerHTML = `<div class="tbl-wrap"><table>
-    <thead><tr><th>اليوم | Day</th><th>الحصة | Period</th><th>المادة | Subject</th></tr></thead>
-    <tbody>${rows.map(r => `<tr>
-      <td>${r.day || '—'}</td>
-      <td>${r.period || '—'}</td>
-      <td style="font-weight:700">${r.subject || '—'}</td>
-    </tr>`).join('')}</tbody>
-  </table></div>`;
+  var DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
+  var DAY_EN = {'الأحد':'Sun','الاثنين':'Mon','الثلاثاء':'Tue','الأربعاء':'Wed','الخميس':'Thu','الجمعة':'Fri'};
+  var DAY_COLORS = {
+    'الأحد':'#F3E8FF','الاثنين':'#DBEAFE','الثلاثاء':'#D1FAE5',
+    'الأربعاء':'#FEF3C7','الخميس':'#FFE4E6','الجمعة':'#F0FDF4'
+  };
+  var DAY_TEXT = {
+    'الأحد':'#7C3AED','الاثنين':'#1D4ED8','الثلاثاء':'#065F46',
+    'الأربعاء':'#92400E','الخميس':'#9F1239','الجمعة':'#14532D'
+  };
+
+  var rows = await dbGet('schedules',
+    'select=day,period,subject,teacher_name&class_name=eq.' + encodeURIComponent(child.class_name) +
+    '&is_active=eq.true&order=period,day'
+  );
+  if (!rows || !rows.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🗓</div>لا بيانات للجدول</div>';
+    return;
+  }
+
+  // build map [period][day] = {subject, teacher_name}
+  var maxPeriod = 0;
+  var grid = {};
+  rows.forEach(function(r) {
+    var p = r.period;
+    if (p > maxPeriod) maxPeriod = p;
+    if (!grid[p]) grid[p] = {};
+    grid[p][r.day] = r;
+  });
+
+  // detect today's day name
+  var todayJS = new Date().getDay(); // 0=Sun,1=Mon...6=Sat
+  var jsToAr = {0:'الأحد',1:'الاثنين',2:'الثلاثاء',3:'الأربعاء',4:'الخميس',5:'الجمعة',6:'السبت'};
+  var todayAr = jsToAr[todayJS];
+
+  // only show days that have data
+  var activeDays = DAYS.filter(function(d) {
+    return rows.some(function(r) { return r.day === d; });
+  });
+
+  // Friday max 4 periods
+  var FRIDAY_MAX = 4;
+
+  var subjectColors = {};
+  var palette = ['#EDE9FE','#DBEAFE','#D1FAE5','#FEF3C7','#FFE4E6','#E0F2FE','#FEE2E2','#F0FDF4','#FFF7ED','#F5F3FF'];
+  var colorIdx = 0;
+  function getSubjectColor(sub) {
+    if (!sub) return '#F9FAFB';
+    if (!subjectColors[sub]) { subjectColors[sub] = palette[colorIdx % palette.length]; colorIdx++; }
+    return subjectColors[sub];
+  }
+
+  var html = '<div style="overflow-x:auto;margin-bottom:12px">';
+  html += '<div style="font-size:13px;color:#6B7280;margin-bottom:10px;font-weight:600">';
+  html += 'الفصل: <span style="color:#6C3DD6;font-weight:800">' + child.class_name + '</span>';
+  html += ' &nbsp;|&nbsp; الطالب: <span style="color:#6C3DD6;font-weight:800">' + (child.name || '') + '</span></div>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:14px;min-width:480px">';
+
+  // header row
+  html += '<thead><tr>';
+  html += '<th style="background:#F9FAFB;padding:10px;border:1px solid #E5E7EB;color:#374151;font-weight:700;min-width:60px">الحصة</th>';
+  activeDays.forEach(function(d) {
+    var isToday = d === todayAr;
+    var bg = isToday ? DAY_COLORS[d] : '#F9FAFB';
+    var color = isToday ? DAY_TEXT[d] : '#374151';
+    var border = isToday ? '2px solid ' + DAY_TEXT[d] : '1px solid #E5E7EB';
+    html += '<th style="background:' + bg + ';padding:10px;border:' + border + ';color:' + color + ';font-weight:' + (isToday ? '800' : '700') + ';min-width:110px">';
+    html += d + (isToday ? ' 🔵' : '');
+    html += '<div style="font-size:11px;font-weight:500;opacity:0.7">' + (DAY_EN[d] || '') + '</div></th>';
+  });
+  html += '</tr></thead><tbody>';
+
+  // rows
+  for (var p = 1; p <= maxPeriod; p++) {
+    html += '<tr>';
+    html += '<td style="background:#F9FAFB;padding:10px;border:1px solid #E5E7EB;font-weight:700;color:#6C3DD6;text-align:center">' + p + '</td>';
+    activeDays.forEach(function(d) {
+      var isFriDone = d === 'الجمعة' && p > FRIDAY_MAX;
+      var cell = grid[p] ? grid[p][d] : null;
+      var isToday = d === todayAr;
+      var border = isToday ? '2px solid #C4B5FD' : '1px solid #E5E7EB';
+      if (isFriDone) {
+        html += '<td style="background:#F3F4F6;padding:10px;border:' + border + ';color:#9CA3AF;text-align:center;font-size:12px">—</td>';
+      } else if (!cell) {
+        html += '<td style="background:#FAFAFA;padding:10px;border:' + border + ';color:#D1D5DB;text-align:center">—</td>';
+      } else {
+        var subBg = getSubjectColor(cell.subject);
+        html += '<td style="background:' + (isToday ? subBg : '#FFF') + ';padding:10px;border:' + border + ';text-align:center">';
+        html += '<div style="font-weight:700;color:#1F2937;margin-bottom:4px">' + (cell.subject || '—') + '</div>';
+        if (cell.teacher_name && cell.teacher_name !== 'شاغر') {
+          html += '<div style="font-size:12px;color:#6B7280">' + cell.teacher_name + '</div>';
+        } else if (cell.teacher_name === 'شاغر') {
+          html += '<div style="font-size:11px;color:#EF4444;font-weight:600">شاغر</div>';
+        }
+        html += '</td>';
+      }
+    });
+    html += '</tr>';
+  }
+
+  html += '</tbody></table></div>';
+
+  // legend
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">';
+  Object.keys(subjectColors).forEach(function(sub) {
+    html += '<span style="background:' + subjectColors[sub] + ';padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;color:#374151">' + sub + '</span>';
+  });
+  html += '</div>';
+
+  el.innerHTML = html;
 }
 
 // --- HOME KPIS ---
 function updateHomeKpis() {
   // Average
   if (gradesData.length) {
-    const nums = gradesData.map(g => parseFloat(g.grade)).filter(n => !isNaN(n));
+    const nums = gradesData.map(g => g.max_score > 0 ? Math.round((g.score/g.max_score)*100) : null).filter(n => n !== null);
     const avg = nums.length ? (nums.reduce((a,b) => a+b, 0) / nums.length).toFixed(1) : '—';
     document.getElementById('kpiAvg').textContent = avg + '%';
   } else {
@@ -637,15 +738,15 @@ function updateHomeKpis() {
 
   // Attendance %
   if (attData.length) {
-    const present = attData.filter(a => a.status === 'present').length;
+    const present = attData.filter(a => a.status === 'حاضر' || a.status === 'present').length;
     document.getElementById('kpiAtt').textContent = Math.round((present / attData.length) * 100) + '%';
   } else {
     document.getElementById('kpiAtt').textContent = '—';
   }
 
   // Behavior points
-  const pts = behData.reduce((a,b) => a + (parseInt(b.points) || 0), 0);
-  document.getElementById('kpiBeh').textContent = behData.length ? pts : '—';
+  const beh_total = behData.length;
+  document.getElementById('kpiBeh').textContent = beh_total === 0 ? '0 ✓' : beh_total;
 
   // Subjects count
   const uniqueSubjects = [...new Set(gradesData.map(g => g.subject))];
@@ -659,7 +760,7 @@ function updateHomeKpis() {
         ${gradesData.slice(0,4).map(g => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
             <span style="color:var(--text2)">${g.subject}</span>
-            <span style="font-weight:800;color:var(--brand)">${g.grade || '—'}</span>
+            <span style="font-weight:800;color:var(--brand)">${g.score !== null && g.score !== undefined ? g.score + '/' + g.max_score : '—'}</span>
           </div>`).join('') || '<div class="empty" style="padding:16px">لا بيانات</div>'}
       </div>
       <div>
@@ -667,7 +768,7 @@ function updateHomeKpis() {
         ${attData.slice(0,4).map(a => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
             <span style="color:var(--text2)">${a.date}</span>
-            <span class="badge ${a.status==='present'?'badge-green':a.status==='absent'?'badge-red':'badge-amber'}" style="font-size:12px">${a.status==='present'?'حاضر/ة':a.status==='absent'?'غائب/ة':'متأخر/ة'}</span>
+            <span class="badge ${(a.status==='حاضر'||a.status==='present')?'badge-green':(a.status==='غائب'||a.status==='absent')?'badge-red':'badge-amber'}" style="font-size:12px">${(a.status==='حاضر'||a.status==='present')?'حاضر/ة':(a.status==='غائب'||a.status==='absent')?'غائب/ة':'متأخر/ة'}</span>
           </div>`).join('') || '<div class="empty" style="padding:16px">لا بيانات</div>'}
       </div>
     </div>`;
