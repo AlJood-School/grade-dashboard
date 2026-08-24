@@ -329,12 +329,12 @@ body{overflow:hidden}
         </div>
         <div>
           <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">Year / &#x627;&#x644;&#x633;&#x646;&#x629;</label>
-          <select id="vpAssignYearSel" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:inherit">
+          <select id="assignYearSel" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:inherit">
             <option value="2026-2027">2026-2027</option>
             <option value="2025-2026">2025-2026</option>
           </select>
         </div>
-        <button id="saveAssignBtn" style="padding:9px 22px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:15px;white-space:nowrap">&#x62D;&#x641;&#x638; &#x2713;</button>
+        <button id="saveAssignBtn" onclick="window.saveAssignment()" style="padding:9px 22px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:15px;white-space:nowrap">&#x62D;&#x641;&#x638; &#x2713;</button>
       </div>
     </div>
     <div style="background:#fff;border-radius:12px;padding:22px 28px;box-shadow:0 2px 8px rgba(0,0,0,.07)">
@@ -452,7 +452,8 @@ function setupGreeting() {
 function setupWeek() {
   if (window.getPlatformWeek) {
     var w = window.getPlatformWeek();
-    document.getElementById('welcomeSub').textContent = 'الفصل ' + (w.term || '—') + ' · الأسبوع ' + (w.week || '—') + ' · العام 2025–2026';
+    var yr = (w.academicYear || '2026-2027').replace('-','–');
+    document.getElementById('welcomeSub').textContent = 'الفصل ' + (w.term || '—') + ' · الأسبوع ' + (w.week || '—') + ' · العام ' + yr;
   } else { setTimeout(setupWeek, 800); }
 }
 
@@ -623,12 +624,17 @@ async function loadAttendance() {
     var present=0, absent=0, late=0;
     var cls = {};
     data.forEach(function(r) {
-      if (r.status==='present') present++;
-      else if (r.status==='absent') absent++;
-      else if (r.status==='late') late++;
+      var s = r.status;
+      var isPresent = (s==='present'||s==='حاضر');
+      var isAbsent  = (s==='absent' ||s==='غائب');
+      var isLate    = (s==='late'   ||s==='متأخر');
+      if (isPresent) present++;
+      else if (isAbsent) absent++;
+      else if (isLate) late++;
       if (!cls[r.class_name]) cls[r.class_name] = {present:0, absent:0, total:0};
       cls[r.class_name].total++;
-      cls[r.class_name][r.status] = (cls[r.class_name][r.status]||0)+1;
+      if (isPresent) cls[r.class_name].present++;
+      else if (isAbsent) cls[r.class_name].absent++;
     });
     document.getElementById('attPresent').textContent = present;
     document.getElementById('attAbsent').textContent = absent;
@@ -669,13 +675,32 @@ async function loadBehavior() {
 async function loadVpTimetableStatus() {
   if (!sb) return;
   var el = document.getElementById('vpTimetableStatus');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--text3);font-size:14px">&#x62C;&#x627;&#x631;&#x64A; &#x627;&#x644;&#x62A;&#x62D;&#x645;&#x64A;&#x644;...</div>';
   try {
-    var countRes = await sb.from('schedules').select('*', {count:'exact', head:true}).eq('is_active', true);
-    var classRes = await sb.from('schedules').select('class_name').eq('is_active', true).limit(500);
+    var [countRes, classRes, draftRes] = await Promise.all([
+      sb.from('schedules').select('*', {count:'exact', head:true}).eq('is_active', true),
+      sb.from('schedules').select('class_name').eq('is_active', true).limit(1000),
+      sb.from('timetable_drafts').select('id,status,updated_at').order('updated_at',{ascending:false}).limit(1)
+    ]);
     var unique = new Set((classRes.data||[]).map(function(r){return r.class_name;})).size;
-    el.innerHTML = '<div style="display:flex;gap:20px;flex-wrap:wrap">' +
-      '<div style="background:#F1F5F9;border-radius:10px;padding:14px 20px;text-align:center"><div style="font-size:26px;font-weight:900;color:#6C3DD6">' + (countRes.count||0) + '</div><div style="font-size:12px;color:#64748B;margin-top:4px">إجمالي الحصص / Total Slots</div></div>' +
-      '<div style="background:#F1F5F9;border-radius:10px;padding:14px 20px;text-align:center"><div style="font-size:26px;font-weight:900;color:#059669">' + unique + '</div><div style="font-size:12px;color:#64748B;margin-top:4px">فصول مجدولة / Scheduled Classes</div></div>' +
+    var draft = (draftRes.data||[])[0];
+    var statusMap = {draft:'مسودة', pending_approval:'قيد الاعتماد', approved:'معتمد', published:'منشور'};
+    var statusColor = {draft:'#64748B', pending_approval:'#D97706', approved:'#059669', published:'#6C3DD6'};
+    var st = draft ? draft.status : null;
+    el.innerHTML = '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">' +
+      '<div style="background:#F1F5F9;border-radius:10px;padding:14px 20px;text-align:center">' +
+        '<div style="font-size:26px;font-weight:900;color:#6C3DD6">' + (countRes.count||0) + '</div>' +
+        '<div style="font-size:12px;color:#64748B;margin-top:4px">إجمالي الحصص</div>' +
+      '</div>' +
+      '<div style="background:#F1F5F9;border-radius:10px;padding:14px 20px;text-align:center">' +
+        '<div style="font-size:26px;font-weight:900;color:#059669">' + unique + '</div>' +
+        '<div style="font-size:12px;color:#64748B;margin-top:4px">فصول مجدولة</div>' +
+      '</div>' +
+      (st ? '<div style="background:#F1F5F9;border-radius:10px;padding:14px 20px;text-align:center">' +
+        '<div style="font-size:18px;font-weight:900;color:' + (statusColor[st]||'#64748B') + '">' + (statusMap[st]||st) + '</div>' +
+        '<div style="font-size:12px;color:#64748B;margin-top:4px">حالة الجدول الأخير</div>' +
+      '</div>' : '') +
     '</div>';
   } catch(e) { el.textContent = 'لا بيانات / No data'; }
 }
@@ -691,6 +716,17 @@ async function loadAnalytics() {
     }
     var etRes = await sb.from('exit_ticket_responses').select('*',{count:'exact',head:true});
     document.getElementById('anaExitTickets').textContent = etRes.count || '—';
+    /* حساب متوسط الحضور */
+    var attDate = await getAttDate();
+    var attRes = await sb.from('student_attendance').select('status').eq('date', attDate).limit(2000);
+    var attData = attRes.data || [];
+    if (attData.length) {
+      var presentCount = attData.filter(function(r) {
+        return r.status === 'present' || r.status === 'حاضر';
+      }).length;
+      var attPct = Math.round(presentCount / attData.length * 100);
+      document.getElementById('anaAvgAtt').textContent = attPct + '%';
+    }
   } catch(e) { console.warn('analytics:', e); }
 }
 
