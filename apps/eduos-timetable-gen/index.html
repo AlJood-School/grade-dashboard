@@ -1571,42 +1571,92 @@ function runGenerate(classes, days, ppd) {
     });
     complianceRows.push({ name: s.name, required: required, actual: actual });
   });
+  /* ── Conflict alerts ── */
+  var cb = document.getElementById('conflictBox');
+  cb.innerHTML = '';
+  if (unassigned > 0) cb.innerHTML += '<div class="alert al-err">❌ ' + unassigned + ' حصة لم توزَّع — قلِّل عدد الحصص أو أعِد التوليد</div>';
+  if (forcedCount > 0) cb.innerHTML += '<div class="alert al-warn">⚠️ ' + forcedCount + ' حصة وُزِّعت اضطرارياً (تكرار مادة في اليوم)</div>';
+  if (consecutiveWarnings > 0) cb.innerHTML += '<div class="alert al-warn">⚡ يوجد معلم/ة يدرِّس 3+ حصص متتالية — انظر العلامة ⚠️ في الجدول</div>';
+  if (unassigned === 0 && forcedCount === 0 && consecutiveWarnings === 0) cb.innerHTML += '<div class="alert al-ok">✓ الجدول مثالي — لا تعارضات</div>';
+
+  /* ── مطابقة الخطة الدراسية ── */
   if (complianceRows.length > 0) {
-    var compDiv = document.createElement('div');
-    compDiv.style.cssText = 'background:#fff;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.06);padding:20px;margin-top:16px';
-    var compTitle = document.createElement('div');
-    compTitle.style.cssText = 'font-size:16px;font-weight:800;color:#1F2937;margin-bottom:14px;display:flex;align-items:center;gap:8px';
-    compTitle.innerHTML = '📋 مطابقة الخطة الدراسية';
-    compDiv.appendChild(compTitle);
-    var compTbl = document.createElement('table');
-    compTbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:13px';
-    compTbl.innerHTML = '<thead><tr style="background:#F8F7FF"><th style="padding:8px 12px;text-align:right;font-size:12px;color:#6B7280;font-weight:700;border-bottom:2px solid #EDE9FE">المادة</th><th style="padding:8px 12px;text-align:center;font-size:12px;color:#6B7280;font-weight:700;border-bottom:2px solid #EDE9FE">المطلوب</th><th style="padding:8px 12px;text-align:center;font-size:12px;color:#6B7280;font-weight:700;border-bottom:2px solid #EDE9FE">الفعلي</th><th style="padding:8px 12px;text-align:center;font-size:12px;color:#6B7280;font-weight:700;border-bottom:2px solid #EDE9FE">الحالة</th></tr></thead>';
-    var ctbody = document.createElement('tbody');
+    var compHtml = '<div style="background:#fff;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.06);padding:20px;margin-top:16px">';
+    compHtml += '<div style="font-size:16px;font-weight:800;color:#1F2937;margin-bottom:14px">📋 مطابقة الخطة الدراسية</div>';
+    compHtml += '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#F8F7FF">';
+    compHtml += '<th style="padding:8px 12px;text-align:right;color:#6B7280;font-weight:700;border-bottom:2px solid #EDE9FE">المادة</th>';
+    compHtml += '<th style="padding:8px 12px;text-align:center;color:#6B7280;font-weight:700;border-bottom:2px solid #EDE9FE">المطلوب</th>';
+    compHtml += '<th style="padding:8px 12px;text-align:center;color:#6B7280;font-weight:700;border-bottom:2px solid #EDE9FE">الفعلي</th>';
+    compHtml += '<th style="padding:8px 12px;text-align:center;color:#6B7280;font-weight:700;border-bottom:2px solid #EDE9FE">الحالة</th>';
+    compHtml += '</tr></thead><tbody>';
     complianceRows.forEach(function(cr) {
       var ok = cr.actual >= cr.required;
       var partial = !ok && cr.actual > 0;
       var icon = ok ? '✅' : (partial ? '⚠️' : '❌');
       var color = ok ? '#065F46' : (partial ? '#92400E' : '#991B1B');
       var bg = ok ? '#F0FDF4' : (partial ? '#FFFBEB' : '#FEF2F2');
-      var tr2 = document.createElement('tr');
-      tr2.style.cssText = 'background:' + bg + ';border-bottom:1px solid #F3F4F6';
-      tr2.innerHTML = '<td style="padding:7px 12px;font-weight:700;color:#374151">' + cr.name + '</td>' +
-        '<td style="padding:7px 12px;text-align:center;color:#6B7280">' + cr.required + '</td>' +
-        '<td style="padding:7px 12px;text-align:center;font-weight:800;color:' + color + '">' + cr.actual + '</td>' +
-        '<td style="padding:7px 12px;text-align:center;font-size:16px">' + icon + '</td>';
-      ctbody.appendChild(tr2);
+      compHtml += '<tr style="background:' + bg + ';border-bottom:1px solid #F3F4F6">';
+      compHtml += '<td style="padding:7px 12px;font-weight:700;color:#374151">' + cr.name + '</td>';
+      compHtml += '<td style="padding:7px 12px;text-align:center;color:#6B7280">' + cr.required + '</td>';
+      compHtml += '<td style="padding:7px 12px;text-align:center;font-weight:800;color:' + color + '">' + cr.actual + '</td>';
+      compHtml += '<td style="padding:7px 12px;text-align:center;font-size:16px">' + icon + '</td>';
+      compHtml += '</tr>';
     });
-    compTbl.appendChild(ctbody);
-    compDiv.appendChild(compTbl);
-    document.getElementById('conflictBox').appendChild(compDiv);
+    compHtml += '</tbody></table></div>';
+    cb.innerHTML += compHtml;
   }
 
-  var cb = document.getElementById('conflictBox');
-  cb.innerHTML = '';
-  if (unassigned > 0) cb.innerHTML += '<div class="alert al-err">❌ ' + unassigned + ' حصة لم توزَّع — قلِّل عدد الحصص أو أعِد التوليد</div>';
-  if (forcedCount > 0) cb.innerHTML += '<div class="alert al-warn">⚠️ ' + forcedCount + ' حصة وُزِّعت اضطرارياً (تكرار مادة في اليوم)</div>';
-  if (consecutiveWarnings > 0) cb.innerHTML += '<div class="alert al-warn">⚡ يوجد معلم/ة يدرِّس 3+ حصص متتالية — انظر العلامة ⚠️ في الجدول</div>';
-  if (unassigned === 0 && forcedCount === 0 && consecutiveWarnings === 0) cb.innerHTML = '<div class="alert al-ok">✓ الجدول مثالي — لا تعارضات</div>';
+  /* ── تقرير نصاب المعلمين ── */
+  var teacherMap = {};
+  classes.forEach(function(cls) {
+    days.forEach(function(day) {
+      var dayPpd4 = (day === 'الجمعة') ? (STATE.fridayPeriodsPerDay || 4) : ppd;
+      for (var p4 = 1; p4 <= dayPpd4; p4++) {
+        var sl4 = tt[cls][day][p4];
+        if (sl4 && sl4.teacherNameAr && sl4.teacherNameAr !== 'شاغر') {
+          var tName = sl4.teacherNameAr;
+          if (!teacherMap[tName]) teacherMap[tName] = { name: tName, periods: 0, subjects: {} };
+          teacherMap[tName].periods++;
+          if (sl4.subject) teacherMap[tName].subjects[sl4.subject] = true;
+        }
+      }
+    });
+  });
+  var teacherList = Object.values(teacherMap).sort(function(a,b){ return b.periods - a.periods; });
+  if (teacherList.length > 0) {
+    var wkHtml = '<div style="background:#fff;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.06);padding:20px;margin-top:16px">';
+    wkHtml += '<div style="font-size:16px;font-weight:800;color:#1F2937;margin-bottom:14px">👩‍🏫 تقرير نصاب المعلمين</div>';
+    wkHtml += '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#F0F9FF">';
+    wkHtml += '<th style="padding:8px 12px;text-align:right;color:#6B7280;font-weight:700;border-bottom:2px solid #BAE6FD">المعلم/ة</th>';
+    wkHtml += '<th style="padding:8px 12px;text-align:center;color:#6B7280;font-weight:700;border-bottom:2px solid #BAE6FD">الحصص الفعلية</th>';
+    wkHtml += '<th style="padding:8px 12px;text-align:center;color:#6B7280;font-weight:700;border-bottom:2px solid #BAE6FD">الحد الأعلى</th>';
+    wkHtml += '<th style="padding:8px 12px;text-align:center;color:#6B7280;font-weight:700;border-bottom:2px solid #BAE6FD">المواد</th>';
+    wkHtml += '<th style="padding:8px 12px;text-align:center;color:#6B7280;font-weight:700;border-bottom:2px solid #BAE6FD">الحالة</th>';
+    wkHtml += '</tr></thead><tbody>';
+    var MAX_DEFAULT = 24;
+    teacherList.forEach(function(t) {
+      var maxLoad = MAX_DEFAULT;
+      var pct = t.periods / maxLoad;
+      var barColor = pct > 1 ? '#EF4444' : pct > 0.85 ? '#F59E0B' : '#10B981';
+      var status = pct > 1 ? '🔴 تجاوز الحد' : pct > 0.85 ? '🟡 قارب الحد' : '🟢 ضمن الحد';
+      var subjectNames = Object.keys(t.subjects).join('، ') || '—';
+      var barW = Math.min(100, Math.round(pct * 100));
+      wkHtml += '<tr style="border-bottom:1px solid #F3F4F6">';
+      wkHtml += '<td style="padding:8px 12px;font-weight:700;color:#1F2937">' + t.name + '</td>';
+      wkHtml += '<td style="padding:8px 12px;text-align:center">';
+      wkHtml += '<div style="display:flex;align-items:center;gap:8px;justify-content:center">';
+      wkHtml += '<span style="font-weight:800;font-size:16px;color:' + barColor + '">' + t.periods + '</span>';
+      wkHtml += '<div style="width:80px;height:8px;background:#F3F4F6;border-radius:4px;overflow:hidden">';
+      wkHtml += '<div style="width:' + barW + '%;height:100%;background:' + barColor + ';border-radius:4px"></div>';
+      wkHtml += '</div></div></td>';
+      wkHtml += '<td style="padding:8px 12px;text-align:center;color:#6B7280">' + maxLoad + '</td>';
+      wkHtml += '<td style="padding:8px 12px;text-align:center;font-size:12px;color:#374151">' + subjectNames + '</td>';
+      wkHtml += '<td style="padding:8px 12px;text-align:center;font-size:13px">' + status + '</td>';
+      wkHtml += '</tr>';
+    });
+    wkHtml += '</tbody></table></div>';
+    cb.innerHTML += wkHtml;
+  }
 
   document.getElementById('statsRow').style.display = 'block';
   document.getElementById('prevSection').style.display = 'block';
