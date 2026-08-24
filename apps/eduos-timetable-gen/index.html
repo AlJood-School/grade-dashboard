@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>منشئ الجدول الذكي v2 — EduOS</title>
 <script src="../platform-config.js"></script>
+<script src="../platform-auth-guard.js"></script>
+<script src="../platform-week.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -236,7 +238,7 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
   </div>
   <div class="wstep" id="ws3" data-step="3">
     <div class="wnum">3</div>
-    <span>المعلمات</span>
+    <span>المعلمون</span>
   </div>
   <div class="wstep" id="ws4" data-step="4">
     <div class="wnum">4</div>
@@ -462,14 +464,14 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
 
     <div class="wiz-nav">
       <button class="btn btn-secondary" onclick="goToStep(1)">&#8594; السابق</button>
-      <button class="btn btn-primary" onclick="goToStep(3)">التالي: المعلمات &#8592;</button>
+      <button class="btn btn-primary" onclick="goToStep(3)">التالي: المعلمون &#8592;</button>
     </div>
   </div>
 
-  <!-- STEP 3: المعلمات -->
+  <!-- STEP 3: المعلمون -->
   <div class="sp" id="sp3">
     <div class="card">
-      <div class="card-title">👩‍🏫 تعيين المعلمات — Assign Teachers</div>
+      <div class="card-title">👩‍🏫 تعيين المعلمون — Assign Teachers</div>
       <div id="assignAlert"></div>
       <div class="ag" id="assignGrid"></div>
     </div>
@@ -511,7 +513,7 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
         <div class="print-acts">
           <button class="btn btn-secondary btn-sm" onclick="printCurrentClass()">🖨️ طباعة الصف الحالي</button>
           <button class="btn btn-secondary btn-sm" onclick="openPrintAllClasses()">📋 طباعة كل الصفوف</button>
-          <button class="btn btn-secondary btn-sm" onclick="openPrintByTeacher()">👩‍🏫 طباعة جدول المعلمات</button>
+          <button class="btn btn-secondary btn-sm" onclick="openPrintByTeacher()">👩‍🏫 طباعة جداول المعلمين</button>
           <button class="btn btn-secondary btn-sm" onclick="openPrintByGrade()">🏫 طباعة حسب المرحلة</button>
         </div>
       </div>
@@ -1524,12 +1526,25 @@ function runGenerate(classes, days, ppd) {
   document.getElementById('btnReGen').disabled = false;
   document.getElementById('btnSave').disabled = false;
 
+  /* Count شاغر slots */
+  var vacantSlots = 0;
+  classes.forEach(function(cls) {
+    days.forEach(function(day) {
+      var dayPpd2 = (day === 'الجمعة') ? (STATE.fridayPeriodsPerDay || 4) : ppd;
+      for (var p2 = 1; p2 <= dayPpd2; p2++) {
+        var sl = tt[cls][day][p2];
+        if (sl && sl.isVacant) vacantSlots++;
+      }
+    });
+  });
+
   var sg = document.getElementById('statsGrid');
   sg.innerHTML = '';
   var statsData = [
     {val:classes.length, lbl:'فصل'},
     {val:totalFilled, lbl:'حصة موزَّعة'},
     {val:doubleCount, lbl:'حصة مزدوجة'},
+    {val:vacantSlots, lbl:'حصة شاغرة', color:vacantSlots>0?'#F59E0B':'#10B981'},
     {val:unassigned, lbl:'حصة غير موزَّعة', color:unassigned>0?'#EF4444':'#10B981'},
     {val:consecutiveWarnings, lbl:'تحذير تتالي', color:consecutiveWarnings>0?'#F59E0B':'#10B981'}
   ];
@@ -1540,11 +1555,57 @@ function runGenerate(classes, days, ppd) {
     sg.appendChild(c);
   });
 
+  /* ── Compliance summary (مطابقة الخطة الدراسية) ── */
+  var complianceRows = [];
+  STATE.subjects.forEach(function(s) {
+    var required = (s.ppw || 0) * classes.length;
+    var actual = 0;
+    classes.forEach(function(cls) {
+      days.forEach(function(day) {
+        var dayPpd3 = (day === 'الجمعة') ? (STATE.fridayPeriodsPerDay || 4) : ppd;
+        for (var p3 = 1; p3 <= dayPpd3; p3++) {
+          var sl3 = tt[cls][day][p3];
+          if (sl3 && sl3.subject === s.name) actual++;
+        }
+      });
+    });
+    complianceRows.push({ name: s.name, required: required, actual: actual });
+  });
+  if (complianceRows.length > 0) {
+    var compDiv = document.createElement('div');
+    compDiv.style.cssText = 'background:#fff;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.06);padding:20px;margin-top:16px';
+    var compTitle = document.createElement('div');
+    compTitle.style.cssText = 'font-size:16px;font-weight:800;color:#1F2937;margin-bottom:14px;display:flex;align-items:center;gap:8px';
+    compTitle.innerHTML = '📋 مطابقة الخطة الدراسية';
+    compDiv.appendChild(compTitle);
+    var compTbl = document.createElement('table');
+    compTbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:13px';
+    compTbl.innerHTML = '<thead><tr style="background:#F8F7FF"><th style="padding:8px 12px;text-align:right;font-size:12px;color:#6B7280;font-weight:700;border-bottom:2px solid #EDE9FE">المادة</th><th style="padding:8px 12px;text-align:center;font-size:12px;color:#6B7280;font-weight:700;border-bottom:2px solid #EDE9FE">المطلوب</th><th style="padding:8px 12px;text-align:center;font-size:12px;color:#6B7280;font-weight:700;border-bottom:2px solid #EDE9FE">الفعلي</th><th style="padding:8px 12px;text-align:center;font-size:12px;color:#6B7280;font-weight:700;border-bottom:2px solid #EDE9FE">الحالة</th></tr></thead>';
+    var ctbody = document.createElement('tbody');
+    complianceRows.forEach(function(cr) {
+      var ok = cr.actual >= cr.required;
+      var partial = !ok && cr.actual > 0;
+      var icon = ok ? '✅' : (partial ? '⚠️' : '❌');
+      var color = ok ? '#065F46' : (partial ? '#92400E' : '#991B1B');
+      var bg = ok ? '#F0FDF4' : (partial ? '#FFFBEB' : '#FEF2F2');
+      var tr2 = document.createElement('tr');
+      tr2.style.cssText = 'background:' + bg + ';border-bottom:1px solid #F3F4F6';
+      tr2.innerHTML = '<td style="padding:7px 12px;font-weight:700;color:#374151">' + cr.name + '</td>' +
+        '<td style="padding:7px 12px;text-align:center;color:#6B7280">' + cr.required + '</td>' +
+        '<td style="padding:7px 12px;text-align:center;font-weight:800;color:' + color + '">' + cr.actual + '</td>' +
+        '<td style="padding:7px 12px;text-align:center;font-size:16px">' + icon + '</td>';
+      ctbody.appendChild(tr2);
+    });
+    compTbl.appendChild(ctbody);
+    compDiv.appendChild(compTbl);
+    document.getElementById('conflictBox').appendChild(compDiv);
+  }
+
   var cb = document.getElementById('conflictBox');
   cb.innerHTML = '';
   if (unassigned > 0) cb.innerHTML += '<div class="alert al-err">❌ ' + unassigned + ' حصة لم توزَّع — قلِّل عدد الحصص أو أعِد التوليد</div>';
   if (forcedCount > 0) cb.innerHTML += '<div class="alert al-warn">⚠️ ' + forcedCount + ' حصة وُزِّعت اضطرارياً (تكرار مادة في اليوم)</div>';
-  if (consecutiveWarnings > 0) cb.innerHTML += '<div class="alert al-warn">⚡ توجد معلمة تدرِّس 3+ حصص متتالية — انظر العلامة ⚠️ في الجدول</div>';
+  if (consecutiveWarnings > 0) cb.innerHTML += '<div class="alert al-warn">⚡ يوجد معلم/ة يدرِّس 3+ حصص متتالية — انظر العلامة ⚠️ في الجدول</div>';
   if (unassigned === 0 && forcedCount === 0 && consecutiveWarnings === 0) cb.innerHTML = '<div class="alert al-ok">✓ الجدول مثالي — لا تعارضات</div>';
 
   document.getElementById('statsRow').style.display = 'block';
@@ -1593,7 +1654,9 @@ function renderPreview(cls) {
   if (!STATE.timetable || !cls) return;
   var tt = STATE.timetable[cls];
   if (!tt) return;
-  var schedule = computeSchedule();
+  /* استخدم جدول أوقات المرحلة الخاصة بالفصل إن وُجدت */
+  var _stageForCls = getStageForClass(cls);
+  var schedule = _stageForCls ? computeScheduleForStage(_stageForCls) : computeSchedule();
   var days = STATE.selectedDays;
 
   var card = document.createElement('div');
@@ -1856,10 +1919,25 @@ async function saveTimetable() {
     if (rows.length > 0) {
       var res = await sbFetch('schedules', { method:'POST', headers:{'Prefer':'return=minimal'}, body: JSON.stringify(rows) });
       if (res.ok || res.status === 201) {
-        showToast('\u062A\u0645 \u062D\u0641\u0638 ' + rows.length + ' \u062D\u0635\u0629 \u0628\u0646\u062C\u0627\u062D \u2713','ok');
-        showAlert('genAlert','al-ok','\u2713 \u062A\u0645 \u062D\u0641\u0638 ' + rows.length + ' \u062D\u0635\u0629 \u0644\u0640 ' + classes.length + ' \u0641\u0635\u0644 (' + selYear + ' \u2013 \u0641\u0635\u0644 ' + selTerm + ')');
+        showToast('تم حفظ ' + rows.length + ' حصة بنجاح ✓','ok');
+        showAlert('genAlert','al-ok','✓ تم حفظ ' + rows.length + ' حصة لـ ' + classes.length + ' فصل (' + selYear + ' – فصل ' + selTerm + ')');
+        /* تحديث timetable_drafts — وضع "منشور" */
+        try {
+          var draftRes = await sbFetch('timetable_drafts?order=id.asc&limit=1&select=id');
+          if (draftRes.ok) {
+            var draftData = await draftRes.json();
+            if (draftData && draftData.length > 0) {
+              var draftId = draftData[0].id;
+              await sbFetch('timetable_drafts?id=eq.' + draftId, {
+                method:'PATCH',
+                headers:{'Prefer':'return=minimal'},
+                body: JSON.stringify({ description: 'منشور – ' + selYear + ' ف' + selTerm + ' – ' + new Date().toLocaleDateString('ar-AE') })
+              });
+            }
+          }
+        } catch(de) { /* لا يوقف العملية */ }
       } else {
-        showToast('\u062E\u0637\u0623 \u0641\u064A \u0627\u0644\u062D\u0641\u0638','err');
+        showToast('خطأ في الحفظ','err');
       }
     }
     /* Save config to app_settings */

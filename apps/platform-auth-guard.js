@@ -196,7 +196,7 @@
     'eduos-swap-builder':         ['principal', 'vice_principal', 'admin'],
     'eduos-agent-control':        ['admin'],
     'eduos-control-plane':        [],
-    'eduos-school-wizard':        [],
+    'eduos-school-wizard':        ['admin'],
   };
 
   // استخراج اسم البوابة من المسار
