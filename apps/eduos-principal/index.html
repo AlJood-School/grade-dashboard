@@ -1283,21 +1283,81 @@ async function loadTimetableStatus() {
   if (!sb) return;
   const el = document.getElementById('timetableStatus');
   try {
-    const { count } = await sb.from('schedules').select('*', {count:'exact', head:true}).eq('is_active', true);
-    const { data: classes } = await sb.from('schedules').select('class_name').eq('is_active', true).limit(500);
-    const unique = new Set((classes||[]).map(r=>r.class_name)).size;
-    el.innerHTML = `
-      <div style="display:flex;gap:20px;flex-wrap:wrap">
-        <div style="background:#F1F5F9;border-radius:10px;padding:14px 20px;text-align:center">
-          <div style="font-size:26px;font-weight:900;color:#6C3DD6">${count||0}</div>
-          <div style="font-size:12px;color:#64748B;margin-top:4px">إجمالي الحصص / Total Slots</div>
-        </div>
-        <div style="background:#F1F5F9;border-radius:10px;padding:14px 20px;text-align:center">
-          <div style="font-size:26px;font-weight:900;color:#059669">${unique}</div>
-          <div style="font-size:12px;color:#64748B;margin-top:4px">فصول مجدولة / Classes Scheduled</div>
-        </div>
-      </div>`;
+    const [slotsRes, draftRes] = await Promise.all([
+      sb.from('schedules').select('*', {count:'exact', head:true}).eq('is_active', true),
+      sb.from('timetable_drafts').select('id,name,description,status,submitted_by,submitted_at,approved_by,approved_at,academic_year,term').order('id', {ascending: false}).limit(5)
+    ]);
+    const count = slotsRes.count || 0;
+    const { data: classes2 } = await sb.from('schedules').select('class_name').eq('is_active', true).limit(500);
+    const unique = new Set((classes2||[]).map(r=>r.class_name)).size;
+
+    var statusHtml = '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:20px">';
+    statusHtml += '<div style="background:#F1F5F9;border-radius:10px;padding:14px 20px;text-align:center"><div style="font-size:26px;font-weight:900;color:#6C3DD6">' + count + '</div><div style="font-size:12px;color:#64748B;margin-top:4px">إجمالي الحصص / Total Slots</div></div>';
+    statusHtml += '<div style="background:#F1F5F9;border-radius:10px;padding:14px 20px;text-align:center"><div style="font-size:26px;font-weight:900;color:#059669">' + unique + '</div><div style="font-size:12px;color:#64748B;margin-top:4px">فصول مجدولة / Classes Scheduled</div></div>';
+    statusHtml += '</div>';
+
+    /* Approval panel */
+    const drafts = draftRes.data || [];
+    const pending = drafts.filter(function(d){ return d.status === 'pending_approval'; });
+    if (pending.length > 0) {
+      statusHtml += '<div style="background:#FFFBEB;border:2px solid #F59E0B;border-radius:12px;padding:18px;margin-bottom:16px">';
+      statusHtml += '<div style="font-weight:800;font-size:15px;color:#92400E;margin-bottom:10px">📤 ' + pending.length + ' جدول ينتظر اعتمادك</div>';
+      pending.forEach(function(d) {
+        var subDate = d.submitted_at ? new Date(d.submitted_at).toLocaleDateString('ar-AE') : '—';
+        statusHtml += '<div style="background:#fff;border-radius:8px;padding:12px;margin-bottom:8px;border:1px solid #FDE68A">';
+        statusHtml += '<div style="font-weight:700;margin-bottom:4px">' + (d.name || 'جدول دراسي') + ' — ' + (d.academic_year || '') + ' ف' + (d.term || '') + '</div>';
+        statusHtml += '<div style="font-size:13px;color:#64748B;margin-bottom:8px">أُرسل بواسطة: ' + (d.submitted_by || '—') + ' — ' + subDate + '</div>';
+        statusHtml += '<div style="display:flex;gap:8px">';
+        statusHtml += '<button onclick="approveTimetable(' + d.id + ')" style="background:#10B981;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer;font-family:Tajawal,Arial,sans-serif">✅ اعتماد ونشر</button>';
+        statusHtml += '<button onclick="rejectTimetable(' + d.id + ')" style="background:#EF4444;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer;font-family:Tajawal,Arial,sans-serif">❌ رفض وإعادة</button>';
+        statusHtml += '</div></div>';
+      });
+      statusHtml += '</div>';
+    }
+
+    /* Recent drafts history */
+    if (drafts.length > 0) {
+      statusHtml += '<div style="margin-top:4px"><div style="font-size:13px;font-weight:700;color:#64748B;margin-bottom:8px">📋 آخر الجداول:</div>';
+      drafts.slice(0,3).forEach(function(d) {
+        var statusColor = d.status === 'approved' ? '#059669' : d.status === 'pending_approval' ? '#D97706' : '#64748B';
+        var statusLabel = d.status === 'approved' ? 'معتمد ✅' : d.status === 'pending_approval' ? 'قيد الاعتماد ⏳' : 'مسودة';
+        statusHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #F1F5F9">';
+        statusHtml += '<span style="font-size:13px;color:#1E293B">' + (d.name || 'جدول') + (d.description ? ' — ' + d.description : '') + '</span>';
+        statusHtml += '<span style="font-size:12px;font-weight:700;color:' + statusColor + '">' + statusLabel + '</span>';
+        statusHtml += '</div>';
+      });
+      statusHtml += '</div>';
+    }
+
+    el.innerHTML = statusHtml;
   } catch(e) { el.textContent = 'لا بيانات / No data'; }
+}
+
+async function approveTimetable(draftId) {
+  var sess2 = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+  var approverName = sess2.name_ar || sess2.username || 'المدير';
+  try {
+    await sb.from('timetable_drafts').update({ status: 'approved', approved_by: approverName, approved_at: new Date().toISOString() }).eq('id', draftId);
+    showToast('تم اعتماد الجدول ✅');
+    loadTimetableStatus();
+    /* إشعار فريق التعيينات */
+    var { data: vps } = await sb.from('staff_profiles').select('staff_db_id').in('role_key', ['vice_principal', 'admin']).eq('is_active', true);
+    if (vps && vps.length) {
+      var notifRows = vps.map(function(v) {
+        return { user_id: v.staff_db_id, type: 'timetable', title: 'تم اعتماد الجدول الدراسي', body: 'اعتمد المدير الجدول — الجدول الآن رسمي وسارٍ.', is_read: false, created_at: new Date().toISOString() };
+      });
+      await sb.from('notifications').insert(notifRows);
+    }
+  } catch(e2) { showToast('خطأ في الاعتماد'); }
+}
+
+async function rejectTimetable(draftId) {
+  var note = prompt('سبب الرفض (اختياري):') || '';
+  try {
+    await sb.from('timetable_drafts').update({ status: 'draft', approval_note: note, submitted_at: null }).eq('id', draftId);
+    showToast('تم إرجاع الجدول للمراجعة');
+    loadTimetableStatus();
+  } catch(e3) { showToast('خطأ في الرفض'); }
 }
 
 function doLogout() { sessionStorage.removeItem('edoos_user'); window.location.href = '../eduos-login/'; }

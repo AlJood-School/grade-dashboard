@@ -491,6 +491,7 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
         <button class="btn btn-primary" id="btnGenerate" onclick="generateTimetable()">🔄 توليد الجدول</button>
         <button class="btn btn-secondary" id="btnReGen" onclick="generateTimetable()" disabled>🔀 إعادة التوليد</button>
         <button class="btn btn-success" id="btnSave" onclick="saveTimetable()" disabled>💾 حفظ في قاعدة البيانات</button>
+        <button class="btn btn-primary" id="btnSubmitApproval" onclick="submitForApproval()" disabled style="background:linear-gradient(135deg,#F59E0B,#D97706);border:none">✅ إرسال للاعتماد</button>
       </div>
       <div id="genProg" style="display:none;margin-top:14px">
         <div style="height:8px;background:#E5E7EB;border-radius:4px;overflow:hidden">
@@ -1970,7 +1971,10 @@ async function saveTimetable() {
       var res = await sbFetch('schedules', { method:'POST', headers:{'Prefer':'return=minimal'}, body: JSON.stringify(rows) });
       if (res.ok || res.status === 201) {
         showToast('تم حفظ ' + rows.length + ' حصة بنجاح ✓','ok');
-        showAlert('genAlert','al-ok','✓ تم حفظ ' + rows.length + ' حصة لـ ' + classes.length + ' فصل (' + selYear + ' – فصل ' + selTerm + ')');
+        showAlert('genAlert','al-ok','✓ تم حفظ ' + rows.length + ' حصة لـ ' + classes.length + ' فصل (' + selYear + ' – فصل ' + selTerm + '). اضغط "إرسال للاعتماد" لإبلاغ المدير.');
+        /* تفعيل زر الإرسال للاعتماد */
+        var btnAppr = document.getElementById('btnSubmitApproval');
+        if (btnAppr) btnAppr.disabled = false;
         /* تحديث timetable_drafts — وضع "منشور" */
         try {
           var draftRes = await sbFetch('timetable_drafts?order=id.asc&limit=1&select=id');
@@ -2050,6 +2054,48 @@ function openPrintByGrade() {
 }
 function openPrintPage() {
   window.open('../eduos-timetable-pdf/', '_blank');
+}
+
+/* ── Approval Flow ── */
+async function submitForApproval() {
+  var session2 = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+  var submittedBy = session2.name_ar || session2.username || 'المستخدم';
+  try {
+    var draftRes = await sbFetch('timetable_drafts?order=id.asc&limit=1&select=id');
+    if (!draftRes.ok) throw new Error('draft fetch failed');
+    var draftData = await draftRes.json();
+    if (!draftData || !draftData.length) { showToast('لا توجد مسودة — احفظ أولاً','err'); return; }
+    var draftId = draftData[0].id;
+    var patchRes = await sbFetch('timetable_drafts?id=eq.' + draftId, {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ status: 'pending_approval', submitted_by: submittedBy, submitted_at: new Date().toISOString() })
+    });
+    if (patchRes.ok) {
+      showToast('تم الإرسال للاعتماد ✓ — في انتظار موافقة المدير', 'ok');
+      showAlert('genAlert','al-ok','📤 الجدول قيد الاعتماد — المدير سيراجعه ويعتمده من بوابته');
+      document.getElementById('btnSubmitApproval').disabled = true;
+      document.getElementById('btnSubmitApproval').textContent = '⏳ قيد الاعتماد';
+      /* إشعار المدير */
+      try {
+        var principals = await sbFetch('staff_profiles?select=staff_db_id&role_key=in.(principal,admin)&is_active=eq.true');
+        if (principals.ok) {
+          var principalData = await principals.json();
+          if (principalData && principalData.length) {
+            var now2 = new Date().toISOString();
+            var pNotifs = principalData.map(function(p) {
+              return { user_id: p.staff_db_id, type: 'timetable_approval', title: 'طلب اعتماد جدول دراسي', body: 'أرسل ' + submittedBy + ' جدولاً للاعتماد — راجعه واعتمده من بوابتك.', is_read: false, created_at: now2 };
+            });
+            await sbFetch('notifications', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(pNotifs) });
+          }
+        }
+      } catch(pe) {}
+    } else {
+      showToast('خطأ في الإرسال', 'err');
+    }
+  } catch(e2) {
+    showToast('خطأ: ' + e2.message, 'err');
+  }
 }
 
 /* ── Alerts ── */
