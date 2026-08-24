@@ -249,6 +249,9 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
 
   <!-- STEP 1: الإعداد -->
   <div class="sp active" id="sp1">
+    <!-- تنبيه وجود جدول مسبق -->
+    <div id="existingScheduleWarn" style="display:none"></div>
+
     <div class="card">
       <div class="card-title">📋 إعداد الجدول — Setup</div>
 
@@ -355,6 +358,14 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
 
     <div class="card" id="stageToggleCard">
       <div class="card-title">🏫 تعدد المراحل — Multi-Stage Setup</div>
+
+      <!-- زر تحميل إعدادات المدرسة المحفوظة -->
+      <div id="savedStageConfigBanner" style="display:none;background:#F0FDF4;border:1px solid #86EFAC;border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span style="font-size:15px;font-weight:700;color:#166534">📋 يوجد إعداد محفوظ لمدرستك</span>
+        <button class="btn btn-success btn-sm" onclick="loadSchoolStageConfig()">⬇ تحميل الإعدادات المحفوظة</button>
+        <span id="savedStageInfo" style="font-size:12px;color:#166534"></span>
+      </div>
+
       <div style="display:flex;gap:28px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;font-size:14px">
           <input type="radio" name="stageMode" value="single" id="stageModeS" checked> مرحلة/حلقة واحدة
@@ -961,17 +972,19 @@ function sanitizeId(str) {
   return (str || '').replace(/\s+/g,'_').replace(/[^\w]/g,'X');
 }
 
-/* ── Auto-load from teacher_assignments DB ── */
+/* ── Auto-load from teacher_assignments DB + schedules fallback ── */
 async function loadDBAssignmentsThenRender() {
   var grid = document.getElementById('assignGrid');
-  if (grid) grid.innerHTML = '<div style="padding:48px;text-align:center;color:#6C3DD6;font-size:15px;font-weight:700">&#x23F3; &#x62C;&#x627;&#x631;&#x64A; &#x627;&#x633;&#x62A;&#x64A;&#x631;&#x627;&#x62F; &#x627;&#x644;&#x62A;&#x639;&#x64A;&#x64A;&#x646;&#x627;&#x62A; &#x645;&#x646; &#x642;&#x627;&#x639;&#x62F;&#x629; &#x627;&#x644;&#x628;&#x64A;&#x627;&#x646;&#x627;&#x62A;...</div>';
-  var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
-  var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+  if (grid) grid.innerHTML = '<div style="padding:48px;text-align:center;color:#6C3DD6;font-size:15px;font-weight:700">&#x23F3; جارٍ استيراد التعيينات من قاعدة البيانات...</div>';
+  var _SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+  var _SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
   var dbCount = 0;
+
+  /* ── Source 1: teacher_assignments (needs class_name populated) ── */
   try {
     var res = await fetch(
-      SB_URL + '/rest/v1/teacher_assignments?is_active=eq.true&select=staff_db_id,teacher_name_ar,subject,class_name',
-      {headers: {'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY}}
+      _SB_URL + '/rest/v1/teacher_assignments?is_active=eq.true&class_name=not.is.null&select=staff_db_id,teacher_name_ar,subject,class_name',
+      {headers: {'apikey': _SB_KEY, 'Authorization': 'Bearer ' + _SB_KEY}}
     );
     var dbRows = await res.json();
     if (Array.isArray(dbRows)) {
@@ -986,11 +999,81 @@ async function loadDBAssignmentsThenRender() {
         dbCount++;
       });
     }
-  } catch(e) { /* silent — proceed without DB data */ }
-  renderAssignMatrix();
-  if (dbCount > 0) {
-    showToast('\u2705 \u062a\u0645 \u0627\u0633\u062a\u064a\u0631\u0627\u062f ' + dbCount + ' \u062a\u0639\u064a\u064a\u0646 \u0645\u0646 \u0642\u0627\u0639\u062f\u0629 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a \u062a\u0644\u0642\u0627\u0626\u064a\u0627\u064b');
+  } catch(e) { /* silent */ }
+
+  /* ── Source 2: schedules table fallback (if teacher_assignments has no class data) ── */
+  if (dbCount === 0) {
+    try {
+      var selYear = (document.getElementById('academicYear') || {value:'2026-2027'}).value;
+      var selTerm = parseInt((document.getElementById('termNumber') || {value:'1'}).value);
+      var schedRes = await fetch(
+        _SB_URL + '/rest/v1/schedules?is_active=eq.true' +
+        '&academic_year=eq.' + encodeURIComponent(selYear) +
+        '&term=eq.' + selTerm +
+        '&teacher_name=neq.' + encodeURIComponent('\u0634\u0627\u063a\u0631') +
+        '&select=subject,class_name,teacher_id,teacher_name',
+        {headers: {'apikey': _SB_KEY, 'Authorization': 'Bearer ' + _SB_KEY}}
+      );
+      var schedRows = await schedRes.json();
+      if (Array.isArray(schedRows) && schedRows.length) {
+        /* Build: schedSubj → class → { teacherId, teacherNameAr, count } */
+        var schedMap = {};
+        schedRows.forEach(function(r) {
+          if (!r.subject || !r.class_name) return;
+          if (!schedMap[r.subject]) schedMap[r.subject] = {};
+          if (!schedMap[r.subject][r.class_name]) {
+            schedMap[r.subject][r.class_name] = { teacherId: r.teacher_id, teacherNameAr: r.teacher_name, count: 1 };
+          } else {
+            schedMap[r.subject][r.class_name].count++;
+            /* Keep teacher with most slots (majority) */
+          }
+        });
+
+        /* Match schedules subjects → STATE.subjects (exact + fuzzy) */
+        var subjNames = STATE.subjects.map(function(s){ return s.name; });
+        Object.keys(schedMap).forEach(function(schedSubj) {
+          var matchedSubj = null;
+          /* 1. Exact match */
+          if (subjNames.indexOf(schedSubj) > -1) {
+            matchedSubj = schedSubj;
+          } else {
+            /* 2. Substring match */
+            for (var si = 0; si < STATE.subjects.length; si++) {
+              var sn = STATE.subjects[si].name;
+              if (schedSubj.indexOf(sn) > -1 || sn.indexOf(schedSubj) > -1) {
+                matchedSubj = sn; break;
+              }
+            }
+          }
+          if (!matchedSubj) return;
+
+          if (!STATE.classAssignments[matchedSubj]) STATE.classAssignments[matchedSubj] = {};
+          Object.keys(schedMap[schedSubj]).forEach(function(cls) {
+            if (STATE.selectedClasses.indexOf(cls) < 0) return;
+            var info = schedMap[schedSubj][cls];
+            if (!STATE.classAssignments[matchedSubj][cls] || STATE.classAssignments[matchedSubj][cls].status === 'pending') {
+              STATE.classAssignments[matchedSubj][cls] = {
+                status: 'assigned',
+                teacherId: info.teacherId,
+                teacherNameAr: info.teacherNameAr
+              };
+              dbCount++;
+            }
+          });
+        });
+
+        if (dbCount > 0) {
+          showToast('\u2705 \u062a\u0645 \u062a\u062d\u0645\u064a\u0644 ' + dbCount + ' \u062a\u0639\u064a\u064a\u0646 \u0645\u0646 \u0627\u0644\u062c\u062f\u0648\u0644 \u0627\u0644\u062d\u0627\u0644\u064a \u062a\u0644\u0642\u0627\u0626\u064a\u0627\u064b', 'ok');
+        } else {
+          showToast('\u2139\uFE0F \u0644\u0645 \u064a\u0624\u062a \u062a\u0637\u0627\u0628\u0642 \u0628\u064a\u0646 \u0623\u0633\u0645\u0627\u0621 \u0627\u0644\u0645\u0648\u0627\u062f \u2014 \u064a\u0631\u062c\u0649 \u0627\u0644\u062a\u0639\u064a\u064a\u0646 \u064a\u062f\u0648\u064a\u0627\u064b', 'warn');
+        }
+      }
+    } catch(e) { /* silent */ }
+  } else {
+    showToast('\u2705 \u062a\u0645 \u0627\u0633\u062a\u064a\u0631\u0627\u062f ' + dbCount + ' \u062a\u0639\u064a\u064a\u0646 \u0645\u0646 \u062c\u062f\u0648\u0644 \u0627\u0644\u062a\u0639\u064a\u064a\u0646\u0627\u062a', 'ok');
   }
+
+  renderAssignMatrix();
 }
 
 function initClassAssignments() {
@@ -1896,6 +1979,91 @@ function syncAssemblyToStart() {
   }
 }
 
+/* ══ Load saved school stage config from timetable_drafts ══ */
+async function loadSchoolStageConfig() {
+  try {
+    var r = await sbFetch('timetable_drafts?select=id,stage_config&order=id.asc&limit=1');
+    var rows = await r.json();
+    if (!rows || !rows.length || !rows[0].stage_config) {
+      showToast('لا يوجد إعداد محفوظ لهذه المدرسة', 'err');
+      return;
+    }
+    var stages = rows[0].stage_config;
+    if (!Array.isArray(stages) || !stages.length) {
+      showToast('الإعداد المحفوظ فارغ', 'err');
+      return;
+    }
+
+    /* Switch to multi-stage mode */
+    document.getElementById('stageModeM').checked = true;
+    document.getElementById('stageModeS').checked = false;
+    var evt = new Event('change');
+    document.getElementById('stageModeM').dispatchEvent(evt);
+
+    /* Wire in the stages */
+    STATE.stages = stages.map(function(st) {
+      return {
+        id: STATE._stageId ? (STATE._stageId++) : (Math.random()*1e6|0),
+        name: st.name || ('مرحلة ' + (stages.indexOf(st)+1)),
+        gradeFrom: st.gradeFrom || st.grade_from || '',
+        gradeTo: st.gradeTo || st.grade_to || '',
+        periodsPerDay: st.periodsPerDay || st.periods_per_day || 7,
+        fridayPpd: st.fridayPpd || st.friday_ppd || 4,
+        startTime: st.startTime || st.start_time || '07:15',
+        periodDuration: st.periodDuration || st.period_duration || 45,
+        breaks: st.breaks || [],
+        fridayBreaks: st.fridayBreaks || st.friday_breaks || [],
+        gender: st.gender || 'mixed'
+      };
+    });
+
+    if (typeof renderStageCards === 'function') renderStageCards();
+
+    showToast('\u2705 \u062a\u0645 \u062a\u062d\u0645\u064a\u0644 ' + stages.length + ' \u0645\u0631\u0627\u062d\u0644 \u0645\u062d\u0641\u0648\u0638\u0629', 'ok');
+    var banner = document.getElementById('savedStageConfigBanner');
+    if (banner) banner.style.background = '#DCFCE7';
+  } catch(e) {
+    showToast('خطأ في تحميل الإعدادات: ' + e.message, 'err');
+  }
+}
+
+/* ══ Check if schedule already exists for selected year/term ══ */
+async function checkExistingSchedule() {
+  try {
+    var selYear = (document.getElementById('academicYear') || {value:'2026-2027'}).value;
+    var selTerm = parseInt((document.getElementById('termNumber') || {value:'1'}).value);
+    var r = await sbFetch('schedules?is_active=eq.true&academic_year=eq.' + encodeURIComponent(selYear) + '&term=eq.' + selTerm + '&select=id&limit=1');
+    var rows = await r.json();
+    var banner = document.getElementById('existingScheduleWarn');
+    if (rows && rows.length > 0) {
+      /* Count full rows */
+      var r2 = await sbFetch('schedules?is_active=eq.true&academic_year=eq.' + encodeURIComponent(selYear) + '&term=eq.' + selTerm + '&select=id');
+      var allRows = await r2.json();
+      var cnt = Array.isArray(allRows) ? allRows.length : '?';
+      if (banner) {
+        banner.innerHTML = '<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#92400E"><strong>⚠️ يوجد جدول محفوظ مسبقاً</strong> لهذه السنة والفصل — <strong>' + cnt + ' حصة</strong>. عند الحفظ سيُنقل الجدول الحالي إلى الأرشيف تلقائياً ولن يُحذف.</div>';
+        banner.style.display = 'block';
+      }
+    } else {
+      if (banner) banner.style.display = 'none';
+    }
+  } catch(e) { /* silent */ }
+}
+
+/* ══ Check if timetable_drafts exists (for stage config banner) ══ */
+async function checkSavedStageConfig() {
+  try {
+    var r = await sbFetch('timetable_drafts?select=id,stage_config&limit=1');
+    var rows = await r.json();
+    if (rows && rows.length && rows[0].stage_config && Array.isArray(rows[0].stage_config) && rows[0].stage_config.length) {
+      var banner = document.getElementById('savedStageConfigBanner');
+      var info = document.getElementById('savedStageInfo');
+      if (banner) banner.style.display = 'flex';
+      if (info) info.textContent = rows[0].stage_config.length + ' مراحل محفوظة';
+    }
+  } catch(e) { /* silent */ }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   /* Default breaks */
   if (STATE.breaks.length === 0) {
@@ -1908,6 +2076,8 @@ document.addEventListener('DOMContentLoaded', function() {
   loadClasses();
   loadTeachers();
   loadSoftRulesFromDB();
+  checkSavedStageConfig();
+  checkExistingSchedule();
 
   /* Wire assembly auto-sync listeners */
   var _asmEnd = document.getElementById('assemblyEnd');
