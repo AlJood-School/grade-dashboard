@@ -277,7 +277,26 @@ select:focus,input:focus{outline:none;border-color:var(--primary)}
       </select>
     </div>
     <div id="rmConflictWarn" style="display:none;background:#FEE2E2;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:.82rem;color:#991b1b;font-weight:600"></div>
-    <div style="display:flex;gap:10px;justify-content:flex-end">
+
+    <!-- تصنيف سبب الشغور -->
+    <div style="margin-bottom:14px">
+      <label style="font-size:.82rem;font-weight:700;color:#374151;display:block;margin-bottom:6px">🏷️ سبب الشغور (للتصنيف):</label>
+      <select id="rmVacancyReason" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:.9rem">
+        <option value="">— غير محدد —</option>
+        <option value="لم_يُعيَّن_بعد">لم يُعيَّن بعد</option>
+        <option value="انتهاء_عقد">انتهاء عقد</option>
+        <option value="إجازة_مرضية">إجازة مرضية</option>
+        <option value="إجازة_أمومة">إجازة أمومة / أبوة</option>
+        <option value="نقل">نقل لمدرسة أخرى</option>
+        <option value="استقالة">استقالة</option>
+        <option value="إجازة_غير_مدفوعة">إجازة غير مدفوعة</option>
+        <option value="منصب_جديد">منصب جديد لم يُشغَل</option>
+        <option value="أخرى">أخرى</option>
+      </select>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
+      <button onclick="classifyVacancyOnly()" style="padding:10px 18px;border:1.5px solid #F59E0B;border-radius:8px;background:#FFFBEB;color:#92400E;cursor:pointer;font-family:Tajawal,Arial,sans-serif;font-weight:600">🏷️ تصنيف فقط</button>
       <button onclick="closeReplaceModal()" style="padding:10px 20px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-family:Tajawal,Arial,sans-serif;font-weight:600">إلغاء</button>
       <button id="rmConfirmBtn" onclick="confirmReplace()" style="padding:10px 24px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:Tajawal,Arial,sans-serif;font-weight:700">تأكيد التعيين ✅</button>
     </div>
@@ -704,10 +723,19 @@ async function confirmReplace() {
     } else {
       url += 'class_name=eq.' + encodeURIComponent(_rmData.cls) + '&day=eq.' + encodeURIComponent(_rmData.day) + '&period=eq.' + _rmData.period + '&teacher_name=eq.%D8%B4%D8%A7%D8%BA%D8%B1';
     }
+    var vacancyReason = document.getElementById('rmVacancyReason').value || null;
+    var sess3 = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+    var classifierName = sess3.name_ar || sess3.username || null;
+    var patchBody = { teacher_name: teacherName.trim(), teacher_id: teacherId };
+    if (vacancyReason) {
+      patchBody.vacancy_reason = vacancyReason;
+      patchBody.vacancy_classified_at = new Date().toISOString();
+      patchBody.vacancy_classified_by = classifierName;
+    }
     var res = await fetch(url, {
       method: 'PATCH',
       headers: { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ teacher_name: teacherName.trim(), teacher_id: teacherId })
+      body: JSON.stringify(patchBody)
     });
     if (res.ok || res.status === 204) {
       showToast('✅ تم تعيين ' + teacherName + ' في المنصب الشاغر');
@@ -723,6 +751,32 @@ async function confirmReplace() {
     }
   } catch(e) { showToast('خطأ في الاتصال'); }
   btn.textContent = 'تأكيد التعيين ✅'; btn.disabled = false;
+}
+
+async function classifyVacancyOnly() {
+  var reason = document.getElementById('rmVacancyReason').value;
+  if (!reason) { showToast('اختر سبب الشغور أولاً'); return; }
+  var sess4 = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+  var classifierName = sess4.name_ar || sess4.username || null;
+  try {
+    var url2 = SB + '/rest/v1/schedules?';
+    if (_rmData.id) {
+      url2 += 'id=eq.' + encodeURIComponent(_rmData.id);
+    } else {
+      url2 += 'class_name=eq.' + encodeURIComponent(_rmData.cls) + '&day=eq.' + encodeURIComponent(_rmData.day) + '&period=eq.' + _rmData.period + '&teacher_name=eq.%D8%B4%D8%A7%D8%BA%D8%B1';
+    }
+    var res2 = await fetch(url2, {
+      method: 'PATCH',
+      headers: { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ vacancy_reason: reason, vacancy_classified_at: new Date().toISOString(), vacancy_classified_by: classifierName })
+    });
+    if (res2.ok || res2.status === 204) {
+      showToast('🏷️ تم تصنيف الشغور بنجاح');
+      closeReplaceModal();
+    } else {
+      showToast('خطأ في التصنيف');
+    }
+  } catch(e2) { showToast('خطأ في الاتصال'); }
 }
 
 init();
