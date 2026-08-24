@@ -1936,6 +1936,27 @@ async function saveTimetable() {
             }
           }
         } catch(de) { /* لا يوقف العملية */ }
+
+        /* إشعار المعلمين بنشر الجدول */
+        try {
+          var teachersRes = await sbFetch('staff_profiles?select=staff_db_id&role_key=eq.teacher&is_active=eq.true');
+          if (teachersRes.ok) {
+            var teachers = await teachersRes.json();
+            if (teachers && teachers.length > 0) {
+              var now = new Date().toISOString();
+              var notifTitle = 'تم نشر الجدول الدراسي';
+              var notifBody = 'تم نشر جدول الحصص للعام ' + selYear + ' — الفصل ' + selTerm + '. يمكنك مراجعة جدولك من بوابتك.';
+              var notifRows = teachers.map(function(t) {
+                return { user_id: t.staff_db_id, type: 'timetable', title: notifTitle, body: notifBody, is_read: false, created_at: now };
+              });
+              await sbFetch('notifications', {
+                method: 'POST',
+                headers: { 'Prefer': 'return=minimal' },
+                body: JSON.stringify(notifRows)
+              });
+            }
+          }
+        } catch(ne) { /* لا يوقف العملية — الإشعار اختياري */ }
       } else {
         showToast('خطأ في الحفظ','err');
       }
