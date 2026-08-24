@@ -1578,7 +1578,12 @@ function runGenerate(classes, days, ppd) {
   if (unassigned > 0) cb.innerHTML += '<div class="alert al-err">❌ ' + unassigned + ' حصة لم توزَّع — قلِّل عدد الحصص أو أعِد التوليد</div>';
   if (forcedCount > 0) cb.innerHTML += '<div class="alert al-warn">⚠️ ' + forcedCount + ' حصة وُزِّعت اضطرارياً (تكرار مادة في اليوم)</div>';
   if (consecutiveWarnings > 0) cb.innerHTML += '<div class="alert al-warn">⚡ يوجد معلم/ة يدرِّس 3+ حصص متتالية — انظر العلامة ⚠️ في الجدول</div>';
-  if (unassigned === 0 && forcedCount === 0 && consecutiveWarnings === 0) cb.innerHTML += '<div class="alert al-ok">✓ الجدول مثالي — لا تعارضات</div>';
+  /* ── فحص تعارضات المعلمين (نفس الوقت + فصلين مختلفين) ── */
+  var teacherConflicts = findTeacherConflicts(tt, classes, days, ppd, STATE.fridayPeriodsPerDay);
+  teacherConflicts.forEach(function(cf) {
+    cb.innerHTML += '<div class="alert al-err">🔴 تعارض: ' + cf.teacherName + ' مُعيَّن/ة في ' + cf.classes.join(' و ') + ' — يوم ' + cf.day + ' ح' + cf.period + ' (نفس الوقت!)</div>';
+  });
+  if (unassigned === 0 && forcedCount === 0 && consecutiveWarnings === 0 && teacherConflicts.length === 0) cb.innerHTML += '<div class="alert al-ok">✓ الجدول مثالي — لا تعارضات</div>';
 
   /* ── مطابقة الخطة الدراسية ── */
   if (complianceRows.length > 0) {
@@ -1899,6 +1904,35 @@ async function loadSchoolName() {
   } catch(e) {}
 }
 
+/* ── Teacher Conflict Detection ── */
+function findTeacherConflicts(tt, classes, days, ppd, fridayPpd) {
+  var conflicts = [];
+  days.forEach(function(day) {
+    var dayPpd = (day === 'الجمعة') ? (fridayPpd || ppd) : ppd;
+    for (var p = 1; p <= dayPpd; p++) {
+      var tidMap = {}; // teacherId -> [cls1, cls2, ...]
+      classes.forEach(function(cls) {
+        if (!tt[cls] || !tt[cls][day] || !tt[cls][day][p]) return;
+        var slot = tt[cls][day][p];
+        if (!slot.teacherId || slot.isVacant) return;
+        if (!tidMap[slot.teacherId]) tidMap[slot.teacherId] = [];
+        tidMap[slot.teacherId].push({ cls: cls, name: slot.teacherNameAr || slot.teacherId });
+      });
+      Object.keys(tidMap).forEach(function(tid) {
+        if (tidMap[tid].length > 1) {
+          conflicts.push({
+            teacherName: tidMap[tid][0].name,
+            day: day,
+            period: p,
+            classes: tidMap[tid].map(function(x) { return x.cls; })
+          });
+        }
+      });
+    }
+  });
+  return conflicts;
+}
+
 /* ── Drag & Drop ── */
 function enableDragDrop() {
   document.querySelectorAll('.scell').forEach(function(cell) {
@@ -1918,6 +1952,37 @@ function enableDragDrop() {
       var tt = STATE.timetable;
       var srcSlot = tt[STATE.dragSrc.cls][STATE.dragSrc.day][STATE.dragSrc.period];
       var dstSlot = tt[dst.cls][dst.day][dst.period];
+
+      /* ── فحص تعارض المعلم قبل الإبدال ── */
+      /* إذا كان SRC وDST في نفس اليوم والحصة → نتحقق أن المعلمين لا يتعارضان */
+      if (STATE.dragSrc.day === dst.day && STATE.dragSrc.period === dst.period) {
+        /* بعد الإبدال: srcSlot ستذهب إلى dst.cls، dstSlot ستذهب إلى STATE.dragSrc.cls */
+        /* التعارض: إذا كانت معلمة srcSlot موجودة بالفعل في أي فصل آخر بنفس اليوم والحصة (غير dst.cls و STATE.dragSrc.cls) */
+        var day2 = STATE.dragSrc.day, per2 = STATE.dragSrc.period;
+        var srcTid = srcSlot && srcSlot.teacherId;
+        var dstTid = dstSlot && dstSlot.teacherId;
+        var allClasses = STATE.selectedClasses;
+        var conflictFound = false;
+        if (srcTid) {
+          allClasses.forEach(function(c) {
+            if (c === STATE.dragSrc.cls || c === dst.cls) return;
+            var sl = tt[c] && tt[c][day2] && tt[c][day2][per2];
+            if (sl && sl.teacherId === srcTid) conflictFound = true;
+          });
+        }
+        if (dstTid && !conflictFound) {
+          allClasses.forEach(function(c) {
+            if (c === STATE.dragSrc.cls || c === dst.cls) return;
+            var sl = tt[c] && tt[c][day2] && tt[c][day2][per2];
+            if (sl && sl.teacherId === dstTid) conflictFound = true;
+          });
+        }
+        if (conflictFound) {
+          showToast('⚠️ تعارض: المعلم/ة موجود/ة بالفعل في حصة أخرى بنفس الوقت — الإبدال ملغى', 'err');
+          return;
+        }
+      }
+
       tt[STATE.dragSrc.cls][STATE.dragSrc.day][STATE.dragSrc.period] = dstSlot || null;
       tt[dst.cls][dst.day][dst.period] = srcSlot || null;
       /* Remove old consecutive warnings */
@@ -1931,6 +1996,24 @@ function enableDragDrop() {
 /* ── Save ── */
 async function saveTimetable() {
   if (!STATE.timetable) return;
+
+  /* ── فحص نهائي لتعارضات المعلمين قبل الحفظ ── */
+  var finalConflicts = findTeacherConflicts(
+    STATE.timetable,
+    STATE.selectedClasses,
+    STATE.selectedDays,
+    STATE.periodsPerDay,
+    STATE.fridayPeriodsPerDay
+  );
+  if (finalConflicts.length > 0) {
+    var conflictMsg = finalConflicts.map(function(cf) {
+      return cf.teacherName + ' (' + cf.classes.join(' و ') + ' — ' + cf.day + ' ح' + cf.period + ')';
+    }).join('\n');
+    showAlert('genAlert', 'al-err', '🔴 لا يمكن الحفظ — يوجد ' + finalConflicts.length + ' تعارض في المعلمين:\n' + conflictMsg + '\nيرجى إصلاح التعارضات أولاً.');
+    showToast('🔴 الحفظ مرفوض — يوجد تعارضات في المعلمين', 'err');
+    return;
+  }
+
   document.getElementById('btnSave').disabled = true;
   var rows = [];
   var classes = STATE.selectedClasses;
