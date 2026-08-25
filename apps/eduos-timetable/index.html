@@ -462,52 +462,127 @@ async function loadWeekTable() {
   var el = document.getElementById('weekTableWrap');
   el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
   try {
-    var slots = await get('schedules', getYTFilter() + '&select=day,period,subject,teacher_name,class_name&order=period&limit=2000');
+    var slots = await get('schedules', getYTFilter() + '&select=day,period,subject,teacher_name,class_name,grade&order=class_name,day,period&limit=3000');
     if (!slots || slots.length === 0) {
       el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text2)">لا جدول أسبوعي مُدخَل حتى الآن</div>';
       return;
     }
-    var periodSet = {};
-    slots.forEach(function(s) { if (s.period) periodSet[s.period] = true; });
-    var periods = Object.keys(periodSet).map(Number).sort(function(a,b){return a-b;});
 
-    var byDP = {};
+    /* جمع كل الفصول والمراحل */
+    var classSeen = {};
+    var gradeSeen = {};
     slots.forEach(function(s) {
-      var di = DAYS.indexOf(s.day);
-      if (di < 0) return;
-      var k = di + '_' + s.period;
-      if (!byDP[k]) byDP[k] = s;
+      if (s.class_name) classSeen[s.class_name] = (s.grade || parseGrade(s.class_name));
+      if (s.grade) gradeSeen[s.grade] = true;
     });
 
-    var html = '<table class="tt-table"><thead><tr><th>الحصة</th>';
-    DAYS.forEach(function(d, i) { html += '<th>' + d + '<br><span style="font-size:.7rem;opacity:.8">' + DAYS_EN[i] + '</span></th>'; });
-    html += '</tr></thead><tbody>';
-    var FRIDAY_MAX = 4;
-    periods.forEach(function(p) {
-      html += '<tr><td class="tt-time">الحصة ' + p + '</td>';
-      [0,1,2,3,4].forEach(function(d) {
-        if (d === 4 && p > FRIDAY_MAX) {
-          html += '<td><div class="slot" style="background:#f1f5f9;color:#94a3b8;font-size:.75rem;text-align:center;border:1px dashed #cbd5e1;">انتهى اليوم</div></td>';
-          return;
-        }
-        var s = byDP[d + '_' + p];
-        if (s) {
-          var isVacant = s.teacher_name === 'شاغر';
-          html += '<td><div class="slot ' + colorClass(s.subject || '') + (isVacant?' vacant':'') + '">' +
-            '<div class="slot-subj">' + (isVacant ? '⚠️ ' : '') + (s.subject || '') + '</div>' +
-            '<div class="slot-teacher">' + (isVacant ? 'منصب شاغر' : (s.teacher_name || '')) + '</div>' +
-            '<div class="slot-room">' + (s.class_name || '') + '</div>' +
-          '</div></td>';
-        } else {
-          html += '<td><div class="slot empty">—</div></td>';
-        }
-      });
-      html += '</tr>';
+    /* دالة استخراج الرقم من اسم الفصل */
+    function parseGrade(cls) {
+      if (!cls) return '?';
+      var m = String(cls).match(/^(KG\d*)/i); if (m) return 'KG';
+      var m2 = String(cls).match(/^(\d+)/); return m2 ? m2[1] : '?';
+    }
+
+    /* تجميع الفصول حسب المرحلة */
+    var gradeGroups = {};
+    Object.keys(classSeen).forEach(function(cls) {
+      var g = parseGrade(cls);
+      if (!gradeGroups[g]) gradeGroups[g] = [];
+      if (gradeGroups[g].indexOf(cls) < 0) gradeGroups[g].push(cls);
     });
-    html += '</tbody></table>';
+    /* ترتيب الصفوف */
+    function gradeOrder(g) {
+      if (g === 'KG') return -1;
+      var n = parseInt(g); return isNaN(n) ? 99 : n;
+    }
+    var sortedGrades = Object.keys(gradeGroups).sort(function(a,b){ return gradeOrder(a)-gradeOrder(b); });
+
+    /* مرحلة → حصص يوم (7 لـ G1-4، 8 لـ G5-8، 5 لـ KG) */
+    function getPPD(grade) {
+      var n = parseInt(grade);
+      if (isNaN(n)) return 5; /* KG */
+      if (n <= 4) return 7;
+      return 8;
+    }
+
+    var FRIDAY_MAX = 4;
+    var html = '';
+
+    /* بطاقة معلومات الهيكل الزمني */
+    html += '<div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:12px;padding:14px 20px;margin-bottom:20px;display:flex;gap:20px;flex-wrap:wrap;align-items:center">' +
+      '<span style="font-weight:700;color:#0284c7;font-size:.9rem">📊 هيكل الجدول الدراسي:</span>' +
+      '<span style="background:#EDE9FE;color:#5b21b6;padding:4px 10px;border-radius:8px;font-size:.82rem;font-weight:700">KG: 5 حصص / يوم</span>' +
+      '<span style="background:#D1FAE5;color:#065f46;padding:4px 10px;border-radius:8px;font-size:.82rem;font-weight:700">G1–G4: 7 حصص / يوم | 32 حصة/أسبوع</span>' +
+      '<span style="background:#DBEAFE;color:#1d4ed8;padding:4px 10px;border-radius:8px;font-size:.82rem;font-weight:700">G5–G8: 8 حصص / يوم | 36 حصة/أسبوع</span>' +
+      '<span style="background:#FEF3C7;color:#92400e;padding:4px 10px;border-radius:8px;font-size:.82rem;font-weight:700">جمعة: 4 حصص (جميع المراحل)</span>' +
+    '</div>';
+
+    sortedGrades.forEach(function(grade) {
+      var classes = gradeGroups[grade].sort();
+      var ppd = getPPD(grade);
+      var gradeLabel = grade === 'KG' ? 'روضة الأطفال' : ('الصف ' + grade);
+
+      /* بناء خريطة البيانات لكل فصل × يوم × حصة */
+      var dataMap = {};
+      classes.forEach(function(cls) { dataMap[cls] = {}; DAYS.forEach(function(d) { dataMap[cls][d] = {}; }); });
+      slots.forEach(function(s) {
+        if (!s.class_name || classes.indexOf(s.class_name) < 0) return;
+        if (!s.day || DAYS.indexOf(s.day) < 0) return;
+        dataMap[s.class_name][s.day][s.period] = s;
+      });
+
+      /* رأس المرحلة */
+      html += '<div style="margin-bottom:24px">' +
+        '<div style="background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;padding:10px 18px;border-radius:10px 10px 0 0;display:flex;align-items:center;justify-content:space-between">' +
+          '<span style="font-weight:800;font-size:.95rem">🏫 ' + gradeLabel + '</span>' +
+          '<span style="font-size:.78rem;background:rgba(255,255,255,.2);padding:3px 10px;border-radius:8px">' + ppd + ' حصص/يوم | ' + classes.length + ' فصل</span>' +
+        '</div>' +
+        '<div style="overflow-x:auto;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 10px 10px">' +
+          '<table class="tt-table" style="min-width:' + (120 + classes.length * 110) + 'px">' +
+          '<thead><tr><th style="min-width:70px">الحصة</th>';
+
+      DAYS.forEach(function(d, di) {
+        classes.forEach(function(cls) {
+          html += '<th style="min-width:100px">' + d + '<br><span style="font-size:.68rem;opacity:.8;font-weight:400">' + cls + '</span></th>';
+        });
+      });
+      html += '</tr></thead><tbody>';
+
+      /* صفوف الحصص */
+      for (var p = 1; p <= ppd; p++) {
+        html += '<tr><td class="tt-time" style="font-weight:700">ح ' + p + '</td>';
+        DAYS.forEach(function(day, di) {
+          var isEndOfDay = (di === 4 && p > FRIDAY_MAX); /* الجمعة */
+          classes.forEach(function(cls) {
+            if (isEndOfDay) {
+              html += '<td style="background:#f8fafc"><div class="slot" style="background:#f1f5f9;color:#94a3b8;font-size:.72rem;text-align:center;border:1px dashed #cbd5e1;min-height:36px;display:flex;align-items:center;justify-content:center">انتهى</div></td>';
+              return;
+            }
+            var s = dataMap[cls][day][p];
+            if (s) {
+              var isVacant = s.teacher_name === 'شاغر';
+              html += '<td><div class="slot ' + colorClass(s.subject || '') + (isVacant ? ' vacant' : '') + '" style="min-height:44px">' +
+                '<div class="slot-subj" style="font-size:.75rem">' + (isVacant ? '⬜ ' : '') + (s.subject || '') + '</div>' +
+                '<div class="slot-teacher" style="font-size:.68rem">' + (isVacant ? 'شاغر' : (s.teacher_name ? s.teacher_name.split(' ').slice(1,3).join(' ') : '')) + '</div>' +
+              '</div></td>';
+            } else {
+              html += '<td><div class="slot empty" style="min-height:44px">—</div></td>';
+            }
+          });
+        });
+        html += '</tr>';
+        /* استراحة بعد الحصة 2 */
+        if (p === 2) {
+          html += '<tr style="background:#FEF9C3"><td colspan="' + (1 + DAYS.length * classes.length) + '" style="text-align:center;padding:4px;font-size:.75rem;color:#92400e;font-weight:600">☕ استراحة</td></tr>';
+        }
+      }
+
+      html += '</tbody></table></div></div>';
+    });
+
     el.innerHTML = html;
   } catch(e) {
-    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text2)">⚠️ تعذّر تحميل الجدول</div>';
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text2)">⚠️ تعذّر تحميل الجدول: ' + e.message + '</div>';
   }
 }
 

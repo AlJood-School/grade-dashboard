@@ -698,7 +698,7 @@ function maxPeriodsForDay(day, ppd, fridayPpd) {
 /* ── DB Loaders ── */
 async function loadClasses() {
   try {
-    var res = await sbFetch('students?select=class_name&order=class_name');
+    var res = await sbFetch('students?select=class_name&order=class_name&limit=2000');
     var data = await res.json();
     var seen = {};
     var classes = [];
@@ -2952,11 +2952,49 @@ async function loadDraft(id) {
     if (d.stage_config) { STATE.stages = d.stage_config; renderStageCards(); }
     if (d.subjects_config) { STATE.subjects = d.subjects_config; renderSubjects(); }
     if (d.class_assignments) STATE.classAssignments = d.class_assignments;
-    if (d.timetable_data) { STATE.timetable = d.timetable_data; }
+    if (d.timetable_data) {
+      STATE.timetable = d.timetable_data;
+      /* ✅ استعادة قائمة الفصول من بيانات الجدول المحفوظ */
+      var restoredClasses = Object.keys(d.timetable_data).sort();
+      STATE.selectedClasses = restoredClasses;
+      /* اضبط أوضاع المراحل */
+      if (STATE.stages && STATE.stages.length) {
+        STATE.multiStage = true;
+        var modeM = document.getElementById('stageModeM');
+        if (modeM) modeM.checked = true;
+      }
+      /* أعد رسم رقائق الفصول بعد تحميل STATE.classes */
+      if (STATE.classes && STATE.classes.length) {
+        renderClassChips();
+      } else {
+        /* إذا لم تُحمَّل الفصول بعد، احفظ مؤقتاً وأعد الرسم لاحقاً */
+        var _pendingClasses = restoredClasses;
+        var _waitChips = setInterval(function() {
+          if (STATE.classes && STATE.classes.length) {
+            clearInterval(_waitChips);
+            STATE.selectedClasses = _pendingClasses.filter(function(c){ return STATE.classes.indexOf(c) > -1; });
+            renderClassChips();
+          }
+        }, 200);
+      }
+      /* أعد بناء الفصول المفقودة من STATE.classes */
+      restoredClasses.forEach(function(c) {
+        if (STATE.classes && STATE.classes.indexOf(c) < 0) STATE.classes.push(c);
+      });
+      if (STATE.classes) STATE.classes.sort();
+    }
     syncAssemblyToStart();
     hideDraftsPanel();
-    showDraftToast('تم تحميل المسودة: ' + d.name, '#6C3DD6');
-    goToStep(1);
+    showDraftToast('تم تحميل المسودة: ' + d.name + ' (' + (STATE.selectedClasses.length) + ' فصل)', '#6C3DD6');
+    /* اذهب مباشرة للمعاينة إذا يوجد جدول — وإلا اذهب للخطوة 1 */
+    if (d.timetable_data && Object.keys(d.timetable_data).length > 0) {
+      goToStep(4);
+      STATE.activeClass = STATE.selectedClasses[0] || null;
+      renderClassTabs();
+      if (STATE.activeClass) renderPreview(STATE.activeClass);
+    } else {
+      goToStep(1);
+    }
   } catch(e) {
     showDraftToast('خطأ في التحميل', '#EF4444');
   }
