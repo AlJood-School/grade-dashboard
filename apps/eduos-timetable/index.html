@@ -403,13 +403,21 @@ async function init() {
 
 async function loadClasses() {
   try {
-    var rows = await get('schedules', getYTFilter() + '&select=class_name&order=class_name&limit=2000');
+    /* RPC POST — يتجنب حد 1000 صف الافتراضي ويُرجع class_name مميزة مباشرة */
+    var r = await fetch(SB + '/rest/v1/rpc/get_active_class_list', {
+      method: 'POST',
+      headers: { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    var rows = r.ok ? await r.json() : [];
     var unique = [];
     var seen = {};
-    rows.forEach(function(r) { if (r.class_name && !seen[r.class_name]) { seen[r.class_name] = true; unique.push(r.class_name); } });
+    (rows || []).forEach(function(row) {
+      var cn = row.class_name;
+      if (cn && !seen[cn]) { seen[cn] = true; unique.push(cn); }
+    });
     unique.sort();
     var sel = document.getElementById('selClass');
-    // clear existing options except first
     while (sel.options.length > 1) sel.remove(1);
     unique.forEach(function(c) { var o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
   } catch(e) {}

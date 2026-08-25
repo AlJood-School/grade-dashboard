@@ -719,8 +719,19 @@ function maxPeriodsForDay(day, ppd, fridayPpd) {
 /* ── DB Loaders ── */
 async function loadClasses() {
   try {
-    var res = await sbFetch('students?select=class_name&order=class_name&limit=2000');
-    var data = await res.json();
+    /* RPC POST — يتجنب حد 1000 صف ويُرجع فصول الجدول النشط مباشرة */
+    if (!SB_URL) { SB_URL = (window.EduOS && window.EduOS.SB_URL) || ''; SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || ''; }
+    var res = await fetch(SB_URL + '/rest/v1/rpc/get_active_class_list', {
+      method: 'POST',
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    var data = res.ok ? await res.json() : [];
+    /* fallback: إذا فشل الـ RPC استخدم students */
+    if (!Array.isArray(data) || data.length === 0) {
+      var res2 = await sbFetch('students?select=class_name&order=class_name&limit=2000');
+      data = (await res2.json()).map(function(r) { return { class_name: r.class_name }; });
+    }
     var seen = {};
     var classes = [];
     (data || []).forEach(function(r) {
