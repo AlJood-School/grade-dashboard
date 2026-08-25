@@ -489,64 +489,247 @@ async function loadTodaySlots() {
   }
 }
 
+// ─── حساب وقت الحصة ─────────────────────────────────────────────────────────
+function getPeriodTime(gradeNum, pNum) {
+  var startMin = (gradeNum === 0) ? 7*60+30 : 7*60+15;
+  var elapsed = (pNum - 1) * 45;
+  if (pNum > 2) elapsed += 20; // استراحة بعد ح2 (20 دقيقة)
+  var s = startMin + elapsed, e = s + 45;
+  function fmt(m){ var h=Math.floor(m/60),mn=m%60; return h+':'+(mn<10?'0':'')+mn; }
+  return fmt(s) + ' – ' + fmt(e);
+}
+
+function gradeNumFromClass(cls) {
+  if (!cls) return 5;
+  if ((cls+'').toUpperCase().indexOf('KG') >= 0) return 0;
+  var m = (cls+'').match(/\d+/); return m ? parseInt(m[0]) : 5;
+}
+
+// ─── الجدول الأسبوعي الذكي — عارض بالفصل ────────────────────────────────────
+var _weekAllClasses = []; // قائمة الفصول المتاحة
+
 async function loadWeekTable() {
   var el = document.getElementById('weekTableWrap');
-  el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  // إذا لم تُبنَ قائمة الفصول بعد — ابنها أولاً
+  if (_weekAllClasses.length === 0) {
+    el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+      var r = await fetch(SB + '/rest/v1/rpc/get_active_class_list', {
+        method: 'POST',
+        headers: { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json' },
+        body: '{}'
+      });
+      var rows = r.ok ? await r.json() : [];
+      _weekAllClasses = [];
+      (rows || []).forEach(function(row) {
+        var cn = (typeof row === 'string') ? row : (row.class_name || row.get_active_class_list || '');
+        if (cn && _weekAllClasses.indexOf(cn) < 0) _weekAllClasses.push(cn);
+      });
+      _weekAllClasses.sort(function(a,b){
+        var an=parseInt(a)||999,bn=parseInt(b)||999;
+        return an!==bn ? an-bn : a.localeCompare(b);
+      });
+    } catch(e) { _weekAllClasses = []; }
+  }
+
+  // بناء واجهة الاختيار
+  var selectedClass = (document.getElementById('weekClassSel') && document.getElementById('weekClassSel').value) || '';
+  var selectedGrade = (document.getElementById('weekGradeSel') && document.getElementById('weekGradeSel').value) || '';
+
+  // تجميع المراحل من قائمة الفصول
+  var gradeSet = {};
+  _weekAllClasses.forEach(function(c) {
+    var g = c.match(/^(KG)/i) ? 'KG' : (c.match(/^\d+/) ? c.match(/^\d+/)[0] : '?');
+    gradeSet[g] = true;
+  });
+  var grades = Object.keys(gradeSet).sort(function(a,b){
+    if (a==='KG') return -1; if (b==='KG') return 1;
+    return parseInt(a)-parseInt(b);
+  });
+
+  // فلترة الفصول حسب المرحلة المختارة
+  var filteredClasses = selectedGrade
+    ? _weekAllClasses.filter(function(c) {
+        var g = c.match(/^(KG)/i) ? 'KG' : (c.match(/^\d+/) ? c.match(/^\d+/)[0] : '?');
+        return g === selectedGrade;
+      })
+    : _weekAllClasses;
+
+  // بناء UI الاختيار
+  var uiHtml = '<div style="background:#F8FAFF;border:1px solid #E2E8F0;border-radius:12px;padding:16px 20px;margin-bottom:16px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">' +
+    '<div style="display:flex;flex-direction:column;gap:4px">' +
+      '<span style="font-size:.75rem;font-weight:700;color:#64748B">المرحلة | Stage</span>' +
+      '<select id="weekGradeSel" onchange="onWeekGradeChange()" style="padding:8px 14px;border:1.5px solid #D1D5DB;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:.9rem;font-weight:700;min-width:140px">' +
+        '<option value="">كل المراحل</option>' +
+        grades.map(function(g){ return '<option value="'+g+'"'+(g===selectedGrade?' selected':'')+'>'+( g==='KG'?'روضة الأطفال':'الصف '+g)+'</option>'; }).join('') +
+      '</select>' +
+    '</div>' +
+    '<div style="display:flex;flex-direction:column;gap:4px">' +
+      '<span style="font-size:.75rem;font-weight:700;color:#64748B">الفصل | Class</span>' +
+      '<select id="weekClassSel" onchange="showWeekForClass()" style="padding:8px 14px;border:1.5px solid #D1D5DB;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:.9rem;font-weight:700;min-width:120px">' +
+        '<option value="">— اختر —</option>' +
+        filteredClasses.map(function(c){ return '<option value="'+c+'"'+(c===selectedClass?' selected':'')+'>'+c+'</option>'; }).join('') +
+      '</select>' +
+    '</div>' +
+    '<button onclick="showWeekForClass()" style="padding:9px 18px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:Tajawal,Arial,sans-serif;font-weight:700;font-size:.88rem">عرض ▶</button>' +
+    '<a href="/apps/eduos-timetable-pdf/?class=' + encodeURIComponent(selectedClass) + '" target="_blank" style="padding:9px 18px;background:#fff;border:1.5px solid #D1D5DB;border-radius:8px;color:#374151;font-family:Tajawal,Arial,sans-serif;font-weight:700;font-size:.88rem;text-decoration:none;display:flex;align-items:center;gap:6px">🖨️ طباعة</a>' +
+  '</div>';
+
+  if (!selectedClass) {
+    // بطاقات الفصول السريعة — مُجمَّعة بحسب المرحلة
+    var gradeGroups2 = {};
+    filteredClasses.forEach(function(c) {
+      var g = c.match(/^(KG)/i) ? 'KG' : (c.match(/^\d+/) ? c.match(/^\d+/)[0] : '?');
+      if (!gradeGroups2[g]) gradeGroups2[g] = [];
+      gradeGroups2[g].push(c);
+    });
+    var sortedG2 = Object.keys(gradeGroups2).sort(function(a,b){
+      if(a==='KG')return -1;if(b==='KG')return 1;
+      return parseInt(a)-parseInt(b);
+    });
+    var cardsHtml = '<div style="padding:16px 0">';
+    sortedG2.forEach(function(g) {
+      var gLabel = g === 'KG' ? 'روضة الأطفال 🌱' : ('الصف ' + g);
+      cardsHtml += '<div style="margin-bottom:14px">' +
+        '<div style="font-size:.78rem;font-weight:800;color:#64748B;margin-bottom:6px;letter-spacing:.5px">' + gLabel + '</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px">';
+      gradeGroups2[g].forEach(function(c) {
+        cardsHtml += '<button onclick="quickPickClass(\'' + c.replace(/'/g,'') + '\')" style="padding:10px 18px;border:1.5px solid #D1D5DB;border-radius:10px;background:#fff;cursor:pointer;font-family:Tajawal,Arial,sans-serif;font-size:.9rem;font-weight:800;color:#374151;min-width:60px;transition:.15s" onmouseover="this.style.background=\'#F5F0FF\';this.style.borderColor=\'#6C3DD6\';this.style.color=\'#6C3DD6\'" onmouseout="this.style.background=\'#fff\';this.style.borderColor=\'#D1D5DB\';this.style.color=\'#374151\'">' + c + '</button>';
+      });
+      cardsHtml += '</div></div>';
+    });
+    cardsHtml += '</div>';
+    el.innerHTML = uiHtml + cardsHtml;
+    return;
+  }
+
+  // تحميل جدول الفصل المختار
+  el.innerHTML = uiHtml + '<div class="loading"><div class="spinner"></div></div>';
   try {
-    var slots = await get('schedules', getYTFilter() + '&select=day,period,subject,teacher_name,class_name,grade&order=class_name,day,period&limit=3000');
-    if (!slots || slots.length === 0) {
-      el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text2)">لا جدول أسبوعي مُدخَل حتى الآن</div>';
-      return;
-    }
-
-    /* جمع كل الفصول والمراحل */
-    var classSeen = {};
-    var gradeSeen = {};
-    slots.forEach(function(s) {
-      if (s.class_name) classSeen[s.class_name] = (s.grade || parseGrade(s.class_name));
-      if (s.grade) gradeSeen[s.grade] = true;
-    });
-
-    /* دالة استخراج الرقم من اسم الفصل */
-    function parseGrade(cls) {
-      if (!cls) return '?';
-      var m = String(cls).match(/^(KG\d*)/i); if (m) return 'KG';
-      var m2 = String(cls).match(/^(\d+)/); return m2 ? m2[1] : '?';
-    }
-
-    /* تجميع الفصول حسب المرحلة */
-    var gradeGroups = {};
-    Object.keys(classSeen).forEach(function(cls) {
-      var g = parseGrade(cls);
-      if (!gradeGroups[g]) gradeGroups[g] = [];
-      if (gradeGroups[g].indexOf(cls) < 0) gradeGroups[g].push(cls);
-    });
-    /* ترتيب الصفوف */
-    function gradeOrder(g) {
-      if (g === 'KG') return -1;
-      var n = parseInt(g); return isNaN(n) ? 99 : n;
-    }
-    var sortedGrades = Object.keys(gradeGroups).sort(function(a,b){ return gradeOrder(a)-gradeOrder(b); });
-
-    /* مرحلة → حصص يوم (7 لـ G1-4، 8 لـ G5-8، 5 لـ KG) */
-    function getPPD(grade) {
-      var n = parseInt(grade);
-      if (isNaN(n)) return 5; /* KG */
-      if (n <= 4) return 7;
-      return 8;
-    }
+    var slots = await get('schedules', getYTFilter() + '&class_name=eq.' + encodeURIComponent(selectedClass) + '&select=day,period,subject,teacher_name,class_name&order=period&limit=200');
+    var wrapDiv = el.querySelector('div.loading');
 
     var FRIDAY_MAX = 4;
-    var html = '';
+    var gNum = gradeNumFromClass(selectedClass);
+    var PPD = gNum === 0 ? 5 : (gNum <= 4 ? 7 : 8);
 
-    /* بطاقة معلومات الهيكل الزمني */
-    html += '<div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:12px;padding:14px 20px;margin-bottom:20px;display:flex;gap:20px;flex-wrap:wrap;align-items:center">' +
-      '<span style="font-weight:700;color:#0284c7;font-size:.9rem">📊 هيكل الجدول الدراسي:</span>' +
-      '<span style="background:#EDE9FE;color:#5b21b6;padding:4px 10px;border-radius:8px;font-size:.82rem;font-weight:700">KG: 5 حصص / يوم</span>' +
-      '<span style="background:#D1FAE5;color:#065f46;padding:4px 10px;border-radius:8px;font-size:.82rem;font-weight:700">G1–G4: 7 حصص / يوم | 32 حصة/أسبوع</span>' +
-      '<span style="background:#DBEAFE;color:#1d4ed8;padding:4px 10px;border-radius:8px;font-size:.82rem;font-weight:700">G5–G8: 8 حصص / يوم | 36 حصة/أسبوع</span>' +
-      '<span style="background:#FEF3C7;color:#92400e;padding:4px 10px;border-radius:8px;font-size:.82rem;font-weight:700">جمعة: 4 حصص (جميع المراحل)</span>' +
+    // اليوم الحالي وتوقيت الحصة الجارية
+    var nowDate = new Date();
+    var todayAr = DAYS_ALL[nowDate.getDay()];
+    var nowMin = nowDate.getHours()*60 + nowDate.getMinutes();
+
+    function getCurrentPeriod(gn) {
+      for (var pp = 1; pp <= 8; pp++) {
+        var startMin2 = (gn===0)?7*60+30:7*60+15;
+        var elapsed2 = (pp-1)*45; if(pp>2) elapsed2+=20;
+        var s2=startMin2+elapsed2, e2=s2+45;
+        if (nowMin>=s2 && nowMin<e2) return pp;
+      }
+      return 0;
+    }
+    var currentPeriod = getCurrentPeriod(gNum);
+
+    // بناء مصفوفة البيانات
+    var matrix = {};
+    DAYS.forEach(function(d){ matrix[d] = {}; });
+    (slots || []).forEach(function(s) {
+      if (!s.day || !s.period) return;
+      matrix[s.day][s.period] = s;
+    });
+
+    // حساب الإحصاء
+    var vacantCount = 0;
+    (slots||[]).forEach(function(s){ if((s.teacher_name||'').indexOf('شاغر')>=0) vacantCount++; });
+
+    // شريط الذكاء
+    var smartBanner = '<div style="background:linear-gradient(135deg,#F0FDF4,#DBEAFE);border:1px solid #86EFAC;border-radius:10px;padding:10px 16px;margin-bottom:12px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">' +
+      '<span style="font-size:.82rem;font-weight:700;color:#166534">📅 الجدول الأسبوعي — ' + selectedClass + '</span>' +
+      '<span style="font-size:.78rem;color:#1d4ed8">⏰ اليوم: ' + todayAr + (currentPeriod?(' — الحصة الجارية: '+currentPeriod):'') + '</span>' +
+      (vacantCount > 0 ? '<span style="font-size:.78rem;color:#B45309;font-weight:700">⚠️ ' + vacantCount + ' منصب شاغر</span>' : '<span style="font-size:.78rem;color:#16a34a">✅ لا مناصب شاغرة</span>') +
+      '<a href="/apps/eduos-timetable-pdf/?class=' + encodeURIComponent(selectedClass) + '" target="_blank" style="margin-right:auto;padding:5px 14px;background:#6C3DD6;color:#fff;border-radius:8px;font-size:.78rem;font-weight:700;text-decoration:none">🖨️ طباعة</a>' +
     '</div>';
+
+    // بناء الجدول
+    var tbl = '<div style="overflow-x:auto;border:1px solid #E2E8F0;border-radius:12px;margin-top:4px">';
+    tbl += '<table class="tt-table" style="min-width:720px"><thead><tr>';
+    tbl += '<th style="min-width:80px">الحصة<br><span style="font-weight:400;font-size:.65rem">الوقت</span></th>';
+    DAYS.forEach(function(d,i){
+      var isToday = (d === todayAr);
+      tbl += '<th style="' + (isToday?'background:rgba(108,61,214,.5);border-bottom:3px solid #fff':'')+'">' +
+        (isToday?'⭐ ':'')+d+'<br><span style="font-size:.65rem;opacity:.8;font-weight:400">'+DAYS_EN[i]+'</span></th>';
+    });
+    tbl += '</tr></thead><tbody>';
+
+    for (var p = 1; p <= PPD; p++) {
+      if (p === 3) {
+        tbl += '<tr style="background:#FFFBEB"><td colspan="6" style="text-align:center;padding:5px 10px;font-size:.75rem;color:#92400E;font-weight:700">☕ استراحة — 20 دقيقة</td></tr>';
+      }
+      var tStr = getPeriodTime(gNum, p);
+      var isCurrentP = (currentPeriod === p);
+      tbl += '<tr' + (isCurrentP?' style="background:#FFFBEB"':'')+'>'+
+        '<td class="tt-time">' +
+          '<strong style="font-size:.85rem;color:' + (isCurrentP?'#E65100':'#6C3DD6') + '">' + (isCurrentP?'▶ ':'')+p+'</strong>' +
+          '<br><span style="font-size:.65rem;direction:ltr;display:block">'+tStr+'</span>' +
+        '</td>';
+      DAYS.forEach(function(d, di) {
+        var isToday = (d === todayAr);
+        var cellBg = isToday ? 'background:#F5F0FF;' : '';
+        if (d === 'الجمعة' && p > FRIDAY_MAX) {
+          if (p === FRIDAY_MAX + 1) {
+            tbl += '<td style="'+cellBg+'border:1px solid #E2E8F0;color:#CBD5E1;font-size:.7rem;text-align:center">انتهى اليوم</td>';
+          } else {
+            tbl += '<td style="'+cellBg+'border:1px solid #E2E8F0"></td>';
+          }
+          return;
+        }
+        var s = matrix[d] && matrix[d][p];
+        if (s && s.subject) {
+          var isVacant = (s.teacher_name === 'شاغر' || (s.teacher_name||'').indexOf('شاغر') >= 0);
+          var cls = colorClass(s.subject);
+          if (isVacant) cls = 'vacant';
+          var isNowSlot = isToday && isCurrentP;
+          tbl += '<td style="'+cellBg+'"><div class="slot '+cls+'" style="min-height:48px' + (isNowSlot?';box-shadow:0 0 0 2px #6C3DD6;animation:pulse 2s infinite':'') + '">' +
+            '<div class="slot-subj">'+( isVacant?'⚠️ ':'')+s.subject+'</div>' +
+            '<div class="slot-room" style="font-size:.68rem">'+(isVacant?'منصب شاغر':(s.teacher_name||''))+'</div>' +
+            '</div></td>';
+        } else {
+          tbl += '<td style="'+cellBg+'"><div class="slot empty" style="min-height:48px;font-size:.75rem">—</div></td>';
+        }
+      });
+      tbl += '</tr>';
+    }
+    var weekTotal = (PPD*4) + Math.min(4,PPD);
+    tbl += '<tr style="background:#F0F9FF"><td style="text-align:center;padding:8px;font-size:.72rem;font-weight:700;color:#0284C7" colspan="6">📊 إجمالي: '+PPD+' حصص/يوم · '+weekTotal+' حصة/أسبوع</td></tr>';
+    tbl += '</tbody></table></div>';
+    el.innerHTML = uiHtml + smartBanner + tbl;
+  } catch(err) {
+    el.innerHTML = uiHtml + '<div style="padding:30px;text-align:center;color:var(--text2)">⚠️ تعذّر تحميل الجدول</div>';
+  }
+}
+
+function quickPickClass(cls) {
+  var g = cls.match(/^(KG)/i) ? 'KG' : (cls.match(/^\d+/) ? cls.match(/^\d+/)[0] : '');
+  var gSel = document.getElementById('weekGradeSel');
+  var cSel = document.getElementById('weekClassSel');
+  if (gSel) gSel.value = g;
+  if (cSel) cSel.value = cls;
+  loadWeekTable();
+}
+
+function onWeekGradeChange() {
+  var classSel = document.getElementById('weekClassSel');
+  if (classSel) classSel.value = '';
+  loadWeekTable();
+}
+
+function showWeekForClass() {
+  loadWeekTable();
+}
+
+async function _loadWeekTableLegacy() {
+  // هذا الكود لم يعد يُستخدم — المنطق الجديد في loadWeekTable أعلاه
+}
 
     sortedGrades.forEach(function(grade) {
       var classes = gradeGroups[grade].sort();
@@ -661,34 +844,63 @@ function renderTimetableHTML(slots, containerId, showClass, contextLabel) {
     if (!byDP[k]) byDP[k] = s;
   });
 
-  var html = '<table class="tt-table"><thead><tr><th>الحصة</th>';
-  DAYS.forEach(function(d) { html += '<th>' + d + '</th>'; });
+  var nowDate2 = new Date();
+  var todayAr2 = DAYS_ALL[nowDate2.getDay()];
+  var nowMin2 = nowDate2.getHours()*60 + nowDate2.getMinutes();
+  var ctxGrade = showClass ? 5 : gradeNumFromClass(contextLabel || '');
+  function ptTime(pn) {
+    var st=(ctxGrade===0)?7*60+30:7*60+15, el2=(pn-1)*45; if(pn>2)el2+=20;
+    var s2=st+el2,e2=s2+45;
+    function f(m){var h=Math.floor(m/60),mn=m%60;return h+':'+(mn<10?'0':'')+mn;}
+    return f(s2)+' – '+f(e2);
+  }
+  function isCurrentSlot(pn) {
+    var st=(ctxGrade===0)?7*60+30:7*60+15, el2=(pn-1)*45; if(pn>2)el2+=20;
+    var s2=st+el2,e2=s2+45;
+    return nowMin2>=s2 && nowMin2<e2;
+  }
+
+  var html = '<table class="tt-table"><thead><tr><th>الحصة<br><span style="font-weight:400;font-size:.65rem">الوقت</span></th>';
+  DAYS.forEach(function(d,i) {
+    var isToday=(d===todayAr2);
+    html += '<th style="'+(isToday?'background:rgba(108,61,214,.5);':'')+'">'+(isToday?'⭐ ':'')+d+'<br><span style="font-size:.65rem;opacity:.8;font-weight:400">'+DAYS_EN[i]+'</span></th>';
+  });
   html += '</tr></thead><tbody>';
 
-  // الجمعة = 4 حصص كحد أقصى (يوم مختصر)
   var FRIDAY_MAX_PERIODS = 4;
 
   periods.forEach(function(p) {
-    html += '<tr><td class="tt-time">الحصة ' + p + '</td>';
-    [0,1,2,3,4].forEach(function(d) {
-      // d=4 يعني الجمعة — إذا تجاوزنا الحد الأقصى نُظلّل الخلية
-      if (d === 4 && p > FRIDAY_MAX_PERIODS) {
-        html += '<td><div class="slot" style="background:#f1f5f9;color:#94a3b8;font-size:.75rem;text-align:center;border:1px dashed #cbd5e1;">انتهى اليوم</div></td>';
+    if (p === 3) {
+      html += '<tr style="background:#FFFBEB"><td colspan="6" style="text-align:center;padding:5px 10px;font-size:.75rem;color:#92400E;font-weight:700">☕ استراحة — 20 دقيقة</td></tr>';
+    }
+    var isCurP = isCurrentSlot(p);
+    html += '<tr' + (isCurP?' style="background:#FFFBEB"':'')+'>'+
+      '<td class="tt-time">' +
+        '<strong style="font-size:.85rem;color:'+(isCurP?'#E65100':'#6C3DD6')+'">'+(isCurP?'▶ ':'')+p+'</strong>' +
+        '<br><span style="font-size:.65rem;direction:ltr;display:block">'+ptTime(p)+'</span>' +
+      '</td>';
+    [0,1,2,3,4].forEach(function(di) {
+      var dayName = DAYS[di];
+      var isToday = (dayName === todayAr2);
+      var cellBg = isToday ? 'background:#F5F0FF;' : '';
+      if (di === 4 && p > FRIDAY_MAX_PERIODS) {
+        html += '<td style="'+cellBg+'"><div class="slot" style="background:#f1f5f9;color:#94a3b8;font-size:.75rem;text-align:center;border:1px dashed #cbd5e1;">انتهى اليوم</div></td>';
         return;
       }
-      var s = byDP[d + '_' + p];
+      var s = byDP[di + '_' + p];
       if (s) {
         var isVacant = s.teacher_name === 'شاغر';
         var slotClass = colorClass(s.subject || '') + (isVacant ? ' vacant' : '');
         var dataAttrs = ' data-sid="" data-subj="' + (s.subject||'') + '" data-cls="' + (s.class_name||'') + '" data-day="' + (s.day||'') + '" data-period="' + p + '"';
-        html += '<td><div class="slot ' + slotClass + '"' + (isVacant ? dataAttrs + ' onclick="openReplaceModal(this)"' : '') + '>' +
+        var isNow = isToday && isCurP;
+        html += '<td style="'+cellBg+'"><div class="slot ' + slotClass + '"' + (isVacant ? dataAttrs + ' onclick="openReplaceModal(this)"' : '') + ' style="'+(isNow?'box-shadow:0 0 0 2px #6C3DD6;animation:pulse 2s infinite':'')+'">' +
           '<div class="slot-subj">' + (isVacant ? '⚠️ ' : '') + (s.subject || '') + '</div>' +
           (showClass
             ? '<div class="slot-teacher">' + (s.class_name || '') + '</div>'
             : '<div class="slot-room">' + (isVacant ? 'منصب شاغر' : (s.teacher_name || '')) + '</div>') +
         '</div></td>';
       } else {
-        html += '<td><div class="slot empty">—</div></td>';
+        html += '<td style="'+cellBg+'"><div class="slot empty">—</div></td>';
       }
     });
     html += '</tr>';

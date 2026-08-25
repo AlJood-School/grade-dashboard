@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>طباعة الجدول — EduOS</title>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet"/>
-<script src="/apps/platform-autologout.js">
+<script src="/apps/platform-autologout.js"></script>
+<script src="/apps/platform-config.js"></script>
+<script>
 function getYTFilter() {
   var sel = document.getElementById('selYearTerm');
   if (!sel || sel.value === 'active' || !sel.value) return 'is_active=eq.true';
@@ -13,12 +15,11 @@ function getYTFilter() {
   if (parts.length === 2) return 'academic_year=eq.' + encodeURIComponent(parts[0]) + '&term=eq.' + parts[1];
   return 'is_active=eq.true';
 }
-
 async function loadYearTerms(reload) {
   try {
-    var SB = (window.EduOS && window.EduOS.SB_URL) || 'https://xdkiktwuuwghvzcukvew.supabase.co';
+    var SB = (window.EduOS && window.EduOS.SB_URL) || '';
     var KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
-    var r = await fetch(SB + '/rest/v1/schedules?' + getYTFilter() + '&select=academic_year,term,is_active&order=academic_year.desc,term.desc&limit=500', {headers:{'apikey':KEY,'Authorization':'Bearer '+KEY}});
+    var r = await fetch(SB + '/rest/v1/schedules?is_active=eq.true&select=academic_year,term,is_active&order=academic_year.desc,term.desc&limit=500', {headers:{'apikey':KEY,'Authorization':'Bearer '+KEY}});
     var rows = r.ok ? await r.json() : [];
     var seen = {}, opts = [];
     rows.forEach(function(row) {
@@ -34,12 +35,16 @@ async function loadYearTerms(reload) {
       opt.textContent = 'الفصل ' + o.term + ' — ' + o.academic_year + (o.is_active ? ' ✓ ساري' : '');
       sel.appendChild(opt);
     });
-    if (reload) generate();
+    if (reload) loadAndRender();
   } catch(e) {}
 }
-
+function goHomePortal() {
+  var sess = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+  var role = sess.role_key || '';
+  var map = {'principal':'../eduos-principal/','vice_principal':'../eduos-vice-principal/','teacher':'../eduos-teacher/','admin':'../eduos-admin/','specialist':'../eduos-specialist/','nurse':'../eduos-nurse/','security':'../eduos-security/','technician':'../eduos-technician/','secretary':'../eduos-secretary/','coach':'../eduos-coach/'};
+  window.location.href = map[role] || '../eduos-hub/';
+}
 </script>
-<script src="/apps/platform-config.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Tajawal',Arial,sans-serif;background:#F0F4F8;color:#1e293b;min-height:100vh;direction:rtl}
@@ -102,11 +107,19 @@ td{padding:8px 6px;border:1px solid var(--border);text-align:center;vertical-ali
 }
 @media print{
   .hdr,.controls,.toast{display:none!important}
-  body{background:#fff}
+  body{background:#fff;font-size:10pt}
   .main{padding:0;max-width:100%}
-  .print-sheet{box-shadow:none;border:none;padding:10px}
-  table{font-size:.7rem}
-  .tbl-wrap{page-break-inside:avoid}
+  .print-sheet{box-shadow:none;border:none;padding:8px}
+  table{font-size:8pt;width:100%}
+  th{font-size:8pt;padding:6px 4px}
+  td{font-size:7.5pt;padding:5px 3px}
+  .subject-pill{font-size:7pt;padding:3px 5px}
+  .teacher-lbl{font-size:6pt}
+  .tbl-wrap{page-break-inside:avoid;margin-bottom:18pt}
+  .tbl-title{page-break-after:avoid;font-size:9pt}
+  .print-header{page-break-after:avoid}
+  .print-footer{position:fixed;bottom:0;left:0;right:0;font-size:7pt;border-top:1px solid #ccc;padding:4pt;text-align:center;background:#fff}
+  @page{margin:12mm 10mm 20mm;size:A4 landscape}
 }
 </style>
 </head>
@@ -205,6 +218,26 @@ td{padding:8px 6px;border:1px solid var(--border);text-align:center;vertical-ali
 
   function hdrs() { return {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}; }
 
+  // ─── مساعد: استخراج رقم الصف من تسمية الفصل ─────────────────────────
+  function gradeNumFrom(lbl) {
+    if (!lbl) return 5;
+    if ((lbl+'').toUpperCase().indexOf('KG') >= 0) return 0;
+    var m = (lbl+'').match(/\d+/); return m ? parseInt(m[0]) : 5;
+  }
+
+  // ─── مساعد: حساب وقت الحصة (بدء/نهاية) ─────────────────────────────
+  // الجدول: G1-G8 يبدأ 7:15 | KG يبدأ 7:30 | حصة 45 دقيقة | استراحة 20د بعد ح2
+  var _gradeCtx = 5; // يُحدَّث قبل كل بناء جدول
+  function getPeriodTime(pNum) {
+    var g = _gradeCtx;
+    var startMin = (g === 0) ? 7*60+30 : 7*60+15;
+    var elapsed = (pNum - 1) * 45;
+    if (pNum > 2) elapsed += 20; // استراحة بعد ح2
+    var s = startMin + elapsed, e = s + 45;
+    function fmt(m){ var h=Math.floor(m/60),mn=m%60; return h+':'+(mn<10?'0':'')+mn; }
+    return fmt(s) + ' – ' + fmt(e);
+  }
+
   function showToast(msg) {
     var el = document.getElementById('toast');
     el.textContent = msg;
@@ -219,8 +252,14 @@ td{padding:8px 6px;border:1px solid var(--border);text-align:center;vertical-ali
 
   function buildTableHTML(rows, label) {
     if (!rows || rows.length === 0) return '<div class="state-box"><span class="state-icon">📭</span><div class="state-title">لا جدول لـ ' + label + '</div></div>';
+
+    // تحديد رقم الصف لحساب الأوقات
+    _gradeCtx = gradeNumFrom(label);
+    var FRIDAY_MAX = 4; // الجمعة: 4 حصص كحد أقصى لجميع المراحل
+
     var matrix = {};
     var maxP = 0;
+    var fridayActualMax = 0;
     rows.forEach(function(r) {
       var p = parseInt(r.period);
       var d = r.day;
@@ -228,18 +267,32 @@ td{padding:8px 6px;border:1px solid var(--border);text-align:center;vertical-ali
       if (!matrix[p]) matrix[p] = {};
       matrix[p][d] = {subj: r.subject || '', teacher: r.teacher_name || '', cls: r.class_name || ''};
       if (p > maxP) maxP = p;
+      if (d === 'الجمعة' && p > fridayActualMax) fridayActualMax = p;
     });
     if (!maxP) return '<div class="state-box"><span class="state-icon">📭</span><div class="state-title">لا جدول مسجّل</div></div>';
 
-    var html = '<table><thead><tr><th>الحصة</th>';
+    var html = '<table><thead><tr><th style="min-width:90px">الحصة<br><span style="font-weight:400;font-size:.65rem;opacity:.75">الوقت</span></th>';
     DAYS.forEach(function(d,i) { html += '<th>' + d + '<br><span style="font-size:.65rem;opacity:.8">' + DAYS_EN[i] + '</span></th>'; });
     html += '</tr></thead><tbody>';
+
     for (var p = 1; p <= maxP; p++) {
-      html += '<tr><td class="period-cell"><span class="period-num">' + p + '</span></td>';
-      DAYS.forEach(function(d) {
+      // استراحة بعد الحصة الثانية
+      if (p === 3) {
+        html += '<tr style="background:#FFFBEB"><td colspan="6" style="text-align:center;padding:5px;font-size:.72rem;color:#92400E;font-weight:700">☕ استراحة — 20 دقيقة</td></tr>';
+      }
+
+      var timeStr = getPeriodTime(p);
+      html += '<tr><td class="period-cell"><span class="period-num">' + p + '</span><span style="display:block;font-size:.62rem;color:#6B7280;margin-top:2px;direction:ltr">' + timeStr + '</span></td>';
+
+      DAYS.forEach(function(d, di) {
+        // الجمعة: إذا تجاوزنا الحد الأقصى → "انتهى اليوم"
+        if (d === 'الجمعة' && p > FRIDAY_MAX) {
+          html += '<td style="background:#F8FAFC;border:1px solid #E2E8F0"><span style="display:block;text-align:center;padding:10px 4px;font-size:.7rem;color:#CBD5E1">انتهى اليوم</span></td>';
+          return;
+        }
         var cell = matrix[p] && matrix[p][d];
         if (cell && cell.subj) {
-          var isVacant = (cell.teacher === 'شاغر');
+          var isVacant = (cell.teacher === 'شاغر' || (cell.teacher || '').indexOf('شاغر') >= 0);
           if (isVacant) {
             html += '<td style="background:#FFF3E0"><span class="vacant-pill">⚠️ ' + cell.subj + '</span>';
             html += '<span class="vacant-lbl">منصب شاغر</span></td>';
@@ -264,6 +317,7 @@ td{padding:8px 6px;border:1px solid var(--border);text-align:center;vertical-ali
   }
 
   function renderSingle(rows, label) {
+    _gradeCtx = gradeNumFrom(label); // تحديث السياق قبل البناء
     document.getElementById('timetableContainer').innerHTML =
       '<div class="tbl-title">🏫 ' + label + '</div>' +
       '<div class="tbl-wrap">' + buildTableHTML(rows, label) + '</div>';
@@ -284,12 +338,21 @@ td{padding:8px 6px;border:1px solid var(--border);text-align:center;vertical-ali
   }
 
   function updateMeta(label) {
-    var school = (window.EduOS && window.EduOS.SCHOOL_NAME) || '';
-    document.getElementById('printSchool').textContent = school;
+    var school = (window.EduOS && window.EduOS.SCHOOL_NAME) || 'روضة ومدرسة الجود';
+    var ytSel = document.getElementById('selYearTerm');
+    var ytText = (ytSel && ytSel.selectedOptions && ytSel.selectedOptions[0])
+      ? ytSel.selectedOptions[0].textContent
+      : 'الجدول الساري';
+
+    document.getElementById('printLogo').innerHTML =
+      '<span style="font-size:1.3rem">🎓</span> EduOS';
+    document.getElementById('printSchool').innerHTML =
+      '<strong style="font-size:1.15rem">' + school + '</strong>';
     document.getElementById('printMeta').innerHTML =
       '<span>📋 ' + label + '</span>' +
-      (school ? '<span>🏫 ' + school + '</span>' : '') +
-      '<span>📅 ' + new Date().toLocaleDateString('ar-AE') + '</span>';
+      '<span>📅 ' + ytText + '</span>' +
+      '<span>🗓️ ' + new Date().toLocaleDateString('ar-AE', {year:'numeric',month:'long',day:'numeric'}) + '</span>' +
+      '<span style="font-size:.7rem;color:#94A3B8">NAFAS FOR ARTIFICIAL INTELLIGENCE · CN-6573712</span>';
   }
 
   function loadAndRender() {
@@ -348,13 +411,30 @@ td{padding:8px 6px;border:1px solid var(--border);text-align:center;vertical-ali
 
     var url;
     if (mode === 'class') {
-      url = SB_URL + '/rest/v1/schedules?select=class_name&order=class_name';
-      fetch(url, {headers: hdrs()}).then(function(r){return r.json();}).then(function(rows){
+      // ✅ RPC — يتجاوز حد 1000 صف ويُرجع class_name مميزة مباشرة
+      fetch(SB_URL + '/rest/v1/rpc/get_active_class_list', {
+        method: 'POST',
+        headers: Object.assign({}, hdrs(), {'Content-Type':'application/json'}),
+        body: '{}'
+      }).then(function(r){return r.json();}).then(function(rows){
         if (!Array.isArray(rows)) return;
         var seen = {}; var list = [];
-        rows.forEach(function(r){ var c = (r.class_name||'').trim(); if (c && !seen[c]){seen[c]=true;list.push(c);} });
+        rows.forEach(function(r){
+          var c = (typeof r === 'string') ? r : ((r.class_name||r.get_active_class_list||'')+'').trim();
+          if (c && !seen[c]){seen[c]=true;list.push(c);}
+        });
         list.sort(function(a,b){ var an=parseInt(a)||999,bn=parseInt(b)||999; if(an!==bn)return an-bn; return a.localeCompare(b); });
         list.forEach(function(c){ var o = document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o); });
+      }).catch(function(){
+        // fallback to direct query
+        fetch(SB_URL + '/rest/v1/schedules?select=class_name&is_active=eq.true&limit=2000', {headers:hdrs()})
+          .then(function(r){return r.json();}).then(function(rows){
+            if (!Array.isArray(rows)) return;
+            var seen = {}; var list = [];
+            rows.forEach(function(r){ var c = (r.class_name||'').trim(); if(c&&!seen[c]){seen[c]=true;list.push(c);} });
+            list.sort(function(a,b){ var an=parseInt(a)||999,bn=parseInt(b)||999; if(an!==bn)return an-bn; return a.localeCompare(b); });
+            list.forEach(function(c){ var o=document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o); });
+          });
       });
     } else if (mode === 'teacher') {
       url = SB_URL + '/rest/v1/schedules?select=teacher_name&order=teacher_name';
@@ -398,11 +478,27 @@ td{padding:8px 6px;border:1px solid var(--border);text-align:center;vertical-ali
     setTimeout(function(){ window.print(); }, 400);
   });
 
-  // INIT — set school name
-  var school = (window.EduOS && window.EduOS.SCHOOL_NAME) || '';
-  document.getElementById('printLogo').textContent = '🎓 EduOS' + (school ? ' — ' + school : '');
+  // INIT — set school name + check URL param for class
+  var school = (window.EduOS && window.EduOS.SCHOOL_NAME) || 'روضة ومدرسة الجود';
+  document.getElementById('printLogo').innerHTML = '🎓&nbsp;EduOS';
   document.getElementById('printSchool').textContent = school;
-  populateFilter('class');
+  document.getElementById('printMeta').innerHTML =
+    '<span>📅 ' + new Date().toLocaleDateString('ar-AE',{year:'numeric',month:'long',day:'numeric'}) + '</span>' +
+    '<span style="font-size:.7rem;color:#94A3B8">NAFAS FOR ARTIFICIAL INTELLIGENCE · CN-6573712</span>';
+
+  // إذا جاء class= من URL → اعرضه مباشرة
+  var urlParams = new URLSearchParams(window.location.search);
+  var urlClass = urlParams.get('class');
+  if (urlClass) {
+    populateFilter('class');
+    setTimeout(function() {
+      var sel = document.getElementById('filterSelect');
+      if (sel) { sel.value = urlClass; loadAndRender(); }
+    }, 800);
+  } else {
+    populateFilter('class');
+  }
+  loadYearTerms(false);
 })();
 </script>
 </body>
