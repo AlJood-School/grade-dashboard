@@ -474,8 +474,28 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
 
   <!-- STEP 3: المعلمون -->
   <div class="sp" id="sp3">
+
+    <!-- إعدادات المعلمين — Teacher Workload Settings -->
+    <div class="card" style="margin-bottom:18px">
+      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <span>&#x1F4CB; إعدادات المعلمين — Teacher Workload Settings</span>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:13px;color:#6B7280;font-weight:600">تصفية:</span>
+          <button class="btn btn-sm btn-primary" id="twf-all" onclick="filterTeacherWorkload('all',this)">الكل</button>
+          <button class="btn btn-sm btn-secondary" id="twf-kg" onclick="filterTeacherWorkload('KG',this)">روضة</button>
+          <button class="btn btn-sm btn-secondary" id="twf-g1" onclick="filterTeacherWorkload('G1',this)">حلقة أولى</button>
+          <button class="btn btn-sm btn-secondary" id="twf-g5" onclick="filterTeacherWorkload('G5',this)">حلقة ثانية</button>
+          <button class="btn btn-sm btn-secondary" onclick="loadTeacherWorkload()">&#x1F504;</button>
+        </div>
+      </div>
+      <div id="teacherWorkloadTable" style="overflow-x:auto">
+        <div style="padding:20px;text-align:center;color:#9CA3AF">جارٍ التحميل...</div>
+      </div>
+    </div>
+
+    <!-- تعيين المعلمين -->
     <div class="card">
-      <div class="card-title">👩‍🏫 تعيين المعلمون — Assign Teachers</div>
+      <div class="card-title">&#x1F469;&#x200D;&#x1F3EB; تعيين المعلمون — Assign Teachers</div>
       <div id="assignAlert"></div>
       <div class="ag" id="assignGrid"></div>
     </div>
@@ -2373,6 +2393,7 @@ function goToStep(n) {
   if (n === 3) {
     if (STATE.subjects.filter(function(s){return s.name.trim();}).length === 0) { showToast('\u0623\u0636\u0641 \u0645\u0627\u062F\u0629 \u0648\u0627\u062D\u062F\u0629 \u0639\u0644\u0649 \u0627\u0644\u0623\u0642\u0644','err'); return; }
     loadDBAssignmentsThenRender();
+    loadTeacherWorkload();
   }
 
   STATE.step = n;
@@ -2385,6 +2406,87 @@ function goToStep(n) {
     else if (sn < n) s.classList.add('done');
   });
   window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* ── Teacher Workload Table ── */
+var _twAllData = [];
+var _twFilter = 'all';
+async function loadTeacherWorkload() {
+  var el = document.getElementById('teacherWorkloadTable');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:16px;text-align:center;color:#9CA3AF">جارٍ التحميل...</div>';
+  var url = (window.EduOS && window.EduOS.SB_URL) || '';
+  var key = (window.EduOS && window.EduOS.SB_KEY) || '';
+  if (!url) { el.innerHTML = '<div style="padding:16px;color:#ef4444">لا يوجد اتصال بقاعدة البيانات</div>'; return; }
+  try {
+    var r1 = await fetch(url+'/rest/v1/staff_profiles?select=staff_db_id,name_ar,subject,role_key,contract_type&role_key=in.(teacher,sub_teacher)&is_active=eq.true&order=name_ar&limit=300', {headers:{apikey:key,'Authorization':'Bearer '+key}});
+    var staff = await r1.json();
+    var r2 = await fetch(url+'/rest/v1/teacher_assignments?select=staff_db_id,class_name&limit=2000', {headers:{apikey:key,'Authorization':'Bearer '+key}});
+    var assigns = await r2.json();
+    var periodCount = {};
+    (Array.isArray(assigns)?assigns:[]).forEach(function(a){ periodCount[a.staff_db_id] = (periodCount[a.staff_db_id]||0)+1; });
+    var alsoFromState = {};
+    if (STATE && STATE.classAssignments) {
+      Object.keys(STATE.classAssignments).forEach(function(cls) {
+        Object.keys(STATE.classAssignments[cls]).forEach(function(subj) {
+          var tid = STATE.classAssignments[cls][subj];
+          if (tid) alsoFromState[tid] = (alsoFromState[tid]||0)+1;
+        });
+      });
+    }
+    _twAllData = (Array.isArray(staff)?staff:[]).map(function(s) {
+      var weeklyMax = (s.contract_type === 'وافد' || s.contract_type === 'وافدة') ? 30 : 24;
+      var assigned = (periodCount[s.staff_db_id]||0) + (alsoFromState[s.staff_db_id]||0);
+      return { id: s.staff_db_id, name: s.name_ar||'—', subject: s.subject||'—', contract: s.contract_type||'مواطنة', weeklyMax: weeklyMax, assigned: assigned, role: s.role_key||'teacher' };
+    });
+    renderTeacherWorkloadTable();
+  } catch(e) {
+    el.innerHTML = '<div style="padding:16px;color:#ef4444">خطأ في التحميل: '+e.message+'</div>';
+  }
+}
+function filterTeacherWorkload(filter, btn) {
+  _twFilter = filter;
+  document.querySelectorAll('#sp3 button[id^="twf-"]').forEach(function(b){ b.className='btn btn-sm btn-secondary'; });
+  if (btn) btn.className = 'btn btn-sm btn-primary';
+  renderTeacherWorkloadTable();
+}
+function renderTeacherWorkloadTable() {
+  var el = document.getElementById('teacherWorkloadTable');
+  if (!el) return;
+  var data = _twAllData;
+  if (_twFilter === 'KG') {
+    data = data.filter(function(t){ return (t.subject||'').includes('روض') || (t.subject||'').includes('KG'); });
+  } else if (_twFilter === 'G1') {
+    data = data.filter(function(t){ var subj=(t.subject||'').toLowerCase(); return !subj.includes('روض') && !subj.includes('kg') && !subj.includes('ثان'); });
+  } else if (_twFilter === 'G5') {
+    data = data.filter(function(t){ var subj=(t.subject||'').toLowerCase(); return subj.includes('ثان') || subj.includes('secondary') || subj.includes('g5') || subj.includes('g6') || subj.includes('g7') || subj.includes('g8'); });
+  }
+  if (!data.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:#9CA3AF">لا توجد بيانات لهذا الفلتر</div>'; return; }
+  var html = '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+    '<thead style="background:linear-gradient(135deg,#6C3DD6,#22D3EE)"><tr>' +
+    '<th style="padding:10px 12px;color:#fff;font-weight:800;text-align:right;white-space:nowrap">الاسم</th>' +
+    '<th style="padding:10px 12px;color:#fff;font-weight:800;text-align:center;white-space:nowrap">المادة</th>' +
+    '<th style="padding:10px 12px;color:#fff;font-weight:800;text-align:center;white-space:nowrap">نوع التوظيف</th>' +
+    '<th style="padding:10px 12px;color:#fff;font-weight:800;text-align:center;white-space:nowrap">الحد الأسبوعي</th>' +
+    '<th style="padding:10px 12px;color:#fff;font-weight:800;text-align:center;white-space:nowrap">الحصص المعيَّنة</th>' +
+    '<th style="padding:10px 12px;color:#fff;font-weight:800;text-align:center;white-space:nowrap">الحالة</th>' +
+    '</tr></thead><tbody>';
+  data.forEach(function(t, i) {
+    var pct = t.weeklyMax > 0 ? Math.round(t.assigned/t.weeklyMax*100) : 0;
+    var statusColor = pct > 100 ? '#BE123C' : (pct >= 80 ? '#D97706' : '#059669');
+    var statusLabel = pct > 100 ? 'تجاوز' : (pct >= 80 ? 'شبه مكتمل' : 'متاح');
+    var bg = i % 2 === 0 ? '#fff' : '#F9FAFB';
+    html += '<tr style="background:'+bg+'">' +
+      '<td style="padding:9px 12px;font-weight:700;color:#1E293B">'+t.name+'</td>' +
+      '<td style="padding:9px 12px;text-align:center;color:#475569">'+t.subject+'</td>' +
+      '<td style="padding:9px 12px;text-align:center;color:#475569">'+t.contract+'</td>' +
+      '<td style="padding:9px 12px;text-align:center;font-weight:800">'+t.weeklyMax+' ح/أسبوع</td>' +
+      '<td style="padding:9px 12px;text-align:center;font-weight:800;color:'+statusColor+'">'+t.assigned+' / '+t.weeklyMax+'</td>' +
+      '<td style="padding:9px 12px;text-align:center"><span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:800;background:'+(pct>100?'#FFF1F2':pct>=80?'#FEF3C7':'#F0FDF4')+';color:'+statusColor+'">'+statusLabel+'</span></td>' +
+      '</tr>';
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
 }
 
 /* ── Init ── */
