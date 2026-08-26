@@ -568,6 +568,9 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
 var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
 var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
 
+/* ── تعريفات مجموعات المواد — تُجلب من DB فقط، لا hard-coding ── */
+var _subjectGroupDefs = [];
+
 var STATE = {
   step: 1,
   classes: [],
@@ -779,6 +782,55 @@ async function loadSoftRulesFromDB() {
     var data = await res.json();
     STATE.softRules = data || [];
   } catch(e) { STATE.softRules = []; }
+}
+
+/* ── تعريفات مجموعات المواد من DB (لا hard-coding) ── */
+async function fetchSubjectGroups() {
+  try {
+    var res = await sbFetch('subject_group_definitions?is_active=eq.true&order=id&select=*');
+    if (res.ok) {
+      _subjectGroupDefs = await res.json();
+    }
+  } catch(e) { console.warn('subject_group_definitions fetch failed:', e); }
+}
+
+/* تحويل اسم الفصل (مثل "1A"، "KG1A") إلى كود الصف ("G1"، "KG1") */
+function gradeCodeFromClass(cls) {
+  if (!cls) return '';
+  var kg = String(cls).match(/^(KG\d+)/i);
+  if (kg) return kg[1].toUpperCase();
+  var gn = String(cls).match(/^(\d+)/);
+  if (gn) return 'G' + gn[1];
+  return '';
+}
+
+/* هل مادة معينة تنتمي لمجال في هذا الصف؟ إرجاع تعريف المجموعة أو null */
+function getSubjectGroupForGrade(gradeCode, subjectName) {
+  if (!_subjectGroupDefs || !_subjectGroupDefs.length) return null;
+  return _subjectGroupDefs.find(function(g) {
+    return g.applies_to_grades && g.applies_to_grades.indexOf(gradeCode) > -1
+      && g.subjects && g.subjects.indexOf(subjectName) > -1;
+  }) || null;
+}
+
+/* عند تعيين معلمة على مادة تنتمي لمجال في G1/G2 → تُعيَّن تلقائياً على باقي مواد المجال */
+function autoAssignDomainSubjects(teacherId, teacherNameAr, baseSubject, cls) {
+  var grade = gradeCodeFromClass(cls);
+  var grp = getSubjectGroupForGrade(grade, baseSubject);
+  if (!grp || grp.teaching_model !== 'domain') return; // ليس نظام مجال
+  grp.subjects.forEach(function(subj) {
+    if (subj === baseSubject) return; // المادة الأصلية مُعيَّنة مسبقاً
+    if (!STATE.classAssignments[subj]) STATE.classAssignments[subj] = {};
+    // عيّن فقط إذا لم تكن مُعيَّنة بعد
+    if (!STATE.classAssignments[subj][cls] || STATE.classAssignments[subj][cls].status !== 'assigned') {
+      STATE.classAssignments[subj][cls] = {
+        teacherId: teacherId,
+        teacherNameAr: teacherNameAr,
+        status: 'assigned',
+        autoDomain: true // مُعيَّنة تلقائياً بسبب المجال
+      };
+    }
+  });
 }
 
 /* ── Load subjects from curriculum_period_rules ── */
@@ -1190,6 +1242,24 @@ function renderAssignMatrix() {
     badge.className = 'cam-badge';
     badge.style.background = bg; badge.style.color = tc;
     badge.textContent = s.name;
+    /* بادج مجال — يظهر إذا كانت المادة ضمن مجموعة في أي صف مختار */
+    (function() {
+      var grades = (STATE.selectedClasses || []).map(gradeCodeFromClass);
+      var grp = null;
+      for (var gi = 0; gi < grades.length; gi++) {
+        grp = getSubjectGroupForGrade(grades[gi], s.name);
+        if (grp && grp.teaching_model === 'domain') break;
+        else grp = null;
+      }
+      if (grp) {
+        var domBadge = document.createElement('span');
+        domBadge.className = 'cam-domain-badge';
+        domBadge.title = grp.group_name_ar + ' — ' + grp.applies_to_grades.join('، ');
+        domBadge.textContent = grp.group_name_ar;
+        domBadge.style.cssText = 'font-size:10px;padding:2px 7px;border-radius:10px;background:#EDE9FE;color:#5B21B6;font-weight:700;margin-right:6px;';
+        hdr.appendChild(domBadge);
+      }
+    })();
     var ppwLbl = document.createElement('span');
     ppwLbl.className = 'cam-ppw';
     ppwLbl.textContent = (s.ppw || 2) + ' \u062d\u0635\u0629/\u0623\u0633\u0628\u0648\u0639';
@@ -1318,7 +1388,10 @@ function renderAssignMatrix() {
           STATE.classAssignments[subj][cls] = { status: 'vacant', teacherId: null, teacherNameAr: '\u0634\u0627\u063a\u0631' };
         } else {
           var opt = this.options[this.selectedIndex];
-          STATE.classAssignments[subj][cls] = { status: 'assigned', teacherId: this.value, teacherNameAr: opt.dataset.nameAr || this.value };
+          var tId = this.value, tName = opt.dataset.nameAr || this.value;
+          STATE.classAssignments[subj][cls] = { status: 'assigned', teacherId: tId, teacherNameAr: tName };
+          /* تعيين تلقائي لباقي مواد المجال (G1-G2 من DB) */
+          autoAssignDomainSubjects(tId, tName, subj, cls);
         }
         setCamRowStatus(subj, cls);
       });
@@ -2630,6 +2703,7 @@ document.addEventListener('DOMContentLoaded', function() {
   loadTeachers();
   loadTeacherPreferences();
   loadSoftRulesFromDB();
+  fetchSubjectGroups(); /* تعريفات المجال من DB — لا hard-coding */
   checkSavedStageConfig();
   checkExistingSchedule();
 
