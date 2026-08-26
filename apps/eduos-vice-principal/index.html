@@ -1538,17 +1538,19 @@ async function refreshAssignList() {
   var el = document.getElementById('assignListWrap');
   if (!el) return;
   el.innerHTML = '<div style="color:var(--text3);padding:24px;text-align:center">جاري التحميل...</div>';
+  /* فلتر افتراضي عند أول تحميل */
+  var stageSel = document.getElementById('assignGridStage');
+  if (!stageSel.value) stageSel.value = '1-4';
   var ay = document.getElementById('assignYearSel').value || '2026-2027';
-  var rows = await apiGet('teacher_assignments?is_active=eq.true&academic_year=eq.' + ay + '&order=subject,class_name&select=id,staff_db_id,teacher_name_ar,subject,class_name,academic_year');
+  var rows = await apiGet('teacher_assignments?is_active=eq.true&academic_year=eq.' + ay + '&order=class_name,subject&select=id,staff_db_id,teacher_name_ar,subject,class_name,academic_year');
   if (!Array.isArray(rows) || !rows.length) { el.innerHTML = '<div style="color:var(--text3);padding:40px;text-align:center">لا بيانات</div>'; return; }
   _assignAllRows = rows;
+  /* إعادة بناء قائمة المواد في كل مرة */
   var subjectSel = document.getElementById('assignGridSubject');
-  var existingVals = Array.from(subjectSel.options).map(function(o){return o.value;}).filter(function(v){return v;});
+  while (subjectSel.options.length > 1) subjectSel.remove(1);
   var allSubjects = rows.map(function(r){return r.subject;}).filter(Boolean).filter(function(s,i,a){return a.indexOf(s)===i;}).sort();
   allSubjects.forEach(function(s) {
-    if (existingVals.indexOf(s) === -1) {
-      var opt = document.createElement('option'); opt.value = s; opt.textContent = s; subjectSel.appendChild(opt);
-    }
+    var opt = document.createElement('option'); opt.value = s; opt.textContent = s; subjectSel.appendChild(opt);
   });
   renderAssignGrid();
 }
@@ -1557,73 +1559,129 @@ function renderAssignGrid() {
   var rows = _assignAllRows;
   if (!rows || !rows.length) return;
   var stageFilt = document.getElementById('assignGridStage').value;
-  var subjFilt = document.getElementById('assignGridSubject').value;
+  var subjFilt  = document.getElementById('assignGridSubject').value;
+
+  /* ---- تحديد رقم الصف ---- */
+  function gradeNum(cls) {
+    if (cls.startsWith('KG')) return cls === 'KG1' ? 0 : 0.5;
+    var m = cls.match(/^(\d+)/); return m ? parseInt(m[1]) : 99;
+  }
+
+  /* ---- فلتر المرحلة ---- */
   function stageMatch(cls) {
     if (!stageFilt) return true;
     if (stageFilt === 'KG') return cls.startsWith('KG');
-    var m = cls.match(/^(\d+)/);
-    if (!m) return false;
-    var g = parseInt(m[1]);
+    var g = gradeNum(cls);
     if (stageFilt === '1-4') return g >= 1 && g <= 4;
     if (stageFilt === '5-8') return g >= 5 && g <= 8;
     return true;
   }
-  var map = {};
-  rows.forEach(function(r) { map[r.class_name + '|||' + r.subject] = r; });
+
+  /* ---- المجموعة الفرعية (لمنع خلط مواد المراحل) ---- */
+  function subGroup(cls) {
+    if (cls.startsWith('KG')) return 'KG';
+    var g = gradeNum(cls);
+    if (g <= 2) return 'G1-G2';
+    if (g <= 4) return 'G3-G4';
+    if (g <= 6) return 'G5-G6';
+    return 'G7-G8';
+  }
+
+  var subGroupOrder  = ['KG','G1-G2','G3-G4','G5-G6','G7-G8'];
+  var subGroupLabels = {'KG':'الروضة','G1-G2':'الصف الأول والثاني','G3-G4':'الصف الثالث والرابع','G5-G6':'الصف الخامس والسادس','G7-G8':'الصف السابع والثامن'};
+  var subColors = ['#6C3DD6','#0891b2','#16a34a','#d97706','#dc2626','#7c3aed','#0e7490','#059669','#b45309','#be123c','#1d4ed8','#9333ea'];
+
+  /* ---- تصفية ---- */
   var filtRows = rows.filter(function(r) { return stageMatch(r.class_name) && (!subjFilt || r.subject === subjFilt); });
-  var classes = filtRows.map(function(r){return r.class_name;}).filter(function(v,i,a){return a.indexOf(v)===i;}).sort(function(a,b){return sortClassKey(a)-sortClassKey(b);});
-  var subjects = subjFilt ? [subjFilt] : filtRows.map(function(r){return r.subject;}).filter(function(v,i,a){return v&&a.indexOf(v)===i;}).sort();
+  if (!filtRows.length) {
+    el.innerHTML = '<div style="color:var(--text3);padding:40px;text-align:center;font-family:Tajawal,Arial,sans-serif">لا توجد تعيينات في هذه المرحلة</div>';
+    return;
+  }
+
+  /* ---- تجميع حسب المجموعة الفرعية ---- */
+  var grouped = {};
+  filtRows.forEach(function(r) {
+    var sg = subGroup(r.class_name);
+    if (!grouped[sg]) grouped[sg] = [];
+    grouped[sg].push(r);
+  });
+
+  var totalGaps = 0;
+  var html = '';
+
+  subGroupOrder.forEach(function(sg) {
+    if (!grouped[sg]) return;
+    var sgRows = grouped[sg];
+
+    /* خريطة cls|||subject لهذه المجموعة فقط */
+    var map = {};
+    sgRows.forEach(function(r) { map[r.class_name + '|||' + r.subject] = r; });
+
+    /* شعب ومواد هذه المجموعة فقط — لا تكرار من مجموعة أخرى */
+    var classes  = sgRows.map(function(r){return r.class_name;}).filter(function(v,i,a){return a.indexOf(v)===i;}).sort(function(a,b){return sortClassKey(a)-sortClassKey(b);});
+    var subjects = sgRows.map(function(r){return r.subject;}).filter(function(v,i,a){return v&&a.indexOf(v)===i;}).sort();
+
+    var colorMap = {};
+    subjects.forEach(function(s,i){ colorMap[s] = subColors[i % subColors.length]; });
+
+    /* عنوان المجموعة */
+    html += '<div style="margin-bottom:20px">';
+    html += '<div style="font-weight:700;font-size:13px;color:#6C3DD6;font-family:Tajawal,Arial,sans-serif;margin-bottom:8px;padding:7px 12px;background:#f5f3ff;border-radius:8px;border-right:3px solid #6C3DD6">'+subGroupLabels[sg]+'</div>';
+    html += '<div style="overflow-x:auto">';
+    html += '<table style="border-collapse:collapse;width:100%;font-size:12px">';
+    html += '<thead><tr>';
+    html += '<th style="background:#f1f5f9;border:1px solid #e2e8f0;padding:7px 12px;text-align:center;font-family:Tajawal,Arial,sans-serif;position:sticky;right:0;z-index:2;white-space:nowrap;min-width:60px">الشعبة</th>';
+    subjects.forEach(function(s) {
+      html += '<th style="background:'+colorMap[s]+'18;border:1px solid #e2e8f0;padding:7px 9px;text-align:center;color:'+colorMap[s]+';font-family:Tajawal,Arial,sans-serif;font-size:11px;white-space:nowrap">'+s+'</th>';
+    });
+    html += '</tr></thead><tbody>';
+
+    classes.forEach(function(cls) {
+      html += '<tr>';
+      html += '<td style="background:#f8fafc;border:1px solid #e2e8f0;padding:7px 12px;font-weight:700;text-align:center;font-family:Tajawal,Arial,sans-serif;position:sticky;right:0;z-index:1;white-space:nowrap">'+cls+'</td>';
+      subjects.forEach(function(s) {
+        var key = cls + '|||' + s;
+        if (map[key]) {
+          var r = map[key];
+          var full  = r.teacher_name_ar || r.staff_db_id || '-';
+          var parts = full.split(' ');
+          var short = parts.length >= 2 ? parts[0] + ' ' + parts[parts.length-1] : full;
+          html += '<td style="border:1px solid #e2e8f0;padding:5px 7px;text-align:center;background:'+colorMap[s]+'0d" title="'+full+'">';
+          html += '<div style="font-size:11px;color:#1e293b;font-family:Tajawal,Arial,sans-serif;line-height:1.4">'+short+'</div>';
+          html += '<button data-aid="'+r.id+'" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:10px;padding:0;margin-top:1px" title="حذف">&#x1F5D1;</button>';
+          html += '</td>';
+        } else {
+          totalGaps++;
+          html += '<td style="border:1px solid #e2e8f0;padding:9px 7px;text-align:center;background:#fef9f9;color:#fca5a5;font-size:16px" title="شاغر">—</td>';
+        }
+      });
+      html += '</tr>';
+    });
+
+    html += '</tbody></table></div></div>';
+  });
+
+  /* ملخص المعلمات */
   var teacherCount = {};
   filtRows.forEach(function(r){ var t=r.teacher_name_ar||r.staff_db_id||'-'; teacherCount[t]=(teacherCount[t]||0)+1; });
-  var subColors = ['#6C3DD6','#0891b2','#16a34a','#d97706','#dc2626','#7c3aed','#0e7490','#059669','#b45309','#be123c','#1d4ed8','#9333ea'];
-  var colorMap = {};
-  subjects.forEach(function(s,i){ colorMap[s]=subColors[i%subColors.length]; });
-  var html = '<div style="overflow-x:auto">';
-  html += '<table style="border-collapse:collapse;width:100%;font-size:13px">';
-  html += '<thead><tr>';
-  html += '<th style="background:#f1f5f9;border:1px solid #e2e8f0;padding:8px 14px;text-align:center;font-family:Tajawal,Arial,sans-serif;position:sticky;right:0;z-index:2;white-space:nowrap">الشعبة</th>';
-  subjects.forEach(function(s) {
-    html += '<th style="background:'+colorMap[s]+'1a;border:1px solid #e2e8f0;padding:8px 10px;text-align:center;color:'+colorMap[s]+';font-family:Tajawal,Arial,sans-serif;font-size:12px;white-space:nowrap">'+s+'</th>';
-  });
-  html += '</tr></thead><tbody>';
-  var gaps = 0;
-  classes.forEach(function(cls) {
-    html += '<tr>';
-    html += '<td style="background:#f8fafc;border:1px solid #e2e8f0;padding:8px 14px;font-weight:700;text-align:center;font-family:Tajawal,Arial,sans-serif;position:sticky;right:0;z-index:1;white-space:nowrap">'+cls+'</td>';
-    subjects.forEach(function(s) {
-      var key = cls+'|||'+s;
-      if (map[key]) {
-        var r = map[key];
-        var fullName = r.teacher_name_ar || r.staff_db_id || '-';
-        var parts = fullName.split(' ');
-        var shortName = parts.length >= 2 ? parts[0]+' '+parts[parts.length-1] : fullName;
-        html += '<td style="border:1px solid #e2e8f0;padding:6px 8px;text-align:center;background:'+colorMap[s]+'0d" title="'+fullName+'">';
-        html += '<div style="font-size:12px;color:#1e293b;font-family:Tajawal,Arial,sans-serif;line-height:1.4">'+shortName+'</div>';
-        html += '<button data-aid="'+r.id+'" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:11px;padding:0;margin-top:2px" title="حذف">&#x1F5D1;</button>';
-        html += '</td>';
-      } else {
-        gaps++;
-        html += '<td style="border:1px solid #e2e8f0;padding:10px 8px;text-align:center;background:#fef2f2;color:#fca5a5;font-size:20px" title="غير معين">—</td>';
-      }
-    });
-    html += '</tr>';
-  });
-  html += '</tbody></table></div>';
   var teacherEntries = Object.keys(teacherCount).map(function(k){return[k,teacherCount[k]];}).sort(function(a,b){return b[1]-a[1];});
-  html += '<div style="margin-top:16px;padding:14px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0">';
-  html += '<div style="font-weight:700;font-family:Tajawal,Arial,sans-serif;margin-bottom:10px;font-size:14px">&#x1F4CB; ملخص التعيينات ('+filtRows.length+' تعيين)</div>';
-  html += '<div style="display:flex;flex-wrap:wrap;gap:8px">';
+  html += '<div style="margin-top:8px;padding:12px 14px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0">';
+  html += '<div style="font-weight:700;font-family:Tajawal,Arial,sans-serif;margin-bottom:8px;font-size:13px">&#x1F4CB; ملخص التعيينات — '+filtRows.filter(function(r){return r.teacher_name_ar&&r.staff_db_id;}).length+' معيّن / '+filtRows.length+' إجمالي</div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
   teacherEntries.forEach(function(e) {
-    var parts = e[0].split(' '); var shortT = parts.length>=2?parts[0]+' '+parts[parts.length-1]:e[0];
-    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-family:Tajawal,Arial,sans-serif;font-size:13px" title="'+e[0]+'">';
-    html += '<span style="font-weight:600">'+shortT+'</span> ';
-    html += '<span style="background:#6C3DD6;color:#fff;border-radius:10px;padding:2px 8px;font-size:12px">'+e[1]+'</span>';
+    if (!e[0] || e[0] === '-') return;
+    var parts = e[0].split(' '); var short = parts.length>=2?parts[0]+' '+parts[parts.length-1]:e[0];
+    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:5px 10px;font-family:Tajawal,Arial,sans-serif;font-size:12px" title="'+e[0]+'">';
+    html += '<span style="font-weight:600">'+short+'</span> ';
+    html += '<span style="background:#6C3DD6;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px">'+e[1]+'</span>';
     html += '</div>';
   });
   html += '</div></div>';
-  if (gaps > 0) {
-    html += '<div style="margin-top:10px;padding:10px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;color:#991b1b;font-family:Tajawal,Arial,sans-serif;font-size:13px">&#x26A0;&#xFE0F; '+gaps+' شعبة/مادة بدون معلمة مُعيَّنة</div>';
+
+  if (totalGaps > 0) {
+    html += '<div style="margin-top:8px;padding:9px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;color:#991b1b;font-family:Tajawal,Arial,sans-serif;font-size:12px">&#x26A0;&#xFE0F; '+totalGaps+' خلية شاغرة (بدون معلمة مُعيَّنة)</div>';
   }
+
   el.innerHTML = html;
   el.querySelectorAll('[data-aid]').forEach(function(btn) {
     btn.addEventListener('click', function() { deleteAssignment(this.dataset.aid); });
