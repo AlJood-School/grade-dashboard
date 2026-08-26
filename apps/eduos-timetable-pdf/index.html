@@ -374,10 +374,34 @@ td{padding:8px 6px;border:1px solid var(--border);text-align:center;vertical-ali
         renderSingle(Array.isArray(rows) ? rows : [], val);
       }).catch(function(){renderSingle([], val);});
     } else if (currentMode === 'grade') {
-      url = SB_URL + '/rest/v1/schedules?select=*&grade=eq.' + encodeURIComponent(val) + '&order=class_name,period,day';
-      updateMeta('المرحلة / Grade: ' + val);
+      // val = "stage:KG" | "stage:1-4" | "stage:5-8" | "stage:9-12" | "grade:N"
+      var gradeQuery, metaLabel;
+      if (val === 'stage:KG') {
+        gradeQuery = 'class_name=ilike.KG*';
+        metaLabel  = 'رياض الأطفال | KG';
+      } else if (val === 'stage:1-4') {
+        gradeQuery = 'or=(class_name.like.1*,class_name.like.2*,class_name.like.3*,class_name.like.4*)';
+        metaLabel  = 'الحلقة الأولى (1 → 4)';
+      } else if (val === 'stage:5-8') {
+        gradeQuery = 'or=(class_name.like.5*,class_name.like.6*,class_name.like.7*,class_name.like.8*)';
+        metaLabel  = 'الحلقة الثانية (5 → 8)';
+      } else if (val === 'stage:9-12') {
+        gradeQuery = 'or=(class_name.like.9*,class_name.like.10*,class_name.like.11*,class_name.like.12*)';
+        metaLabel  = 'المرحلة الثانوية (9 → 12)';
+      } else if (val.indexOf('grade:') === 0) {
+        var gn = val.split(':')[1];
+        var gradeAr2 = ['','الأول','الثاني','الثالث','الرابع','الخامس','السادس','السابع','الثامن','التاسع','العاشر','الحادي عشر','الثاني عشر'];
+        gradeQuery = 'class_name=like.' + gn + '*';
+        metaLabel  = 'الصف ' + (gradeAr2[parseInt(gn)] || gn) + ' كاملاً';
+      } else {
+        gradeQuery = 'grade=eq.' + encodeURIComponent(val);
+        metaLabel  = 'المرحلة / Grade: ' + val;
+      }
+      url = SB_URL + '/rest/v1/schedules?select=*&is_active=eq.true&' + gradeQuery + '&order=class_name,period,day&limit=2000';
+      updateMeta(metaLabel);
       fetch(url, {headers: hdrs()}).then(function(r){return r.json();}).then(function(rows){
-        if (!Array.isArray(rows) || rows.length === 0) { renderSingle([], val); return; }
+        if (!Array.isArray(rows) || rows.length === 0) { renderSingle([], metaLabel); return; }
+        // ترتيب الفصول بشكل طبيعي (1A قبل 1B قبل 2A...)
         var groups = {};
         rows.forEach(function(r){ var c = r.class_name || '—'; if (!groups[c]) groups[c] = []; groups[c].push(r); });
         renderMultiple(groups);
@@ -446,13 +470,42 @@ td{padding:8px 6px;border:1px solid var(--border);text-align:center;vertical-ali
         list.forEach(function(t){ var o=document.createElement('option'); o.value=t; o.textContent=t; sel.appendChild(o); });
       });
     } else if (mode === 'grade') {
-      url = SB_URL + '/rest/v1/schedules?select=grade&order=grade';
-      fetch(url, {headers: hdrs()}).then(function(r){return r.json();}).then(function(rows){
+      // جلب كل الفصول النشطة ثم استخراج أرقام الصفوف ذكياً
+      fetch(SB_URL + '/rest/v1/rpc/get_active_class_list', {
+        method: 'POST',
+        headers: Object.assign({}, hdrs(), {'Content-Type':'application/json'}),
+        body: '{}'
+      }).then(function(r){return r.json();}).then(function(rows){
         if (!Array.isArray(rows)) return;
-        var seen = {}; var list = [];
-        rows.forEach(function(r){ var g=(r.grade||'').trim(); if(g&&!seen[g]){seen[g]=true;list.push(g);} });
-        list.sort(function(a,b){ var an=parseInt(a)||999,bn=parseInt(b)||999; if(an!==bn)return an-bn; return a.localeCompare(b); });
-        list.forEach(function(g){ var o=document.createElement('option'); o.value=g; o.textContent='المرحلة / Grade ' + g; sel.appendChild(o); });
+        var hasKG = false; var gradeNums = {};
+        rows.forEach(function(row){
+          var c = (typeof row === 'string') ? row : ((row.class_name||row.get_active_class_list||'')+'').trim();
+          if (!c) return;
+          if (/^KG/i.test(c)) { hasKG = true; }
+          else { var n = parseInt(c); if (!isNaN(n) && n > 0) { if (!gradeNums[n]) gradeNums[n]=[]; gradeNums[n].push(c); } }
+        });
+        var gradeAr = ['','الأول','الثاني','الثالث','الرابع','الخامس','السادس','السابع','الثامن','التاسع','العاشر','الحادي عشر','الثاني عشر'];
+        var nums = Object.keys(gradeNums).map(Number).sort(function(a,b){return a-b;});
+        // مجموعة الحلقات
+        var og1 = document.createElement('optgroup'); og1.label = '── بحسب الحلقة / By Stage ──';
+        if (hasKG) { var o=document.createElement('option'); o.value='stage:KG'; o.textContent='🌱 رياض الأطفال (KG1 + KG2)'; og1.appendChild(o); }
+        var g14 = nums.filter(function(n){return n>=1&&n<=4;});
+        if (g14.length) { var o=document.createElement('option'); o.value='stage:1-4'; o.textContent='📘 الحلقة الأولى — الصف 1 إلى 4'; og1.appendChild(o); }
+        var g58 = nums.filter(function(n){return n>=5&&n<=8;});
+        if (g58.length) { var o=document.createElement('option'); o.value='stage:5-8'; o.textContent='📗 الحلقة الثانية — الصف 5 إلى 8'; og1.appendChild(o); }
+        var g912 = nums.filter(function(n){return n>=9&&n<=12;});
+        if (g912.length) { var o=document.createElement('option'); o.value='stage:9-12'; o.textContent='📙 المرحلة الثانوية — الصف 9 إلى 12'; og1.appendChild(o); }
+        sel.appendChild(og1);
+        // مجموعة الصفوف
+        var og2 = document.createElement('optgroup'); og2.label = '── بحسب الصف كاملاً / By Full Grade ──';
+        nums.forEach(function(n){
+          var sections = (gradeNums[n]||[]).sort(function(a,b){return a.localeCompare(b);});
+          var label = (gradeAr[n]||n) + ' (' + sections.join('، ') + ')';
+          var o = document.createElement('option'); o.value='grade:'+n; o.textContent='الصف '+label; og2.appendChild(o);
+        });
+        sel.appendChild(og2);
+      }).catch(function(){
+        var o=document.createElement('option'); o.value=''; o.textContent='تعذّر التحميل'; sel.appendChild(o);
       });
     }
   }
@@ -483,8 +536,7 @@ td{padding:8px 6px;border:1px solid var(--border);text-align:center;vertical-ali
   document.getElementById('printLogo').innerHTML = '🎓&nbsp;EduOS';
   document.getElementById('printSchool').textContent = school;
   document.getElementById('printMeta').innerHTML =
-    '<span>📅 ' + new Date().toLocaleDateString('ar-AE',{year:'numeric',month:'long',day:'numeric'}) + '</span>' +
-    '<span style="font-size:.7rem;color:#94A3B8">NAFAS FOR ARTIFICIAL INTELLIGENCE · CN-6573712</span>';
+    '<span>📅 ' + new Date().toLocaleDateString('ar-AE',{year:'numeric',month:'long',day:'numeric'}) + '</span>';
 
   // إذا جاء class= من URL → اعرضه مباشرة
   var urlParams = new URLSearchParams(window.location.search);
