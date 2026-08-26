@@ -123,6 +123,9 @@ select:focus,input:focus{outline:none;border-color:var(--primary)}
 /* TOAST */
 .toast{position:fixed;top:80px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;border-radius:10px;padding:12px 24px;font-size:.88rem;font-weight:600;z-index:9999;display:none;box-shadow:0 4px 20px rgba(0,0,0,.3)}
 .toast.show{display:block}
+/* Lang toggle in purple header — force white */
+.hdr .edu-lang-btn{color:#fff!important;border-color:rgba(255,255,255,.65)!important;background:rgba(255,255,255,.12)!important}
+.hdr .edu-lang-btn:hover{background:rgba(255,255,255,.28)!important}
 </style>
 </head>
 <body>
@@ -136,8 +139,17 @@ select:focus,input:focus{outline:none;border-color:var(--primary)}
     </div>
   </div>
   <div class="hdr-meta" id="hdrMeta">جاري التحميل...</div>
-  <div class="hdr-actions">
-    <button class="btn-hdr" onclick="printTimetable()">🖨️ طباعة</button>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div id="hdrUserChip" style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.35);border-radius:22px;padding:5px 14px 5px 5px">
+      <div id="hdrAvatar" style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:#fff">—</div>
+      <div>
+        <div id="hdrUserName" style="font-size:13px;font-weight:700;color:#fff;line-height:1.2">—</div>
+        <div id="hdrUserRole" style="font-size:10px;color:rgba(255,255,255,.8);line-height:1">Timetable</div>
+      </div>
+    </div>
+    <div class="hdr-actions">
+      <button class="btn-hdr" onclick="printTimetable()">🖨️ طباعة</button>
+    </div>
   </div>
 </header>
 
@@ -444,6 +456,17 @@ function goHomePortal() {
 }
 
 async function init() {
+  /* === Header user chip === */
+  var sessInit0 = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+  var hdrName = sessInit0.name_ar || sessInit0.name || sessInit0.full_name || sessInit0.username || '—';
+  var hdrRoleLabel = {principal:'مدير/ة',vice_principal:'نائب/ة المدير',teacher:'معلم/ة',admin:'مدير النظام',secretary:'سكرتارية',specialist:'أخصائي/ة'}[sessInit0.role_key] || (sessInit0.role_key || 'EduOS');
+  var hdrUserNameEl = document.getElementById('hdrUserName');
+  var hdrAvatarEl = document.getElementById('hdrAvatar');
+  var hdrUserRoleEl = document.getElementById('hdrUserRole');
+  if (hdrUserNameEl) hdrUserNameEl.textContent = hdrName;
+  if (hdrAvatarEl) hdrAvatarEl.textContent = hdrName && hdrName !== '—' ? hdrName[0] : '؟';
+  if (hdrUserRoleEl) hdrUserRoleEl.textContent = hdrRoleLabel;
+
   var now = new Date();
   var hdrMeta = document.getElementById('hdrMeta');
   if (hdrMeta) hdrMeta.textContent = DAYS_ALL[now.getDay()] + ' ' + now.toLocaleDateString('ar-AE');
@@ -629,58 +652,34 @@ async function loadWeekTable() {
       })
     : _weekAllClasses;
 
-  // بناء UI الاختيار
+  // بناء UI الاختيار — المرحلة إلزامية أولاً، ثم الفصل
+  var noStage = (selectedGrade === '');
+  var classSel_options = noStage
+    ? '<option value="">— اختر المرحلة أولاً —</option>'
+    : '<option value="">— اختر الفصل —</option>' + filteredClasses.map(function(c){ return '<option value="'+c+'"'+(c===selectedClass?' selected':'')+'>'+c+'</option>'; }).join('');
+
   var uiHtml = '<div style="background:#F8FAFF;border:1px solid #E2E8F0;border-radius:12px;padding:16px 20px;margin-bottom:16px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">' +
     '<div style="display:flex;flex-direction:column;gap:4px">' +
-      '<span style="font-size:.75rem;font-weight:700;color:#64748B">المرحلة | Stage</span>' +
-      '<select id="weekGradeSel" onchange="onWeekGradeChange()" style="padding:8px 14px;border:1.5px solid #D1D5DB;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:.9rem;font-weight:700;min-width:140px">' +
-        '<option value="">كل المراحل</option>' +
+      '<span style="font-size:.75rem;font-weight:700;color:#64748B">1. المرحلة | Stage</span>' +
+      '<select id="weekGradeSel" onchange="onWeekGradeChange()" style="padding:8px 14px;border:1.5px solid '+(noStage?'#6C3DD6':'#D1D5DB')+';border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:.9rem;font-weight:700;min-width:150px">' +
+        '<option value="">— اختر المرحلة —</option>' +
         grades.map(function(g){ return '<option value="'+g+'"'+(g===selectedGrade?' selected':'')+'>'+( g==='KG'?'روضة الأطفال':'الصف '+g)+'</option>'; }).join('') +
       '</select>' +
     '</div>' +
     '<div style="display:flex;flex-direction:column;gap:4px">' +
-      '<span style="font-size:.75rem;font-weight:700;color:#64748B">الفصل | Class</span>' +
-      '<select id="weekClassSel" onchange="showWeekForClass()" style="padding:8px 14px;border:1.5px solid #D1D5DB;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:.9rem;font-weight:700;min-width:120px">' +
-        '<option value="">— اختر —</option>' +
-        filteredClasses.map(function(c){ return '<option value="'+c+'"'+(c===selectedClass?' selected':'')+'>'+c+'</option>'; }).join('') +
+      '<span style="font-size:.75rem;font-weight:700;color:'+(noStage?'#CBD5E1':'#64748B')+'">2. الفصل | Class</span>' +
+      '<select id="weekClassSel" onchange="showWeekForClass()" '+(noStage?'disabled':'')+' style="padding:8px 14px;border:1.5px solid #D1D5DB;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:.9rem;font-weight:700;min-width:130px;opacity:'+(noStage?'.45':'1')+';cursor:'+(noStage?'not-allowed':'pointer')+'">' +
+        classSel_options +
       '</select>' +
     '</div>' +
-    '<button onclick="showWeekForClass()" style="padding:9px 18px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:Tajawal,Arial,sans-serif;font-weight:700;font-size:.88rem">عرض ▶</button>' +
-    '<a href="/apps/eduos-timetable-pdf/?class=' + encodeURIComponent(selectedClass) + '" target="_blank" style="padding:9px 18px;background:#fff;border:1.5px solid #D1D5DB;border-radius:8px;color:#374151;font-family:Tajawal,Arial,sans-serif;font-weight:700;font-size:.88rem;text-decoration:none;display:flex;align-items:center;gap:6px">🖨️ طباعة</a>' +
+    (selectedClass ? '<a href="/apps/eduos-timetable-pdf/?class=' + encodeURIComponent(selectedClass) + '" target="_blank" style="padding:9px 18px;background:#fff;border:1.5px solid #D1D5DB;border-radius:8px;color:#374151;font-family:Tajawal,Arial,sans-serif;font-weight:700;font-size:.88rem;text-decoration:none;display:flex;align-items:center;gap:6px;align-self:flex-end">🖨️ طباعة</a>' : '') +
   '</div>';
 
   if (!selectedClass) {
-    // بطاقات الفصول السريعة — مُجمَّعة بحسب المرحلة
-    var gradeGroups2 = {};
-    filteredClasses.forEach(function(c) {
-      var g = c.match(/^(KG)/i) ? 'KG' : (c.match(/^\d+/) ? c.match(/^\d+/)[0] : '?');
-      if (!gradeGroups2[g]) gradeGroups2[g] = [];
-      gradeGroups2[g].push(c);
-    });
-    var sortedG2 = Object.keys(gradeGroups2).sort(function(a,b){
-      if(a==='KG')return -1;if(b==='KG')return 1;
-      return parseInt(a)-parseInt(b);
-    });
-    var cardsHtml = '<div style="padding:16px 0">';
-    sortedG2.forEach(function(g) {
-      var gLabel = g === 'KG' ? 'روضة الأطفال 🌱' : ('الصف ' + g);
-      cardsHtml += '<div style="margin-bottom:14px">' +
-        '<div style="font-size:.78rem;font-weight:800;color:#64748B;margin-bottom:6px;letter-spacing:.5px">' + gLabel + '</div>' +
-        '<div style="display:flex;flex-wrap:wrap;gap:8px">';
-      gradeGroups2[g].forEach(function(c) {
-        var safeC = c.replace(/\\/g,'').replace(/'/g,'');
-        cardsHtml += '<button data-cls="' + safeC + '" class="week-class-btn" style="padding:10px 18px;border:1.5px solid #D1D5DB;border-radius:10px;background:#fff;cursor:pointer;font-family:Tajawal,Arial,sans-serif;font-size:.9rem;font-weight:800;color:#374151;min-width:60px;transition:.15s">' + c + '</button>';
-      });
-      cardsHtml += '</div></div>';
-    });
-    cardsHtml += '</div>';
-    el.innerHTML = uiHtml + cardsHtml;
-    // ربط أحداث البطاقات بعد إدخالها في DOM
-    el.querySelectorAll('.week-class-btn').forEach(function(btn) {
-      btn.addEventListener('mouseover', function() { this.style.background='#F5F0FF'; this.style.borderColor='#6C3DD6'; this.style.color='#6C3DD6'; });
-      btn.addEventListener('mouseout', function() { this.style.background='#fff'; this.style.borderColor='#D1D5DB'; this.style.color='#374151'; });
-      btn.addEventListener('click', function() { quickPickClass(this.dataset.cls); });
-    });
+    var hint = noStage
+      ? '<div style="text-align:center;padding:48px 20px;color:#94A3B8"><div style="font-size:40px;margin-bottom:12px">📋</div><div style="font-size:1rem;font-weight:700;color:#64748B;margin-bottom:6px">اختر المرحلة أولاً</div><div style="font-size:.85rem">ثم اختر الفصل لعرض الجدول الأسبوعي الكامل</div></div>'
+      : '<div style="text-align:center;padding:48px 20px;color:#94A3B8"><div style="font-size:40px;margin-bottom:12px">🏫</div><div style="font-size:1rem;font-weight:700;color:#64748B;margin-bottom:6px">اختر فصلاً من القائمة</div><div style="font-size:.85rem">الفصول المتاحة في هذه المرحلة: ' + filteredClasses.join(' · ') + '</div></div>';
+    el.innerHTML = uiHtml + hint;
     _weekLoading = false;
     return;
   }
@@ -848,8 +847,12 @@ async function loadWeekTableForClass(cls) {
 
 function onWeekGradeChange() {
   _weekLoading = false;
+  /* reset class selection when stage changes */
   var classSel = document.getElementById('weekClassSel');
-  if (classSel) classSel.value = '';
+  if (classSel) { classSel.value = ''; }
+  /* force re-render with empty class so filter bar rebuilds */
+  var weekWrap = document.getElementById('weekTableWrap');
+  if (weekWrap) { weekWrap.dataset.lastClass = ''; }
   loadWeekTable();
 }
 

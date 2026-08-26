@@ -89,7 +89,7 @@ tr:hover td{background:var(--surface2)}
 /* LAYOUT */
 body{overflow:hidden}
 .app-shell{display:flex;height:100vh;overflow:hidden}
-.sidebar{width:236px;min-width:236px;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;z-index:10;box-shadow:-2px 0 12px rgba(0,0,0,0.04)}
+.sidebar{width:236px;min-width:236px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;z-index:10;box-shadow:-2px 0 12px rgba(0,0,0,0.04)}
 .sidebar-brand{padding:16px 14px 12px;border-bottom:1px solid var(--border)}
 .sidebar-nav{flex:1;padding:10px 8px;display:flex;flex-direction:column;gap:3px;overflow-y:auto}
 .snav{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid transparent;background:transparent;cursor:pointer;font-family:'Tajawal',Arial,sans-serif;text-align:right;direction:rtl;transition:all .15s;width:100%}
@@ -104,7 +104,7 @@ body{overflow:hidden}
 .sidebar-footer{padding:10px 8px;border-top:1px solid var(--border)}
 .main-area{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 .top-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:64px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-.scroll-area{flex:1;overflow-y:auto;padding:24px}
+.scroll-area{flex:1;overflow-y:auto;overflow-x:hidden;padding:24px}
 .panel{display:none}.panel.active{display:block}
 .context-pill{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;font-weight:600}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--emerald)}
@@ -115,7 +115,10 @@ body{overflow:hidden}
 .logout-btn:hover{background:var(--rose);color:#fff}
 .inc-card{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:10px}
 .inc-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
-@media(max-width:900px){.sidebar{display:none}}
+@media(max-width:900px){.sidebar{position:fixed;right:0;top:0;height:100vh;z-index:200;transform:translateX(105%);transition:transform .3s ease;box-shadow:-4px 0 24px rgba(0,0,0,0.15)}.sidebar.mob-open{transform:translateX(0)}.mob-overlay{display:block!important}.mob-ham{display:flex!important}}
+.mob-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:190}
+.mob-ham{display:none;background:none;border:none;cursor:pointer;font-size:22px;padding:4px 8px;color:var(--text);margin-left:8px}
+@media(min-width:901px){.mob-ham,.mob-overlay{display:none!important}}
 @media(max-width:768px){.grid-4,.grid-3{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
@@ -206,6 +209,7 @@ body{overflow:hidden}
 <div class="main-area">
   <div class="top-bar">
     <div style="display:flex;align-items:center;gap:10px">
+      <button class="mob-ham" id="mobHamBtn" aria-label="قائمة">&#9776;</button>
       <div class="context-pill"><div class="dot"></div><span id="pillText">—</span></div>
       <div class="user-chip">
         <div class="user-avatar" id="userAvatar">ن</div>
@@ -652,6 +656,32 @@ document.addEventListener('DOMContentLoaded', function() {
   setupIdleLogout();
   setInterval(loadApprovals, 60000);
 
+  /* === Mobile sidebar toggle === */
+  var mobHamBtn = document.getElementById('mobHamBtn');
+  var sidebarEl = document.querySelector('.sidebar');
+  var mobOverlay = document.createElement('div');
+  mobOverlay.className = 'mob-overlay';
+  mobOverlay.addEventListener('click', function() {
+    sidebarEl.classList.remove('mob-open');
+    mobOverlay.style.display = 'none';
+  });
+  document.body.appendChild(mobOverlay);
+  if (mobHamBtn) {
+    mobHamBtn.addEventListener('click', function() {
+      var isOpen = sidebarEl.classList.toggle('mob-open');
+      mobOverlay.style.display = isOpen ? 'block' : 'none';
+    });
+  }
+  /* close sidebar when nav item clicked on mobile */
+  document.querySelectorAll('.snav').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      if (window.innerWidth <= 900) {
+        sidebarEl.classList.remove('mob-open');
+        mobOverlay.style.display = 'none';
+      }
+    });
+  });
+
   document.getElementById('logoutBtn').addEventListener('click', doLogout);
   document.getElementById('saveAbsBtn').addEventListener('click', saveAbsence);
   document.getElementById('refreshAbsBtn').addEventListener('click', loadAbsencePanel);
@@ -676,10 +706,12 @@ document.addEventListener('DOMContentLoaded', function() {
 function setupGreeting() {
   var h = new Date().getHours();
   var g = h < 12 ? 'صباح النور ☀️ / Good Morning' : h < 17 ? 'مساء الخير 🌤️ / Good Afternoon' : 'مساء النور 🌙 / Good Evening';
-  document.getElementById('welcomeMsg').textContent = g + ' ' + (session.name || '');
+  var displayName = session.name_ar || session.name || session.full_name || session.username || '';
+  document.getElementById('welcomeMsg').textContent = g + ' ' + displayName;
+  document.getElementById('userName').textContent = displayName || 'نائب/ة المدير';
+  document.getElementById('userAvatar').textContent = displayName ? displayName[0] : 'ن';
   document.getElementById('pillText').textContent = new Date().toLocaleTimeString('ar-AE', {hour:'2-digit', minute:'2-digit'});
-  document.getElementById('userName').textContent = session.name || 'نائب/ة المدير';
-  document.getElementById('userAvatar').textContent = (session.name || 'ن')[0];
+  /* username set above via displayName */
 }
 
 function setupWeek() {
