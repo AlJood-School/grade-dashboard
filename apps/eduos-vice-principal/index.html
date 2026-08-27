@@ -706,6 +706,28 @@ body{overflow:hidden}
 </div><!-- /app-shell -->
 
 <!-- PDP Revision Modal -->
+<!-- Edit Assignment Modal -->
+<div class="modal-overlay" id="editAssignModal">
+  <div class="modal-box" style="max-width:460px">
+    <div class="modal-title">&#x270F;&#xFE0F; تعديل التعيين</div>
+    <input type="hidden" id="editAssignId">
+    <div style="margin-bottom:12px">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:4px">الفصل / المادة</div>
+      <div id="editAssignInfo" style="font-weight:700;font-size:15px;font-family:'Tajawal',Arial,sans-serif;color:#1e293b;background:#f8fafc;border-radius:8px;padding:8px 12px"></div>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:6px">المعلمة الجديدة / New Teacher</label>
+      <select id="editAssignTeacherSel" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:14px;font-family:'Tajawal',Arial,sans-serif">
+        <option value="">-- اختر المعلمة --</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-reject" id="editAssignCancelBtn">إلغاء</button>
+      <button class="btn btn-approve" id="editAssignSaveBtn">&#x2714; حفظ التعديل</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="pdpRevModal">
   <div class="modal-box">
     <div class="modal-title">&#x270F;&#xFE0F; طلب تعديل الخطة / Request Revision</div>
@@ -809,6 +831,10 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('saveAssignBtn').addEventListener('click', saveAssignment);
   document.getElementById('assignGridStage').addEventListener('change', renderAssignGrid);
   document.getElementById('assignGridSubject').addEventListener('change', renderAssignGrid);
+  document.getElementById('editAssignSaveBtn').addEventListener('click', saveEditAssignment);
+  document.getElementById('editAssignCancelBtn').addEventListener('click', function() {
+    document.getElementById('editAssignModal').style.display = 'none';
+  });
   document.getElementById('refreshAssignBtn').addEventListener('click', refreshAssignList);
   document.getElementById('refreshBehBtn').addEventListener('click', loadBehavior);
   document.getElementById('refreshPdpBtn').addEventListener('click', loadPdpPanel);
@@ -1758,7 +1784,10 @@ function renderAssignGrid() {
           var short = parts.length >= 2 ? parts[0] + ' ' + parts[parts.length-1] : full;
           html += '<td style="border:1px solid #e2e8f0;padding:5px 7px;text-align:center;background:'+colorMap[s]+'0d" title="'+full+'">';
           html += '<div style="font-size:11px;color:#1e293b;font-family:Tajawal,Arial,sans-serif;line-height:1.4">'+short+'</div>';
-          html += '<button data-aid="'+r.id+'" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:10px;padding:0;margin-top:1px" title="حذف">&#x1F5D1;</button>';
+          html += '<div style="display:flex;justify-content:center;gap:4px;margin-top:2px">';
+          html += '<button data-edit-aid="'+r.id+'" data-edit-subject="'+encodeURIComponent(r.subject||'')+'" data-edit-class="'+encodeURIComponent(r.class_name||'')+'" data-edit-teacher="'+encodeURIComponent(r.teacher_name_ar||'')+'" style="background:none;border:none;cursor:pointer;color:#6C3DD6;font-size:11px;padding:0" title="تعديل">&#x270F;&#xFE0F;</button>';
+          html += '<button data-aid="'+r.id+'" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:11px;padding:0" title="حذف">&#x1F5D1;</button>';
+          html += '</div>';
           html += '</td>';
         } else {
           totalGaps++;
@@ -1796,6 +1825,16 @@ function renderAssignGrid() {
   el.querySelectorAll('[data-aid]').forEach(function(btn) {
     btn.addEventListener('click', function() { deleteAssignment(this.dataset.aid); });
   });
+  el.querySelectorAll('[data-edit-aid]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      openEditAssign(
+        this.dataset.editAid,
+        decodeURIComponent(this.dataset.editSubject),
+        decodeURIComponent(this.dataset.editClass),
+        decodeURIComponent(this.dataset.editTeacher)
+      );
+    });
+  });
 }
 async function saveAssignment() {
   var tSel = document.getElementById('assignTeacherSel');
@@ -1819,6 +1858,52 @@ async function saveAssignment() {
     refreshAssignList();
   } else { showToast('خطأ: ' + res.status); }
 }
+/* ===== EDIT ASSIGNMENT ===== */
+async function openEditAssign(id, subject, cls, currentTeacher) {
+  document.getElementById('editAssignId').value = id;
+  document.getElementById('editAssignInfo').textContent = cls + ' — ' + subject;
+  var modal = document.getElementById('editAssignModal');
+  modal.style.display = 'flex';
+  /* تحميل قائمة المعلمين من DB */
+  var sel = document.getElementById('editAssignTeacherSel');
+  sel.innerHTML = '<option value="">-- اختر المعلمة --</option>';
+  var res = await apiGet('staff_profiles?is_active=eq.true&order=name_ar&select=staff_db_id,name_ar,subject&limit=200');
+  (res.data || []).forEach(function(t) {
+    var opt = document.createElement('option');
+    opt.value = t.staff_db_id;
+    opt.textContent = (t.name_ar || t.staff_db_id) + (t.subject ? ' (' + t.subject + ')' : '');
+    if ((t.name_ar || '') === currentTeacher) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+async function saveEditAssignment() {
+  var id = document.getElementById('editAssignId').value;
+  var sel = document.getElementById('editAssignTeacherSel');
+  if (!sel.value) { showToast('⚠️ اختر المعلمة أولاً'); return; }
+  var teacherNameAr = sel.options[sel.selectedIndex].textContent.split(' (')[0].trim();
+  var btn = document.getElementById('editAssignSaveBtn');
+  btn.textContent = '...'; btn.disabled = true;
+  var res = await fetch(SB_URL + '/rest/v1/teacher_assignments?id=eq.' + id, {
+    method: 'PATCH',
+    headers: {
+      apikey: SB_KEY,
+      'Authorization': 'Bearer ' + AUTH_TOKEN,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    },
+    body: JSON.stringify({ staff_db_id: sel.value, teacher_name_ar: teacherNameAr })
+  });
+  btn.textContent = '✔ حفظ التعديل'; btn.disabled = false;
+  document.getElementById('editAssignModal').style.display = 'none';
+  if (res.ok || res.status === 204) {
+    showToast('✅ تم التعديل بنجاح');
+    refreshAssignList();
+  } else {
+    showToast('خطأ في الحفظ: ' + res.status);
+  }
+}
+
 async function deleteAssignment(id) {
   if (!confirm('حذف هذا التعيين؟')) return;
   await fetch(SB_URL+'/rest/v1/teacher_assignments?id=eq.'+id, {method:'DELETE',headers:{apikey:SB_KEY,'Authorization':'Bearer '+AUTH_TOKEN}});
