@@ -315,6 +315,13 @@ tr:hover td{background:var(--surface2)}
         <span class="snav-sub">Platform State</span>
       </span>
     </button>
+    <button class="snav" data-panel="news" onclick="showPanel('news',this)">
+      <span class="snav-icon">&#x1F4F0;</span>
+      <span class="snav-text">
+        <span class="snav-label">أخبار التعليم</span>
+        <span class="snav-sub">Education News</span>
+      </span>
+    </button>
   </nav>
 
   <div class="sidebar-footer">
@@ -704,6 +711,43 @@ tr:hover td{background:var(--surface2)}
           style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border-radius:12px;font-family:'Tajawal',Arial,sans-serif;font-size:14px;font-weight:800;text-decoration:none">
           &#x1F517; فتح بوابة التقييم الكاملة
         </a>
+      </div>
+    </div>
+
+    <!-- لوحة أخبار التعليم -->
+    <div class="panel" id="panel-news">
+      <p class="sec-title">&#x1F4F0; أخبار التعليم / Education News</p>
+
+      <!-- فلتر الإمارة -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;align-items:center">
+        <select id="newsEmirateFilter" style="padding:9px 14px;border-radius:10px;border:1px solid #E2E8F0;font-family:'Tajawal',Arial,sans-serif;font-size:14px;background:#fff;color:#1E293B;cursor:pointer">
+          <option value="">كل الإمارات</option>
+          <option value="federal">اتحادي</option>
+          <option value="abudhabi">أبوظبي</option>
+          <option value="dubai">دبي</option>
+          <option value="sharjah">الشارقة</option>
+          <option value="ajman">عجمان</option>
+          <option value="fujairah">الفجيرة</option>
+          <option value="rak">رأس الخيمة</option>
+          <option value="uaq">أم القيوين</option>
+        </select>
+        <select id="newsCategoryFilter" style="padding:9px 14px;border-radius:10px;border:1px solid #E2E8F0;font-family:'Tajawal',Arial,sans-serif;font-size:14px;background:#fff;color:#1E293B;cursor:pointer">
+          <option value="">كل التصنيفات</option>
+          <option value="policy">سياسات</option>
+          <option value="schools">مدارس</option>
+          <option value="safety">أمن وسلامة</option>
+          <option value="traffic">مرور</option>
+          <option value="general">عام</option>
+        </select>
+        <button id="newsFilterBtn" style="padding:9px 18px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:10px;font-family:'Tajawal',Arial,sans-serif;font-size:14px;font-weight:700;cursor:pointer" onclick="loadNews()">تصفية</button>
+        <span id="newsCount" style="margin-right:auto;font-size:13px;color:#64748B"></span>
+      </div>
+
+      <!-- قائمة الأخبار -->
+      <div id="newsListWrap">
+        <div class="skeleton" style="height:100px;border-radius:12px;margin-bottom:12px"></div>
+        <div class="skeleton" style="height:100px;border-radius:12px;margin-bottom:12px"></div>
+        <div class="skeleton" style="height:100px;border-radius:12px"></div>
       </div>
     </div>
 
@@ -1488,6 +1532,7 @@ window.showPanel = function showPanel(name, btnEl) {
   if (name === 'appraisal') { loadAppraisalPanel(); }
   if (name === 'timetable') loadTimetableStatus();
   if (name === 'assign') loadAssignPanel();
+  if (name === 'news') loadNews();
 }
 
 function showPanelLegacy(name, el) { showPanel(name, null); }
@@ -1725,6 +1770,57 @@ function loadStaff() {
       return '<tr><td>' + (i+1) + '</td><td style="font-weight:700;color:var(--text)">' + (s.name_ar||'—') + '</td><td>' + (s.role_key||'—') + '</td><td>' + (s.subject||'—') + '</td><td>—</td><td>—</td><td><span class="chip chip-green">✅</span></td></tr>';
     }).join('');
   }).catch(function(e){ console.warn('staff:', e); });
+}
+
+/* ===== NEWS ===== */
+var _newsCache = null;
+async function loadNews() {
+  var wrap = document.getElementById('newsListWrap');
+  if (!wrap) return;
+  var emirate = document.getElementById('newsEmirateFilter').value;
+  var category = document.getElementById('newsCategoryFilter').value;
+  wrap.innerHTML = '<div class="skeleton" style="height:100px;border-radius:12px;margin-bottom:12px"></div><div class="skeleton" style="height:100px;border-radius:12px"></div>';
+  try {
+    var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+    var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+    var qs = 'select=id,title,summary,source_url,published_at,category,emirate,is_featured&order=published_at.desc,id.desc&limit=50';
+    if (emirate) qs += '&emirate=eq.' + encodeURIComponent(emirate);
+    if (category) qs += '&category=eq.' + encodeURIComponent(category);
+    var res = await fetch(sbUrl + '/rest/v1/school_news?' + qs, {
+      headers: { 'apikey': sb, 'Authorization': 'Bearer ' + sb }
+    });
+    var rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) {
+      wrap.innerHTML = '<div style="text-align:center;padding:40px;color:#94A3B8;font-size:15px">لا توجد أخبار بهذا التصفية</div>';
+      document.getElementById('newsCount').textContent = '';
+      return;
+    }
+    document.getElementById('newsCount').textContent = rows.length + ' خبر';
+    var categoryLabels = { policy: 'سياسات', schools: 'مدارس', safety: 'أمن وسلامة', traffic: 'مرور', general: 'عام' };
+    var emirateLabels = { federal: 'اتحادي', abudhabi: 'أبوظبي', dubai: 'دبي', sharjah: 'الشارقة', ajman: 'عجمان', fujairah: 'الفجيرة', rak: 'رأس الخيمة', uaq: 'أم القيوين' };
+    wrap.innerHTML = rows.map(function(n) {
+      var catLabel = categoryLabels[n.category] || n.category || '';
+      var emLabel = emirateLabels[n.emirate] || n.emirate || '';
+      var featuredBadge = n.is_featured ? '<span style="background:#F59E0B;color:#fff;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:800;margin-right:6px">مميّز</span>' : '';
+      return '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:18px 20px;margin-bottom:12px;direction:rtl">' +
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:15px;font-weight:800;color:#1E293B;line-height:1.4;margin-bottom:6px">' + featuredBadge + (n.title || '') + '</div>' +
+            (n.summary ? '<div style="font-size:13px;color:#475569;line-height:1.5;margin-bottom:8px">' + n.summary + '</div>' : '') +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+              (catLabel ? '<span style="background:#EDE9FE;color:#6C3DD6;border-radius:6px;padding:2px 10px;font-size:12px;font-weight:700">' + catLabel + '</span>' : '') +
+              (emLabel ? '<span style="background:#ECFDF5;color:#059669;border-radius:6px;padding:2px 10px;font-size:12px;font-weight:700">' + emLabel + '</span>' : '') +
+              (n.published_at ? '<span style="font-size:12px;color:#94A3B8">' + n.published_at + '</span>' : '') +
+            '</div>' +
+          '</div>' +
+          (n.source_url ? '<a href="' + n.source_url + '" target="_blank" rel="noopener" style="flex-shrink:0;padding:8px 14px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:13px;font-weight:700;text-decoration:none;white-space:nowrap">اقرأ الخبر &#x2192;</span></a>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    wrap.innerHTML = '<div style="text-align:center;padding:32px;color:#EF4444">خطأ في تحميل الأخبار</div>';
+    console.warn('loadNews:', e);
+  }
 }
 </script>
 </body>
