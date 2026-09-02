@@ -567,6 +567,25 @@ function countSubjectInDay(grid, day, subjId){
   return count;
 }
 
+/* ===== عدد الحصص الفردية فقط (غير المتتالية) لمادة في يوم ===== */
+function countSingleInDay(grid, day, subjId){
+  var count=0;
+  if(!grid[day]) return 0;
+  Object.keys(grid[day]).forEach(function(p){
+    var c=grid[day][p];
+    if(c && c.subjectId===subjId && !c.isDoubleFirst && !c.isDoubleSecond) count++;
+  });
+  return count;
+}
+
+/* ===== عدد الخانات المشغولة في يوم ===== */
+function countFilledInDay(grid, day){
+  var count=0;
+  if(!grid[day]) return 0;
+  Object.keys(grid[day]).forEach(function(p){ if(grid[day][p]!==null) count++; });
+  return count;
+}
+
 /* ===== قائمة الأيام بترتيب دوراني حسب المادة والصف ===== */
 function rotatedDays(seedStr){
   var allDays = SCHOOL_CONFIG.weekDays.concat([FRIDAY_NAME]);
@@ -886,7 +905,19 @@ function updateAllSelects(){
     var o=document.createElement("option"); o.value=String(c.id);
     o.textContent=c.label+" — "+stageOf(c.stageId).name; vc.appendChild(o);
   });
-  if(pvv && classes.some(function(c){ return String(c.id)===pvv; })) vc.value=pvv;
+  /* إضافة خيارات عرض المرحلة كاملة */
+  if(classes.length){
+    var sep2=document.createElement("option"); sep2.disabled=true; sep2.textContent="─── عرض كامل المرحلة ───"; vc.appendChild(sep2);
+    var stagesSeen2={};
+    classes.forEach(function(c2){
+      if(!stagesSeen2[c2.stageId]){
+        stagesSeen2[c2.stageId]=true;
+        var o3=document.createElement("option"); o3.value="__stage_"+c2.stageId;
+        o3.textContent="📚 عرض "+stageOf(c2.stageId).name+" كاملاً"; vc.appendChild(o3);
+      }
+    });
+  }
+  if(pvv && (classes.some(function(c){ return String(c.id)===pvv; }) || pvv.indexOf("__stage_")===0)) vc.value=pvv;
 
   // print-class
   var pc=$("print-class-select");
@@ -1031,7 +1062,7 @@ function generateTimetable(){
     /* ===== وضع بقية المواد ===== */
     sorted.forEach(function(subj){
       /* تخطي الزوج الثاني للتناوب */
-      if(hasAlt&&(subj===altA||subj===altB)) return;
+      if(hasAlt&&(subj.name===ALT_PAIR_A||subj.name===ALT_PAIR_B)) return;
 
       var subAss=clsAssigned.filter(function(a){ return a.subjectId===subj.id; });
       var teacherList=subAss.map(function(a){ return a.teacher; }).filter(function(t){ return !!t; });
@@ -1072,19 +1103,27 @@ function generateTimetable(){
 
       /* ----- الحصص الفردية ----- */
       var remaining=need;
-      var maxPerDay=Math.max(1,Math.ceil(remaining/allDays.length));
+      /* maxSinglesPerDay: الحد الأقصى للحصص الفردية (لا المتتالية) لكل يوم */
+      var maxSinglesPerDay=Math.max(1,Math.ceil(remaining/allDays.length));
+
+      /* رتّب الأيام من الأقل امتلاءً إلى الأكثر لتوزيع الحصص بعدل */
+      function daysByLoad(){
+        return allDays.slice().sort(function(a,b){
+          return countFilledInDay(grid,a)-countFilledInDay(grid,b);
+        });
+      }
 
       for(var pass=0;pass<2&&remaining>0;pass++){
-        var dayOrderS=rotatedDays(subj.name+cls.label+(teacherList[0]||"")+(placed));
+        var dayOrderS = pass===0 ? daysByLoad() : rotatedDays(subj.name+cls.label+(teacherList[0]||"")+(placed));
         for(var di3=0;di3<dayOrderS.length&&remaining>0;di3++){
           var day3=dayOrderS[di3];
-          if(pass===0&&countSubjectInDay(grid,day3,subj.id)>=maxPerDay) continue;
+          if(pass===0&&countSingleInDay(grid,day3,subj.id)>=maxSinglesPerDay) continue;
           var ppd3=day3===FRIDAY_NAME?stage.fridayPpd:stage.periodsPerDay;
           var pOrderS=rotatedPeriods(stage,day3,teacherList[0]||"");
           for(var pi3=0;pi3<pOrderS.length&&remaining>0;pi3++){
             var p3=pOrderS[pi3];
             if(grid[day3][p3]!==null) continue;
-            if(pass===0&&countSubjectInDay(grid,day3,subj.id)>=maxPerDay) continue;
+            if(pass===0&&countSingleInDay(grid,day3,subj.id)>=maxSinglesPerDay) continue;
             var chosenT3=vacantTeacher?null:pickTeacher(teacherList,day3,p3);
             if(chosenT3===null&&teacherList.length>0&&!vacantTeacher) continue;
             grid[day3][p3]={ subjectId:subj.id, subjectName:subj.name, teacher:chosenT3 };
@@ -1208,6 +1247,112 @@ function renderTimetable(classId){
   container.appendChild(table);
 }
 
+/* ============================= عرض كامل المرحلة ============================= */
+function renderStageView(stageId){
+  renderInfoPanels(null);
+  var container=$("timetable-view");
+  container.innerHTML="";
+  var stageClasses=classes.filter(function(c){ return c.stageId===stageId; });
+  if(!stageClasses.length){
+    container.innerHTML="<p style='color:var(--muted);text-align:center;padding:40px;'>لا يوجد صفوف لهذه المرحلة بعد التوليد</p>";
+    return;
+  }
+  var stage=stageOf(stageId);
+  var summary=document.createElement("div");
+  summary.className="times-summary";
+  summary.innerHTML=buildTimesSummary(stage);
+  container.appendChild(summary);
+
+  var grid2=document.createElement("div");
+  grid2.style.cssText="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;padding:4px;";
+
+  stageClasses.forEach(function(cls){
+    if(!schedule[cls.id]) return;
+    var wrap=document.createElement("div");
+    wrap.style.cssText="background:var(--cb100);border:1.5px solid var(--cb200);border-radius:12px;overflow:hidden;";
+
+    var header=document.createElement("div");
+    header.style.cssText="background:var(--cp);color:#fff;padding:8px 14px;font-weight:900;font-size:14px;text-align:center;";
+    header.textContent="الصف "+cls.label;
+    wrap.appendChild(header);
+
+    var days=SCHOOL_CONFIG.weekDays.concat([FRIDAY_NAME]);
+    var tbl=document.createElement("table");
+    tbl.style.cssText="width:100%;border-collapse:collapse;";
+
+    var th_row=document.createElement("tr");
+    var corner_th=document.createElement("th");
+    corner_th.style.cssText="padding:3px 5px;background:var(--cb200);font-size:10px;color:var(--text2);width:36px;";
+    corner_th.textContent="اليوم";
+    th_row.appendChild(corner_th);
+
+    var maxP=stage.periodsPerDay;
+    for(var pp=1;pp<=maxP;pp++){
+      var pth=document.createElement("th");
+      pth.style.cssText="padding:3px;background:var(--cb200);font-size:10px;text-align:center;color:var(--text2);";
+      pth.textContent="ح"+pp;
+      th_row.appendChild(pth);
+    }
+    tbl.appendChild(th_row);
+
+    days.forEach(function(day){
+      var isFri=day===FRIDAY_NAME;
+      var ppd=isFri?stage.fridayPpd:stage.periodsPerDay;
+      var tr=document.createElement("tr");
+      var dayTh=document.createElement("th");
+      dayTh.style.cssText="padding:3px 5px;background:var(--cb200);font-size:10px;color:var(--text2);white-space:nowrap;";
+      dayTh.textContent=day.substr(0,3);
+      tr.appendChild(dayTh);
+      for(var pp2=1;pp2<=maxP;pp2++){
+        var td2=document.createElement("td");
+        td2.style.cssText="padding:2px 3px;border:1px solid var(--cb200);font-size:10px;text-align:center;vertical-align:middle;min-height:32px;";
+        if(pp2>ppd){
+          td2.style.background="var(--cb200)"; td2.textContent="—";
+        } else {
+          var cell2=schedule[cls.id][day]?schedule[cls.id][day][pp2]:null;
+          if(!cell2){
+            td2.textContent="—";
+          } else if(cell2.isAltWeek){
+            td2.style.background="rgba(5,150,105,0.08)";
+            td2.style.color="#059669";
+            td2.innerHTML="<b style='font-size:9px;'>أ/ب</b><br><span style='font-size:9px;'>فنون</span>";
+          } else if(cell2.isDoubleFirst){
+            td2.style.background="rgba(109,40,217,0.08)";
+            td2.style.borderBottom="2px dashed #7C3AED";
+            td2.innerHTML="<span style='font-size:9px;font-weight:700;color:#7C3AED;'>◼ "+escStageCell(cell2.subjectName)+"</span>"+
+              "<br><span style='font-size:8px;color:var(--text2);'>"+escStageCell(cell2.teacher||"شاغر")+"</span>";
+          } else if(cell2.isDoubleSecond){
+            td2.style.background="rgba(109,40,217,0.05)";
+            td2.style.borderTop="2px dashed #7C3AED";
+            td2.innerHTML="<span style='font-size:9px;color:#7C3AED;'>↑</span>";
+          } else if(!cell2.teacher){
+            td2.style.background="rgba(239,68,68,0.06)";
+            td2.innerHTML="<span style='font-size:9px;color:#DC2626;'>⬜ "+escStageCell(cell2.subjectName)+"</span>";
+          } else {
+            td2.innerHTML="<span style='font-size:9px;font-weight:700;display:block;'>"+escStageCell(cell2.subjectName)+"</span>"+
+              "<span style='font-size:8px;color:var(--text2);display:block;'>"+escStageCell(cell2.teacher)+"</span>";
+          }
+        }
+        tr.appendChild(td2);
+      }
+      tbl.appendChild(tr);
+    });
+    wrap.appendChild(tbl);
+    grid2.appendChild(wrap);
+  });
+  container.appendChild(grid2);
+}
+
+/* مختصرات للعرض المكثّف */
+var SUBJ_ABBREV={"مجال عربي":"عربي","مجال إنجليزي":"إنجليزي","اللغة العربية":"عربية","اللغة الإنجليزية":"إنجليزي","الرياضيات":"رياضيات","العلوم":"علوم","التربية الإسلامية":"إسلامية","التربية البدنية والصحية":"رياضة","الفنون البصرية":"فنون","التربية الموسيقية":"موسيقى","الذكاء الاصطناعي والتكنولوجيا":"ذكاء","الدراسات الاجتماعية والتربية الأخلاقية":"دراسات"};
+function escStageCell(s){
+  if(!s) return "";
+  if(SUBJ_ABBREV[s]) return SUBJ_ABBREV[s];
+  var parts=s.trim().split(" ");
+  if(parts.length>=3) return parts[0]+" "+parts[parts.length-1];
+  return s;
+}
+
 /* ============================= لوحة الشواغر والاحتياط ============================= */
 function renderInfoPanels(classId){
   var panelEl = $("info-panels");
@@ -1255,9 +1400,11 @@ function renderInfoPanels(classId){
   }
 
   /* --- لوحة المعلمات الاحتياط --- */
-  if(subTeachers.length>0){
-    html+='<div style="background:#EFF6FF;border:1.5px solid #3B82F6;border-radius:12px;padding:14px 18px;margin-bottom:12px;">';
-    html+='<div style="font-weight:900;color:#1D4ED8;font-size:14px;margin-bottom:10px;">👩&#8205;🏫 المعلمات الاحتياط / البديلات ('+subTeachers.length+')</div>';
+  html+='<div style="background:#EFF6FF;border:1.5px solid #3B82F6;border-radius:12px;padding:14px 18px;margin-bottom:12px;">';
+  html+='<div style="font-weight:900;color:#1D4ED8;font-size:14px;margin-bottom:10px;">👩&#8205;🏫 المعلمات الاحتياط / البديلات ('+subTeachers.length+')</div>';
+  if(subTeachers.length===0){
+    html+='<p style="color:#64748B;font-size:13px;margin:0;">لا توجد معلمات احتياط مسجّلة — أضف معلمات بوضع <strong>is_sub_teacher=true</strong> في قاعدة البيانات.</p>';
+  } else {
     html+='<div style="display:flex;flex-wrap:wrap;gap:8px;">';
     subTeachers.forEach(function(t){
       html+='<span style="background:#fff;border:1px solid #3B82F6;border-radius:8px;padding:5px 12px;font-size:13px;font-weight:700;color:#1E40AF;">';
@@ -1265,8 +1412,9 @@ function renderInfoPanels(classId){
       if(t.subject) html+=' ('+escapeHtml(t.subject)+')';
       html+='</span>';
     });
-    html+='</div></div>';
+    html+='</div>';
   }
+  html+='</div>';
 
   panelEl.innerHTML = html;
 }
@@ -1571,7 +1719,14 @@ function init(){
   });
 
   $("assign-class-select").addEventListener("change",refreshAssignSubjectSelect);
-  $("view-class-select").addEventListener("change",function(){ renderTimetable(Number(this.value)); });
+  $("view-class-select").addEventListener("change",function(){
+    var v=this.value;
+    if(v.indexOf("__stage_")===0){
+      renderStageView(Number(v.replace("__stage_","")));
+    } else {
+      renderTimetable(Number(v));
+    }
+  });
 
   $("class-code-select").addEventListener("change",function(){
     $("class-label-custom").style.display = (this.value==="__custom__") ? "block" : "none";
