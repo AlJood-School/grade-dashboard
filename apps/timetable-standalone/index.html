@@ -1215,6 +1215,47 @@ function generateTimetable(){
       });
     });
 
+    /* ========================================================
+       Phase Post-1: تطبيع الدبل — أي حصتان متتاليتان لنفس المادة → دبل رسمي
+       Phase Post-2: نقل الفراغات لنهاية كل يوم (0 فراغات في المنتصف)
+    ======================================================== */
+    allDays.forEach(function(dayP){
+      var ppdP = dayP===FRIDAY_NAME ? stage.fridayPpd : stage.periodsPerDay;
+
+      /* --- Post-1: علامة الدبل التلقائية --- */
+      for(var pp=1; pp<ppdP; pp++){
+        var cA=grid[dayP][pp], cB=grid[dayP][pp+1];
+        if(!cA||!cB) continue;
+        if(cA.isDoubleSecond||cA.isAltWeek) continue;
+        if(cB.isDoubleFirst||cB.isAltWeek) continue;
+        if(cA.subjectId===cB.subjectId && cA.subjectId!=='_free'){
+          cA.isDoubleFirst=true;
+          cB.isDoubleSecond=true;
+        }
+      }
+
+      /* --- Post-2: إعادة ترتيب الفراغات لنهاية اليوم --- */
+      var orderedCells=[];
+      var pp2=1;
+      while(pp2<=ppdP){
+        var cell=grid[dayP][pp2];
+        if(cell===null){ pp2++; continue; }
+        if(cell.isDoubleSecond){ pp2++; continue; } /* ستُضاف مع first */
+        if(cell.isDoubleFirst && pp2<ppdP && grid[dayP][pp2+1] && grid[dayP][pp2+1].isDoubleSecond){
+          orderedCells.push(cell);
+          orderedCells.push(grid[dayP][pp2+1]);
+          pp2+=2;
+        } else {
+          orderedCells.push(cell);
+          pp2++;
+        }
+      }
+      /* إعادة البناء: الحصص أولاً ثم null */
+      for(var idx=1;idx<=ppdP;idx++){
+        grid[dayP][idx] = orderedCells[idx-1]||null;
+      }
+    });
+
     schedule[cls.id] = grid;
   });
 
