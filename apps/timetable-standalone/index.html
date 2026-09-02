@@ -328,7 +328,7 @@ footer{text-align:center;padding:20px;color:var(--cbc3);font-size:12px;font-weig
 /* ============================= إعدادات المدرسة ============================= */
 const SCHOOL_CONFIG = {
   name: "مدرسة الجود",
-  weekDays: ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس"],
+  weekDays: ["الاثنين","الثلاثاء","الأربعاء","الخميس"],
   stages: [
     {
       id: 0, name: "رياض الأطفال", gradeFrom: "KG1", gradeTo: "KG2",
@@ -876,13 +876,18 @@ function generateTimetable(){
       var subAssign = assignments.filter(function(a){ return a.classId===cls.id&&a.subjectId===subj.id; });
       var teacherList = subAssign.map(function(a){ return a.teacher; });
       var need = subj.periodsPerWeek, placed = 0, tp = 0;
+      /* توزيع متوازن: الحد الأقصى لحصص المادة في اليوم الواحد */
+      var totalWorkDays = SCHOOL_CONFIG.weekDays.length + 1; /* +1 للجمعة */
+      var maxPerDay = Math.ceil(need / totalWorkDays);
       for(var pass=0; pass<2&&placed<need; pass++){
         for(var i=0; i<slots.length&&placed<need; i++){
           var slot = slots[i];
           if(grid[slot.day][slot.period]!==null) continue;
           if(pass===0){
-            var dc=grid[slot.day], sameDayAlready=Object.keys(dc).some(function(pp){ var cell=dc[pp]; return cell&&cell.subjectId===subj.id; });
-            if(sameDayAlready) continue;
+            /* pass 0: لا تتجاوز maxPerDay حصة من نفس المادة في اليوم */
+            var dc=grid[slot.day];
+            var sameDayCount=Object.keys(dc).filter(function(pp){ var cell=dc[pp]; return cell&&cell.subjectId===subj.id; }).length;
+            if(sameDayCount>=maxPerDay) continue;
           }
           var teacher = teacherList[tp%teacherList.length];
           var bkey = busyKey(slot.day,slot.period);
