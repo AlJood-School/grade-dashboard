@@ -1070,80 +1070,96 @@ function generateTimetable(){
       }
     }
 
-    /* ===== وضع بقية المواد ===== */
-    sorted.forEach(function(subj){
-      /* تخطي الزوج الثاني للتناوب */
-      if(hasAlt&&(subj.name===ALT_PAIR_A||subj.name===ALT_PAIR_B)) return;
+    /* ===== وضع بقية المواد — v10 Round-Robin ===== */
 
+    /* بناء قائمة عمل لكل مادة */
+    var workItems = sorted.filter(function(s){
+      return !(hasAlt&&(s.name===ALT_PAIR_A||s.name===ALT_PAIR_B));
+    }).map(function(subj){
       var subAss=clsAssigned.filter(function(a){ return a.subjectId===subj.id; });
-      var teacherList=subAss.map(function(a){ return a.teacher; }).filter(function(t){ return !!t; });
-      var vacantTeacher=(subAss.length&&!teacherList.length); /* شاغر حقيقي */
-
+      var teacherList=subAss.map(function(a){ return a.teacher; }).filter(Boolean);
+      var vacantTeacher=(subAss.length&&!teacherList.length);
       var isDouble=dblList.indexOf(subj.name)!==-1;
-      var need=subj.periodsPerWeek;
-      var placed=0;
+      var dblNeeded=isDouble?Math.floor(subj.periodsPerWeek/2):0;
+      return { subj:subj, teacherList:teacherList, vacantTeacher:vacantTeacher,
+               isDouble:isDouble, dblNeeded:dblNeeded, dblDone:0,
+               placed:0, target:subj.periodsPerWeek };
+    });
 
-      /* ----- الحصص المتتالية أولاً ----- */
-      if(isDouble&&need>=2){
-        var doublesNeeded=Math.floor(need/2);
-        var doublesPlaced=0;
-        var dayOrderD=rotatedDays(subj.name+cls.label);
+    /* دالة مساعدة: أفضل يوم من حيث الامتلاء الكلي */
+    function leastLoadedDays(){
+      return allDays.slice().sort(function(a,b){
+        return countFilledInDay(grid,a)-countFilledInDay(grid,b);
+      });
+    }
 
-        for(var di2=0;di2<dayOrderD.length&&doublesPlaced<doublesNeeded;di2++){
-          var day2=dayOrderD[di2];
-          /* مادة واحدة متتالية فقط في اليوم */
-          if(countSubjectInDay(grid,day2,subj.id)>0) continue;
-          var ppd2=day2===FRIDAY_NAME?stage.fridayPpd:stage.periodsPerDay;
-          /* ابحث عن حصتين متتاليتين بلا استراحة كبيرة بينهما */
-          for(var p2=1;p2<ppd2;p2++){
-            if(grid[day2][p2]!==null||grid[day2][p2+1]!==null) continue;
-            if(hasMajorBreakAfter(stage,day2,p2)) continue;
-            var chosenT=vacantTeacher?null:pickTeacher(teacherList,day2,p2,p2+1);
-            if(chosenT===null&&teacherList.length>0) continue;
-            grid[day2][p2]={ subjectId:subj.id, subjectName:subj.name, teacher:chosenT, isDoubleFirst:true };
-            grid[day2][p2+1]={ subjectId:subj.id, subjectName:subj.name, teacher:chosenT, isDoubleSecond:true };
-            markBusy(chosenT,day2,p2); markBusy(chosenT,day2,p2+1);
-            placed+=2; doublesPlaced++;
+    /* ===== المرحلة الأولى: وضع المتتاليات Round-Robin ===== */
+    var anyDblProgress=true;
+    var dblRound=0;
+    while(anyDblProgress && dblRound<200){
+      anyDblProgress=false; dblRound++;
+      workItems.forEach(function(wi){
+        if(!wi.isDouble||wi.dblDone>=wi.dblNeeded) return;
+        var dayOrder=leastLoadedDays();
+        for(var di=0;di<dayOrder.length;di++){
+          var day=dayOrder[di];
+          if(countSubjectInDay(grid,day,wi.subj.id)>0) continue;
+          var ppd=day===FRIDAY_NAME?stage.fridayPpd:stage.periodsPerDay;
+          var found=false;
+          for(var p=1;p<ppd;p++){
+            if(grid[day][p]!==null||grid[day][p+1]!==null) continue;
+            if(hasMajorBreakAfter(stage,day,p)) continue;
+            var chosenT=wi.vacantTeacher?null:pickTeacher(wi.teacherList,day,p,p+1);
+            if(chosenT===null&&wi.teacherList.length>0&&!wi.vacantTeacher) continue;
+            grid[day][p]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:chosenT,isDoubleFirst:true};
+            grid[day][p+1]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:chosenT,isDoubleSecond:true};
+            markBusy(chosenT,day,p); markBusy(chosenT,day,p+1);
+            wi.dblDone++; wi.placed+=2;
+            anyDblProgress=true; found=true;
             break;
           }
+          if(found) break;
         }
-        /* الحصص الفردية المتبقية (عدد فردي أو تعذّر وضع بعض الأزواج) */
-        need = (doublesNeeded-doublesPlaced)*2 + (subj.periodsPerWeek%2) + placed;
-        need = subj.periodsPerWeek - placed;
-      }
+      });
+    }
 
-      /* ----- الحصص الفردية ----- */
-      var remaining=need;
-      /* الحد الأقصى لإجمالي خانات المادة في اليوم (يشمل المتتالية) */
-      var maxTotalPerDay=Math.max(1,Math.ceil(subj.periodsPerWeek/allDays.length));
-
-      /* رتّب الأيام من الأقل امتلاءً إلى الأكثر لتوزيع الحصص بعدل */
-      function daysByLoad(){
-        return allDays.slice().sort(function(a,b){
-          return countFilledInDay(grid,a)-countFilledInDay(grid,b);
+    /* ===== المرحلة الثانية: الحصص الفردية Round-Robin (3 تمريرات) ===== */
+    /* pass=0: مع حد أقصى يومي · pass=1: بدون حد · pass=2: إجبار بلا تعارض معلمة */
+    for(var spass=0;spass<3;spass++){
+      var anySProgress=true;
+      var sRound=0;
+      while(anySProgress&&sRound<400){
+        anySProgress=false; sRound++;
+        workItems.forEach(function(wi){
+          if(wi.placed>=wi.target) return;
+          var maxDay=spass===0?Math.max(1,Math.ceil(wi.subj.periodsPerWeek/allDays.length)):9999;
+          var dayOrder=leastLoadedDays();
+          for(var di=0;di<dayOrder.length;di++){
+            var day=dayOrder[di];
+            if(spass===0&&countPeriodsInDay(grid,day,wi.subj.id)>=maxDay) continue;
+            var ppd=day===FRIDAY_NAME?stage.fridayPpd:stage.periodsPerDay;
+            var pOrder=rotatedPeriods(stage,day,wi.teacherList[0]||"");
+            var placed=false;
+            for(var pi=0;pi<pOrder.length;pi++){
+              var p=pOrder[pi];
+              if(grid[day][p]!==null) continue;
+              var chosenT;
+              if(spass===2){ chosenT=wi.vacantTeacher?null:(wi.teacherList[0]||null); }
+              else {
+                chosenT=wi.vacantTeacher?null:pickTeacher(wi.teacherList,day,p);
+                if(chosenT===null&&wi.teacherList.length>0&&!wi.vacantTeacher) continue;
+              }
+              grid[day][p]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:chosenT};
+              if(spass<2) markBusy(chosenT,day,p);
+              wi.placed++;
+              anySProgress=true; placed=true;
+              break;
+            }
+            if(placed) break;
+          }
         });
       }
-
-      for(var pass=0;pass<2&&remaining>0;pass++){
-        var dayOrderS = pass===0 ? daysByLoad() : rotatedDays(subj.name+cls.label+(teacherList[0]||"")+(placed));
-        for(var di3=0;di3<dayOrderS.length&&remaining>0;di3++){
-          var day3=dayOrderS[di3];
-          if(pass===0&&countPeriodsInDay(grid,day3,subj.id)>=maxTotalPerDay) continue;
-          var ppd3=day3===FRIDAY_NAME?stage.fridayPpd:stage.periodsPerDay;
-          var pOrderS=rotatedPeriods(stage,day3,teacherList[0]||"");
-          for(var pi3=0;pi3<pOrderS.length&&remaining>0;pi3++){
-            var p3=pOrderS[pi3];
-            if(grid[day3][p3]!==null) continue;
-            if(pass===0&&countPeriodsInDay(grid,day3,subj.id)>=maxTotalPerDay) continue;
-            var chosenT3=vacantTeacher?null:pickTeacher(teacherList,day3,p3);
-            if(chosenT3===null&&teacherList.length>0&&!vacantTeacher) continue;
-            grid[day3][p3]={ subjectId:subj.id, subjectName:subj.name, teacher:chosenT3 };
-            markBusy(chosenT3,day3,p3);
-            placed++; remaining--;
-          }
-        }
-      }
-    });
+    }
 
     schedule[cls.id] = grid;
   });
