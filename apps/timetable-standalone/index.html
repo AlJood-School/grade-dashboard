@@ -1234,26 +1234,32 @@ function generateTimetable(){
         }
       }
 
-      /* --- Post-2: إعادة ترتيب الفراغات لنهاية اليوم --- */
-      var orderedCells=[];
-      var pp2=1;
-      while(pp2<=ppdP){
+      /* --- Post-2: إعادة ترتيب الفراغات لنهاية اليوم ---
+         نقرأ حتى ppdP+1 لالتقاط الدبل التي قد تمتد خارج النطاق الطبيعي.
+         نحفظ كل مادة كـ "مجموعة" (فردي=[cell] أو دبل=[first,second]).
+         ثم نكتبها بالترتيب من الخانة 1 ونُفرّغ الباقي. */
+      var groups=[];
+      var pp2=1, scanEnd=ppdP+1;
+      while(pp2<=scanEnd){
         var cell=grid[dayP][pp2];
-        if(cell===null){ pp2++; continue; }
-        if(cell.isDoubleSecond){ pp2++; continue; } /* ستُضاف مع first */
-        if(cell.isDoubleFirst && pp2<ppdP && grid[dayP][pp2+1] && grid[dayP][pp2+1].isDoubleSecond){
-          orderedCells.push(cell);
-          orderedCells.push(grid[dayP][pp2+1]);
-          pp2+=2;
+        if(!cell){ pp2++; continue; }
+        if(cell.isDoubleSecond){ pp2++; continue; } /* يُعالَج مع first */
+        if(cell.isDoubleFirst){
+          var nextCell=grid[dayP][pp2+1];
+          if(nextCell && nextCell.isDoubleSecond){
+            groups.push([cell,nextCell]); pp2+=2;
+          } else {
+            cell.isDoubleFirst=false; /* بلا شريك — حوّله لفردي */
+            groups.push([cell]); pp2++;
+          }
         } else {
-          orderedCells.push(cell);
-          pp2++;
+          groups.push([cell]); pp2++;
         }
       }
-      /* إعادة البناء: الحصص أولاً ثم null */
-      for(var idx=1;idx<=ppdP;idx++){
-        grid[dayP][idx] = orderedCells[idx-1]||null;
-      }
+      /* إعادة البناء: كتابة المجموعات من الخانة 1 ثم تفريغ الباقي */
+      var writeIdx=1;
+      groups.forEach(function(grp){ grp.forEach(function(c){ grid[dayP][writeIdx++]=c; }); });
+      for(; writeIdx<=scanEnd; writeIdx++){ grid[dayP][writeIdx]=null; }
     });
 
     schedule[cls.id] = grid;
