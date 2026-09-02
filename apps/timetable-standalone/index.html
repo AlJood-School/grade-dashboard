@@ -593,7 +593,12 @@ function loadAljoodData(){
       subj = { id:subjectSeq++, name:item.s, periodsPerWeek:ppw, stageId:stageId };
       subjects.push(subj);
     }
-    if(item.t === "شاغر") return;
+    if(item.t === "شاغر"){
+      // سجّل الشاغر كتعيين بدون معلمة حتى يظهر في الجدول بالمادة الصحيحة
+      var vacDup = assignments.find(function(a){ return a.classId===cls.id && a.subjectId===subj.id && a.teacher===null; });
+      if(!vacDup) assignments.push({ id:assignmentSeq++, classId:cls.id, subjectId:subj.id, teacher:null });
+      return;
+    }
     var dup = assignments.find(function(a){ return a.classId===cls.id && a.subjectId===subj.id && a.teacher===item.t; });
     if(!dup){
       assignments.push({ id:assignmentSeq++, classId:cls.id, subjectId:subj.id, teacher:item.t });
@@ -816,9 +821,11 @@ function generateTimetable(){
     var grid = {};
     slots.forEach(function(s){ if(!grid[s.day]) grid[s.day]={}; grid[s.day][s.period]=null; });
 
-    subjects.filter(function(s){ return s.stageId===cls.stageId; }).forEach(function(subj){
+    // فقط المواد التي لها تعيين فعلي لهذا الصف (حتى شاغر) — لا يُولَّد حصص لمواد بلا تعيين
+    var clsAssignedSubjIds = new Set(assignments.filter(function(a){ return a.classId===cls.id; }).map(function(a){ return a.subjectId; }));
+    subjects.filter(function(s){ return s.stageId===cls.stageId && clsAssignedSubjIds.has(s.id); }).forEach(function(subj){
       var subAssign = assignments.filter(function(a){ return a.classId===cls.id&&a.subjectId===subj.id; });
-      var teacherList = subAssign.length ? subAssign.map(function(a){ return a.teacher; }) : [null];
+      var teacherList = subAssign.map(function(a){ return a.teacher; });
       var need = subj.periodsPerWeek, placed = 0, tp = 0;
       for(var pass=0; pass<2&&placed<need; pass++){
         for(var i=0; i<slots.length&&placed<need; i++){
