@@ -1369,14 +1369,23 @@ function generateTimetable(){
     /* Phase نهائي 2: ملء الحصص المتتالية الناقصة في أي خانتين فارغتين */
     workItems.forEach(function(wi){
       if(!wi.isDouble||wi.dblDone>=wi.dblNeeded) return;
-      var forcedT=wi.vacantTeacher?null:(wi.teacherList[0]||null);
       allDays.forEach(function(day){
         if(wi.dblDone>=wi.dblNeeded) return;
         var ppd=day===FRIDAY_NAME?stage.fridayPpd:stage.periodsPerDay;
         for(var p=1;p<ppd;p++){
           if(grid[day][p]!==null||grid[day][p+1]!==null) continue;
-          grid[day][p]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:forcedT,isDoubleFirst:true,forcedFill:true};
-          grid[day][p+1]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:forcedT,isDoubleSecond:true,forcedFill:true};
+          /* ✅ فحص isBusy قبل التعيين */
+          var forcedT=wi.vacantTeacher?null:pickTeacher(wi.teacherList,day,p);
+          if(!forcedT&&!wi.vacantTeacher&&wi.teacherList.length>0){
+            /* المعلمة مشغولة — ضع المادة وأشِر إلى الإشكالية */
+            grid[day][p]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:null,teacherBusy:true,isDoubleFirst:true,forcedFill:true};
+            grid[day][p+1]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:null,teacherBusy:true,isDoubleSecond:true,forcedFill:true};
+          } else {
+            grid[day][p]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:forcedT,isDoubleFirst:true,forcedFill:true};
+            grid[day][p+1]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:forcedT,isDoubleSecond:true,forcedFill:true};
+            /* ✅ تسجيل busy بعد الإدراج */
+            if(forcedT){ markBusy(forcedT,day,p); markBusy(forcedT,day,p+1); }
+          }
           wi.dblDone++; wi.placed+=2;
           break;
         }
