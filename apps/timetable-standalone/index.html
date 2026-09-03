@@ -1798,7 +1798,7 @@ function checkConflicts(){
      قيد    = مادة وُضعت دون معلمة لأن جميع معلماتها مشغولات في صفوف أخرى (قيد تقني)
      فراغ   = خانة لم تُملأ بأي مادة (فارق النصاب الوزاري عن الخانات الفيزيائية)
      ============================================================ */
-  var issues=[], busyMap={};
+  var issues=[], busyMap={}, vacantMap={};
 
   classes.forEach(function(cls){
     var grid=schedule[cls.id]; if(!grid) return;
@@ -1821,9 +1821,21 @@ function checkConflicts(){
           return;
         }
 
-        /* شاغر حقيقي: مادة بدون معلمة معيَّنة في DB */
+        /* شاغر حقيقي: مادة بدون معلمة معيَّنة في DB
+           نجمع بشكل فريد (مادة × صف) — لا نكرر بعدد الحصص */
         if(cell && !cell.isAltWeek && !cell.teacher && !cell.teacherBusy && !cell.isEmpty){
-          issues.push({type:"شاغر",msg:"مادة \""+cell.subjectName+"\" بدون معلمة — "+cls.label+" · "+day+" · ح"+ps});
+          var vk = cls.id + "#" + cell.subjectName;
+          if(!vacantMap[vk]){
+            var vsubj = subjects.find(function(s){
+              return s.stageId===cls.stageId &&
+                     (s.name===cell.subjectName || s.id===cell.subjectId);
+            });
+            vacantMap[vk] = {
+              subjectName: cell.subjectName,
+              classLabel:  cls.label,
+              periodsPerWeek: vsubj ? vsubj.periodsPerWeek : "؟"
+            };
+          }
         }
 
         /* فراغ: خانة فارغة كلياً (طبيعي بسبب فارق النصاب) */
@@ -1834,6 +1846,18 @@ function checkConflicts(){
           issues.push({type:"فراغ",msg:"خانة فارغة — "+cls.label+" · "+day+" · ح"+ps});
         }
       });
+    });
+  });
+
+  /* إضافة الشاغرات المجمَّعة كـ issue واحد لكل مادة×صف */
+  Object.keys(vacantMap).forEach(function(vk){
+    var v = vacantMap[vk];
+    issues.push({
+      type: "شاغر",
+      subjectName: v.subjectName,
+      classLabel:  v.classLabel,
+      periodsPerWeek: v.periodsPerWeek,
+      msg: "مادة \""+v.subjectName+"\" — "+v.classLabel+" — "+v.periodsPerWeek+" ح/أسبوع"
     });
   });
 
@@ -1892,7 +1916,48 @@ function renderConflicts(){
   var order=["تعارض","شاغر","قيد","نقص","فراغ"];
   var sorted=issues.slice().sort(function(a,b){ return order.indexOf(a.type)-order.indexOf(b.type); });
 
-  sorted.forEach(function(issue){
+  /* عرض الشاغرات كجدول منظم بدلاً من قائمة نصية */
+  var vacantIssues = sorted.filter(function(i){ return i.type==="شاغر"; });
+  var otherIssues  = sorted.filter(function(i){ return i.type!=="شاغر"; });
+
+  if(vacantIssues.length){
+    var secDiv = document.createElement("div");
+    secDiv.style.cssText = "margin-bottom:18px;";
+    var secTitle = document.createElement("div");
+    secTitle.style.cssText = "font-weight:900;font-size:15px;color:var(--cw);margin-bottom:10px;";
+    secTitle.textContent = "🕳️ المواد الشاغرة — تحتاج تعيين معلمة (" + vacantIssues.length + " مادة)";
+    secDiv.appendChild(secTitle);
+
+    var tbl = document.createElement("table");
+    tbl.style.cssText = "width:100%;border-collapse:collapse;font-size:14px;";
+    tbl.innerHTML = "<thead><tr style='background:color-mix(in oklab,var(--cw) 15%,var(--cb200));'>" +
+      "<th style='padding:8px 12px;text-align:right;border-radius:8px 0 0 0;'>المادة</th>" +
+      "<th style='padding:8px 12px;text-align:center;'>الصف</th>" +
+      "<th style='padding:8px 12px;text-align:center;border-radius:0 8px 0 0;'>النصاب الأسبوعي</th>" +
+      "</tr></thead><tbody>";
+
+    /* ترتيب: بالصف ثم بالمادة */
+    vacantIssues.sort(function(a,b){
+      if(a.classLabel < b.classLabel) return -1;
+      if(a.classLabel > b.classLabel) return 1;
+      return a.subjectName < b.subjectName ? -1 : 1;
+    });
+
+    vacantIssues.forEach(function(v, idx){
+      var bg = idx%2===0 ? "var(--cb100)" : "var(--cb200)";
+      tbl.innerHTML += "<tr style='background:"+bg+";'>" +
+        "<td style='padding:8px 12px;font-weight:700;color:var(--cw);'>"+escapeHtml(v.subjectName)+"</td>" +
+        "<td style='padding:8px 12px;text-align:center;font-weight:600;'>"+escapeHtml(v.classLabel)+"</td>" +
+        "<td style='padding:8px 12px;text-align:center;'><span style='background:color-mix(in oklab,var(--cw) 20%,var(--cb300));padding:3px 10px;border-radius:20px;font-weight:900;'>"+v.periodsPerWeek+" ح</span></td>" +
+        "</tr>";
+    });
+    tbl.innerHTML += "</tbody>";
+    secDiv.appendChild(tbl);
+    list.appendChild(secDiv);
+  }
+
+  /* باقي الأنواع كقائمة عادية */
+  otherIssues.forEach(function(issue){
     var div=document.createElement("div");
     div.className="conflict-item type-"+issue.type;
     div.textContent=(icons[issue.type]||"•")+" ["+issue.type+"] "+issue.msg;
