@@ -1411,32 +1411,9 @@ function generateTimetable(){
         }
       }
 
-      /* --- Post-2: إعادة ترتيب الفراغات لنهاية اليوم ---
-         نقرأ حتى ppdP+1 لالتقاط الدبل التي قد تمتد خارج النطاق الطبيعي.
-         نحفظ كل مادة كـ "مجموعة" (فردي=[cell] أو دبل=[first,second]).
-         ثم نكتبها بالترتيب من الخانة 1 ونُفرّغ الباقي. */
-      var groups=[];
-      var pp2=1, scanEnd=ppdP+1;
-      while(pp2<=scanEnd){
-        var cell=grid[dayP][pp2];
-        if(!cell){ pp2++; continue; }
-        if(cell.isDoubleSecond){ pp2++; continue; } /* يُعالَج مع first */
-        if(cell.isDoubleFirst){
-          var nextCell=grid[dayP][pp2+1];
-          if(nextCell && nextCell.isDoubleSecond){
-            groups.push([cell,nextCell]); pp2+=2;
-          } else {
-            cell.isDoubleFirst=false; /* بلا شريك — حوّله لفردي */
-            groups.push([cell]); pp2++;
-          }
-        } else {
-          groups.push([cell]); pp2++;
-        }
-      }
-      /* إعادة البناء: كتابة المجموعات من الخانة 1 ثم تفريغ الباقي */
-      var writeIdx=1;
-      groups.forEach(function(grp){ grp.forEach(function(c){ grid[dayP][writeIdx++]=c; }); });
-      for(; writeIdx<=scanEnd; writeIdx++){ grid[dayP][writeIdx]=null; }
+      /* Post-2 مُلغاة من التوليد — كانت تُعيد ترتيب الخلايا وتُفسد teacherBusy
+         التوليد يحافظ على المواقع الأصلية لضمان دقة isBusy بين الصفوف.
+         الترتيب الجمالي (الفراغات في النهاية) مؤجّل لطبقة العرض. */
     });
 
     /* ===== v19 Phase 3: تحديد الخانات الفارغة — لا تعبئة وهمية =====
@@ -1462,23 +1439,7 @@ function generateTimetable(){
     }
 
     schedule[cls.id] = grid;
-
-    /* ✅ v21.2: إعادة بناء teacherBusy من الشبكة النهائية (بعد Post-2)
-       سبب: Post-2 تُعيد ترتيب الخلايا بين الخانات، فتصبح مواقع
-       markBusy القديمة غير دقيقة → تعارضات وهمية عند الصف التالي.
-       الحل: بعد كل صف، نُعيد بناء teacherBusy كاملاً من جميع
-       الشبكات المُنتَجة حتى الآن.                                      */
-    teacherBusy = {};
-    Object.keys(schedule).forEach(function(clsId){
-      var g = schedule[clsId];
-      if(!g) return;
-      Object.keys(g).forEach(function(day){
-        Object.keys(g[day]).forEach(function(pStr){
-          var cell = g[day][pStr];
-          if(cell && cell.teacher) markBusy(cell.teacher, day, parseInt(pStr, 10));
-        });
-      });
-    });
+    /* ✅ v22: لا Post-2 → مواقع markBusy دقيقة دائماً → لا تعارضات وهمية */
   });
 
   updateAllSelects();
