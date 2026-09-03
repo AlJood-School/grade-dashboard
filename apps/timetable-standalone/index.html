@@ -96,6 +96,7 @@ footer{text-align:center;padding:20px;color:var(--cbc3);font-size:12px;font-weig
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
       <button type="button" class="btn btn-outline" data-action="download-template-excel">⬇️ تحميل قالب Excel</button>
       <button type="button" class="btn btn-outline" data-action="download-template-csv">⬇️ تحميل قالب CSV</button>
+      <button type="button" class="btn btn-primary" data-action="reload-aljood" style="background:var(--cp);color:#fff;">🔄 إعادة تحميل بيانات الجود من DB</button>
     </div>
 
     <div class="import-zone" id="import-zone" data-action="trigger-import">
@@ -386,7 +387,7 @@ const SCHOOL_CONFIG = {
   ]
 };
 const FRIDAY_NAME = "الجمعة";
-const STORAGE_KEY = "aljood_timetable_v3";
+const STORAGE_KEY = "aljood_timetable_v19";
 
 /* ===== المواد التي تُدرَّس بحصص متتالية (double period) ===== */
 const DOUBLE_PERIOD_SUBJECTS = {
@@ -586,10 +587,19 @@ function buildValidationSummary(){
   classes.forEach(function(cls){
     var r = calcCurriculumTotal(cls);
     if(r.gap !== 0){
-      var icon = r.gap > 0 ? "⚠️" : "🔴";
-      var msg = r.gap > 0
-        ? (r.gap + " خانة فارغة — أضف مواد أو زِد حصص مادة")
-        : (Math.abs(r.gap) + " حصة زائدة — قلّل حصص مادة");
+      /* فارق 1-2 حصة = ملاحظة تقنية (DB ≠ نصاب وزاري) — لا يُعدّ خطأً */
+      var isMinor = Math.abs(r.gap) <= 2;
+      var icon = isMinor ? "ℹ️" : (r.gap > 0 ? "⚠️" : "🔴");
+      var msg;
+      if(isMinor && r.gap > 0){
+        msg = "فارق " + r.gap + " حصة مع النصاب الوزاري — سيُملأ تلقائياً بتكرار أقصر الحصص";
+      } else if(isMinor && r.gap < 0){
+        msg = "فارق " + Math.abs(r.gap) + " حصة زائدة — يمكن دمجها في double period";
+      } else if(r.gap > 0){
+        msg = r.gap + " خانة فارغة — أضف مواد أو زِد حصص مادة";
+      } else {
+        msg = Math.abs(r.gap) + " حصة زائدة — قلّل حصص مادة";
+      }
       lines.push(icon + " <b>" + cls.label + "</b>: نصاب " + r.total + " / متاح " + r.slots + " — " + msg);
     }
   });
@@ -1053,9 +1063,17 @@ function updateStats(){
       balEl.style.color = "var(--csu)";
       balChip.style.borderColor = "var(--csu)";
     } else {
-      balEl.textContent = gaps.length + " تعارض";
-      balEl.style.color = "var(--cer)";
-      balChip.style.borderColor = "var(--cer)";
+      /* افحص هل كل الفوارق صغيرة (ملاحظات تقنية فقط) */
+      var hasRealGap = gaps.some(function(g){ return g.indexOf("⚠️") !== -1 || g.indexOf("🔴") !== -1; });
+      if(!hasRealGap){
+        balEl.textContent = "✓ مقبول";
+        balEl.style.color = "var(--cw)";
+        balChip.style.borderColor = "var(--cw)";
+      } else {
+        balEl.textContent = gaps.filter(function(g){ return g.indexOf("⚠️")!==-1||g.indexOf("🔴")!==-1; }).length + " تنبيه";
+        balEl.style.color = "var(--cer)";
+        balChip.style.borderColor = "var(--cer)";
+      }
     }
   }
 }
@@ -2032,10 +2050,14 @@ function init(){
       localStorage.removeItem(STORAGE_KEY);
       renderAll(); showToast("تم مسح كل البيانات","warning");
     }
-    else if(action==="load-aljood-data"){
+    else if(action==="load-aljood-data" || action==="reload-aljood"){
+      /* مسح التخزين القديم وإعادة التحميل الكامل */
+      classes=[]; subjects=[]; assignments=[]; schedule={};
+      classSeq=1; subjectSeq=1; assignmentSeq=1;
+      localStorage.removeItem(STORAGE_KEY);
       loadAljoodData();
       hideLaunchModal();
-      showToast("تم تحميل بيانات مدرسة الجود بنجاح ✅","success");
+      showToast("جارٍ تحميل بيانات مدرسة الجود كاملاً من قاعدة البيانات… ✅","success");
     }
     else if(action==="start-fresh"){
       hideLaunchModal();
@@ -2045,6 +2067,19 @@ function init(){
   });
 
   var hasData = loadFromStorage();
+  /* فحص سلامة البيانات: إذا كانت ناقصة (بدون CCDI أو بدون عربية) → أعد التحميل من DB */
+  if(hasData){
+    var hasCCDI = subjects.some(function(s){ return s.name && s.name.indexOf("ذكاء") !== -1; });
+    var hasArabic = subjects.some(function(s){ return s.name && (s.name.indexOf("عربي") !== -1 || s.name.indexOf("مجال عربي") !== -1); });
+    if(!hasCCDI || !hasArabic){
+      /* بيانات ناقصة — امسح وأعد التحميل */
+      localStorage.removeItem(STORAGE_KEY);
+      classes=[]; subjects=[]; assignments=[]; schedule={};
+      classSeq=1; subjectSeq=1; assignmentSeq=1;
+      hasData = false;
+      showToast("تم اكتشاف بيانات ناقصة — جارٍ إعادة التحميل من قاعدة البيانات…","warning");
+    }
+  }
   renderAll();
   switchTab("import");
   if(!hasData){ showLaunchModal(); }
