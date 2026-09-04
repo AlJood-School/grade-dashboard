@@ -14,6 +14,7 @@
 <script src="../platform-lang.js" defer></script>
 <script src="../platform-motd.js" defer></script>
 <script src="../platform-agent-brain.js" defer></script>
+<script src="../platform-messages.js" defer></script>
 <script src="../platform-student-state.js" defer></script>
 <script src="../platform-live-clock.js" defer></script>
 <style>
@@ -1486,10 +1487,14 @@ async function loadPDDates() {
     let events = [];
     if (!error && data && data.length) { events = data; }
     else { const { data: d2 } = await sb.from('pd_events').select('*').order('event_date').limit(20); if (d2 && d2.length) events = d2; }
-    const moeEvents = [
-      { event_date: '2026-09-01', title: 'بداية العام الدراسي / Academic Year Start', org: 'وزارة التربية UAE MOE', type: 'moe', duration_hours: 0 },
-      { event_date: '2026-10-15', title: 'يوم المعلم الإماراتي / UAE Teachers Day', org: 'وزارة التربية UAE MOE', type: 'moe', duration_hours: 6 },
-    ];
+    // جلب الأحداث الأكاديمية الرسمية من قاعدة البيانات
+    var moeEvents = [];
+    try {
+      var { data: acadData } = await sb.from('academic_events').select('title_ar,title_en,starts_at,event_type').order('starts_at').limit(50);
+      if (acadData && acadData.length) {
+        moeEvents = acadData.map(function(e) { return { event_date: e.starts_at, title: e.title_ar || e.title_en || '—', org: 'وزارة التربية UAE MOE', type: 'moe', duration_hours: 0 }; });
+      }
+    } catch(ex) { moeEvents = []; }
     const allEvents = [...events, ...moeEvents].sort((a,b) => (a.event_date||'').localeCompare(b.event_date||''));
     const today = new Date().toISOString().split('T')[0];
     let upcoming = 0, completed = 0, hours = 0;
