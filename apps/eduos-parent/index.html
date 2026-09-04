@@ -381,16 +381,20 @@ tr:hover td { background: #FAFBFC; }
         <div class="card-title">💬 إرسال رسالة لمعلم/ة | Send Message to Teacher</div>
         <div class="msg-form">
           <div style="margin-bottom:12px">
-            <label style="font-size:14px;font-weight:700;color:var(--text2);display:block;margin-bottom:6px">المعلم/ة | Teacher</label>
+            <label style="font-size:14px;font-weight:700;color:var(--text2);display:block;margin-bottom:6px">الموضوع | Subject</label>
+            <input id="msgSubject" type="text" placeholder="مثال: استفسار عن درجات الفصل الأول..." style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 16px;font-family:'Tajawal',sans-serif;font-size:15px;background:#fff;color:var(--text)">
+          </div>
+          <div style="margin-bottom:12px">
+            <label style="font-size:14px;font-weight:700;color:var(--text2);display:block;margin-bottom:6px">المعلم/ة (اختياري) | Teacher</label>
             <select id="msgTeacher" style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 16px;font-family:'Tajawal',sans-serif;font-size:15px;background:#fff">
-              <option value="">اختر المعلم/ة...</option>
+              <option value="">— المدرسة عموماً —</option>
             </select>
           </div>
           <div style="margin-bottom:14px">
             <label style="font-size:14px;font-weight:700;color:var(--text2);display:block;margin-bottom:6px">الرسالة | Message</label>
             <textarea id="msgText" placeholder="اكتب رسالتك هنا..."></textarea>
           </div>
-          <button class="btn btn-primary" onclick="sendMessage()">📤 إرسال | Send</button>
+          <button class="btn btn-primary" id="sendMsgBtn" onclick="sendMessage()">📤 إرسال | Send</button>
         </div>
       </div>
       <div class="card">
@@ -776,53 +780,104 @@ function updateHomeKpis() {
 
 // --- MESSAGES ---
 async function loadTeachersForMsg() {
-  const teachers = await dbGet('staff_profiles', 'select=id,name_ar&role_key=eq.teacher&order=name_ar&limit=60');
+  const teachers = await dbGet('staff_profiles', 'select=staff_db_id,name_ar&role_key=eq.teacher&order=name_ar&limit=80');
   const sel = document.getElementById('msgTeacher');
   if (teachers.length) {
     sel.innerHTML = '<option value="">اختر المعلم/ة...</option>' +
-      teachers.map(t => `<option value="${t.id}">${t.name_ar || '—'}</option>`).join('');
+      teachers.map(function(t) { return '<option value="' + t.staff_db_id + '">' + (t.name_ar || '—') + '</option>'; }).join('');
   }
+  await loadMessages();
 }
 
 async function sendMessage() {
-  const teacher = document.getElementById('msgTeacher').value;
-  const text = document.getElementById('msgText').value.trim();
-  if (!teacher || !text) { showToast('⚠️ اختر/ي المعلم/ة واكتب/ي الرسالة'); return; }
+  var teacher = document.getElementById('msgTeacher').value;
+  var subjectEl = document.getElementById('msgSubject');
+  var subjectVal = subjectEl ? subjectEl.value.trim() : '';
+  var text = document.getElementById('msgText').value.trim();
+  if (!text) { showToast('⚠️ اكتب/ي الرسالة أولاً'); return; }
+  var user = getUser();
+  var natId = user.national_id || user.id || '';
 
   try {
-    const user = getUser();
-    await fetch(`${(window.EduOS?window.EduOS.SB_URL:'')}/rest/v1/parent_messages`, {
+    var res = await fetch((window.EduOS ? window.EduOS.SB_URL : '') + '/rest/v1/parent_messages', {
       method: 'POST',
       headers: {
-        'apikey': (window.EduOS?window.EduOS.SB_KEY:''), 'Authorization': 'Bearer ' + (window.EduOS?window.EduOS.SB_KEY:''),
-        'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+        'apikey': (window.EduOS ? window.EduOS.SB_KEY : ''),
+        'Authorization': 'Bearer ' + (window.EduOS ? window.EduOS.SB_KEY : ''),
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
       },
       body: JSON.stringify({
-        parent_id: currentParentId,
-        teacher_id: teacher,
-        student_id: selectedChild,
-        message: text,
-        sent_at: new Date().toISOString()
+        parent_phone: natId,
+        student_id: selectedChild || '',
+        student_name: selectedChild ? (children.find(function(c) { return c.student_id === selectedChild; }) || {}).name || '' : '',
+        message_type: 'parent_inquiry',
+        subject: subjectVal || 'استفسار من ولي الأمر',
+        body: text,
+        direction: 'inbound',
+        status: 'pending'
       })
     });
-  } catch(e) {}
+    if (!res.ok) throw new Error('فشل الإرسال');
+  } catch(e) {
+    showToast('❌ حدث خطأ في الإرسال');
+    return;
+  }
 
   showToast('✅ تم إرسال الرسالة | Message sent');
   document.getElementById('msgText').value = '';
+  if (subjectEl) subjectEl.value = '';
   document.getElementById('msgTeacher').value = '';
+  await loadMessages();
+}
+
+async function loadMessages() {
+  if (!selectedChild) return;
+  var rows = await dbGet('parent_messages',
+    'select=subject,body,direction,status,reply,replied_at,created_at&student_id=eq.' + selectedChild + '&order=created_at.desc&limit=30'
+  );
+  var el = document.getElementById('msgList');
+  if (!rows || !rows.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">💬</div>لا رسائل بعد</div>';
+    return;
+  }
+  el.innerHTML = rows.map(function(m) {
+    var isOut = m.direction === 'outbound';
+    var align = isOut ? 'right' : 'left';
+    var bg = isOut ? '#EDE9FE' : '#F0FDF4';
+    var border = isOut ? '#C4B5FD' : '#A7F3D0';
+    var label = isOut ? 'من المدرسة' : 'رسالتك';
+    var dateStr = m.created_at ? new Date(m.created_at).toLocaleDateString('ar-AE', {day:'2-digit',month:'short',year:'numeric'}) : '';
+    var statusBadge = m.status === 'replied' ? '<span class="badge badge-green" style="font-size:11px">تم الرد</span>' : '<span class="badge badge-amber" style="font-size:11px">بانتظار الرد</span>';
+    var replyHtml = '';
+    if (m.reply) {
+      replyHtml = '<div style="margin-top:10px;padding:10px 14px;background:#F0FDF4;border-right:3px solid #10B981;border-radius:8px;font-size:14px;color:#065F46">' +
+        '<strong>رد المدرسة:</strong> ' + m.reply + '</div>';
+    }
+    return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:12px;padding:14px 18px;margin-bottom:12px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
+        '<span style="font-weight:800;font-size:14px;color:#1E293B">' + (m.subject || 'رسالة') + '</span>' +
+        '<div style="display:flex;gap:6px;align-items:center">' + statusBadge + '<span style="font-size:12px;color:#94A3B8">' + dateStr + '</span></div>' +
+      '</div>' +
+      '<div style="font-size:15px;color:#334155;line-height:1.7">' + m.body + '</div>' +
+      replyHtml +
+    '</div>';
+  }).join('');
 }
 
 // --- ANNOUNCEMENTS ---
 async function loadAnnouncements() {
-  const rows = await dbGet('announcements', 'select=title,body,created_at&order=created_at.desc&limit=20');
-  const el = document.getElementById('announceList');
-  if (!rows.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📢</div>لا بيانات</div>'; return; }
-  el.innerHTML = rows.map(a => `
-    <div class="announce-card">
-      <div class="announce-title">📢 ${a.title || 'إعلان'}</div>
-      <div class="announce-body">${a.body || ''}</div>
-      <div class="announce-date">${a.created_at ? new Date(a.created_at).toLocaleDateString('ar') : ''}</div>
-    </div>`).join('');
+  var rows = await dbGet('school_news', 'select=title,summary,published_at,category&order=published_at.desc&limit=20');
+  var el = document.getElementById('announceList');
+  if (!rows || !rows.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📢</div>لا بيانات</div>'; return; }
+  el.innerHTML = rows.map(function(a) {
+    var dateStr = a.published_at ? new Date(a.published_at).toLocaleDateString('ar-AE', {day:'2-digit',month:'long',year:'numeric'}) : '';
+    return '<div class="announce-card">' +
+      '<div class="announce-title">📢 ' + (a.title || 'إعلان') + '</div>' +
+      '<div class="announce-body">' + (a.summary || '') + '</div>' +
+      '<div class="announce-date">' + dateStr + (a.category ? ' · ' + a.category : '') + '</div>' +
+    '</div>';
+  }).join('');
 }
 
 // --- NAV ---
@@ -833,7 +888,7 @@ function switchTab(name, el) {
   if (el) el.classList.add('active');
 
   if (name === 'announcements') loadAnnouncements();
-  if (name === 'messages') loadTeachersForMsg();
+  if (name === 'messages') { loadTeachersForMsg(); if (selectedChild) loadMessages(); }
 }
 
 // --- TOAST ---
