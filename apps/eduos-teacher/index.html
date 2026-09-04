@@ -444,6 +444,13 @@ tr:hover td{background:var(--surface2)}
         <span class="snav-sub">Meetings</span>
       </span>
     </button>
+    <button class="snav" id="coord-nav-btn" data-panel="coord-meetings" onclick="showPanel('coord-meetings',this);loadMySubjectMeetings()" style="display:none">
+      <span class="snav-icon">&#x1F4CB;</span>
+      <span class="snav-text">
+        <span class="snav-label">اجتماعات مادتي</span>
+        <span class="snav-sub">Subject Meetings</span>
+      </span>
+    </button>
   </nav>
 
   <div class="sidebar-footer">
@@ -2336,6 +2343,151 @@ function loadMyPDP() {
     ctr.innerHTML = '<div class="empty">بيانات المستخدم غير متوفرة</div>';
   }
 }
+</script>
+
+<script>
+// ===================== COORDINATOR MODULE — TEACHER PORTAL =====================
+// Shows "اجتماعات مادتي" tab only if logged-in teacher is a coordinator
+
+async function checkCoordinatorStatus() {
+  try {
+    var s = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+    var staffDbId = s.id || s.staff_db_id || '';
+    if (!staffDbId) return;
+    var sb = window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
+    var sbUrl = window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
+    var res = await fetch(sbUrl+'/rest/v1/staff_profiles?staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&select=is_coordinator,coordinator_subject,name_ar',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var rows = await res.json();
+    if (Array.isArray(rows) && rows.length && rows[0].is_coordinator) {
+      window._myCoordSubject = rows[0].coordinator_subject;
+      window._myNameAr = rows[0].name_ar;
+      window._myStaffDbId = staffDbId;
+      var btn = document.getElementById('coord-nav-btn');
+      if (btn) btn.style.display = 'flex';
+      // Inject panel if not exists
+      if (!document.getElementById('panel-coord-meetings')) {
+        injectCoordMeetingsPanel();
+      }
+    }
+  } catch(e) { /* silent */ }
+}
+
+function injectCoordMeetingsPanel() {
+  var panels = document.querySelectorAll('.panel');
+  if (!panels.length) return;
+  var last = panels[panels.length-1];
+  var div = document.createElement('div');
+  div.className = 'panel';
+  div.id = 'panel-coord-meetings';
+  div.style.cssText = 'padding:24px;overflow-y:auto;height:100%';
+  div.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">' +
+      '<div><div style="font-size:20px;font-weight:900;color:#1E293B">اجتماعات مادتي</div>' +
+      '<div id="coord-subject-label" style="font-size:13px;color:#6C3DD6;font-weight:700;margin-top:2px">'+(window._myCoordSubject||'')+'</div></div>' +
+      '<button onclick="showNewMeetingModal()" style="padding:10px 20px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:800;cursor:pointer">+ اجتماع جديد</button>' +
+    '</div>' +
+    '<div id="my-meetings-wrap"><div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div></div>' +
+    '<div id="new-meeting-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.5);align-items:center;justify-content:center">' +
+      '<div style="background:#fff;border-radius:18px;padding:28px;width:500px;max-width:95vw;direction:rtl;max-height:90vh;overflow-y:auto">' +
+        '<div style="font-size:18px;font-weight:900;color:#1E293B;margin-bottom:18px">اجتماع مادة جديد</div>' +
+        '<div style="margin-bottom:12px"><label style="font-size:13px;font-weight:700;color:#475569;display:block;margin-bottom:5px">تاريخ الاجتماع</label><input type="date" id="meet-date-inp" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px"></div>' +
+        '<div style="margin-bottom:12px"><label style="font-size:13px;font-weight:700;color:#475569;display:block;margin-bottom:5px">جدول الأعمال</label><textarea id="meet-agenda-inp" rows="3" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;resize:vertical" placeholder="موضوعات الاجتماع..."></textarea></div>' +
+        '<div style="margin-bottom:20px"><label style="font-size:13px;font-weight:700;color:#475569;display:block;margin-bottom:5px">محضر الاجتماع (اختياري — يمكن إضافته لاحقاً)</label><textarea id="meet-minutes-inp" rows="4" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;resize:vertical" placeholder="ما تم مناقشته وقراراته..."></textarea></div>' +
+        '<div style="display:flex;gap:10px;justify-content:flex-end">' +
+          '<button onclick="closeNewMeetingModal()" style="padding:10px 20px;background:#F1F5F9;border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;cursor:pointer;color:#475569">إلغاء</button>' +
+          '<button onclick="saveNewMeeting()" style="padding:10px 20px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:800;cursor:pointer;color:#fff">حفظ الاجتماع</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  last.parentNode.insertBefore(div, last.nextSibling);
+}
+
+async function loadMySubjectMeetings() {
+  var wrap = document.getElementById('my-meetings-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div>';
+  try {
+    var subject = window._myCoordSubject || '';
+    var sb = window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
+    var sbUrl = window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
+    var res = await fetch(sbUrl+'/rest/v1/subject_meetings?subject=eq.'+encodeURIComponent(subject)+'&academic_year=eq.2026-2027&order=meeting_date.desc&limit=50&select=id,meeting_date,agenda,minutes,status',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var rows = await res.json();
+    if (!Array.isArray(rows)||!rows.length) {
+      wrap.innerHTML = '<div style="text-align:center;padding:40px;color:#94A3B8">لا توجد اجتماعات مسجَّلة<br><span style="font-size:13px">اضغطي + اجتماع جديد لتسجيل أول اجتماع</span></div>';
+      return;
+    }
+    var sm = {scheduled:{l:'مجدول',c:'#D97706',b:'#FEF3C7'},completed:{l:'منتهٍ',c:'#059669',b:'#ECFDF5'},cancelled:{l:'ملغى',c:'#E11D48',b:'#FFF1F2'}};
+    wrap.innerHTML = '<div style="display:flex;flex-direction:column;gap:12px">'+rows.map(function(m){
+      var s=sm[m.status]||sm.scheduled;
+      return '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:18px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">' +
+          '<div style="font-size:15px;font-weight:800;color:#1E293B">'+(m.meeting_date||'')+'</div>' +
+          '<div style="display:flex;gap:8px;align-items:center">' +
+            '<span style="background:'+s.b+';color:'+s.c+';border-radius:8px;padding:4px 12px;font-size:12px;font-weight:700">'+s.l+'</span>' +
+            (m.status!=='completed'?'<button onclick="completeMeeting(\''+m.id+'\')" style="background:#ECFDF5;border:1px solid #A7F3D0;color:#059669;border-radius:8px;padding:4px 10px;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">إغلاق</button>':'') +
+          '</div>' +
+        '</div>' +
+        (m.agenda?'<div style="font-size:13px;color:#1E293B;font-weight:700;margin-bottom:6px">جدول الأعمال:</div><div style="font-size:13px;color:#475569;margin-bottom:10px;line-height:1.6">'+m.agenda.replace(/\n/g,'<br>')+'</div>':'') +
+        (m.minutes?'<div style="font-size:13px;color:#1E293B;font-weight:700;margin-bottom:6px">المحضر:</div><div style="font-size:13px;color:#475569;background:#F8FAFF;border-radius:8px;padding:12px;line-height:1.6">'+m.minutes.replace(/\n/g,'<br>')+'</div>':
+          '<button onclick="addMinutes(\''+m.id+'\')" style="background:#EDE9FE;border:none;color:#6C3DD6;border-radius:8px;padding:6px 14px;font-family:Tajawal,Arial,sans-serif;font-size:13px;font-weight:700;cursor:pointer">+ إضافة محضر</button>') +
+      '</div>';
+    }).join('')+'</div>';
+  } catch(e) {
+    wrap.innerHTML='<div style="text-align:center;padding:32px;color:#EF4444">خطأ في التحميل</div>';
+  }
+}
+
+function showNewMeetingModal(){var m=document.getElementById('new-meeting-modal');if(m)m.style.display='flex';}
+function closeNewMeetingModal(){var m=document.getElementById('new-meeting-modal');if(m)m.style.display='none';}
+
+async function saveNewMeeting(){
+  var dateInp=document.getElementById('meet-date-inp');
+  var agendaInp=document.getElementById('meet-agenda-inp');
+  var minutesInp=document.getElementById('meet-minutes-inp');
+  var meetDate=dateInp?dateInp.value:'';
+  var agenda=agendaInp?agendaInp.value.trim():'';
+  var minutes=minutesInp?minutesInp.value.trim():'';
+  if(!meetDate){alert('يرجى تحديد تاريخ الاجتماع');return;}
+  try{
+    var sb=window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
+    var sbUrl=window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
+    var body={subject:window._myCoordSubject||'',coordinator_staff_db_id:window._myStaffDbId||'',coordinator_name_ar:window._myNameAr||'',meeting_date:meetDate,academic_year:'2026-2027',agenda:agenda||null,minutes:minutes||null,status:minutes?'completed':'scheduled'};
+    await fetch(sbUrl+'/rest/v1/subject_meetings',{method:'POST',headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(body)});
+    closeNewMeetingModal();
+    if(dateInp)dateInp.value='';
+    if(agendaInp)agendaInp.value='';
+    if(minutesInp)minutesInp.value='';
+    loadMySubjectMeetings();
+  }catch(e){alert('خطأ في الحفظ');}
+}
+
+async function completeMeeting(id){
+  var minutes=prompt('أدخلي محضر الاجتماع:');
+  if(minutes===null)return;
+  try{
+    var sb=window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
+    var sbUrl=window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
+    await fetch(sbUrl+'/rest/v1/subject_meetings?id=eq.'+id,{method:'PATCH',headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({status:'completed',minutes:minutes})});
+    loadMySubjectMeetings();
+  }catch(e){alert('خطأ في الحفظ');}
+}
+
+async function addMinutes(id){
+  var minutes=prompt('أدخلي محضر الاجتماع:');
+  if(minutes===null||!minutes.trim())return;
+  try{
+    var sb=window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
+    var sbUrl=window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
+    await fetch(sbUrl+'/rest/v1/subject_meetings?id=eq.'+id,{method:'PATCH',headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({minutes:minutes,status:'completed'})});
+    loadMySubjectMeetings();
+  }catch(e){alert('خطأ في الحفظ');}
+}
+
+// Run coordinator check after page load
+document.addEventListener('DOMContentLoaded', function(){
+  setTimeout(checkCoordinatorStatus, 1500);
+});
+// ===================== END COORDINATOR MODULE =====================
 </script>
 </body>
 </html>

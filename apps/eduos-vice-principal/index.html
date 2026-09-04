@@ -210,6 +210,10 @@ body{overflow:hidden}
       <span class="snav-icon">&#x1F91D;</span>
       <span class="snav-text"><span class="snav-label">الاجتماعات</span><span class="snav-sub">Meetings</span></span>
     </button>
+    <button class="snav" data-panel="coordinators" onclick="showPanel('coordinators',this);loadCoordinators()">
+      <span class="snav-icon">&#x1F4CB;</span>
+      <span class="snav-text"><span class="snav-label">منسقات المواد</span><span class="snav-sub">Subject Coordinators</span></span>
+    </button>
   </nav>
   <div class="sidebar-footer">
     <button class="logout-btn" id="logoutBtn">&#x1F6AA; تسجيل الخروج / Logout</button>
@@ -2495,6 +2499,144 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 });
+</script>
+
+<script>
+(function injectCoordPanelVP(){
+  var panelHTML = '<div class="panel" id="panel-coordinators" style="padding:24px;overflow-y:auto;height:100%">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">' +
+      '<div><div style="font-size:20px;font-weight:900;color:#1E293B">منسقات المواد</div>' +
+      '<div style="font-size:13px;color:#94A3B8;margin-top:2px">Subject Coordinators — 2026-2027</div></div>' +
+      '<button onclick="showAssignModalVP()" style="padding:10px 20px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:800;cursor:pointer">+ تعيين منسقة</button>' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap">' +
+      '<button onclick="coordTabVP(\'list\')" id="vp-ctab-list" style="padding:8px 18px;border-radius:8px;border:1px solid #6C3DD6;background:#EDE9FE;color:#6C3DD6;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;cursor:pointer">المنسقات الحالية</button>' +
+      '<button onclick="coordTabVP(\'meetings\')" id="vp-ctab-meetings" style="padding:8px 18px;border-radius:8px;border:1px solid #E2E8F0;background:#fff;color:#475569;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;cursor:pointer">اجتماعات المواد</button>' +
+      '<button onclick="coordTabVP(\'minutes\')" id="vp-ctab-minutes" style="padding:8px 18px;border-radius:8px;border:1px solid #E2E8F0;background:#fff;color:#475569;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;cursor:pointer">المحاضر</button>' +
+    '</div>' +
+    '<div id="vp-coord-tab-list"><div id="vp-coord-list-wrap"><div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div></div></div>' +
+    '<div id="vp-coord-tab-meetings" style="display:none"><div id="vp-coord-meetings-wrap"></div></div>' +
+    '<div id="vp-coord-tab-minutes" style="display:none"><div id="vp-coord-minutes-wrap"></div></div>' +
+  '</div>';
+  var modalHTML = '<div id="vp-coord-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.5);align-items:center;justify-content:center">' +
+    '<div style="background:#fff;border-radius:18px;padding:28px;width:460px;max-width:95vw;direction:rtl">' +
+      '<div style="font-size:18px;font-weight:900;color:#1E293B;margin-bottom:18px">تعيين منسقة مادة</div>' +
+      '<div style="margin-bottom:14px"><label style="font-size:13px;font-weight:700;color:#475569;display:block;margin-bottom:6px">المادة</label>' +
+        '<select id="vp-coord-subject-sel" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px">' +
+          '<option value="">-- اختري المادة --</option>' +
+          '<option value="اللغة العربية">اللغة العربية</option>' +
+          '<option value="التربية الإسلامية">التربية الإسلامية</option>' +
+          '<option value="الدراسات الاجتماعية">الدراسات الاجتماعية</option>' +
+          '<option value="اللغة الإنجليزية">اللغة الإنجليزية</option>' +
+          '<option value="الرياضيات">الرياضيات</option>' +
+          '<option value="العلوم">العلوم</option>' +
+          '<option value="التربية البدنية">التربية البدنية</option>' +
+          '<option value="الفنون">الفنون</option>' +
+          '<option value="الموسيقى">الموسيقى</option>' +
+          '<option value="الذكاء الاصطناعي والتكنولوجيا">الذكاء الاصطناعي والتكنولوجيا</option>' +
+        '</select></div>' +
+      '<div style="margin-bottom:20px"><label style="font-size:13px;font-weight:700;color:#475569;display:block;margin-bottom:6px">المنسقة</label>' +
+        '<select id="vp-coord-teacher-sel" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px"><option value="">-- اختري المعلمة --</option></select></div>' +
+      '<div style="display:flex;gap:10px;justify-content:flex-end">' +
+        '<button onclick="closeCoordModalVP()" style="padding:10px 20px;background:#F1F5F9;border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;cursor:pointer;color:#475569">إلغاء</button>' +
+        '<button onclick="saveCoordinatorVP()" style="padding:10px 20px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:800;cursor:pointer;color:#fff">حفظ</button>' +
+      '</div>' +
+    '</div></div>';
+  // Find last panel and insert after
+  var panels = document.querySelectorAll('.panel');
+  if (panels.length) {
+    var last = panels[panels.length - 1];
+    var div = document.createElement('div');
+    div.innerHTML = panelHTML;
+    last.parentNode.insertBefore(div.firstChild, last.nextSibling);
+  }
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+})();
+
+function coordTabVP(tab) {
+  ['list','meetings','minutes'].forEach(function(t) {
+    var el = document.getElementById('vp-coord-tab-' + t);
+    var btn = document.getElementById('vp-ctab-' + t);
+    if (el) el.style.display = t === tab ? 'block' : 'none';
+    if (btn) {
+      if (t === tab) { btn.style.background='#EDE9FE'; btn.style.borderColor='#6C3DD6'; btn.style.color='#6C3DD6'; }
+      else { btn.style.background='#fff'; btn.style.borderColor='#E2E8F0'; btn.style.color='#475569'; }
+    }
+  });
+  if (tab === 'meetings') loadCoordMeetingsVP();
+  if (tab === 'minutes') loadCoordMinutesVP();
+}
+
+async function loadCoordinators() {
+  var wrap = document.getElementById('vp-coord-list-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div>';
+  try {
+    var sb = window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
+    var sbUrl = window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
+    var res = await fetch(sbUrl+'/rest/v1/staff_profiles?is_coordinator=eq.true&is_active=eq.true&select=name_ar,coordinator_subject,staff_db_id&order=coordinator_subject.asc',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var rows = await res.json();
+    if (!Array.isArray(rows)||!rows.length){wrap.innerHTML='<div style="text-align:center;padding:40px;color:#94A3B8">لا توجد منسقات معيَّنات</div>';return;}
+    var colors={'اللغة العربية':'#6C3DD6','التربية الإسلامية':'#059669','الدراسات الاجتماعية':'#D97706','اللغة الإنجليزية':'#0284C7','الرياضيات':'#7C3AED','العلوم':'#0891B2','التربية البدنية':'#16A34A','الفنون':'#E11D48','الموسيقى':'#F59E0B','الذكاء الاصطناعي والتكنولوجيا':'#8B5CF6'};
+    wrap.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px">'+rows.map(function(r){var c=colors[r.coordinator_subject]||'#6C3DD6';return'<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:18px;border-right:4px solid '+c+'"><div style="font-size:15px;font-weight:800;color:#1E293B">'+(r.name_ar||'')+'</div><div style="font-size:13px;color:'+c+';font-weight:700;margin-top:3px">'+(r.coordinator_subject||'')+'</div><div style="margin-top:8px;font-size:12px;color:#94A3B8">اجتماع أسبوعي — محضر الأربعاء</div></div>';}).join('')+'</div>';
+  } catch(e){wrap.innerHTML='<div style="text-align:center;padding:32px;color:#EF4444">خطأ</div>';}
+}
+
+async function loadCoordMeetingsVP() {
+  var wrap=document.getElementById('vp-coord-meetings-wrap');
+  if(!wrap)return;
+  wrap.innerHTML='<div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div>';
+  try{
+    var sb=window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
+    var sbUrl=window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
+    var res=await fetch(sbUrl+'/rest/v1/subject_meetings?academic_year=eq.2026-2027&order=meeting_date.desc&limit=50&select=id,subject,coordinator_name_ar,meeting_date,status,agenda',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var rows=await res.json();
+    if(!Array.isArray(rows)||!rows.length){wrap.innerHTML='<div style="text-align:center;padding:40px;color:#94A3B8">لا توجد اجتماعات</div>';return;}
+    var sm={scheduled:{l:'مجدول',c:'#D97706',b:'#FEF3C7'},completed:{l:'منتهٍ',c:'#059669',b:'#ECFDF5'},cancelled:{l:'ملغى',c:'#E11D48',b:'#FFF1F2'}};
+    wrap.innerHTML='<div style="display:flex;flex-direction:column;gap:10px">'+rows.map(function(m){var s=sm[m.status]||sm.scheduled;return'<div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap"><div style="min-width:80px;text-align:center;background:#EDE9FE;border-radius:10px;padding:8px"><div style="font-size:17px;font-weight:900;color:#6C3DD6">'+(m.meeting_date?m.meeting_date.split('-').slice(2).join(''):'--')+'</div><div style="font-size:11px;color:#94A3B8">'+(m.meeting_date?m.meeting_date.substring(0,7):'')+'</div></div><div style="flex:1"><div style="font-size:15px;font-weight:800;color:#1E293B">'+(m.subject||'')+'</div><div style="font-size:13px;color:#475569">'+(m.coordinator_name_ar||'')+'</div></div><span style="background:'+s.b+';color:'+s.c+';border-radius:8px;padding:4px 12px;font-size:12px;font-weight:700">'+s.l+'</span></div>';}).join('')+'</div>';
+  }catch(e){wrap.innerHTML='<div style="text-align:center;padding:32px;color:#EF4444">خطأ</div>';}
+}
+
+async function loadCoordMinutesVP() {
+  var wrap=document.getElementById('vp-coord-minutes-wrap');
+  if(!wrap)return;
+  wrap.innerHTML='<div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div>';
+  try{
+    var sb=window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
+    var sbUrl=window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
+    var res=await fetch(sbUrl+'/rest/v1/subject_meetings?academic_year=eq.2026-2027&status=eq.completed&minutes=not.is.null&order=meeting_date.desc&limit=50&select=id,subject,coordinator_name_ar,meeting_date,minutes',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var rows=await res.json();
+    if(!Array.isArray(rows)||!rows.length){wrap.innerHTML='<div style="text-align:center;padding:40px;color:#94A3B8">لا توجد محاضر</div>';return;}
+    wrap.innerHTML='<div style="display:flex;flex-direction:column;gap:10px">'+rows.map(function(m){return'<div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-size:15px;font-weight:800;color:#1E293B">'+(m.subject||'')+'</div><div style="font-size:12px;color:#94A3B8">'+(m.meeting_date||'')+'</div></div><div style="font-size:13px;color:#475569;line-height:1.6">'+(m.minutes||'').replace(/\n/g,'<br>')+'</div></div>';}).join('')+'</div>';
+  }catch(e){wrap.innerHTML='<div style="text-align:center;padding:32px;color:#EF4444">خطأ</div>';}
+}
+
+async function showAssignModalVP(){
+  var modal=document.getElementById('vp-coord-modal');if(!modal)return;
+  modal.style.display='flex';
+  var sel=document.getElementById('vp-coord-teacher-sel');
+  sel.innerHTML='<option value="">جاري التحميل...</option>';
+  try{
+    var sb=window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
+    var sbUrl=window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
+    var res=await fetch(sbUrl+'/rest/v1/staff_profiles?role_key=eq.teacher&is_active=eq.true&select=name_ar,staff_db_id&order=name_ar.asc',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var rows=await res.json();
+    sel.innerHTML='<option value="">-- اختري المعلمة --</option>'+(Array.isArray(rows)?rows:[]).map(function(t){return'<option value="'+(t.staff_db_id||'')+'">'+(t.name_ar||'')+'</option>';}).join('');
+  }catch(e){sel.innerHTML='<option value="">خطأ</option>';}
+}
+function closeCoordModalVP(){var m=document.getElementById('vp-coord-modal');if(m)m.style.display='none';}
+async function saveCoordinatorVP(){
+  var subject=document.getElementById('vp-coord-subject-sel').value;
+  var staffDbId=document.getElementById('vp-coord-teacher-sel').value;
+  if(!subject||!staffDbId){alert('يرجى اختيار المادة والمعلمة');return;}
+  try{
+    var sb=window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
+    var sbUrl=window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
+    await fetch(sbUrl+'/rest/v1/staff_profiles?coordinator_subject=eq.'+encodeURIComponent(subject),{method:'PATCH',headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({is_coordinator:false,coordinator_subject:null})});
+    await fetch(sbUrl+'/rest/v1/staff_profiles?staff_db_id=eq.'+encodeURIComponent(staffDbId),{method:'PATCH',headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({is_coordinator:true,coordinator_subject:subject})});
+    closeCoordModalVP();loadCoordinators();
+  }catch(e){alert('خطأ في الحفظ');}
+}
 </script>
 </body>
 </html>
