@@ -230,12 +230,7 @@
     const token = session.token || '';
 
     if (!token) {
-      // طالب أو مستخدم بدون JWT (قديم) — تحقق بسيط من وجود الجلسة
-      if (session.role_key === 'student' || session.role_key === 'parent') {
-        document.documentElement.style.visibility = 'visible';
-        return;
-      }
-      // موظف بدون JWT = مشبوه
+      // H-03 FIX: كل الأدوار تحتاج JWT — لا استثناء للطالب أو ولي الأمر
       redirectTo('/apps/eduos-login/?err=no_token');
       return;
     }
