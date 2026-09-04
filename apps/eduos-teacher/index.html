@@ -796,6 +796,7 @@ tr:hover td{background:var(--surface2)}
         <button class="sub-nav-btn" id="comm-btn-ai" onclick="switchCommTab('ai')">🤖 الذكاء / AI <span id="aiBadge" style="background:var(--rose);color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;font-weight:800;margin-right:4px">0</span></button>
         <button class="sub-nav-btn" id="comm-btn-reports" onclick="switchCommTab('reports')">📋 التقارير / Reports</button>
         <button class="sub-nav-btn" id="comm-btn-notif" onclick="switchCommTab('notif')">🔔 الإشعارات <span id="notifBadge" style="background:var(--rose);color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;font-weight:800;margin-right:4px;display:none">0</span></button>
+        <button class="sub-nav-btn" id="comm-btn-parent" onclick="switchCommTab('parent');loadParentMessages()">👨‍👩‍👧 رسائل الأولياء <span id="parentMsgBadge" style="background:var(--rose);color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;font-weight:800;margin-right:4px;display:none">0</span></button>
       </div>
 
       <!-- MESSAGES -->
@@ -869,6 +870,15 @@ tr:hover td{background:var(--surface2)}
           <button class="btn btn-ghost" onclick="markAllNotifRead()" style="font-size:13px">✔ تحديد الكل مقروءاً</button>
         </div>
         <div id="notifList"><div class="empty"><div class="icon">🔔</div><p>لا إشعارات / No notifications</p></div></div>
+      </div>
+
+      <!-- PARENT MESSAGES -->
+      <div class="sub-panel" id="comm-panel-parent">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div style="font-weight:800;font-size:16px">👨‍👩‍👧 رسائل أولياء الأمور / Parent Messages</div>
+          <button class="btn btn-ghost" onclick="loadParentMessages()" style="font-size:13px">🔄 تحديث</button>
+        </div>
+        <div id="parentMsgList"><div class="empty"><div class="icon">👨‍👩‍👧</div><p>جاري التحميل...</p></div></div>
       </div>
     </div>
 
@@ -1925,6 +1935,110 @@ async function markAllNotifRead() {
     await sb.from('notifications').update({ is_read: true }).eq('user_id', teacherId).eq('is_read', false);
     loadNotifications();
   } catch(e) {}
+}
+
+// ═══════════════════════════════════════
+// PARENT MESSAGES MODULE
+// ═══════════════════════════════════════
+async function loadParentMessages() {
+  var el = document.getElementById('parentMsgList');
+  if (!el) return;
+  el.innerHTML = '<div class="empty"><div class="icon">⏳</div><p>جاري التحميل...</p></div>';
+
+  try {
+    // Get classes taught by this teacher
+    var myClasses = [];
+    if (currentTeacher && currentTeacher.staff_db_id) {
+      var asgn = await sb.from('teacher_assignments')
+        .select('class_name')
+        .eq('staff_db_id', currentTeacher.staff_db_id);
+      if (asgn.data) myClasses = [...new Set(asgn.data.map(function(r) { return r.class_name; }).filter(Boolean))];
+    }
+
+    // Get students in my classes
+    var studentIds = [];
+    if (myClasses.length) {
+      var stu = await sb.from('students')
+        .select('student_number')
+        .in('class_name', myClasses);
+      if (stu.data) studentIds = stu.data.map(function(r) { return r.student_number; }).filter(Boolean);
+    }
+
+    // Get parent messages for these students
+    var rows = [];
+    if (studentIds.length) {
+      var res = await sb.from('parent_messages')
+        .select('id,student_id,student_name,subject,body,direction,status,reply,replied_by,replied_at,created_at')
+        .in('student_id', studentIds.slice(0, 100))
+        .eq('direction', 'inbound')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (res.data) rows = res.data;
+    }
+
+    // Update badge
+    var unread = rows.filter(function(r) { return r.status === 'pending'; }).length;
+    var badge = document.getElementById('parentMsgBadge');
+    if (badge) { badge.textContent = unread; badge.style.display = unread > 0 ? 'inline' : 'none'; }
+
+    if (!rows.length) {
+      el.innerHTML = '<div class="empty"><div class="icon">👨‍👩‍👧</div><p>لا رسائل من أولياء الأمور حتى الآن</p></div>';
+      return;
+    }
+
+    el.innerHTML = rows.map(function(m) {
+      var dateStr = m.created_at ? new Date(m.created_at).toLocaleDateString('ar-AE', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+      var isPending = m.status === 'pending';
+      var bg = isPending ? '#FFF7ED' : '#F0FDF4';
+      var border = isPending ? '#FED7AA' : '#A7F3D0';
+      var statusBadge = isPending
+        ? '<span style="background:#FEF3C7;color:#92400E;border-radius:20px;padding:2px 8px;font-size:11px;font-weight:700">⏳ بانتظار الرد</span>'
+        : '<span style="background:#D1FAE5;color:#065F46;border-radius:20px;padding:2px 8px;font-size:11px;font-weight:700">✅ تم الرد</span>';
+      var replyHtml = m.reply
+        ? '<div style="margin-top:10px;padding:10px;background:#F0FDF4;border-right:3px solid #10B981;border-radius:8px;font-size:13px;color:#065F46"><strong>ردك:</strong> ' + m.reply + '</div>'
+        : '';
+      var replyForm = isPending
+        ? '<div style="margin-top:12px;display:flex;gap:8px">' +
+            '<input type="text" id="replyInput_' + m.id + '" placeholder="اكتب ردك هنا..." ' +
+              'style="flex:1;border:1px solid #E2E8F0;border-radius:8px;padding:8px 12px;font-family:Tajawal,Arial,sans-serif;font-size:13px">' +
+            '<button onclick="replyParentMsg(\'' + m.id + '\')" ' +
+              'style="background:#6C3DD6;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:Tajawal,Arial,sans-serif;font-size:13px;font-weight:700;cursor:pointer">إرسال الرد</button>' +
+          '</div>'
+        : '';
+      return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:12px;padding:16px 18px;margin-bottom:12px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">' +
+          '<div>' +
+            '<span style="font-weight:800;font-size:15px;color:#1E293B">' + escHtml(m.student_name || m.student_id || '—') + '</span>' +
+            '<span style="margin-right:10px;font-size:13px;color:#64748B">' + escHtml(m.subject || 'رسالة') + '</span>' +
+          '</div>' +
+          '<div style="display:flex;gap:6px;align-items:center">' + statusBadge + '<span style="font-size:11px;color:#94A3B8">' + dateStr + '</span></div>' +
+        '</div>' +
+        '<div style="font-size:14px;color:#334155;line-height:1.7">' + escHtml(m.body || '') + '</div>' +
+        replyHtml + replyForm +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="empty"><div class="icon">❌</div><p>خطأ في التحميل</p></div>';
+  }
+}
+
+async function replyParentMsg(id) {
+  var input = document.getElementById('replyInput_' + id);
+  if (!input) return;
+  var text = input.value.trim();
+  if (!text) return;
+  var teacherName = currentTeacher ? (currentTeacher.name_ar || '') : '';
+  try {
+    await sb.from('parent_messages').update({
+      reply: text,
+      replied_by: teacherName,
+      replied_at: new Date().toISOString(),
+      status: 'replied'
+    }).eq('id', id);
+    loadParentMessages();
+  } catch(e) {
+    alert('حدث خطأ في إرسال الرد');
+  }
 }
 
 // ═══════════════════════════════════════
