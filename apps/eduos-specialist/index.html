@@ -11,6 +11,7 @@
 <script src="../platform-shield.js" defer></script>
 <script src="../platform-week.js" defer></script>
 <script src="../platform-lang.js" defer></script>
+<script src="../platform-messages.js" defer></script>
 <script src="../platform-agent-brain.js" defer></script>
 <script src="../platform-live-clock.js" defer></script>
 <style>
@@ -491,6 +492,21 @@ async function loadSpecialistReports() {
   }).join('') || '<div style="color:#22c55e;text-align:center;padding:20px;font-weight:700">✅ لا حالات مفتوحة</div>';
 }
 
+
+async function fetchCriteriaFromDB(roleKey, fallback) {
+  try {
+    var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+    var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+    if (!SB_URL || !SB_KEY) return fallback;
+    var resp = await fetch(SB_URL + '/rest/v1/evaluation_criteria?role_key=eq.' + roleKey + '&is_active=eq.true&order=order_num&select=criteria_id,name_ar,evidence', {
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+    });
+    if (!resp.ok) return fallback;
+    var data = await resp.json();
+    if (!data || !data.length) return fallback;
+    return data.map(function(c) { return { id: c.criteria_id, name: c.name_ar, evidence: c.evidence || '' }; });
+  } catch(e) { return fallback; }
+}
 async function init() {
   try { user = JSON.parse(sessionStorage.getItem('edoos_user')); } catch(e) {}
   if (!user) { location.href = '../eduos-login/'; return; }
@@ -779,7 +795,7 @@ const LEVELS_SPECIALIST = [
   {v:2, icon:'⚠',  label:'دون التوقعات', cls:'selected-2'},
   {v:1, icon:'✗',  label:'غير مقبول', cls:'selected-1'}
 ];
-const CRITERIA_SPECIALIST = [{"id": "cases", "name": "إدارة حالات الدعم النفسي", "evidence": "من سجلات الحالات"}, {"id": "followup", "name": "المتابعة المنتظمة للحالات", "evidence": ""}, {"id": "plans", "name": "جودة خطط التدخل", "evidence": ""}, {"id": "coord", "name": "التنسيق مع الأسرة والمعلمين", "evidence": ""}, {"id": "docs", "name": "التوثيق والتقارير", "evidence": ""}];
+let CRITERIA_SPECIALIST = [{"id": "cases", "name": "إدارة حالات الدعم النفسي", "evidence": "من سجلات الحالات"}, {"id": "followup", "name": "المتابعة المنتظمة للحالات", "evidence": ""}, {"id": "plans", "name": "جودة خطط التدخل", "evidence": ""}, {"id": "coord", "name": "التنسيق مع الأسرة والمعلمين", "evidence": ""}, {"id": "docs", "name": "التوثيق والتقارير", "evidence": ""}];
 let apprSelfScores_SPECIALIST = {};
 let apprNotes_SPECIALIST = {};
 
@@ -804,7 +820,8 @@ async function autoSaveDraft_SPECIALIST() {
 let appraisalRow_SPECIALIST = null;
 let appraisalLocked_SPECIALIST = false;
 
-function renderAppraisalCriteria_SPECIALIST() {
+async function renderAppraisalCriteria_SPECIALIST() {
+  CRITERIA_SPECIALIST = await fetchCriteriaFromDB('specialist', CRITERIA_SPECIALIST);
   const container = document.getElementById('crit-container-specialist');
   if (!container) return;
   const grid = document.createElement('div');

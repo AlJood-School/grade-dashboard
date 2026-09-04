@@ -11,6 +11,7 @@
 <script src="../platform-shield.js" defer></script>
 <script src="../platform-week.js" defer></script>
 <script src="../platform-lang.js" defer></script>
+<script src="../platform-messages.js" defer></script>
 <script src="../platform-agent-brain.js" defer></script>
 <script src="../platform-live-clock.js" defer></script>
 <style>
@@ -322,6 +323,21 @@ function switchPanel(name){
   const panel=document.getElementById('panel-'+name);if(panel)panel.classList.add('active');
   if(name==='requests')loadRequests();if(name==='inventory')loadInventory();if(name==='schedule')loadTechSchedule();if(name==='appraisal'){renderAppraisalCriteria_TECHNICIAN();loadAppraisal_TECHNICIAN(window._staffDbId||'');}if(name==='pdp')loadMyPDP();
 }
+
+async function fetchCriteriaFromDB(roleKey, fallback) {
+  try {
+    var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+    var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+    if (!SB_URL || !SB_KEY) return fallback;
+    var resp = await fetch(SB_URL + '/rest/v1/evaluation_criteria?role_key=eq.' + roleKey + '&is_active=eq.true&order=order_num&select=criteria_id,name_ar,evidence', {
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+    });
+    if (!resp.ok) return fallback;
+    var data = await resp.json();
+    if (!data || !data.length) return fallback;
+    return data.map(function(c) { return { id: c.criteria_id, name: c.name_ar, evidence: c.evidence || '' }; });
+  } catch(e) { return fallback; }
+}
 async function init(){
   try{user=JSON.parse(sessionStorage.getItem('edoos_user'));}catch(e){}
   if(!user){location.href='../eduos-login/';return;}
@@ -569,7 +585,7 @@ const LEVELS_TECHNICIAN = [
   {v:2, icon:'⚠',  label:'دون التوقعات', cls:'selected-2'},
   {v:1, icon:'✗',  label:'غير مقبول', cls:'selected-1'}
 ];
-const CRITERIA_TECHNICIAN = [{"id": "requests", "name": "الاستجابة لطلبات الصيانة", "evidence": "من سجلات الطلبات"}, {"id": "time", "name": "الالتزام بالوقت والمواعيد", "evidence": ""}, {"id": "quality", "name": "جودة الإصلاحات والصيانة", "evidence": ""}, {"id": "inventory", "name": "إدارة المخزون والمعدات", "evidence": ""}, {"id": "safety", "name": "الالتزام بمعايير الأمان", "evidence": ""}];
+let CRITERIA_TECHNICIAN = [{"id": "requests", "name": "الاستجابة لطلبات الصيانة", "evidence": "من سجلات الطلبات"}, {"id": "time", "name": "الالتزام بالوقت والمواعيد", "evidence": ""}, {"id": "quality", "name": "جودة الإصلاحات والصيانة", "evidence": ""}, {"id": "inventory", "name": "إدارة المخزون والمعدات", "evidence": ""}, {"id": "safety", "name": "الالتزام بمعايير الأمان", "evidence": ""}];
 let apprSelfScores_TECHNICIAN = {};
 let apprNotes_TECHNICIAN = {};
 
@@ -594,7 +610,8 @@ async function autoSaveDraft_TECHNICIAN() {
 let appraisalRow_TECHNICIAN = null;
 let appraisalLocked_TECHNICIAN = false;
 
-function renderAppraisalCriteria_TECHNICIAN() {
+async function renderAppraisalCriteria_TECHNICIAN() {
+  CRITERIA_TECHNICIAN = await fetchCriteriaFromDB('technician', CRITERIA_TECHNICIAN);
   const container = document.getElementById('crit-container-technician');
   if (!container) return;
   const grid = document.createElement('div');

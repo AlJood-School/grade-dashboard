@@ -11,6 +11,7 @@
 <script src="../platform-shield.js" defer></script>
 <script src="../platform-week.js" defer></script>
 <script src="../platform-lang.js" defer></script>
+<script src="../platform-messages.js" defer></script>
 <script src="../platform-agent-brain.js" defer></script>
 <script src="../platform-live-clock.js" defer></script>
 <style>
@@ -423,6 +424,21 @@ async function loadNurseReports() {
   }).join('') || '<div style="color:#94a3b8;text-align:center;padding:20px">لا زيارات في هذه الفترة</div>';
 }
 
+
+async function fetchCriteriaFromDB(roleKey, fallback) {
+  try {
+    var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+    var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+    if (!SB_URL || !SB_KEY) return fallback;
+    var resp = await fetch(SB_URL + '/rest/v1/evaluation_criteria?role_key=eq.' + roleKey + '&is_active=eq.true&order=order_num&select=criteria_id,name_ar,evidence', {
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+    });
+    if (!resp.ok) return fallback;
+    var data = await resp.json();
+    if (!data || !data.length) return fallback;
+    return data.map(function(c) { return { id: c.criteria_id, name: c.name_ar, evidence: c.evidence || '' }; });
+  } catch(e) { return fallback; }
+}
 async function init(){
   try{user=JSON.parse(sessionStorage.getItem('edoos_user'));}catch(e){}
   if(!user){location.href='../eduos-login/';return;}
@@ -670,7 +686,7 @@ const LEVELS_NURSE = [
   {v:2, icon:'⚠',  label:'دون التوقعات', cls:'selected-2'},
   {v:1, icon:'✗',  label:'غير مقبول', cls:'selected-1'}
 ];
-const CRITERIA_NURSE = [{"id": "visits", "name": "عدد الزيارات الصحية المسجّلة", "evidence": "من السجلات الصحية"}, {"id": "records", "name": "دقة السجلات الصحية", "evidence": ""}, {"id": "emergency", "name": "الاستجابة للحالات الطارئة", "evidence": ""}, {"id": "parents", "name": "التواصل مع أولياء الأمور", "evidence": ""}, {"id": "referral", "name": "إدارة حالات الإحالة الخارجية", "evidence": ""}];
+let CRITERIA_NURSE = [{"id": "visits", "name": "عدد الزيارات الصحية المسجّلة", "evidence": "من السجلات الصحية"}, {"id": "records", "name": "دقة السجلات الصحية", "evidence": ""}, {"id": "emergency", "name": "الاستجابة للحالات الطارئة", "evidence": ""}, {"id": "parents", "name": "التواصل مع أولياء الأمور", "evidence": ""}, {"id": "referral", "name": "إدارة حالات الإحالة الخارجية", "evidence": ""}];
 let apprSelfScores_NURSE = {};
 let apprNotes_NURSE = {};
 
@@ -695,7 +711,8 @@ async function autoSaveDraft_NURSE() {
 let appraisalRow_NURSE = null;
 let appraisalLocked_NURSE = false;
 
-function renderAppraisalCriteria_NURSE() {
+async function renderAppraisalCriteria_NURSE() {
+  CRITERIA_NURSE = await fetchCriteriaFromDB('nurse', CRITERIA_NURSE);
   const container = document.getElementById('crit-container-nurse');
   if (!container) return;
   const grid = document.createElement('div');
