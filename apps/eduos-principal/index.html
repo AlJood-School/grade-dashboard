@@ -339,6 +339,13 @@ tr:hover td{background:var(--surface2)}
         <span class="snav-sub">Subject Coordinators</span>
       </span>
     </button>
+    <button class="snav" data-panel="section-coordinators" onclick="showPanel('section-coordinators',this);loadSectionCoordinators()">
+      <span class="snav-icon">🏫</span>
+      <span class="snav-text">
+        <span class="snav-label">منسقو الأقسام</span>
+        <span class="snav-sub">Section Coordinators</span>
+      </span>
+    </button>
   </nav>
 
   <div class="sidebar-footer">
@@ -2101,6 +2108,183 @@ async function removeCoordinator(staffDbId) {
       body: JSON.stringify({ is_coordinator: false, coordinator_subject: null })
     });
     loadCoordinators();
+  } catch(e) {
+    alert('خطأ في الحذف');
+  }
+}
+</script>
+
+<!-- ===================== SECTION / PLANNING / TRACK COORDINATORS PANEL ===================== -->
+<script>
+(function injectSectionCoordinatorPanel(){
+  var panelHTML = '<div class="panel" id="panel-section-coordinators" style="padding:24px;overflow-y:auto;height:100%">' +
+    '<div style="margin-bottom:20px">' +
+      '<div style="font-size:20px;font-weight:900;color:#1E293B">منسقو الأقسام</div>' +
+      '<div style="font-size:13px;color:#94A3B8;margin-top:2px">Section / Planning / Track Coordinators — 2026-2027</div>' +
+    '</div>' +
+    '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:20px;margin-bottom:20px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">' +
+        '<div style="font-size:16px;font-weight:800;color:#1E293B">منسقو الأقسام</div>' +
+        '<button onclick="showSecCoordModal(\'section\')" style="padding:8px 16px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:13px;font-weight:800;cursor:pointer">+ تعيين منسقة قسم</button>' +
+      '</div>' +
+      '<div id="seccoord-section-wrap"><div class="skeleton" style="height:70px;border-radius:12px"></div></div>' +
+    '</div>' +
+    '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:20px;margin-bottom:20px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">' +
+        '<div style="font-size:16px;font-weight:800;color:#1E293B">منسقو التخطيط</div>' +
+        '<button onclick="showSecCoordModal(\'planning\')" style="padding:8px 16px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:13px;font-weight:800;cursor:pointer">+ تعيين منسقة تخطيط</button>' +
+      '</div>' +
+      '<div id="seccoord-planning-wrap"><div class="skeleton" style="height:70px;border-radius:12px"></div></div>' +
+    '</div>' +
+    '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:20px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">' +
+        '<div style="font-size:16px;font-weight:800;color:#1E293B">منسقو المسار</div>' +
+        '<button onclick="showSecCoordModal(\'track\')" style="padding:8px 16px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:13px;font-weight:800;cursor:pointer">+ تعيين منسقة مسار</button>' +
+      '</div>' +
+      '<div id="seccoord-track-wrap"><div class="skeleton" style="height:70px;border-radius:12px"></div></div>' +
+    '</div>' +
+  '</div>';
+
+  var modalHTML = '<div id="seccoord-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.5);align-items:center;justify-content:center">' +
+    '<div style="background:#fff;border-radius:18px;padding:28px;width:460px;max-width:95vw;direction:rtl">' +
+      '<div id="seccoord-modal-title" style="font-size:18px;font-weight:900;color:#1E293B;margin-bottom:18px">تعيين منسقة</div>' +
+      '<input type="hidden" id="seccoord-type-inp">' +
+      '<div style="margin-bottom:14px">' +
+        '<label style="font-size:13px;font-weight:700;color:#475569;display:block;margin-bottom:6px">النطاق (اسم القسم أو الصف/الصفوف مفصولة بفاصلة)</label>' +
+        '<input type="text" id="seccoord-scope-inp" placeholder="مثال: 1A,1B أو القسم الابتدائي" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px">' +
+      '</div>' +
+      '<div style="margin-bottom:20px">' +
+        '<label style="font-size:13px;font-weight:700;color:#475569;display:block;margin-bottom:6px">المعلمة</label>' +
+        '<select id="seccoord-teacher-sel" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px"><option value="">-- اختري المعلمة --</option></select>' +
+      '</div>' +
+      '<div style="display:flex;gap:10px;justify-content:flex-end">' +
+        '<button onclick="closeSecCoordModal()" style="padding:10px 20px;background:#F1F5F9;border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;cursor:pointer;color:#475569">إلغاء</button>' +
+        '<button onclick="saveSecCoordinator()" style="padding:10px 20px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:800;cursor:pointer;color:#fff">حفظ التعيين</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  var afterPanel = document.getElementById('panel-coordinators') || document.getElementById('panel-news');
+  if (afterPanel) {
+    var div = document.createElement('div');
+    div.innerHTML = panelHTML;
+    afterPanel.parentNode.insertBefore(div.firstChild, afterPanel.nextSibling);
+  }
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+})();
+
+var _secCoordTypeLabels = { section: 'قسم', planning: 'تخطيط', track: 'مسار' };
+
+async function loadSectionCoordinators() {
+  loadSecCoordGroup('section');
+  loadSecCoordGroup('planning');
+  loadSecCoordGroup('track');
+}
+
+async function loadSecCoordGroup(type) {
+  var wrap = document.getElementById('seccoord-' + type + '-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="text-align:center;padding:16px;color:#94A3B8">جاري التحميل...</div>';
+  try {
+    var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+    var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+    var res = await fetch(sbUrl + '/rest/v1/staff_profiles?coord_type=eq.' + encodeURIComponent(type) + '&is_active=eq.true&select=name_ar,coord_type,coord_scope,staff_db_id&order=name_ar.asc', {
+      headers: { 'apikey': sb, 'Authorization': 'Bearer ' + sb }
+    });
+    var rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) {
+      wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#94A3B8;font-size:14px">لا توجد منسقات ' + (_secCoordTypeLabels[type]||'') + ' معيَّنات حتى الآن</div>';
+      return;
+    }
+    wrap.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">' +
+      rows.map(function(r){
+        return '<div style="background:#F8FAFF;border:1px solid #E2E8F0;border-radius:14px;padding:16px">' +
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">' +
+            '<div>' +
+              '<div style="font-size:15px;font-weight:800;color:#1E293B">' + (r.name_ar||'غير محدد') + '</div>' +
+              '<div style="font-size:13px;color:#6C3DD6;font-weight:700;margin-top:3px">' + (r.coord_scope||'') + '</div>' +
+            '</div>' +
+            '<button onclick="removeSecCoordinator(\'' + (r.staff_db_id||'') + '\')" style="background:#FFF1F2;border:1px solid #FECDD3;color:#E11D48;border-radius:8px;padding:5px 10px;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">إزالة</button>' +
+          '</div>' +
+        '</div>';
+      }).join('') +
+    '</div>';
+  } catch(e) {
+    wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#EF4444">خطأ في التحميل</div>';
+  }
+}
+
+var _secCoordTeachers = [];
+async function showSecCoordModal(type) {
+  var modal = document.getElementById('seccoord-modal');
+  if (!modal) return;
+  var titleEl = document.getElementById('seccoord-modal-title');
+  var typeInp = document.getElementById('seccoord-type-inp');
+  var scopeInp = document.getElementById('seccoord-scope-inp');
+  if (titleEl) titleEl.textContent = 'تعيين منسقة ' + (_secCoordTypeLabels[type]||'');
+  if (typeInp) typeInp.value = type;
+  if (scopeInp) scopeInp.value = '';
+  modal.style.display = 'flex';
+  var sel = document.getElementById('seccoord-teacher-sel');
+  sel.innerHTML = '<option value="">جاري التحميل...</option>';
+  try {
+    var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+    var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+    var res = await fetch(sbUrl + '/rest/v1/staff_profiles?role_key=eq.teacher&is_active=eq.true&select=name_ar,staff_db_id&order=name_ar.asc', {
+      headers: { 'apikey': sb, 'Authorization': 'Bearer ' + sb }
+    });
+    var rows = await res.json();
+    _secCoordTeachers = Array.isArray(rows) ? rows : [];
+    sel.innerHTML = '<option value="">-- اختري المعلمة --</option>' + _secCoordTeachers.map(function(t){
+      return '<option value="' + (t.staff_db_id||'') + '">' + (t.name_ar||'') + '</option>';
+    }).join('');
+  } catch(e) {
+    sel.innerHTML = '<option value="">خطأ في التحميل</option>';
+  }
+}
+
+function closeSecCoordModal() {
+  var modal = document.getElementById('seccoord-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function saveSecCoordinator() {
+  var typeInp = document.getElementById('seccoord-type-inp');
+  var scopeInp = document.getElementById('seccoord-scope-inp');
+  var teacherSel = document.getElementById('seccoord-teacher-sel');
+  var type = typeInp ? typeInp.value : '';
+  var scope = scopeInp ? scopeInp.value.trim() : '';
+  var staffDbId = teacherSel ? teacherSel.value : '';
+  if (!type || !scope || !staffDbId) {
+    alert('يرجى تحديد النطاق واختيار المعلمة');
+    return;
+  }
+  try {
+    var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+    var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+    await fetch(sbUrl + '/rest/v1/staff_profiles?staff_db_id=eq.' + encodeURIComponent(staffDbId), {
+      method: 'PATCH',
+      headers: { 'apikey': sb, 'Authorization': 'Bearer ' + sb, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ coord_type: type, coord_scope: scope })
+    });
+    closeSecCoordModal();
+    loadSectionCoordinators();
+  } catch(e) {
+    alert('خطأ في الحفظ — يرجى المحاولة مجدداً');
+  }
+}
+
+async function removeSecCoordinator(staffDbId) {
+  if (!staffDbId || !confirm('هل تريدين إزالة هذا التعيين؟')) return;
+  try {
+    var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+    var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+    await fetch(sbUrl + '/rest/v1/staff_profiles?staff_db_id=eq.' + encodeURIComponent(staffDbId), {
+      method: 'PATCH',
+      headers: { 'apikey': sb, 'Authorization': 'Bearer ' + sb, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ coord_type: null, coord_scope: null })
+    });
+    loadSectionCoordinators();
   } catch(e) {
     alert('خطأ في الحذف');
   }
