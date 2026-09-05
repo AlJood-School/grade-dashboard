@@ -228,8 +228,17 @@
     // ─── التحقق من JWT مع الخادم (C-02 fix) ──────────────
     // الطلاب والوالدين قد يكون لديهم token أو لا
     const token = session.token || '';
+    // Demo: تحقق من hostname مباشرة (أكثر موثوقية من window.EduOS)
+    const isDemo = window.EduOS?.school?.isDemo === true
+      || location.hostname === 'demo.eduos.ae'
+      || location.hostname === 'localhost';
 
     if (!token) {
+      // في Demo: نقبل الجلسة بدون JWT (بيئة تجريبية)
+      if (isDemo && session.role_key) {
+        // Demo session valid — skip JWT verification
+        return;
+      }
       // H-03 FIX: كل الأدوار تحتاج JWT — لا استثناء للطالب أو ولي الأمر
       redirectTo('/apps/eduos-login/?err=no_token');
       return;
