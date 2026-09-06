@@ -367,7 +367,7 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
       <div class="card-title">🏫 تعدد المراحل — Multi-Stage Setup</div>
 
       <!-- زر تحميل إعدادات المدرسة المحفوظة -->
-      <div id="savedStageConfigBanner" style="display:none;background:#F0FDF4;border:1px solid #86EFAC;border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div id="savedStageConfigBanner" style="display:none;background:#F0FDF4;border:1px solid #86EFAC;border-radius:10px;padding:12px 16px;margin-bottom:14px;align-items:center;gap:12px;flex-wrap:wrap">
         <span style="font-size:15px;font-weight:700;color:#166534">📋 يوجد إعداد محفوظ لمدرستك</span>
         <button class="btn btn-success btn-sm" onclick="loadSchoolStageConfig()">⬇ تحميل الإعدادات المحفوظة</button>
         <span id="savedStageInfo" style="font-size:12px;color:#166534"></span>
@@ -513,6 +513,11 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
     <div class="card" id="genControls">
       <div class="card-title">⚡ توليد الجدول — Generate Timetable</div>
       <div id="genAlert"></div>
+      <div id="vacancySummaryPanel" style="display:none;background:#FFF7ED;border:1.5px solid #F97316;border-radius:12px;padding:14px 18px;margin-bottom:14px">
+        <div style="font-weight:800;color:#C2410C;font-size:15px;margin-bottom:8px">⚠️ خانات شاغرة تحتاج انتباهك</div>
+        <div id="vacancySummaryList" style="font-size:13px;color:#9A3412;line-height:1.9"></div>
+        <div style="font-size:12px;color:#B45309;margin-top:8px">💡 يمكن توليد الجدول مع الشاغرات — ستُعلَّم بلون برتقالي في المعاينة وتُرسل إشعار للمدير عند الحفظ.</div>
+      </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-primary" id="btnGenerate" onclick="generateTimetable()">🔄 توليد الجدول</button>
         <button class="btn btn-secondary" id="btnReGen" onclick="generateTimetable()" disabled>🔀 إعادة التوليد</button>
@@ -748,7 +753,7 @@ async function loadClasses() {
 
 async function loadTeachers() {
   try {
-    var res = await sbFetch("staff_profiles?select=username,name_ar,subject,role_key&role_key=eq.teacher&order=name_ar");
+    var res = await sbFetch("staff_profiles?select=staff_db_id,username,name_ar,subject,role_key,is_coordinator&role_key=in.(teacher,sub_teacher)&is_active=eq.true&order=name_ar&limit=300");
     var data = await res.json();
     STATE.teachers = (data || []).filter(function(t){ return t.name_ar; });
   } catch(e) { STATE.teachers = []; }
@@ -1125,8 +1130,15 @@ async function loadDBAssignmentsThenRender() {
         schedRows.forEach(function(r) {
           if (!r.subject || !r.class_name) return;
           if (!schedMap[r.subject]) schedMap[r.subject] = {};
+          var isVacant = !r.teacher_id || r.teacher_id === '' || (r.vacancy_reason && r.vacancy_reason !== '');
           if (!schedMap[r.subject][r.class_name]) {
-            schedMap[r.subject][r.class_name] = { teacherId: r.teacher_id, teacherNameAr: r.teacher_name, count: 1 };
+            schedMap[r.subject][r.class_name] = {
+              teacherId: isVacant ? null : r.teacher_id,
+              teacherNameAr: isVacant ? 'شاغر' : r.teacher_name,
+              count: 1,
+              isVacant: isVacant,
+              vacancyReason: r.vacancy_reason || ''
+            };
           } else {
             schedMap[r.subject][r.class_name].count++;
             /* Keep teacher with most slots (majority) */
@@ -1157,9 +1169,10 @@ async function loadDBAssignmentsThenRender() {
             var info = schedMap[schedSubj][cls];
             if (!STATE.classAssignments[matchedSubj][cls] || STATE.classAssignments[matchedSubj][cls].status === 'pending') {
               STATE.classAssignments[matchedSubj][cls] = {
-                status: 'assigned',
+                status: info.isVacant ? 'vacant' : 'assigned',
                 teacherId: info.teacherId,
-                teacherNameAr: info.teacherNameAr
+                teacherNameAr: info.isVacant ? 'شاغر' : info.teacherNameAr,
+                vacancyReason: info.vacancyReason || ''
               };
               dbCount++;
             }
@@ -1203,7 +1216,7 @@ function updateCamSummary(subjName) {
   });
   el.innerHTML =
     (assigned > 0 ? '<span class="cam-sum-item cam-sum-assigned">\u2705 ' + assigned + ' \u0645\u0639\u064a\u0651\u064e\u0646\u0629</span>' : '') +
-    (vacant  > 0 ? '<span class="cam-sum-item cam-sum-vacant">\uD83D\uDFE0 ' + vacant  + ' \u0634\u0627\u063a\u0631</span>' : '') +
+    (vacant  > 0 ? '<span class="cam-sum-item cam-sum-vacant" style="background:#FEF3C7;color:#92400E;border-radius:12px;padding:2px 9px;font-size:11px;font-weight:700">⚠️ ' + vacant  + ' شاغر</span>' : '') +
     (pending > 0 ? '<span class="cam-sum-item cam-sum-pending">\u26AA ' + pending + ' \u063a\u064a\u0631 \u0645\u0639\u064a\u0651\u0646\u0629</span>' : '');
 }
 
@@ -2410,42 +2423,110 @@ function openPrintPage() {
 async function submitForApproval() {
   var session2 = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
   var submittedBy = session2.name_ar || session2.username || 'المستخدم';
+  var userRole = session2.role_key || session2.role || '';
+  var isPrincipal = (userRole === 'principal' || userRole === 'admin');
   try {
     var draftRes = await sbFetch('timetable_drafts?order=id.asc&limit=1&select=id');
     if (!draftRes.ok) throw new Error('draft fetch failed');
     var draftData = await draftRes.json();
     if (!draftData || !draftData.length) { showToast('لا توجد مسودة — احفظ أولاً','err'); return; }
     var draftId = draftData[0].id;
-    var patchRes = await sbFetch('timetable_drafts?id=eq.' + draftId, {
-      method: 'PATCH',
-      headers: { 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ status: 'pending_approval', submitted_by: submittedBy, submitted_at: new Date().toISOString() })
-    });
-    if (patchRes.ok) {
-      showToast('تم الإرسال للاعتماد ✓ — في انتظار موافقة المدير', 'ok');
-      showAlert('genAlert','al-ok','📤 الجدول قيد الاعتماد — المدير سيراجعه ويعتمده من بوابته');
-      document.getElementById('btnSubmitApproval').disabled = true;
-      document.getElementById('btnSubmitApproval').textContent = '⏳ قيد الاعتماد';
-      /* إشعار المدير */
-      try {
-        var principals = await sbFetch('staff_profiles?select=staff_db_id&role_key=in.(principal,admin)&is_active=eq.true');
-        if (principals.ok) {
-          var principalData = await principals.json();
-          if (principalData && principalData.length) {
-            var now2 = new Date().toISOString();
-            var pNotifs = principalData.map(function(p) {
-              return { user_id: p.staff_db_id, type: 'timetable_approval', title: 'طلب اعتماد جدول دراسي', body: 'أرسل ' + submittedBy + ' جدولاً للاعتماد — راجعه واعتمده من بوابتك.', is_read: false, created_at: now2 };
-            });
-            await sbFetch('notifications', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(pNotifs) });
+
+    if (isPrincipal) {
+      /* المدير: اعتماد مباشر */
+      var patchRes = await sbFetch('timetable_drafts?id=eq.' + draftId, {
+        method: 'PATCH',
+        headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ status: 'approved', submitted_by: submittedBy, submitted_at: new Date().toISOString(), approved_by: submittedBy, approved_at: new Date().toISOString() })
+      });
+      if (patchRes.ok) {
+        showToast('✅ تم اعتماد الجدول مباشرة', 'ok');
+        showAlert('genAlert','al-ok','✅ الجدول معتمد رسمياً من المدير — سيُبلَّغ جميع الموظفين');
+        document.getElementById('btnSubmitApproval').disabled = true;
+        document.getElementById('btnSubmitApproval').textContent = '✅ معتمد';
+        /* إشعار جميع المعلمات */
+        try {
+          var teachersRes2 = await sbFetch('staff_profiles?select=staff_db_id&role_key=in.(teacher,sub_teacher,vice_principal)&is_active=eq.true');
+          if (teachersRes2.ok) {
+            var allStaff = await teachersRes2.json();
+            if (allStaff && allStaff.length) {
+              var now3 = new Date().toISOString();
+              var notifRows2 = allStaff.map(function(t) {
+                return { user_id: t.staff_db_id, type: 'timetable', title: '✅ الجدول الدراسي معتمد', body: 'اعتمد' + submittedBy + ' الجدول الدراسي رسمياً. يمكنك الاطلاع على جدولك من بوابتك.', is_read: false, created_at: now3 };
+              });
+              await sbFetch('notifications', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(notifRows2) });
+            }
           }
-        }
-      } catch(pe) {}
+        } catch(ne2) {}
+      } else {
+        showToast('خطأ في الاعتماد', 'err');
+      }
     } else {
-      showToast('خطأ في الإرسال', 'err');
+      /* نائب المدير: إرسال للاعتماد */
+      var patchRes2 = await sbFetch('timetable_drafts?id=eq.' + draftId, {
+        method: 'PATCH',
+        headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ status: 'pending_approval', submitted_by: submittedBy, submitted_at: new Date().toISOString() })
+      });
+      if (patchRes2.ok) {
+        showToast('تم الإرسال للاعتماد ✓', 'ok');
+        showAlert('genAlert','al-ok','📤 الجدول قيد الاعتماد — المدير سيراجعه ويعتمده من بوابته');
+        document.getElementById('btnSubmitApproval').disabled = true;
+        document.getElementById('btnSubmitApproval').textContent = '⏳ قيد الاعتماد';
+        /* إشعار المدير */
+        try {
+          var principals = await sbFetch('staff_profiles?select=staff_db_id&role_key=in.(principal,admin)&is_active=eq.true');
+          if (principals.ok) {
+            var principalData = await principals.json();
+            if (principalData && principalData.length) {
+              var now2 = new Date().toISOString();
+              var pNotifs = principalData.map(function(p) {
+                return { user_id: p.staff_db_id, type: 'timetable_approval', title: 'طلب اعتماد جدول دراسي', body: 'أرسل ' + submittedBy + ' جدولاً للاعتماد — راجعه واعتمده من بوابتك.', is_read: false, created_at: now2 };
+              });
+              await sbFetch('notifications', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(pNotifs) });
+            }
+          }
+        } catch(pe) {}
+      } else {
+        showToast('خطأ في الإرسال', 'err');
+      }
     }
   } catch(e2) {
     showToast('خطأ: ' + e2.message, 'err');
   }
+}
+
+/* ── Vacancy Summary ── */
+function showVacancySummary() {
+  var panel = document.getElementById('vacancySummaryPanel');
+  var list = document.getElementById('vacancySummaryList');
+  if (!panel || !list) return;
+  var vacancies = [];
+  STATE.subjects.forEach(function(s) {
+    var subj = s.name;
+    STATE.selectedClasses.forEach(function(cls) {
+      var ca = (STATE.classAssignments[subj] || {})[cls];
+      if (ca && ca.status === 'vacant') {
+        vacancies.push({ subj: subj, cls: cls, reason: ca.vacancyReason || '' });
+      }
+    });
+  });
+  if (vacancies.length === 0) {
+    panel.style.display = 'none';
+    return;
+  }
+  /* Group by subject */
+  var bySubj = {};
+  vacancies.forEach(function(v) {
+    if (!bySubj[v.subj]) bySubj[v.subj] = [];
+    bySubj[v.subj].push(v.cls);
+  });
+  var html = '';
+  Object.keys(bySubj).forEach(function(subj) {
+    html += '<div>📌 <strong>' + subj + '</strong>: ' + bySubj[subj].join('، ') + '</div>';
+  });
+  list.innerHTML = html;
+  panel.style.display = 'block';
 }
 
 /* ── Alerts ── */
@@ -2485,6 +2566,11 @@ function goToStep(n) {
     loadTeacherWorkload();
   }
 
+  /* عند الانتقال لخطوة التوليد: عرض ملخص الشاغرات */
+  if (n === 4) {
+    showVacancySummary();
+  }
+
   STATE.step = n;
   document.querySelectorAll('.sp').forEach(function(p){ p.classList.remove('active'); });
   document.getElementById('sp' + n).classList.add('active');
@@ -2510,10 +2596,20 @@ async function loadTeacherWorkload() {
   try {
     var r1 = await fetch(url+'/rest/v1/staff_profiles?select=staff_db_id,name_ar,subject,role_key,contract_type&role_key=in.(teacher,sub_teacher)&is_active=eq.true&order=name_ar&limit=300', {headers:{apikey:key,'Authorization':'Bearer '+key}});
     var staff = await r1.json();
-    var r2 = await fetch(url+'/rest/v1/teacher_assignments?select=staff_db_id,class_name&limit=2000', {headers:{apikey:key,'Authorization':'Bearer '+key}});
+    var r2 = await fetch(url+'/rest/v1/teacher_assignments?select=staff_db_id,class_name,subject&is_active=eq.true&limit=2000', {headers:{apikey:key,'Authorization':'Bearer '+key}});
     var assigns = await r2.json();
+    /* احتساب النصاب الأسبوعي: عدد الفصول × متوسط الحصص الأسبوعية للمادة */
     var periodCount = {};
-    (Array.isArray(assigns)?assigns:[]).forEach(function(a){ periodCount[a.staff_db_id] = (periodCount[a.staff_db_id]||0)+1; });
+    (Array.isArray(assigns)?assigns:[]).forEach(function(a){
+      /* كل تعيين = صف × مادة واحدة. متوسط الحصص = 4 (تقريب موثوق) */
+      var ppwEstimate = 4;
+      /* محاولة مطابقة نصاب حقيقي من curriculum_period_rules */
+      if (STATE.dbRules && STATE.dbRules.length) {
+        var rule = STATE.dbRules.find(function(r){ return r.subject_ar === a.subject; });
+        if (rule && rule.min_periods) ppwEstimate = rule.min_periods;
+      }
+      periodCount[a.staff_db_id] = (periodCount[a.staff_db_id]||0) + ppwEstimate;
+    });
     var alsoFromState = {};
     if (STATE && STATE.classAssignments) {
       Object.keys(STATE.classAssignments).forEach(function(cls) {
@@ -2692,6 +2788,37 @@ async function checkSavedStageConfig() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+  /* ── Role detection ── */
+  (function() {
+    var _sess = {};
+    try { _sess = JSON.parse(sessionStorage.getItem('edoos_user') || '{}'); } catch(e) {}
+    var _role = _sess.role_key || _sess.role || '';
+    STATE._userRole = _role;
+    STATE._userName = _sess.name_ar || _sess.username || '';
+
+    /* أزرار الاعتماد */
+    var btnApprove = document.getElementById('btnSubmitApproval');
+    if (btnApprove) {
+      if (_role === 'principal' || _role === 'admin') {
+        /* المدير: اعتماد مباشر بدون إرسال */
+        btnApprove.textContent = '✅ اعتماد مباشر وحفظ';
+        btnApprove.style.background = 'linear-gradient(135deg,#10B981,#059669)';
+        btnApprove.title = 'المدير يعتمد الجدول مباشرة';
+      } else {
+        /* نائب المدير: إرسال للاعتماد */
+        btnApprove.textContent = '📤 إرسال للاعتماد';
+        btnApprove.title = 'إرسال الجدول للمدير للاعتماد';
+      }
+    }
+
+    /* شارة الدور في الهيدر */
+    var hdrSub = document.querySelector('.hdr-sub');
+    if (hdrSub && _sess.name_ar) {
+      var roleLabel = {principal:'مدير',vice_principal:'نائب مدير',admin:'مسؤول نظام'}[_role] || _role;
+      hdrSub.innerHTML = hdrSub.innerHTML + ' · ' + _sess.name_ar + ' (' + roleLabel + ')';
+    }
+  })();
+
   /* Default breaks */
   if (STATE.breaks.length === 0) {
     STATE.breaks = [
