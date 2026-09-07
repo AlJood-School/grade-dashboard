@@ -217,7 +217,7 @@
     btn.id = 'aqFloatingBtn';
     btn.innerHTML = '🛡️ أقدر';
     btn.title = 'استطلاع الجاهزية الرقمية — ارجو الإكمال';
-    btn.style.cssText = 'position:fixed;bottom:90px;left:20px;z-index:9997;' +
+    btn.style.cssText = 'position:fixed;bottom:160px;left:20px;z-index:9997;' +
       'background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:50px;' +
       'padding:10px 18px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;' +
       'cursor:pointer;box-shadow:0 4px 16px rgba(108,61,214,0.35);animation:aqPulse 2s infinite;';

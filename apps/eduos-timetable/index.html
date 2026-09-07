@@ -539,7 +539,28 @@ async function loadTodaySlots() {
   try {
     var user = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
     var roleKey = user.role_key || '';
-    var params = getYTFilter() + '&day=eq.' + encodeURIComponent(todayAr) + '&select=period,subject,teacher_name,class_name&order=period&limit=100';
+    var adminRoles = ['principal','vice_principal','admin','secretary'];
+    var isAdminRole = adminRoles.indexOf(roleKey) >= 0;
+
+    // المدير ونائب المدير لا يدرّسان صفوفاً → عرض رسالة واضحة
+    if (isAdminRole) {
+      document.getElementById('statSubjects').textContent = '—';
+      document.getElementById('statHours').textContent = '—';
+      document.getElementById('statDone').textContent = '—';
+      el.innerHTML =
+        '<div style="padding:36px;text-align:center;color:#64748B">' +
+          '<div style="font-size:2.5rem;margin-bottom:12px">📋</div>' +
+          '<div style="font-size:1rem;font-weight:800;color:#1E293B;margin-bottom:8px">لا توجد حصص مخصصة لك</div>' +
+          '<div style="font-size:.85rem;margin-bottom:16px">لعرض جداول المعلمات أو الصفوف اختر من القائمة في الأعلى</div>' +
+          '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
+            '<button onclick="switchPanel(\'week\')" style="background:#6C3DD6;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">📆 جدول الصف</button>' +
+            '<button onclick="switchPanel(\'teacher\')" style="background:#0EA5E9;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">👩‍🏫 جدول المعلمة</button>' +
+          '</div>' +
+        '</div>';
+      return;
+    }
+
+    var params = getYTFilter() + '&day=eq.' + encodeURIComponent(todayAr) + '&select=period,subject,teacher_name,class_name,grade&order=period&limit=100';
     if (roleKey === 'teacher' && user.id) {
       params += '&teacher_id=eq.' + encodeURIComponent(user.id);
     }
@@ -559,28 +580,80 @@ async function loadTodaySlots() {
     document.getElementById('statHours').textContent = slots.length;
     document.getElementById('statDone').textContent = '0';
 
-    var html = slots.map(function(s) {
-      return '<div class="today-slot">' +
-        '<div class="slot-num">' + (s.period || '•') + '</div>' +
-        '<div class="slot-info">' +
-          '<div class="slot-name">' + (s.subject || '—') + '</div>' +
-          '<div class="slot-details">' + (s.teacher_name || '') + (s.class_name ? ' · ' + s.class_name : '') + '</div>' +
+    // ترتيب أفقي كبطاقات — أجمل من القائمة الرأسية
+    var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">';
+    var prevPeriod = 0;
+    slots.forEach(function(s) {
+      var p = s.period || 0;
+      var gNum = gradeNumFromClass(s.class_name);
+      // إضافة فاصل استراحة بين الحصص
+      var breakLabel = getBreakAfterPeriod(gNum, prevPeriod, p);
+      if (breakLabel) {
+        html += '<div style="grid-column:1/-1;background:#FFFBEB;border-radius:8px;padding:7px 14px;font-size:.78rem;font-weight:700;color:#92400E;text-align:center">☕ ' + breakLabel + '</div>';
+      }
+      prevPeriod = p;
+      var tStr = getPeriodTime(gNum, p);
+      var now2 = new Date(); var nowMin = now2.getHours()*60+now2.getMinutes();
+      var parts = tStr.split(' – ');
+      var startParts = (parts[0]||'').split(':'); var endParts = (parts[1]||'').split(':');
+      var sMin = (parseInt(startParts[0]||0))*60+(parseInt(startParts[1]||0));
+      var eMin = (parseInt(endParts[0]||0))*60+(parseInt(endParts[1]||0));
+      var isNow = nowMin >= sMin && nowMin < eMin;
+      var isDone = nowMin >= eMin;
+      var badge = isNow ? '<span style="background:#22c55e;color:#fff;border-radius:12px;padding:2px 8px;font-size:.7rem;font-weight:800">🔴 الآن</span>'
+                : isDone ? '<span style="background:#94a3b8;color:#fff;border-radius:12px;padding:2px 8px;font-size:.7rem;font-weight:800">✓ انتهت</span>'
+                : '<span style="background:#e0e7ff;color:#3730a3;border-radius:12px;padding:2px 8px;font-size:.7rem;font-weight:800">⏳ قادمة</span>';
+      html += '<div style="background:#fff;border-radius:10px;padding:12px 14px;box-shadow:0 1px 4px rgba(0,0,0,.06);border:1px solid #E2E8F0;' + (isNow?'border-color:#6C3DD6;box-shadow:0 0 0 2px rgba(108,61,214,.2)':'') + '">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
+          '<span style="font-size:.7rem;font-weight:800;color:#6C3DD6;background:#F3EEFF;border-radius:6px;padding:2px 7px">ح' + p + '</span>' +
+          badge +
         '</div>' +
-        '<div class="slot-time">الحصة ' + (s.period || '') + '</div>' +
-        '<span class="slot-badge badge-next">⏳ قادمة</span>' +
+        '<div style="font-size:.9rem;font-weight:800;color:#1E293B;margin-bottom:3px">' + (s.subject || '—') + '</div>' +
+        '<div style="font-size:.75rem;color:#64748B">' + (s.class_name || '') + '</div>' +
+        '<div style="font-size:.72rem;color:#94A3B8;margin-top:4px;direction:ltr">' + tStr + '</div>' +
       '</div>';
-    }).join('');
+    });
+    html += '</div>';
     el.innerHTML = html;
   } catch(e) {
     el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text2)">⚠️ تعذّر تحميل الجدول</div>';
   }
 }
 
-// ─── حساب وقت الحصة ─────────────────────────────────────────────────────────
+// ─── هل توجد استراحة بين حصة p1 وحصة p2؟ ──────────────────────────────────
+function getBreakAfterPeriod(gNum, p1, p2) {
+  if (p1 <= 0 || p2 <= p1 + 1) return null; // فجوة طبيعية
+  // استراحات حسب المرحلة
+  var breaks = [];
+  if (gNum <= 2) { // G1-G2: ح2+ح5
+    breaks = [{after:2,label:'استراحة كبيرة — 25 دقيقة (8:45-9:10)'},{after:5,label:'استراحة صغيرة — 15 دقيقة (11:35-11:50)'}];
+  } else if (gNum <= 4) { // G3-G4: ح3+ح5
+    breaks = [{after:3,label:'استراحة كبيرة — 25 دقيقة (9:35-10:00)'},{after:5,label:'استراحة صغيرة — 15 دقيقة (11:35-11:50)'}];
+  } else { // G5-G8: ح2+ح6
+    breaks = [{after:2,label:'استراحة كبيرة — 25 دقيقة (9:35-10:00)'},{after:6,label:'استراحة صغيرة — 10 دقيقة (1:05-1:15)'}];
+  }
+  for (var i=0;i<breaks.length;i++) {
+    if (p1 <= breaks[i].after && breaks[i].after < p2) return breaks[i].label;
+  }
+  return null;
+}
+
+// ─── حساب وقت الحصة (مع الاستراحتين حسب المرحلة) ──────────────────────────
 function getPeriodTime(gradeNum, pNum) {
-  var startMin = (gradeNum === 0) ? 7*60+30 : 7*60+15;
-  var elapsed = (pNum - 1) * 45;
-  if (pNum > 2) elapsed += 20; // استراحة بعد ح2 (20 دقيقة)
+  // أوقات البداية: G5-G8 تبدأ 8:00، الباقي 7:10
+  var startMin = (gradeNum >= 5) ? 8*60 : 7*60+10;
+  var elapsed = 0;
+  for (var p = 1; p < pNum; p++) {
+    elapsed += 45; // مدة الحصة
+    elapsed += 5;  // فاصل انتقال بين الحصص
+    // استراحة كبيرة
+    if (gradeNum <= 2 && p === 2) elapsed += 25;  // G1-G2: بعد ح2 (25د)
+    if (gradeNum >= 3 && gradeNum <= 4 && p === 3) elapsed += 25; // G3-G4: بعد ح3 (25د)
+    if (gradeNum >= 5 && p === 2) elapsed += 25;  // G5-G8: بعد ح2 (25د)
+    // استراحة صغيرة
+    if (gradeNum <= 4 && p === 5) elapsed += 15;  // G1-G4: بعد ح5 (15د)
+    if (gradeNum >= 5 && p === 6) elapsed += 10;  // G5-G8: بعد ح6 (10د)
+  }
   var s = startMin + elapsed, e = s + 45;
   function fmt(m){ var h=Math.floor(m/60),mn=m%60; return h+':'+(mn<10?'0':'')+mn; }
   return fmt(s) + ' – ' + fmt(e);
@@ -746,9 +819,18 @@ async function loadWeekTable() {
     });
     tbl += '</tr></thead><tbody>';
 
+    // استراحات حسب المرحلة
+    var b1After = gNum<=2 ? 2 : (gNum<=4 ? 3 : 2); // استراحة كبيرة بعد ح2 أو ح3
+    var b1Label = gNum<=2 ? 'استراحة كبيرة ☕ — 25 دقيقة (8:45-9:10)' : gNum<=4 ? 'استراحة كبيرة ☕ — 25 دقيقة (9:35-10:00)' : 'استراحة كبيرة ☕ — 25 دقيقة (9:35-10:00)';
+    var b2After = gNum<=4 ? 5 : 6;
+    var b2Label = gNum<=4 ? 'استراحة صغيرة 🍱 — 15 دقيقة (11:35-11:50)' : 'استراحة صغيرة 🍱 — 10 دقيقة (1:05-1:15)';
+
     for (var p = 1; p <= PPD; p++) {
-      if (p === 3) {
-        tbl += '<tr style="background:#FFFBEB"><td colspan="6" style="text-align:center;padding:5px 10px;font-size:.75rem;color:#92400E;font-weight:700">☕ استراحة — 20 دقيقة</td></tr>';
+      if (p === b1After + 1) {
+        tbl += '<tr style="background:#FFFBEB"><td colspan="6" style="text-align:center;padding:6px 10px;font-size:.75rem;color:#92400E;font-weight:700">' + b1Label + '</td></tr>';
+      }
+      if (p === b2After + 1) {
+        tbl += '<tr style="background:#FFF7ED"><td colspan="6" style="text-align:center;padding:5px 10px;font-size:.72rem;color:#9A3412;font-weight:700">' + b2Label + '</td></tr>';
       }
       var tStr = getPeriodTime(gNum, p);
       var isCurrentP = (currentPeriod === p);
@@ -930,9 +1012,17 @@ function renderTimetableHTML(slots, containerId, showClass, contextLabel) {
 
   var FRIDAY_MAX_PERIODS = 4;
 
+  var tB1 = ctxGrade<=2 ? 2 : (ctxGrade<=4 ? 3 : 2);
+  var tB2 = ctxGrade<=4 ? 5 : 6;
+  var lB1 = ctxGrade<=2 ? 'استراحة كبيرة ☕ — 25 دقيقة (8:45-9:10)' : ctxGrade<=4 ? 'استراحة كبيرة ☕ — 25 دقيقة (9:35-10:00)' : 'استراحة كبيرة ☕ — 25 دقيقة (9:35-10:00)';
+  var lB2 = ctxGrade<=4 ? 'استراحة صغيرة 🍱 — 15 دقيقة (11:35-11:50)' : 'استراحة صغيرة 🍱 — 10 دقيقة (1:05-1:15)';
+
   periods.forEach(function(p) {
-    if (p === 3) {
-      html += '<tr style="background:#FFFBEB"><td colspan="6" style="text-align:center;padding:5px 10px;font-size:.75rem;color:#92400E;font-weight:700">☕ استراحة — 20 دقيقة</td></tr>';
+    if (p === tB1 + 1) {
+      html += '<tr style="background:#FFFBEB"><td colspan="6" style="text-align:center;padding:6px 10px;font-size:.75rem;color:#92400E;font-weight:700">' + lB1 + '</td></tr>';
+    }
+    if (p === tB2 + 1) {
+      html += '<tr style="background:#FFF7ED"><td colspan="6" style="text-align:center;padding:5px 10px;font-size:.72rem;color:#9A3412;font-weight:700">' + lB2 + '</td></tr>';
     }
     var isCurP = isCurrentSlot(p);
     html += '<tr' + (isCurP?' style="background:#FFFBEB"':'')+'>'+
