@@ -356,7 +356,38 @@ tr:hover td{background:var(--surface2)}
 .final-score-label{font-size:18px;font-weight:800;color:var(--text);margin-top:8px}
 .final-score-grade{font-size:14px;color:var(--text2);margin-top:4px}
 .appraisal-locked-msg{padding:16px 20px;background:var(--sky-lt);border:1px solid rgba(2,132,199,0.15);border-radius:10px;font-size:14px;font-weight:700;color:var(--sky);text-align:center;margin-top:16px}
-</style>
+
+  /* ── HOVER CARD (بطاقة مستخدم لحظية) ── */
+  .hcard {
+    position: fixed; z-index: 9990;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    min-width: 220px; max-width: 280px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    display: none;
+    pointer-events: none;
+    animation: hcardIn 0.2s cubic-bezier(.22,1,.36,1);
+    direction: rtl;
+  }
+  @keyframes hcardIn {
+    from { opacity:0; transform:scale(0.92) translateY(6px); }
+    to   { opacity:1; transform:scale(1)    translateY(0); }
+  }
+  .hcard.show { display: block; }
+  .hcard-name { font-size:15px;font-weight:900;color:var(--text);margin-bottom:4px; }
+  .hcard-sub  { font-size:12px;color:var(--text3);margin-bottom:10px; }
+  .hcard-row  { display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);margin-bottom:6px; }
+  .hcard-vark { display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:800;margin-top:4px; }
+  .hcard-vark.V { background:#FEE2E2;color:#DC2626; }
+  .hcard-vark.A { background:#DBEAFE;color:#1D4ED8; }
+  .hcard-vark.R { background:#D1FAE5;color:#065F46; }
+  .hcard-vark.K { background:#FEF3C7;color:#92400E; }
+  .hcard-vark.M { background:#EDE9FE;color:#5B21B6; }
+  .has-hcard { cursor: default; border-bottom: 1px dashed var(--brand); }
+
+  </style>
 </head>
 <body>
 
@@ -1421,24 +1452,77 @@ async function loadTodaySchedule() {
     }
     todayScheduleData = data;
     document.getElementById('schedBadge').textContent = data.length;
+    // Fetch attendance counts for today's passed classes
+    const today_date = new Date().toISOString().split('T')[0];
+    const classNames = [...new Set(data.map(s => s.class_name).filter(Boolean))];
+    let attMap = {};
+    try {
+      const { data: attData } = await sb.from('student_attendance')
+        .select('class_name, period, status')
+        .eq('date', today_date)
+        .in('class_name', classNames);
+      if (attData) {
+        attData.forEach(a => {
+          const key = (a.class_name||'') + '_' + (a.period||'');
+          if (!attMap[key]) attMap[key] = {present:0, absent:0, late:0};
+          if (a.status === 'present') attMap[key].present++;
+          else if (a.status === 'absent') attMap[key].absent++;
+          else if (a.status === 'late')   attMap[key].late++;
+        });
+      }
+    } catch(e) {}
+
     const colors = ['brand','emerald','amber','sky','brand','emerald','amber','sky'];
-    container.innerHTML = data.map((s, i) => {
+    let schedHtml = '';
+    data.forEach((s, i) => {
       const p = s.period || (i+1);
       const {start, end, startMin, endMin} = getPeriodTime(p, s.class_name);
       const isCurrent = nowMin >= startMin && nowMin < endMin;
-      const isDone = nowMin >= endMin;
-      const col = colors[i % colors.length];
-      const liveTag = isCurrent ? ' <span style="color:var(--emerald);font-size:12px;font-weight:800;margin-right:8px">● جارية</span>' : '';
-      return '<div class="sched-item ' + (isCurrent?'current':'') + ' ' + (isDone?'done':'') + '">'
+      const isDone    = nowMin >= endMin;
+      const col       = colors[i % colors.length];
+
+      // Break before this period?
+      const gNum = parseInt((s.class_name||'').replace(/[^0-9]/g,'')) || 1;
+      const brk  = typeof getBreakBefore === 'function' ? getBreakBefore(p, gNum) : null;
+      if (brk) {
+        const isBreakNow  = nowMin >= brk.startMin && nowMin < brk.endMin;
+        const isBreakDone = nowMin >= brk.endMin;
+        schedHtml += '<div style="background:' + (isBreakNow?'rgba(245,158,11,0.12)':isBreakDone?'rgba(0,0,0,0.02)':'rgba(255,255,255,0.02)') + ';border-radius:8px;padding:6px 14px;margin:4px 0;display:flex;align-items:center;gap:10px">'
+          + '<span style="font-size:15px">☕</span>'
+          + '<span style="font-size:12px;font-weight:700;color:' + (isBreakNow?'#D97706':'var(--text3)') + '">' + brk.label + '</span>'
+          + '<span style="font-size:11px;color:var(--text3);margin-right:auto">' + brk.start + '–' + brk.end + '</span>'
+          + (isBreakNow ? '<span style="background:rgba(245,158,11,0.2);color:#D97706;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:800">الآن</span>' : '')
+          + '</div>';
+      }
+
+      // Attendance badge for done periods
+      const attKey = (s.class_name||'') + '_' + p;
+      const att    = attMap[attKey];
+      let attBadge = '';
+      if (isDone && att && (att.present + att.absent + att.late) > 0) {
+        attBadge = '<div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap">'
+          + '<span style="background:rgba(16,185,129,0.15);color:#10B981;padding:1px 7px;border-radius:8px;font-size:11px;font-weight:800">✅ ' + att.present + '</span>'
+          + (att.absent ? '<span style="background:rgba(239,68,68,0.15);color:#EF4444;padding:1px 7px;border-radius:8px;font-size:11px;font-weight:800">❌ ' + att.absent + '</span>' : '')
+          + (att.late   ? '<span style="background:rgba(245,158,11,0.15);color:#F59E0B;padding:1px 7px;border-radius:8px;font-size:11px;font-weight:800">⏰ ' + att.late   + '</span>' : '')
+          + '</div>';
+      }
+
+      const liveTag  = isCurrent ? ' <span style="color:var(--emerald);font-size:11px;font-weight:800">● جارية</span>' : '';
+      const rowStyle = isDone ? 'opacity:0.45;' : isCurrent ? 'box-shadow:0 0 0 1px rgba(16,185,129,0.3);' : '';
+
+      schedHtml += '<div class="sched-item ' + (isCurrent?'current':'') + ' ' + (isDone?'done':'') + '" style="' + rowStyle + '">'
         + '<div class="sched-time">' + start + '<br><span style="color:var(--text3);font-size:12px">' + end + '</span></div>'
         + '<div class="sched-bar ' + col + '"></div>'
-        + '<div class="sched-info"><div class="sched-subject">' + (s.subject||'—') + liveTag + '</div>'
-        + '<div class="sched-class">' + (s.class_name||'') + ' · الحصة ' + p + '</div></div>'
+        + '<div class="sched-info" style="flex:1"><div class="sched-subject">' + (s.subject||'—') + liveTag + '</div>'
+        + '<div class="sched-class">' + (s.class_name||'') + ' · الحصة ' + p + '</div>'
+        + attBadge
+        + '</div>'
         + '<div class="sched-actions">'
-        + (isCurrent ? '<a href="../eduos-class-session/" class="btn-sm btn-primary">ابدأ / Start</a>' : '')
-        + '<button class="btn-sm btn-ghost" onclick="markAttendance(\'' + (s.class_name||'') + '\')">حضور / Att</button>'
+        + (isCurrent ? '<a href="../eduos-class-session/" class="btn-sm btn-primary">ابدأ</a>' : '')
+        + (!isDone ? '<button class="btn-sm btn-ghost" onclick="markAttendance(\'' + (s.class_name||'') + '\')">حضور</button>' : '')
         + '</div></div>';
-    }).join('');
+    });
+    container.innerHTML = schedHtml;
   } catch(e) { console.warn('schedule:', e); }
 }
 
@@ -3081,6 +3165,148 @@ document.addEventListener('DOMContentLoaded', function(){
   setTimeout(checkCoordinatorStatus, 1500);
 });
 // ===================== END COORDINATOR MODULE =====================
+
+// ══════════════════════════════════════════════
+// HOVER CARDS — بطاقات المعلومات اللحظية
+// ══════════════════════════════════════════════
+const HC = document.getElementById('globalHCard');
+let _hcTimer = null;
+
+function hcShow(el, name, sub, body, e) {
+  if (!HC) return;
+  document.getElementById('hc-name').textContent = name || '—';
+  document.getElementById('hc-sub').textContent  = sub  || '';
+  document.getElementById('hc-body').innerHTML   = body || '';
+  HC.classList.add('show');
+  hcPos(e);
+}
+function hcHide() { if(HC) HC.classList.remove('show'); }
+function hcPos(e) {
+  if (!HC || !e) return;
+  const x = e.clientX, y = e.clientY;
+  const w = HC.offsetWidth  || 240;
+  const h = HC.offsetHeight || 160;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  HC.style.left = (x + 12 + w > vw ? x - w - 12 : x + 12) + 'px';
+  HC.style.top  = (y + 12 + h > vh ? y - h - 12 : y + 12) + 'px';
+}
+document.addEventListener('mousemove', e => {
+  if (HC && HC.classList.contains('show')) hcPos(e);
+});
+
+// Cache de VARK por student id
+const _varkCache = {};
+
+async function fetchVARK(studentId) {
+  if (_varkCache[studentId] !== undefined) return _varkCache[studentId];
+  try {
+    const res = await sb.from('vark_results')
+      .select('primary_style,secondary_style,v_score,a_score,r_score,k_score')
+      .eq('student_id', String(studentId)).maybeSingle();
+    _varkCache[studentId] = res.data || null;
+  } catch(e) { _varkCache[studentId] = null; }
+  return _varkCache[studentId];
+}
+
+const VARK_LABELS = {V:'👁️ بصري',A:'👂 سمعي',R:'📖 قرائي',K:'🤸 حركي',M:'🔀 متعدد'};
+const VARK_EN    = {V:'Visual',A:'Auditory',R:'Read/Write',K:'Kinesthetic',M:'Multimodal'};
+
+async function attachStudentHoverCards() {
+  document.querySelectorAll('[data-student-id]').forEach(el => {
+    if (el._hcAttached) return;
+    el._hcAttached = true;
+    el.classList.add('has-hcard');
+    el.addEventListener('mouseenter', async (e) => {
+      const sid = el.dataset.studentId;
+      const name = el.dataset.studentName || el.textContent.trim();
+      const cls  = el.dataset.studentClass || '';
+      const num  = el.dataset.studentNum  || '';
+      // Quick show with loading
+      hcShow(el, name, cls + (num?' · '+num:''),
+        '<div style="color:var(--text3);font-size:12px">جارٍ التحميل…</div>', e);
+      const vark = await fetchVARK(sid);
+      if (!vark) {
+        document.getElementById('hc-body').innerHTML =
+          '<div style="color:var(--text3);font-size:12px">لا بيانات VARK</div>';
+        return;
+      }
+      const p = vark.primary_style || 'M';
+      const s = vark.secondary_style || '';
+      const varkHtml = '<div class="hcard-vark '+p+'">'+VARK_LABELS[p]+'</div>'
+        + (s && s !== p ? '<div class="hcard-vark '+s+'" style="margin-right:6px;font-size:11px">'+VARK_LABELS[s]+' (ثانوي)</div>' : '')
+        + '<div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:4px">'
+        + Object.entries({V:vark.v_score,A:vark.a_score,R:vark.r_score,K:vark.k_score})
+          .filter(([,v])=>v!==null&&v!==undefined)
+          .map(([k,v])=>'<div class="hcard-row"><span>'+VARK_LABELS[k]+'</span><strong>'+v+'</strong></div>').join('')
+        + '</div>';
+      document.getElementById('hc-body').innerHTML = varkHtml;
+    });
+    el.addEventListener('mouseleave', () => setTimeout(hcHide, 200));
+  });
+}
+
+// Patch renderStudentsTable to add data attrs
+const _origRenderStudents = typeof renderStudentsTable !== 'undefined' ? renderStudentsTable : null;
+function renderStudentsTable(students, avgMap, flagSet) {
+  const body = document.getElementById('studentsBody');
+  if (!students.length) { body.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text3)">لا طلاب / No students</td></tr>'; return; }
+  const effort = n => 18 + (parseInt(n,36) % 3);
+  body.innerHTML = students.map((s,i) => {
+    const avg = avgMap[s.id] || null;
+    const att = s.attendance_pct || null;
+    const lvl = avg === null ? '—' : avg >= 90 ? 'A' : avg >= 75 ? 'B' : avg >= 60 ? 'C' : 'D';
+    const e = effort(s.id || i);
+    const stars = s.reinforcement_stars || 0;
+    const sb1 = avg ? Math.min(100, Math.round(avg*0.4 + (att||80)*0.3 + e*3)) : null;
+    const dispName = (window.EduLang?.getLang()==='en'&&s.name_en)?s.name_en:(s.name||'—');
+    return '<tr><td>' + (i+1) + '</td>'
+      + '<td><span class="has-hcard" data-student-id="' + s.id + '" data-student-name="' + (s.name||'').replace(/"/g,'') + '" data-student-class="' + (s.class_name||'') + '" data-student-num="' + (s.student_number||'') + '" style="font-weight:700;cursor:pointer">' + dispName + '</span></td>'
+      + '<td>' + (s.class_name||'—') + '</td>'
+      + '<td>' + (att!==null?att+'%':'—') + '</td>'
+      + '<td>' + (avg!==null?avg+'%':'—') + '</td>'
+      + '<td style="font-size:12px">' + '★'.repeat(Math.min(e,5)) + '</td>'
+      + '<td>' + (sb1!==null?'<div class="sb1-bar"><div class="sb1-fill" style="width:'+sb1+'%"></div></div> '+sb1:'—') + '</td>'
+      + '<td>⭐ ' + stars + '</td>'
+      + '<td>' + (flagSet.has(s.id)?'<span class="flag-chip">⚠️</span>':'<span class="grade-chip grade-'+(lvl||'x').toLowerCase()+'">'+lvl+'</span>') + '</td>'
+      + '<td><button class="btn-sm btn-ghost" onclick="viewStudent(\'' + s.id + '\')" data-student-id="'+s.id+'">عرض</button></td></tr>';
+  }).join('');
+  setTimeout(attachStudentHoverCards, 100);
+}
+
+// Also attach on VARK table
+function patchVARKTable() {
+  document.querySelectorAll('#varkBody [data-sid]').forEach(el => {
+    if (el._hcAttached) return;
+    el._hcAttached = true;
+    el.classList.add('has-hcard');
+    el.addEventListener('mouseenter', async e => {
+      const sid = el.dataset.sid;
+      const name = el.textContent.trim();
+      hcShow(el, name, '', '<div style="color:var(--text3);font-size:12px">جارٍ التحميل…</div>', e);
+      const vark = await fetchVARK(sid);
+      if (vark) {
+        const p = vark.primary_style || 'M';
+        document.getElementById('hc-body').innerHTML =
+          '<div class="hcard-vark '+p+'">'+VARK_LABELS[p]+'</div>'
+          + '<div style="margin-top:8px;font-size:12px;color:var(--text3)">'+VARK_EN[p]+'</div>';
+      }
+    });
+    el.addEventListener('mouseleave', () => setTimeout(hcHide, 200));
+  });
+}
+// Watch for VARK table changes
+const _vObserver = new MutationObserver(() => patchVARKTable());
+const _vBody = document.getElementById('varkBody');
+if (_vBody) _vObserver.observe(_vBody, {childList:true});
+
 </script>
+
+<!-- Hover Card -->
+<div class="hcard" id="globalHCard">
+  <div class="hcard-name" id="hc-name">—</div>
+  <div class="hcard-sub" id="hc-sub">—</div>
+  <div id="hc-body"></div>
+</div>
+
 </body>
 </html>
