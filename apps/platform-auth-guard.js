@@ -179,6 +179,7 @@
     'eduos-survey':               ['teacher', 'sub_teacher', 'principal', 'admin'],
     'eduos-digital-readiness':    ['admin', 'principal'],
     'eduos-emiratization':        ['admin', 'principal', 'vice_principal'],
+    'eduos-school-timetable':     ['admin', 'principal', 'vice_principal'],
     'eduos-school-settings':      ['admin', 'principal'],
     'eduos-school-manager':       ['admin'],
     'eduos-onboarding':           ['admin'],

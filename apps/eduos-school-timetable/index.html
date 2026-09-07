@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>جدول المدرسة الشامل — بوابة الجود</title>
+<script src="../platform-config.js"></script>
+<script src="../platform-auth-guard.js"></script>
+<script src="../platform-week.js"></script>
+<script src="../platform-lang.js"></script>
+<style>
+  :root {
+    --bg:      #0f1923;
+    --surface: #162132;
+    --border:  #1e3048;
+    --brand:   #7c5cbf;
+    --brand2:  #22d3ee;
+    --gold:    #c9a84c;
+    --text:    #f0f4ff;
+    --text2:   #a8b8d0;
+    --text3:   #5a7090;
+    --green:   #10b981;
+    --red:     #ef4444;
+    --amber:   #f59e0b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Tajawal', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── HEADER ── */
+  .hdr {
+    background: linear-gradient(135deg,#6C3DD6,#22D3EE);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.3);
+  }
+  .hdr-logo {
+    width: 44px; height: 44px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+  }
+  .hdr-title { font-size: 18px; font-weight: 900; flex: 1; }
+  .hdr-meta  { font-size: 12px; color: rgba(255,255,255,0.75); }
+  .hdr-time  { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .hdr-back  {
+    background: rgba(255,255,255,0.15);
+    border: none; color: #fff;
+    padding: 8px 16px; border-radius: 20px;
+    font-size: 13px; cursor: pointer;
+    font-family: inherit; font-weight: 700;
+  }
+  .hdr-back:hover { background: rgba(255,255,255,0.25); }
+
+  /* ── LEGEND ── */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    padding: 12px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+  }
+  .leg { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
+  .leg-dot { width: 12px; height: 12px; border-radius: 3px; }
+
+  /* ── FILTER BAR ── */
+  .filter-bar {
+    padding: 10px 24px;
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .filter-chip {
+    padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text2);
+    font-family: inherit; font-size: 12px; cursor: pointer;
+  }
+  .filter-chip.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+
+  /* ── MAIN TABLE WRAPPER ── */
+  .tbl-wrap {
+    overflow-x: auto;
+    padding: 16px 24px 60px;
+  }
+
+  /* ── MASTER GRID TABLE ── */
+  .master-tbl {
+    border-collapse: separate;
+    border-spacing: 3px;
+    min-width: max-content;
+    width: 100%;
+  }
+  .master-tbl th {
+    background: var(--surface);
+    color: var(--text2);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 8px 10px;
+    white-space: nowrap;
+    border-radius: 6px;
+    text-align: center;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .master-tbl th.col-class {
+    position: sticky;
+    right: 0;
+    z-index: 20;
+    background: #1a2d42;
+    color: var(--gold);
+    font-size: 13px;
+  }
+  /* Current period header */
+  .master-tbl th.now-col {
+    background: linear-gradient(135deg,#6C3DD6,#22D3EE);
+    color: #fff;
+    position: relative;
+  }
+  .master-tbl th.now-col::after {
+    content: '🟢 الآن';
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+
+  /* ── CELL ── */
+  .master-tbl td {
+    background: var(--surface);
+    border-radius: 6px;
+    padding: 7px 8px;
+    font-size: 12px;
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+    min-width: 100px;
+    transition: background 0.15s;
+  }
+  .master-tbl td.col-class {
+    position: sticky;
+    right: 0;
+    z-index: 5;
+    background: #1a2d42;
+    color: var(--gold);
+    font-weight: 900;
+    font-size: 14px;
+    min-width: 60px;
+    border-radius: 6px;
+  }
+  /* Past */
+  .master-tbl td.cell-past {
+    background: rgba(255,255,255,0.03);
+    color: var(--text3);
+    opacity: 0.65;
+  }
+  /* Current */
+  .master-tbl td.cell-now {
+    background: rgba(108,61,214,0.18);
+    border: 1px solid rgba(108,61,214,0.5);
+    box-shadow: 0 0 10px rgba(108,61,214,0.2);
+  }
+  /* Upcoming */
+  .master-tbl td.cell-future { background: var(--surface); }
+  /* Vacant */
+  .master-tbl td.cell-vacant {
+    background: rgba(239,68,68,0.08);
+    border: 1px dashed rgba(239,68,68,0.4);
+    color: var(--red);
+  }
+  /* Break row */
+  .master-tbl td.cell-break {
+    background: rgba(201,168,76,0.08);
+    color: var(--gold);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .master-tbl th.break-col {
+    background: rgba(201,168,76,0.12);
+    color: var(--gold);
+  }
+
+  .cell-subject { font-weight: 800; font-size: 13px; color: var(--text); }
+  .cell-teacher { font-size: 10px; color: var(--text2); margin-top: 3px; }
+  .cell-past .cell-subject { color: var(--text3); }
+  .cell-past .cell-teacher { color: var(--text3); opacity: 0.7; }
+  .cell-now .cell-subject  { color: #c4b5fd; }
+
+  /* Grade group separators */
+  .grade-sep td { background: transparent !important; padding: 4px 0; }
+  .grade-label {
+    font-size: 10px; color: var(--brand2);
+    font-weight: 900; text-align: right;
+    padding-right: 4px;
+  }
+
+  /* Loading */
+  .loading-overlay {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 14px;
+    z-index: 999;
+  }
+  .spinner {
+    width: 48px; height: 48px;
+    border: 4px solid var(--border);
+    border-top-color: var(--brand);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Day selector */
+  .day-tabs {
+    display: flex; gap: 4px;
+    padding: 10px 24px 0;
+    background: var(--bg);
+  }
+  .day-tab {
+    padding: 6px 16px; border-radius: 20px 20px 0 0;
+    border: 1px solid var(--border); border-bottom: none;
+    background: var(--surface); color: var(--text3);
+    font-family: inherit; font-size: 13px; cursor: pointer;
+  }
+  .day-tab.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .day-tab.today-tab { border-color: var(--brand2); color: var(--brand2); }
+
+  /* Vacancy alert */
+  .vacancy-bar {
+    margin: 8px 24px;
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgba(239,68,68,0.3);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    color: var(--red);
+    display: none;
+  }
+  .vacancy-bar.show { display: block; }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadOverlay">
+  <div class="spinner"></div>
+  <div style="color:var(--text2);font-size:14px">جارٍ تحميل جدول المدرسة…</div>
+</div>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-logo">📅</div>
+  <div style="flex:1">
+    <div class="hdr-title">جدول المدرسة الشامل</div>
+    <div class="hdr-meta" id="hdrMeta">—</div>
+  </div>
+  <div class="hdr-time" id="hdrTime">—</div>
+  <button class="hdr-back" onclick="history.back()">↩ رجوع</button>
+</div>
+
+<!-- LEGEND -->
+<div class="legend">
+  <div class="leg"><div class="leg-dot" style="background:rgba(108,61,214,0.5)"></div> جارية الآن</div>
+  <div class="leg"><div class="leg-dot" style="background:rgba(255,255,255,0.07)"></div> منتهية</div>
+  <div class="leg"><div class="leg-dot" style="background:var(--surface)"></div> قادمة</div>
+  <div class="leg"><div class="leg-dot" style="background:rgba(239,68,68,0.3)"></div> شاغر</div>
+  <div class="leg"><div class="leg-dot" style="background:rgba(201,168,76,0.2)"></div> استراحة</div>
+  <span id="vacancyCount" style="margin-right:auto;font-size:12px;color:var(--red);font-weight:700"></span>
+</div>
+
+<!-- DAY TABS -->
+<div class="day-tabs" id="dayTabs"></div>
+
+<!-- VACANCY BAR -->
+<div class="vacancy-bar" id="vacancyBar"></div>
+
+<!-- FILTER -->
+<div class="filter-bar">
+  <span style="font-size:12px;color:var(--text3)">المرحلة:</span>
+  <button class="filter-chip active" onclick="filterGrade('all',this)">الكل</button>
+  <button class="filter-chip" onclick="filterGrade('KG',this)">روضة</button>
+  <button class="filter-chip" onclick="filterGrade('G1-G2',this)">١-٢</button>
+  <button class="filter-chip" onclick="filterGrade('G3-G4',this)">٣-٤</button>
+  <button class="filter-chip" onclick="filterGrade('G5-G8',this)">٥-٨</button>
+</div>
+
+<!-- TABLE -->
+<div class="tbl-wrap">
+  <table class="master-tbl" id="masterTbl">
+    <tbody id="masterBody">
+    </tbody>
+  </table>
+</div>
+
+<script>
+// ══════════════════════════════════
+// CONFIG
+// ══════════════════════════════════
+const SB_URL = window.EduOS?.SB_URL || 'https://zuyizaiugpmhmeycqton.supabase.co';
+const SB_KEY = window.EduOS?.SB_KEY || '';
+
+const DAYS_AR = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+const DAYS_ORDER = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس'];
+
+// Period times by stage
+// Returns {start, end} in minutes from midnight
+function getPeriodTime(grade, period) {
+  const g = parseInt(grade?.replace(/\D/g,'')) || 1;
+  if (g <= 2) {
+    // G1-G2: 7:10 start, break after p2
+    const starts = [0, 430, 480, 550, 600, 650, 695, 740, 760];
+    // 7:10=430, 8:00=480, 9:10=550, 10:00=600, 10:50=650, 11:35=695, 11:50=710(break), 11:50=710, 12:35=755
+    const times = [
+      null,
+      {s:430,e:475},{s:480,e:525}, // p1,p2
+      {s:550,e:595},{s:600,e:645},{s:650,e:695}, // p3,p4,p5
+      {s:710,e:755},{s:760,e:805}  // p6,p7
+    ];
+    return times[period] || null;
+  } else if (g <= 4) {
+    // G3-G4: 7:10 start, break after p3
+    const times = [
+      null,
+      {s:430,e:475},{s:480,e:525},{s:530,e:575}, // p1,p2,p3
+      {s:600,e:645},{s:650,e:695}, // p4(after break 9:35-10:00),p5
+      {s:710,e:755},{s:760,e:805}  // p6,p7 (after break 11:35-11:50)
+    ];
+    return times[period] || null;
+  } else {
+    // G5-G8: 8:00 start, break after p2
+    const times = [
+      null,
+      {s:480,e:525},{s:530,e:575}, // p1,p2
+      {s:600,e:645},{s:650,e:695},{s:700,e:745}, // p3(after break),p4,p5
+      {s:750,e:795},{s:815,e:860},{s:865,e:905}  // p6, (break 13:05-13:15), p7,p8
+    ];
+    return times[period] || null;
+  }
+}
+
+function nowMinutes() {
+  const d = new Date();
+  return d.getHours()*60 + d.getMinutes();
+}
+
+function getPeriodStatus(grade, period) {
+  const t = getPeriodTime(grade, period);
+  if (!t) return 'unknown';
+  const now = nowMinutes();
+  if (now < t.s) return 'future';
+  if (now > t.e) return 'past';
+  return 'now';
+}
+
+function minsToTime(m) {
+  const h = Math.floor(m/60), mm = m%60;
+  return h + ':' + String(mm).padStart(2,'0');
+}
+
+// Breaks per grade group: {afterPeriod, start, end}
+function getBreaks(grade) {
+  const g = parseInt(grade?.replace(/\D/g,'')) || 1;
+  if (g <= 2) return [{after:2,s:525,e:550},{after:5,s:695,e:710}];
+  if (g <= 4) return [{after:3,s:575,e:600},{after:5,s:695,e:710}];
+  return [{after:2,s:575,e:600},{after:6,s:795,e:815}];
+}
+
+function maxPeriods(grade) {
+  const g = parseInt(grade?.replace(/\D/g,'')) || 1;
+  return g >= 5 ? 8 : 7;
+}
+
+// ══════════════════════════════════
+// STATE
+// ══════════════════════════════════
+let allSchedule = [];
+let allClasses  = [];
+let activeDay   = '';
+let gradeFilter = 'all';
+let todayAr     = '';
+
+// ══════════════════════════════════
+// INIT
+// ══════════════════════════════════
+document.addEventListener('DOMContentLoaded', async () => {
+  updateClock();
+  setInterval(updateClock, 30000);
+  setTodayAr();
+  buildDayTabs();
+  await loadSchedule();
+  render();
+  document.getElementById('loadOverlay').style.display = 'none';
+});
+
+function setTodayAr() {
+  const d = new Date().getDay();
+  const map = {0:'الأحد',1:'الاثنين',2:'الثلاثاء',3:'الأربعاء',4:'الخميس',5:'الجمعة',6:'السبت'};
+  todayAr = map[d] || 'الأحد';
+  activeDay = DAYS_ORDER.includes(todayAr) ? todayAr : 'الأحد';
+}
+
+function updateClock() {
+  const now = new Date();
+  const t = now.toLocaleTimeString('ar-AE',{hour:'2-digit',minute:'2-digit'});
+  const d = now.toLocaleDateString('ar-AE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  document.getElementById('hdrTime').textContent = t;
+  document.getElementById('hdrMeta').textContent = d;
+}
+
+function buildDayTabs() {
+  const tabs = document.getElementById('dayTabs');
+  tabs.innerHTML = DAYS_ORDER.map(day => {
+    const isToday = day === todayAr;
+    return '<button class="day-tab' + (isToday?' today-tab':'') + (day===activeDay?' active':'') + '" onclick="selectDay(\'' + day + '\',this)">' + day + (isToday?' 📍':'') + '</button>';
+  }).join('');
+}
+
+function selectDay(day, btn) {
+  activeDay = day;
+  document.querySelectorAll('.day-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function filterGrade(g, btn) {
+  gradeFilter = g;
+  document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+// ══════════════════════════════════
+// LOAD
+// ══════════════════════════════════
+async function loadSchedule() {
+  try {
+    // Load all schedules for current year/term
+    let url = SB_URL + '/rest/v1/schedules?select=class_name,subject,teacher_name,period,day,grade,vacancy_reason,is_active&is_active=eq.true&order=class_name,period';
+    const res = await fetch(url, {
+      headers: {'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY}
+    });
+    const data = await res.json();
+    allSchedule = Array.isArray(data) ? data : [];
+
+    // Extract unique classes
+    const classSet = {};
+    allSchedule.forEach(r => {
+      if (r.class_name) classSet[r.class_name] = r.grade || '';
+    });
+    // Sort classes: KG1A, KG2A, 1A... 8C
+    allClasses = Object.entries(classSet).map(([c,g])=>({cls:c,grade:g}))
+      .sort((a,b) => sortClass(a.cls) - sortClass(b.cls));
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function sortClass(cls) {
+  if (!cls) return 999;
+  if (cls.startsWith('KG')) {
+    const n = cls.startsWith('KG1') ? 0 : 10;
+    return n + cls.charCodeAt(cls.length-1);
+  }
+  const m = cls.match(/^(\d+)([A-Z])/);
+  if (m) return parseInt(m[1])*100 + m[2].charCodeAt(0);
+  return 999;
+}
+
+function gradeNum(grade) {
+  if (!grade) return 1;
+  if (grade==='KG1'||grade==='KG2') return 0;
+  return parseInt(grade.replace(/\D/g,'')) || 1;
+}
+
+// ══════════════════════════════════
+// RENDER
+// ══════════════════════════════════
+function render() {
+  const tbody = document.getElementById('masterBody');
+  const isFriday = (activeDay === 'الجمعة');
+  const isToday  = (activeDay === todayAr);
+
+  // Filter classes
+  let classes = allClasses;
+  if (gradeFilter !== 'all') {
+    classes = classes.filter(c => {
+      const g = gradeNum(c.grade);
+      if (gradeFilter==='KG')   return g===0;
+      if (gradeFilter==='G1-G2') return g===1||g===2;
+      if (gradeFilter==='G3-G4') return g===3||g===4;
+      if (gradeFilter==='G5-G8') return g>=5&&g<=8;
+      return true;
+    });
+  }
+
+  // Build schedule index: {class_name_day_period: row}
+  const idx = {};
+  allSchedule.forEach(r => {
+    const key = (r.class_name||'') + '__' + (r.day||'') + '__' + (r.period||'');
+    idx[key] = r;
+  });
+
+  // Determine max periods for display
+  const maxP = isFriday ? 4 : 8;
+
+  // Build header columns with breaks interspersed
+  // We'll figure out breaks per grade group dynamically, but for the header
+  // use G3 as reference (most common); breaks after p3 and p5
+  // Actually for header we show periods 1-maxP and insert break markers
+  // But different grades have breaks at different periods!
+  // Solution: Show all periods 1-maxP in columns, no break column in header
+  // Breaks shown as cell content per row based on grade
+
+  // Actually better: show columns 1..maxP, and a visual break separator
+  // We'll use rowspan approach: for each class row, when a break happens, show it inline
+
+  // Build HEADER
+  let headerHtml = '<tr>';
+  headerHtml += '<th class="col-class">الصف</th>';
+  for (let p = 1; p <= maxP; p++) {
+    // Determine status of this period for reference grade G3
+    let colClass = '';
+    if (isToday) {
+      // Use G3 timing as reference for header highlight
+      const refGrade = 'G3';
+      const st = getPeriodStatus(refGrade, p);
+      if (st === 'now') colClass = ' now-col';
+    }
+    // Time range (use G3 as reference)
+    const t = getPeriodTime('G3', p);
+    const timeStr = t ? minsToTime(t.s)+'-'+minsToTime(t.e) : '';
+    headerHtml += '<th class="' + colClass.trim() + '">ح' + toArabicNum(p) + '<br><span style="font-size:9px;font-weight:400;color:rgba(255,255,255,0.6)">' + timeStr + '</span></th>';
+  }
+  headerHtml += '</tr>';
+
+  // Build rows
+  let vacancies = [];
+  let rowsHtml = '';
+
+  // Group classes by grade group for separators
+  let lastGroup = '';
+  classes.forEach(({cls, grade}) => {
+    const g = gradeNum(grade);
+    const group = g===0 ? 'روضة' : g<=2 ? 'الصف الأول والثاني' : g<=4 ? 'الصف الثالث والرابع' : 'الصف الخامس إلى الثامن';
+    if (group !== lastGroup) {
+      lastGroup = group;
+      rowsHtml += '<tr class="grade-sep"><td class="grade-label col-class">' + group + '</td>';
+      for (let p=1; p<=maxP; p++) rowsHtml += '<td style="background:transparent;border-bottom:1px solid var(--border)"></td>';
+      rowsHtml += '</tr>';
+    }
+
+    rowsHtml += '<tr>';
+    rowsHtml += '<td class="col-class">' + cls + '</td>';
+
+    const breaks = getBreaks(grade);
+
+    for (let p = 1; p <= maxP; p++) {
+      const key = cls + '__' + activeDay + '__' + p;
+      const cell = idx[key];
+      const isBreakHere = breaks.some(b => b.after === p-1 && p > 1);
+
+      // Determine status
+      let cellClass = 'cell-future';
+      if (isToday) {
+        const st = getPeriodStatus(grade, p);
+        if (st === 'past') cellClass = 'cell-past';
+        else if (st === 'now') cellClass = 'cell-now';
+      }
+
+      if (!cell) {
+        // No schedule entry
+        rowsHtml += '<td class="' + cellClass + ' cell-vacant"><span style="font-size:18px">—</span></td>';
+      } else if (cell.vacancy_reason) {
+        // Vacant period
+        vacancies.push({cls, period:p, reason:cell.vacancy_reason});
+        rowsHtml += '<td class="' + cellClass + ' cell-vacant"><div class="cell-subject" style="color:var(--red)">شاغر</div><div class="cell-teacher" style="color:var(--red);font-size:9px">' + (cell.vacancy_reason||'') + '</div></td>';
+      } else {
+        const subj = cell.subject || '—';
+        const tchr = cell.teacher_name || '—';
+        // Short teacher name (first 2 words)
+        const shortTchr = tchr.split(' ').slice(0,2).join(' ');
+        rowsHtml += '<td class="' + cellClass + '"><div class="cell-subject">' + subj + '</div><div class="cell-teacher">' + shortTchr + '</div></td>';
+      }
+    }
+    rowsHtml += '</tr>';
+  });
+
+  tbody.innerHTML = headerHtml + rowsHtml;
+
+  // Vacancy summary
+  const vCount = document.getElementById('vacancyCount');
+  const vBar   = document.getElementById('vacancyBar');
+  if (vacancies.length > 0) {
+    vCount.textContent = '⚠️ ' + vacancies.length + ' شاغر في هذا اليوم';
+    vBar.className = 'vacancy-bar show';
+    vBar.innerHTML = '⚠️ <strong>' + vacancies.length + ' حصة شاغرة:</strong> ' +
+      vacancies.map(v => v.cls + ' ح' + toArabicNum(v.period)).join(' · ');
+  } else {
+    vCount.textContent = '';
+    vBar.className = 'vacancy-bar';
+  }
+}
+
+function toArabicNum(n) {
+  return String(n).replace(/[0-9]/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+}
+</script>
+</body>
+</html>
