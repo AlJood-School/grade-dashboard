@@ -80,7 +80,26 @@ body{font-family:'Tajawal',Arial,sans-serif;background:#F0F4F8;color:#1e293b;min
 footer{text-align:center;padding:20px;color:var(--text2);font-size:.75rem;border-top:1px solid var(--border);margin-top:40px}
 /* Mark absent panel */
 .mark-absent-bar{background:#fff;border-radius:12px;padding:14px 20px;margin-bottom:20px;border:1.5px solid #fecaca;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
-.mark-absent-bar select{background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;font-family:inherit;font-size:.88rem;color:var(--text);min-width:200px}
+/* teacher cards grid */
+.teachers-grid-wrap{background:#fff;border-radius:14px;padding:18px 20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid var(--border)}
+.teachers-grid-title{font-size:.95rem;font-weight:900;color:var(--text);margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.teachers-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.tc-card{border-radius:12px;padding:12px 14px;cursor:pointer;transition:all .2s;border:2px solid transparent;user-select:none;position:relative}
+.tc-card.present{background:#f0fdf4;border-color:#86efac}
+.tc-card:hover.present{background:#dcfce7;border-color:#4ade80;transform:translateY(-2px);box-shadow:0 4px 12px rgba(34,197,94,.2)}
+.tc-card.absent{background:#fff5f5;border-color:#fca5a5}
+.tc-card:hover.absent{background:#fee2e2;border-color:#f87171;transform:translateY(-2px);box-shadow:0 4px 12px rgba(239,68,68,.2)}
+.tc-card .tc-status{width:10px;height:10px;border-radius:50%;display:inline-block;margin-left:6px}
+.tc-card.present .tc-status{background:#22c55e;box-shadow:0 0 6px rgba(34,197,94,.5)}
+.tc-card.absent .tc-status{background:#ef4444;box-shadow:0 0 6px rgba(239,68,68,.5)}
+.tc-card .tc-name{font-size:.82rem;font-weight:700;color:var(--text);line-height:1.4;margin-top:4px}
+.tc-card .tc-subj{font-size:.72rem;color:var(--text2);margin-top:2px}
+.tc-card .tc-state-label{font-size:.7rem;font-weight:800;margin-top:6px}
+.tc-card.present .tc-state-label{color:#16a34a}
+.tc-card.absent .tc-state-label{color:#dc2626}
+.tc-legend{display:flex;gap:16px;font-size:.78rem;color:var(--text2)}
+.tc-legend span{display:flex;align-items:center;gap:5px}
+.tc-legend .dot{width:9px;height:9px;border-radius:50%}
 </style>
 </head>
 <body>
@@ -109,12 +128,18 @@ footer{text-align:center;padding:20px;color:var(--text2);font-size:.75rem;border
     </div>
   </div>
 
-  <!-- Mark absent panel -->
-  <div class="mark-absent-bar">
-    <strong style="font-size:.9rem;color:#991b1b">🔴 تسجيل غياب معلمة:</strong>
-    <select id="selAbsentTeacher"><option value="">اختري المعلمة الغائبة...</option></select>
-    <button class="btn btn-danger btn-sm" onclick="markTeacherAbsent()">تسجيل غائبة</button>
-    <span style="font-size:.78rem;color:var(--text2)">سيظهر جدولها أدناه تلقائياً</span>
+  <!-- Teacher cards grid -->
+  <div class="teachers-grid-wrap">
+    <div class="teachers-grid-title">
+      <span>👩‍🏫 انقري على اسم المعلمة لتسجيل غيابها — انقري مرة أخرى لإلغائه</span>
+      <div class="tc-legend">
+        <span><span class="dot" style="background:#22c55e"></span> حاضرة</span>
+        <span><span class="dot" style="background:#ef4444"></span> غائبة</span>
+      </div>
+    </div>
+    <div class="teachers-grid" id="teachersGrid">
+      <div style="color:var(--text2);font-size:.85rem;padding:10px">جاري تحميل المعلمات...</div>
+    </div>
   </div>
 
   <!-- Date bar -->
@@ -234,12 +259,7 @@ async function loadData() {
   const fromSub = new Set(coverage.map(c => c.original_teacher_id));
   absentTeacherIds = [...new Set([...fromSub, ...(absentTeacherIds||[])])];
 
-  // Populate absent teacher selector
-  const sel = document.getElementById('selAbsentTeacher');
-  const teachersWithSched = [...new Map(sched.map(s=>[s.teacher_id,s])).values()];
-  sel.innerHTML = '<option value="">اختري المعلمة الغائبة...</option>' +
-    teachersWithSched.map(s => `<option value="${s.teacher_id}">${s.teacher_name || s.teacher_id}</option>`).join('');
-
+  renderTeacherCards();
   renderAll(dayAr);
 }
 
@@ -343,17 +363,63 @@ async function assign(origId, subId, subName, className, subject, period, grade,
   }
 }
 
-function markTeacherAbsent() {
-  const sel = document.getElementById('selAbsentTeacher');
-  const tid = sel.value;
-  if (!tid) { toast('اختاري معلمة أولاً'); return; }
-  if (!absentTeacherIds.includes(tid)) {
-    absentTeacherIds.push(tid);
-    toast('🔴 تم تسجيل الغياب');
-    loadData();
-  } else {
-    toast('هذه المعلمة مسجّلة غائبة بالفعل');
+function renderTeacherCards() {
+  const grid = document.getElementById('teachersGrid');
+  if (!grid) return;
+
+  // Build from scheduleData teachers + allTeachers
+  const schedTeachers = new Map();
+  scheduleData.forEach(s => {
+    if (s.teacher_id && s.teacher_name) schedTeachers.set(s.teacher_id, s.teacher_name);
+  });
+
+  // Merge: teachers with schedule get priority, then remaining from staff_profiles
+  const cardList = [];
+  schedTeachers.forEach((name, tid) => cardList.push({id: tid, name}));
+  allTeachers.forEach(t => {
+    if (!schedTeachers.has(t.staff_db_id)) {
+      cardList.push({id: t.staff_db_id, name: t.name_ar || t.staff_db_id, subj: t.subject});
+    }
+  });
+
+  if (cardList.length === 0) {
+    grid.innerHTML = '<div style="color:var(--text2);font-size:.85rem;padding:10px">لا بيانات — تأكدي من وجود جداول لهذا اليوم</div>';
+    return;
   }
+
+  grid.innerHTML = cardList.map(tc => {
+    const isAbsent = absentTeacherIds.includes(tc.id);
+    const nameParts = (tc.name || tc.id).split(' ');
+    const shortName = nameParts.length >= 3 ? nameParts.slice(0,3).join(' ') : tc.name || tc.id;
+    return `<div class="tc-card ${isAbsent ? 'absent' : 'present'}"
+      data-tid="${tc.id}"
+      onclick="toggleTeacherAbsent('${tc.id}', this)">
+      <div><span class="tc-status"></span><span style="font-size:.72rem;font-weight:700;color:${isAbsent?'#dc2626':'#16a34a'}">${isAbsent?'غائبة':'حاضرة'}</span></div>
+      <div class="tc-name">${shortName}</div>
+      ${tc.subj ? '<div class="tc-subj">'+tc.subj+'</div>' : ''}
+      <div class="tc-state-label">${isAbsent ? '🔴 انقري للإلغاء' : '🟢 انقري للغياب'}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleTeacherAbsent(tid, card) {
+  if (absentTeacherIds.includes(tid)) {
+    // Mark present again
+    absentTeacherIds = absentTeacherIds.filter(id => id !== tid);
+    card.className = 'tc-card present';
+    card.querySelector('.tc-state-label').textContent = '🟢 انقري للغياب';
+    card.querySelector('span[style]').style.color = '#16a34a';
+    card.querySelector('span[style]').textContent = 'حاضرة';
+    toast('✅ إلغاء الغياب');
+  } else {
+    absentTeacherIds.push(tid);
+    card.className = 'tc-card absent';
+    card.querySelector('.tc-state-label').textContent = '🔴 انقري للإلغاء';
+    card.querySelector('span[style]').style.color = '#dc2626';
+    card.querySelector('span[style]').textContent = 'غائبة';
+    toast('🔴 تم تسجيل الغياب');
+  }
+  renderAll(arabicDay(selectedDate));
 }
 
 function renderCoverage() {
