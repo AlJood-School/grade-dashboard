@@ -163,15 +163,15 @@
   .master-tbl td {
     background: var(--surface);
     border-radius: 8px;
-    padding: 9px 10px;
+    padding: 10px 8px;
     text-align: center;
     vertical-align: middle;
-    min-width: 116px;
-    max-width: 140px;
+    min-width: 130px;
+    max-width: 148px;
     transition: background 0.15s, box-shadow 0.15s;
     border: 1px solid transparent;
   }
-  .master-tbl td:hover { filter: brightness(1.12); }
+  .master-tbl td:hover { filter: brightness(1.15); cursor: default; }
 
   .master-tbl td.col-class {
     position: sticky;
@@ -215,19 +215,52 @@
     font-weight: 800;
     font-size: 13px;
     color: var(--text);
-    line-height: 1.3;
+    line-height: 1.35;
     white-space: normal;
     word-break: keep-all;
+    max-height: 2.8em;
+    overflow: hidden;
+  }
+  .cell-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 6px;
+    margin-top: 3px;
+    background: rgba(108,61,214,0.15);
+    color: var(--brand);
+    letter-spacing: 0.3px;
   }
   .cell-teacher {
     font-size: 11px;
-    color: var(--text3);
-    margin-top: 5px;
-    white-space: normal;
-    line-height: 1.3;
+    color: rgba(255,255,255,0.45);
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
   }
-  .cell-past .cell-subject { color: var(--text3); }
-  .cell-past .cell-teacher { color: var(--text3); }
+  .cell-now .cell-teacher { color: rgba(255,255,255,0.65); }
+  .cell-past .cell-subject { color: rgba(255,255,255,0.35); }
+  .cell-past .cell-teacher { color: rgba(255,255,255,0.2); }
+  /* Tooltip for full info */
+  .master-tbl td[title]:hover::after {
+    content: attr(title);
+    position: fixed;
+    background: #1e3050;
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    white-space: pre;
+    z-index: 9999;
+    border: 1px solid var(--border);
+    pointer-events: none;
+    direction: rtl;
+    max-width: 200px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
   .cell-now  .cell-subject { color: #c4b5fd; font-size: 14px; }
   .cell-now  .cell-teacher { color: #a5b4fc; }
   .cell-vacant .cell-subject { color: var(--red); font-size: 12px; }
@@ -336,7 +369,7 @@
 
   /* Responsive — smaller on mobile */
   @media (max-width: 768px) {
-    .master-tbl td, .master-tbl th { min-width: 88px; max-width: 100px; font-size: 11px; padding: 7px 6px; }
+    .master-tbl td, .master-tbl th { min-width: 100px; max-width: 120px; font-size: 11px; padding: 8px 6px; }
     .cell-subject { font-size: 12px; }
     .cell-teacher { font-size: 10px; }
   }
@@ -575,6 +608,35 @@ function gradeNum(grade) {
   return parseInt(grade.replace(/\D/g,'')) || 1;
 }
 
+
+// ══════════════════════════════════
+// SUBJECT ABBREVIATIONS
+// ══════════════════════════════════
+function abbrevSubject(subj) {
+  if (!subj) return '—';
+  // Remove parenthetical tags for display
+  const s = subj.trim();
+  // Exact/prefix matches
+  if (s.includes('جيوجيتسو')) return 'جيوجيتسو';
+  if (s.includes('ذكاء اصطناعي') || s.includes('CCDI')) return 'ذكاء اصطناعي';
+  if (s.includes('فنون وموسيقى')) return 'فنون / موسيقى';
+  if (s.includes('فنون بصرية') || s === 'فنون') return 'فنون';
+  if (s.includes('موسيقى')) return 'موسيقى';
+  if (s.includes('تربية بدنية')) return 'بدنية';
+  if (s.includes('دراسات اجتماعية')) return 'دراسات';
+  if (s.includes('تربية إسلامية') && !s.includes('عربي')) return 'إسلامية';
+  if (s.includes('رياضيات') && s.includes('علوم') && s.includes('إنجليز')) return 'AMT';
+  if (s.includes('رياضيات') && s.includes('إنجليز') && !s.includes('علوم')) return 'إنجليزي + رياضيات';
+  if (s.includes('عربية') && s.includes('إسلامية') && s.includes('دراسات')) return 'عربي + إسلامية + دراسات';
+  if (s.includes('عربية') && s.includes('إسلامية')) return 'عربي + إسلامية';
+  if (s.includes('لغة عربية') || s === 'عربي') return 'عربي';
+  if (s.includes('إنجليز') && !s.includes('رياضيات')) return 'إنجليزي';
+  if (s === 'رياضيات') return 'رياضيات';
+  if (s === 'علوم') return 'علوم';
+  // Default: trim long strings
+  return s.length > 16 ? s.slice(0,14) + '…' : s;
+}
+
 // ══════════════════════════════════
 // RENDER
 // ══════════════════════════════════
@@ -690,9 +752,18 @@ function render() {
       } else {
         const subj = cell.subject || '—';
         const tchr = cell.teacher_name || '—';
-        // Short teacher name (first 2 words)
-        const shortTchr = tchr.split(' ').slice(0,2).join(' ');
-        rowsHtml += '<td class="' + cellClass + '"><div class="cell-subject">' + subj + '</div><div class="cell-teacher">' + shortTchr + '</div></td>';
+        // Short teacher: first name only
+        const shortTchr = tchr.split(' ')[0] || tchr;
+        // Short subject
+        const shortSubj = abbrevSubject(subj);
+        // Badge if EMT/AMT type
+        const isBadge = subj.includes('(AMT)') || subj.includes('(E)') || subj.includes('(CCDI)') || subj.includes('جيوجيتسو');
+        const badgeTxt = subj.includes('(AMT)') ? 'AMT' : subj.includes('(E)') ? 'EMT' : subj.includes('(CCDI)') ? 'CCDI' : subj.includes('جيوجيتسو') ? 'JJJ' : '';
+        const tooltip = subj + '\n' + tchr;
+        rowsHtml += '<td class="' + cellClass + '" title="' + tooltip.replace(/"/g,'') + '">'
+          + '<div class="cell-subject">' + shortSubj + (badgeTxt ? '<br><span class="cell-badge">' + badgeTxt + '</span>' : '') + '</div>'
+          + '<div class="cell-teacher">' + shortTchr + '</div>'
+          + '</td>';
       }
     }
     rowsHtml += '</tr>';
