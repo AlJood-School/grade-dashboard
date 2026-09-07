@@ -363,11 +363,21 @@ try {
   if (raw) currentUser = JSON.parse(raw);
 } catch(e) {}
 
+function getKey() { return window.EduOS?.SB_KEY || KEY; }
+// استعلامات القراءة العامة = anon key (teacher_assignments, students, schedules)
+// حفظ الحضور = user JWT (student_attendance)
 async function get(table, params='') {
-  const token = currentUser?.token || '';
-  const authHeader = token ? 'Bearer ' + token : 'Bearer ' + KEY;
+  const k = getKey();
   const r = await fetch(`${SB}/rest/v1/${table}?${params}`, {
-    headers:{'apikey':KEY,'Authorization':authHeader,'Content-Type':'application/json'}
+    headers:{'apikey': k, 'Authorization': 'Bearer ' + k, 'Content-Type':'application/json'}
+  });
+  return r.ok ? r.json() : [];
+}
+async function getAuth(table, params='') {
+  const k = getKey();
+  const tok = currentUser?.token || currentUser?.access_token || k;
+  const r = await fetch(`${SB}/rest/v1/${table}?${params}`, {
+    headers:{'apikey': k, 'Authorization': 'Bearer ' + tok, 'Content-Type':'application/json'}
   });
   return r.ok ? r.json() : [];
 }
@@ -432,7 +442,7 @@ async function loadClasses() {
       classNames = unique.sort();
     } else if (staffId) {
       // Teacher/coach: get classes from teacher_assignments
-      const rows = await get('teacher_assignments', `staff_db_id=eq.${encodeURIComponent(staffId)}&select=class_name&is_active=eq.true&limit=100`);
+      const rows = await get('teacher_assignments', `staff_db_id=eq.${encodeURIComponent(staffId)}&select=class_name&limit=100`);
       classNames = [...new Set(rows.map(r=>r.class_name).filter(Boolean))].sort();
     }
 
@@ -626,10 +636,11 @@ async function saveAttendance() {
   }));
 
   try {
-    const token = currentUser?.access_token || KEY;
+    const k = getKey();
+    const tok = currentUser?.token || currentUser?.access_token || k;
     const r = await fetch(`${SB}/rest/v1/student_attendance`, {
       method:'POST',
-      headers:{'apikey':KEY,'Authorization':'Bearer '+token,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
+      headers:{'apikey':k,'Authorization':'Bearer '+tok,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
       body: JSON.stringify(records)
     });
     if (r.ok || r.status === 201) {
