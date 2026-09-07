@@ -1318,7 +1318,93 @@ async function loadTodaySchedule() {
     const dayNames = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
     const today = dayNames[new Date().getDay()];
     const now = new Date();
+    const nowMin = now.getHours()*60 + now.getMinutes();
     const container = document.getElementById('schedList');
+    const userRole = session?.role_key || session?.role || '';
+    const isManager = ['admin','principal','vice_principal'].includes(userRole);
+
+    if (isManager) {
+      // ── عرض جميع صفوف المدرسة لهذا اليوم ──
+      const { data } = await sb.from('schedules').select('*').eq('is_active', true).eq('day', today).order('period').order('class_name');
+      if (!data || !data.length) {
+        container.innerHTML = '<div class="empty"><div class="icon">📅</div><p>لا بيانات جدول اليوم</p></div>';
+        document.getElementById('schedBadge').textContent = '0';
+        return;
+      }
+      todayScheduleData = data;
+      document.getElementById('schedBadge').textContent = data.length;
+
+      // تجميع حسب رقم الحصة
+      const byPeriod = {};
+      data.forEach(s => {
+        const p = s.period || 1;
+        if (!byPeriod[p]) byPeriod[p] = [];
+        byPeriod[p].push(s);
+      });
+      const periods = Object.keys(byPeriod).map(Number).sort((a,b) => a-b);
+
+      // نموذج فصل عشوائي لتحديد التوقيت
+      const sampleClass = data[0]?.class_name || '1A';
+      const gradeNum = parseInt((sampleClass||'').replace(/[^0-9]/g,'')) || 1;
+
+      let html = '<div style="overflow-x:auto">'
+        + '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+        + '<thead><tr style="background:color-mix(in oklab,var(--brand) 8%,var(--surface));color:var(--text)">'
+        + '<th style="padding:10px 12px;text-align:right;border-bottom:2px solid var(--border);white-space:nowrap">ح</th>'
+        + '<th style="padding:10px 12px;text-align:right;border-bottom:2px solid var(--border);white-space:nowrap">الوقت</th>'
+        + '<th style="padding:10px 12px;text-align:right;border-bottom:2px solid var(--border)">الصف</th>'
+        + '<th style="padding:10px 12px;text-align:right;border-bottom:2px solid var(--border)">المادة</th>'
+        + '<th style="padding:10px 12px;text-align:right;border-bottom:2px solid var(--border)">المعلمة</th>'
+        + '<th style="padding:10px 12px;text-align:center;border-bottom:2px solid var(--border)">الحالة</th>'
+        + '</tr></thead><tbody>';
+
+      periods.forEach(p => {
+        const rows = byPeriod[p];
+        const timing = getPeriodTime(p, rows[0]?.class_name || '1A');
+        const isCurrPeriod = nowMin >= timing.startMin && nowMin < timing.endMin;
+
+        // استراحة قبل هذه الحصة؟
+        const breakInfo = getBreakBefore(p, gradeNum);
+        if (breakInfo) {
+          const isBreakNow = nowMin >= breakInfo.startMin && nowMin < breakInfo.endMin;
+          html += '<tr style="background:' + (isBreakNow ? 'rgba(245,158,11,0.12)' : 'rgba(0,0,0,0.03)') + '">'
+            + '<td colspan="6" style="padding:6px 12px;text-align:center;font-size:12px;font-weight:700;color:' + (isBreakNow ? '#D97706' : 'var(--text3)') + ';border-bottom:1px solid var(--border)">'
+            + (isBreakNow ? '☕ استراحة جارية الآن — ' : '⏸️ استراحة — ')
+            + breakInfo.label + ' · ' + breakInfo.start + '–' + breakInfo.end
+            + '</td></tr>';
+        }
+
+        rows.forEach((s, ri) => {
+          const isCurrent = isCurrPeriod && nowMin >= timing.startMin && nowMin < timing.endMin;
+          const isDone = nowMin >= timing.endMin;
+          const isVacant = !s.teacher_name || s.subject === 'شاغر' || (s.vacancy_reason && s.vacancy_reason.length > 0);
+          const bgColor = isCurrent ? 'rgba(5,150,105,0.06)' : isDone ? 'rgba(0,0,0,0.01)' : '';
+          const borderRight = isCurrent ? '3px solid var(--emerald)' : isVacant ? '3px solid #EF4444' : '3px solid transparent';
+          const subjectColor = isVacant ? '#EF4444' : isCurrent ? 'var(--emerald)' : 'var(--text)';
+
+          let statusBadge = '';
+          if (isCurrent) statusBadge = '<span style="background:rgba(5,150,105,0.15);color:var(--emerald);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:800">● جارية</span>';
+          else if (isVacant) statusBadge = '<span style="background:rgba(239,68,68,0.12);color:#EF4444;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:800">⚠️ شاغر</span>';
+          else if (isDone) statusBadge = '<span style="color:var(--text3);font-size:11px">✓ انتهت</span>';
+          else statusBadge = '<span style="color:var(--text3);font-size:11px">قادمة</span>';
+
+          html += '<tr style="background:' + bgColor + ';border-right:' + borderRight + ';transition:background .2s">'
+            + (ri === 0 ? '<td rowspan="' + rows.length + '" style="padding:8px 12px;font-weight:900;font-size:14px;text-align:center;border-bottom:1px solid var(--border);color:var(--brand);vertical-align:middle">' + p + '</td>'
+              + '<td rowspan="' + rows.length + '" style="padding:8px 12px;font-size:12px;color:var(--text2);white-space:nowrap;border-bottom:1px solid var(--border);vertical-align:middle"><strong>' + timing.start + '</strong><br>' + timing.end + '</td>' : '')
+            + '<td style="padding:8px 12px;font-weight:700;border-bottom:1px solid var(--border)">' + (s.class_name||'—') + '</td>'
+            + '<td style="padding:8px 12px;font-weight:700;color:' + subjectColor + ';border-bottom:1px solid var(--border)">' + (s.subject||'—') + '</td>'
+            + '<td style="padding:8px 12px;color:var(--text2);border-bottom:1px solid var(--border)">' + (s.teacher_name||'<span style="color:#EF4444">—</span>') + '</td>'
+            + '<td style="padding:8px 12px;text-align:center;border-bottom:1px solid var(--border)">' + statusBadge + '</td>'
+            + '</tr>';
+        });
+      });
+
+      html += '</tbody></table></div>';
+      container.innerHTML = html;
+      return;
+    }
+
+    // ── عرض جدول المعلمة فقط ──
     let data = null;
     if (teacherNumericId) {
       const { data: d } = await sb.from('schedules').select('*').eq('is_active', true).eq('teacher_id', teacherNumericId).eq('day', today).order('period');
@@ -1332,14 +1418,13 @@ async function loadTodaySchedule() {
     todayScheduleData = data;
     document.getElementById('schedBadge').textContent = data.length;
     const colors = ['brand','emerald','amber','sky','brand','emerald','amber','sky'];
-    const nowMin = now.getHours()*60 + now.getMinutes();
     container.innerHTML = data.map((s, i) => {
       const p = s.period || (i+1);
       const {start, end, startMin, endMin} = getPeriodTime(p, s.class_name);
       const isCurrent = nowMin >= startMin && nowMin < endMin;
       const isDone = nowMin >= endMin;
       const col = colors[i % colors.length];
-      const liveTag = isCurrent ? ' <span style="color:var(--emerald);font-size:12px;font-weight:800;margin-right:8px">● جارية / Live</span>' : '';
+      const liveTag = isCurrent ? ' <span style="color:var(--emerald);font-size:12px;font-weight:800;margin-right:8px">● جارية</span>' : '';
       return '<div class="sched-item ' + (isCurrent?'current':'') + ' ' + (isDone?'done':'') + '">'
         + '<div class="sched-time">' + start + '<br><span style="color:var(--text3);font-size:12px">' + end + '</span></div>'
         + '<div class="sched-bar ' + col + '"></div>'
@@ -1351,6 +1436,18 @@ async function loadTodaySchedule() {
         + '</div></div>';
     }).join('');
   } catch(e) { console.warn('schedule:', e); }
+}
+
+// ── استراحة قبل الحصة p حسب المرحلة ──
+function getBreakBefore(period, gradeNum) {
+  // الاستراحات الأولى
+  if (gradeNum <= 2 && period === 3) return { label:'استراحة كبيرة', start:'8:45', end:'9:10', startMin:525, endMin:550 };
+  if (gradeNum >= 3 && gradeNum <= 4 && period === 4) return { label:'استراحة كبيرة', start:'9:35', end:'10:00', startMin:575, endMin:600 };
+  if (gradeNum >= 5 && period === 3) return { label:'استراحة كبيرة', start:'9:35', end:'10:00', startMin:575, endMin:600 };
+  // الاستراحات الثانية
+  if (gradeNum <= 4 && period === 6) return { label:'استراحة صغيرة', start:'11:35', end:'11:50', startMin:695, endMin:710 };
+  if (gradeNum >= 5 && period === 7) return { label:'استراحة صغيرة', start:'13:05', end:'13:15', startMin:785, endMin:795 };
+  return null;
 }
 
 // ── FULL WEEK SCHEDULE ──
