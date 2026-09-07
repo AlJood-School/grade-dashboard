@@ -365,8 +365,9 @@ footer{text-align:center;padding:20px;color:var(--cbc3);font-size:12px;font-weig
 
     <!-- إرشادات التبديل -->
     <div id="swap-guide" style="background:color-mix(in oklab,var(--cs) 8%,var(--cb100));border:1px solid color-mix(in oklab,var(--cs) 20%,var(--cb300));border-radius:var(--r-field);padding:12px 16px;margin-bottom:16px;font-size:13px;font-weight:700;color:color-mix(in oklab,var(--cs) 70%,#000);">
-      💡 <strong>التبديل الذكي:</strong> انقر خلية أولى (تتلوّن ذهبياً) ← ثم انقر خلية ثانية ← تبادل فوري مع فحص التعارض
+      💡 <strong>التبديل الذكي:</strong> انقر خلية أولى (تتلوّن ذهبياً) ← ثم انقر خلية ثانية ← تبادل فوري مع حفظ تلقائي في DB
       <span id="swap-status" style="margin-right:12px;"></span>
+      <button id="undo-swap-btn" class="btn btn-sm" onclick="undoLastSwap()" disabled style="margin-right:8px;">↩️ تراجع</button>
     </div>
 
     <div class="form-group" style="max-width:220px;margin-bottom:16px;">
@@ -2348,6 +2349,7 @@ document.addEventListener("DOMContentLoaded",init);
   var currentDraftId = null;
   var swapFirst = null; // {day, period, el}
   var draftsList = [];
+  var swapHistory = []; // سجل التبديلات للتراجع
 
   function getSBKey(){
     if(SB_KEY) return SB_KEY;
@@ -2577,12 +2579,71 @@ document.addEventListener("DOMContentLoaded",init);
       first.el.classList.remove("swap-ok");
     }, 600);
 
-    showToast("✅ تم التبديل بنجاح", "success");
+    // سجّل في التاريخ للتراجع
+    swapHistory.push({
+      cls: cls,
+      day1: first.day, period1: first.period,
+      day2: second.day, period2: second.period,
+      slot1: secondSlot, // ما أصبح في الخلية الأولى
+      slot2: firstSlot   // ما أصبح في الخلية الثانية
+    });
+    updateUndoBtn();
+
+    showToast("✅ تم التبديل — يُحفظ في DB...", "success");
+
+    // حفظ في DB فوراً
+    saveDraftSwapToDB();
 
     // إعادة رسم الجدول
     var sel = document.getElementById("draft-class-select");
     renderDraftClass(sel.value);
   }
+
+  // ── حفظ التعديل في DB
+  async function saveDraftSwapToDB(){
+    if(!currentDraftId || !currentDraftData) return;
+    var k = getSBKey();
+    if(!k) return;
+    try {
+      var r = await fetch(SB_URL + "/rest/v1/timetable_drafts?id=eq." + currentDraftId, {
+        method: "PATCH",
+        headers: { "apikey": k, "Authorization": "Bearer " + k, "Content-Type": "application/json", "Prefer": "return=minimal" },
+        body: JSON.stringify({
+          timetable_data: currentDraftData,
+          updated_at: new Date().toISOString()
+        })
+      });
+      if(r.ok){
+        showToast("✅ حُفظ في DB بنجاح", "success");
+      } else {
+        showToast("⚠️ خطأ في الحفظ — التعديل في الذاكرة فقط", "warning");
+      }
+    } catch(e){
+      showToast("⚠️ تعذّر الحفظ: " + e.message, "warning");
+    }
+  }
+
+  // ── تراجع عن آخر تبديل
+  function undoLastSwap(){
+    if(!swapHistory.length){ showToast("لا يوجد تبديل للتراجع عنه", "warning"); return; }
+    var last = swapHistory.pop();
+    currentDraftData[last.cls][last.day1][last.period1] = last.slot2;
+    currentDraftData[last.cls][last.day2][last.period2] = last.slot1;
+    updateUndoBtn();
+    saveDraftSwapToDB();
+    var sel = document.getElementById("draft-class-select");
+    renderDraftClass(sel.value);
+    showToast("↩️ تم التراجع عن آخر تبديل", "success");
+  }
+
+  function updateUndoBtn(){
+    var btn = document.getElementById("undo-swap-btn");
+    if(!btn) return;
+    btn.disabled = swapHistory.length === 0;
+    btn.textContent = swapHistory.length > 0 ? "↩️ تراجع (" + swapHistory.length + ")" : "↩️ تراجع";
+  }
+
+  window.undoLastSwap = undoLastSwap;
 
   // ── اعتماد مسودة
   async function approveDraft(id){
