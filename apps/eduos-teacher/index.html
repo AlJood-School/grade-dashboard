@@ -1147,17 +1147,21 @@ let trackWeekOffset = 0;
 
 // ── PERIOD TIMING ──
 function getPeriodTime(period, className) {
+  // جدول التوقيتات الدقيقة المعتمدة (بالدقائق من منتصف الليل)
+  // G1-G2: 7:10 بداية، استراحة كبيرة بعد ح2 (8:45-9:10) + انتقال 5د، استراحة صغيرة بعد ح5 (11:35-11:50)
+  // G3-G4: 7:10 بداية، استراحة كبيرة بعد ح3 (9:35-10:00)، استراحة صغيرة بعد ح5 (11:35-11:50)
+  // G5-G8: 8:00 بداية، استراحة كبيرة بعد ح2 (9:35-10:05)، استراحة صغيرة بعد ح6 (13:05-13:15)
+  const PT = {
+    G12: [0, {s:430,e:475}, {s:480,e:525}, {s:555,e:600}, {s:605,e:650}, {s:650,e:695}, {s:710,e:755}, {s:760,e:805}],
+    G34: [0, {s:430,e:475}, {s:480,e:525}, {s:530,e:575}, {s:600,e:645}, {s:650,e:695}, {s:710,e:755}, {s:760,e:805}],
+    G58: [0, {s:480,e:525}, {s:530,e:575}, {s:605,e:650}, {s:650,e:695}, {s:695,e:740}, {s:740,e:785}, {s:795,e:840}, {s:840,e:885}]
+  };
   const isKG = (className||'').toUpperCase().includes('KG');
-  const gradeNum = parseInt((className||'').replace(/[^0-9]/g,'')) || 0;
-  const isLower = isKG || gradeNum <= 4;
-  const startH = 7, startM = 15, dur = isLower ? 40 : 45;
-  let totalMin = startH * 60 + startM;
-  for (let i = 1; i < period; i++) {
-    totalMin += dur;
-    if ([2,4].includes(i)) totalMin += 10;
-  }
+  const gradeNum = parseInt((className||'').replace(/[^0-9]/g,'')) || 1;
+  const key = (isKG || gradeNum <= 2) ? 'G12' : (gradeNum <= 4 ? 'G34' : 'G58');
+  const row = PT[key][period] || PT[key][1];
   const fmt = m => String(Math.floor(m/60)) + ':' + String(m%60).padStart(2,'0');
-  return { start: fmt(totalMin), end: fmt(totalMin+dur), startMin: totalMin, endMin: totalMin+dur };
+  return { start: fmt(row.s), end: fmt(row.e), startMin: row.s, endMin: row.e };
 }
 
 // ── INIT ──
@@ -1440,13 +1444,18 @@ async function loadTodaySchedule() {
 
 // ── استراحة قبل الحصة p حسب المرحلة ──
 function getBreakBefore(period, gradeNum) {
-  // الاستراحات الأولى
-  if (gradeNum <= 2 && period === 3) return { label:'استراحة كبيرة', start:'8:45', end:'9:10', startMin:525, endMin:550 };
-  if (gradeNum >= 3 && gradeNum <= 4 && period === 4) return { label:'استراحة كبيرة', start:'9:35', end:'10:00', startMin:575, endMin:600 };
-  if (gradeNum >= 5 && period === 3) return { label:'استراحة كبيرة', start:'9:35', end:'10:00', startMin:575, endMin:600 };
-  // الاستراحات الثانية
-  if (gradeNum <= 4 && period === 6) return { label:'استراحة صغيرة', start:'11:35', end:'11:50', startMin:695, endMin:710 };
-  if (gradeNum >= 5 && period === 7) return { label:'استراحة صغيرة', start:'13:05', end:'13:15', startMin:785, endMin:795 };
+  // استراحات كبيرة
+  // G1-G2: 8:45-9:15 (25د استراحة + 5د انتقال) → ح3 تبدأ 9:15
+  if (gradeNum <= 2 && period === 3) return { label:'استراحة كبيرة ☕', start:'8:45', end:'9:15', startMin:525, endMin:555 };
+  // G3-G4: 9:35-10:00 (25د) → ح4 تبدأ 10:00
+  if (gradeNum >= 3 && gradeNum <= 4 && period === 4) return { label:'استراحة كبيرة ☕', start:'9:35', end:'10:00', startMin:575, endMin:600 };
+  // G5-G8: 9:35-10:05 (25د + 5د انتقال) → ح3 تبدأ 10:05
+  if (gradeNum >= 5 && period === 3) return { label:'استراحة كبيرة ☕', start:'9:35', end:'10:05', startMin:575, endMin:605 };
+  // استراحات صغيرة
+  // G1-G4: 11:35-11:50 (15د) بعد ح5
+  if (gradeNum <= 4 && period === 6) return { label:'استراحة صغيرة 🍎', start:'11:35', end:'11:50', startMin:695, endMin:710 };
+  // G5-G8: 13:05-13:15 (10د) بعد ح6
+  if (gradeNum >= 5 && period === 7) return { label:'استراحة صغيرة 🍎', start:'13:05', end:'13:15', startMin:785, endMin:795 };
   return null;
 }
 
