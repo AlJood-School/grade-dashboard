@@ -977,7 +977,6 @@ function renderTimetableHTML(slots, containerId, showClass, contextLabel) {
   }
   var periodSet = {};
   slots.forEach(function(s) { if (s.period) periodSet[s.period] = true; });
-  var periods = Object.keys(periodSet).map(Number).sort(function(a,b){return a-b;});
 
   var byDP = {};
   slots.forEach(function(s) {
@@ -990,17 +989,37 @@ function renderTimetableHTML(slots, containerId, showClass, contextLabel) {
   var nowDate2 = new Date();
   var todayAr2 = DAYS_ALL[nowDate2.getDay()];
   var nowMin2 = nowDate2.getHours()*60 + nowDate2.getMinutes();
-  var ctxGrade = showClass ? 5 : gradeNumFromClass(contextLabel || '');
-  function ptTime(pn) {
-    var st=(ctxGrade===0)?7*60+30:7*60+15, el2=(pn-1)*45; if(pn>2)el2+=20;
-    var s2=st+el2,e2=s2+45;
-    function f(m){var h=Math.floor(m/60),mn=m%60;return h+':'+(mn<10?'0':'')+mn;}
-    return f(s2)+' – '+f(e2);
+
+  // تحديد المرحلة من بيانات الجدول
+  var ctxGrade = 5; // افتراضي
+  if (!showClass && contextLabel) {
+    ctxGrade = gradeNumFromClass(contextLabel);
+  } else if (slots && slots.length > 0) {
+    // استنتاج المرحلة من أرقام الصفوف الموجودة في البيانات
+    var grades = slots.map(function(s){ return gradeNumFromClass(s.class_name); }).filter(function(g){ return g > 0; });
+    if (grades.length > 0) ctxGrade = Math.max.apply(null, grades);
   }
+
+  // نطاق الحصص الكامل حسب المرحلة (لا نحذف الحصات الفارغة)
+  var maxP = ctxGrade >= 5 ? 8 : 7;
+  var periods = [];
+  for (var pi = 1; pi <= maxP; pi++) periods.push(pi);
+
+  // استخدام getPeriodTime الصحيحة للتوقيتات
+  function ptTime(pn) { return getPeriodTime(ctxGrade, pn); }
   function isCurrentSlot(pn) {
-    var st=(ctxGrade===0)?7*60+30:7*60+15, el2=(pn-1)*45; if(pn>2)el2+=20;
-    var s2=st+el2,e2=s2+45;
-    return nowMin2>=s2 && nowMin2<e2;
+    var startMin = (ctxGrade >= 5) ? 8*60 : 7*60+10;
+    var elapsed = 0;
+    for (var ip = 1; ip < pn; ip++) {
+      elapsed += 45 + 5;
+      if (ctxGrade <= 2 && ip === 2) elapsed += 25;
+      if (ctxGrade >= 3 && ctxGrade <= 4 && ip === 3) elapsed += 25;
+      if (ctxGrade >= 5 && ip === 2) elapsed += 25;
+      if (ctxGrade <= 4 && ip === 5) elapsed += 15;
+      if (ctxGrade >= 5 && ip === 6) elapsed += 10;
+    }
+    var s2 = startMin + elapsed, e2 = s2 + 45;
+    return nowMin2 >= s2 && nowMin2 < e2;
   }
 
   var html = '<table class="tt-table"><thead><tr><th>الحصة<br><span style="font-weight:400;font-size:.65rem">الوقت</span></th>';
