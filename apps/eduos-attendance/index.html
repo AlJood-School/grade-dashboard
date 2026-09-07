@@ -13,7 +13,9 @@
 <script src="/apps/platform-agent-brain.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Tajawal',Arial,sans-serif;background:#F0F4F8;color:#1e293b;min-height:100vh;direction:rtl}
+body{
+    margin: 0;
+    padding: 0;font-family:'Tajawal',Arial,sans-serif;background:#F0F4F8;color:#1e293b;min-height:100vh;direction:rtl}
 :root{--primary:#6C3DD6;--secondary:#22D3EE;--success:#22c55e;--warning:#f59e0b;--danger:#ef4444;--card:#fff;--bg:#F0F4F8;--border:#e2e8f0;--text:#1e293b;--text2:#64748b}
 
 /* Header */
@@ -351,23 +353,20 @@ let attendance = {}; // {student_id: status}
 let unsaved = new Set();
 let classesData = [];
 let studentsData = [];
-let currentClass = null;
+let currentClass = null; // class_name (TEXT)
+let currentUser = null;  // from sessionStorage edoos_user
 
-async function q(sql) {
-  const r = await fetch(`${SB}/rest/v1/rpc/execute_sql`, {
-    method:'POST', headers:{'Content-Type':'application/json','apikey':KEY,'Authorization':'Bearer '+KEY},
-    body: JSON.stringify({query:sql})
-  });
-  if (!r.ok) {
-    // fallback to direct table query if rpc not available
-    return [];
-  }
-  return r.json();
-}
+// Read session
+try {
+  const raw = sessionStorage.getItem('edoos_user');
+  if (raw) currentUser = JSON.parse(raw);
+} catch(e) {}
 
 async function get(table, params='') {
+  const token = currentUser?.access_token || '';
+  const authHeader = token ? 'Bearer ' + token : 'Bearer ' + KEY;
   const r = await fetch(`${SB}/rest/v1/${table}?${params}`, {
-    headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'}
+    headers:{'apikey':KEY,'Authorization':authHeader,'Content-Type':'application/json'}
   });
   return r.ok ? r.json() : [];
 }
@@ -397,7 +396,8 @@ async function init() {
 async function loadKPIs() {
   try {
     const today = new Date().toISOString().split('T')[0];
-    const records = await get('attendance', `date=eq.${today}&select=status`);
+    const classFilter = currentClass ? `&class_name=eq.${encodeURIComponent(currentClass)}` : '';
+    const records = await get('student_attendance', `date=eq.${today}${classFilter}&select=status`);
     const total = records.length;
     const present = records.filter(r=>r.status==='P').length;
     const absent = records.filter(r=>r.status==='A').length;
@@ -419,50 +419,81 @@ async function loadKPIs() {
 
 async function loadClasses() {
   try {
-    const classes = await get('classes', 'select=id,name,grade_level,student_count&order=grade_level,name&limit=50');
-    classesData = classes;
+    let classNames = [];
+    const role = currentUser?.role || currentUser?.role_key || '';
+    const staffId = currentUser?.id || currentUser?.staff_db_id || '';
+    const isAdmin = ['admin','principal','vice_principal','secretary'].includes(role);
+
+    if (isAdmin) {
+      // Admin/principal: show all classes from students table
+      const rows = await get('students', 'select=class_name&order=class_name&limit=200');
+      const unique = [...new Set(rows.map(r=>r.class_name).filter(Boolean))];
+      classNames = unique.sort();
+    } else if (staffId) {
+      // Teacher/coach: get classes from teacher_assignments
+      const rows = await get('teacher_assignments', `staff_db_id=eq.${encodeURIComponent(staffId)}&select=class_name&is_active=eq.true&limit=100`);
+      classNames = [...new Set(rows.map(r=>r.class_name).filter(Boolean))].sort();
+    }
+
+    if (classNames.length === 0) {
+      document.getElementById('classGrid').innerHTML = '<div style="padding:30px;text-align:center;color:var(--text2)">لا توجد صفوف مرتبطة بحسابك — تواصلي مع الإدارة</div>';
+      return;
+    }
+
+    classesData = classNames.map(n => ({name: n}));
 
     // Populate selects
-    ['selClass','repClass'].forEach(id=>{
-      const sel = document.getElementById(id);
-      const existingOpt = sel.options[0];
-      sel.innerHTML = '';
-      sel.appendChild(existingOpt || Object.assign(document.createElement('option'),{value:'',textContent:'كل الصفوف'}));
-      classes.forEach(c=>{
+    ['selClass','repClass'].forEach(selId=>{
+      const sel = document.getElementById(selId);
+      if (!sel) return;
+      sel.innerHTML = '<option value="">اختر الصف...</option>';
+      classNames.forEach(n=>{
         const o = document.createElement('option');
-        o.value = c.id; o.textContent = c.name || `الصف ${c.grade_level}`;
+        o.value = n; o.textContent = n;
         sel.appendChild(o);
       });
     });
 
-    await renderClassGrid(classes);
+    // If class passed via URL param, auto-select
+    const urlClass = new URLSearchParams(location.search).get('class');
+    if (urlClass && classNames.includes(urlClass)) {
+      const sel = document.getElementById('selClass');
+      if (sel) { sel.value = urlClass; await loadClassStudents(); }
+    }
+
+    await renderClassGrid(classNames);
   } catch(e) {
     console.log('Classes load error:', e);
     document.getElementById('classGrid').innerHTML = '<div style="padding:30px;text-align:center;color:var(--text2)">⚠️ تعذّر تحميل الصفوف — تحقق من الاتصال</div>';
   }
 }
 
-async function renderClassGrid(classes) {
+async function renderClassGrid(classNames) {
   const today = new Date().toISOString().split('T')[0];
   let html = '';
-  if (!classes || classes.length === 0) {
+  if (!classNames || classNames.length === 0) {
     document.getElementById('classGrid').innerHTML = '<div style="padding:30px;text-align:center;color:var(--text2)">لا توجد صفوف مسجّلة حتى الآن</div>';
     return;
   }
 
-  for (const c of classes) {
-    const recs = await get('attendance', `date=eq.${today}&class_id=eq.${c.id}&select=status`);
-    const total = c.student_count || recs.length || 0;
+  for (const name of classNames) {
+    const recs = await get('student_attendance', `date=eq.${today}&class_name=eq.${encodeURIComponent(name)}&select=status`);
+    const studs = await get('students', `class_name=eq.${encodeURIComponent(name)}&select=id&limit=1`);
+    // get total count
+    const countRes = await fetch(`${SB}/rest/v1/students?class_name=eq.${encodeURIComponent(name)}&select=id`, {
+      headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Prefer':'count=exact','Range':'0-0'}
+    });
+    const total = parseInt(countRes.headers?.get?.('content-range')?.split('/')?.[1] || '0') || recs.length || 0;
     const present = recs.filter(r=>r.status==='P').length;
     const rate = total > 0 ? Math.round(present/total*100) : 0;
-    const hasAlert = rate > 0 && rate < 85;
-    html += `
-    <div class="att-class" onclick="selectClass('${c.id}','${c.name||'الصف'}')">
-      ${hasAlert ? `<div class="att-alert">⚠️ غياب عالٍ</div>` : ''}
-      <div class="att-class-name">${c.name || 'الصف'}</div>
-      <div class="att-class-grade">المرحلة ${c.grade_level || ''}</div>
+    const hasAlert = recs.length > 0 && rate < 85;
+    const grade = name.replace(/[A-Z]/g,'');
+    html += `<div class="att-class" data-class="${name}" onclick="selectClass('${name}')">
+      ${hasAlert ? '<div class="att-alert">&#9888;&#65039; غياب عالٍ</div>' : ''}
+      <div class="att-class-name">${name}</div>
+      <div class="att-class-grade">الصف ${grade}</div>
       <div class="att-bar"><div class="att-bar-fill" style="width:${rate}%"></div></div>
-      <div class="att-rate"><span>حضور</span><span>${rate > 0 ? rate+'%' : 'لم يُسجَّل'}</span></div>
+      <div class="att-rate"><span>حضور</span><span>${recs.length > 0 ? rate+'%' : 'لم يُسجَّل'}</span></div>
     </div>`;
   }
   document.getElementById('classGrid').innerHTML = html;
@@ -473,7 +504,8 @@ async function renderClassGrid(classes) {
 async function loadAbsentToday() {
   try {
     const today = new Date().toISOString().split('T')[0];
-    const recs = await get('attendance', `date=eq.${today}&status=eq.A&select=student_id,students(full_name,class_id)&limit=20`);
+    const classFilter = currentClass ? `&class_name=eq.${encodeURIComponent(currentClass)}` : '';
+    const recs = await get('student_attendance', `date=eq.${today}&status=eq.A${classFilter}&select=student_id,students(name,class_name)&limit=20`);
     document.getElementById('absentCountBadge').textContent = `${recs.length} غائب/ة`;
     if (recs.length === 0) {
       document.getElementById('absentList').innerHTML = '<div style="padding:20px;text-align:center;color:var(--success)">✅ لا غياب اليوم — ممتاز!</div>';
@@ -482,7 +514,7 @@ async function loadAbsentToday() {
     document.getElementById('absentList').innerHTML = recs.map(r=>`
       <div class="absent-item">
         <div class="absent-dot"></div>
-        <div class="absent-name">${r.students?.full_name || `طالب/ة ${r.student_id}`}</div>
+        <div class="absent-name">${r.students?.name || `طالب/ة ${r.student_id}`}</div>
         <div class="absent-class">${r.students?.class_id || ''}</div>
         <div class="absent-days">غائب/ة اليوم</div>
       </div>`).join('');
@@ -491,34 +523,38 @@ async function loadAbsentToday() {
   }
 }
 
-async function selectClass(classId, className) {
-  currentClass = classId;
-  document.querySelectorAll('.att-class').forEach(el=>el.classList.remove('selected'));
+async function selectClass(className) {
+  currentClass = className;
   document.querySelectorAll('.att-class').forEach(el=>{
-    if(el.onclick.toString().includes(classId)) el.classList.add('selected');
+    el.classList.toggle('selected', el.dataset.class === className);
   });
   switchTab('class');
-  document.getElementById('selClass').value = classId;
+  const sel = document.getElementById('selClass');
+  if (sel) sel.value = className;
   await loadClassStudents();
 }
 
 async function loadClassStudents() {
-  const classId = document.getElementById('selClass').value;
-  if (!classId) { document.getElementById('studentListWrap').innerHTML = '<div style="text-align:center;padding:30px;color:var(--text2)">اختر صفاً لبدء التسجيل</div>'; return; }
-
-  document.getElementById('studentListWrap').innerHTML = '<div class="loading"><div class="spinner"></div> جاري تحميل الطلاب...</div>';
+  const className = document.getElementById('selClass')?.value || currentClass;
+  if (!className) {
+    document.getElementById('studentListWrap').innerHTML = '<div style="text-align:center;padding:30px;color:var(--text2)">اختر صفاً لبدء التسجيل</div>';
+    return;
+  }
+  currentClass = className;
+  document.getElementById('studentListWrap').innerHTML = '<div class="loading"><div class="spinner"></div> جاري تحميل الطالبات...</div>';
   document.getElementById('classSummaryRow').style.display = 'flex';
 
   try {
     const date = document.getElementById('attDate').value;
-    const students = await get('students', `class_id=eq.${classId}&select=id,full_name,student_number&order=full_name&limit=60`);
-    const existing = await get('attendance', `class_id=eq.${classId}&date=eq.${date}&select=student_id,status`);
+    const students = await get('students', `class_name=eq.${encodeURIComponent(className)}&select=id,name,student_number&order=name&limit=100`);
+    const existing = await get('student_attendance', `class_name=eq.${encodeURIComponent(className)}&date=eq.${date}&select=student_id,status`);
 
+    attendance = {};
     existing.forEach(r=>{ attendance[r.student_id] = r.status; });
     studentsData = students;
     renderStudentList(students);
   } catch(e) {
-    document.getElementById('studentListWrap').innerHTML = '<div style="text-align:center;padding:30px;color:var(--text2)">⚠️ تعذّر تحميل بيانات الطلاب/ات</div>';
+    document.getElementById('studentListWrap').innerHTML = '<div style="text-align:center;padding:30px;color:var(--text2)">⚠️ تعذّر تحميل بيانات الطالبات</div>';
   }
 }
 
@@ -528,9 +564,9 @@ function renderStudentList(students) {
     ${students.map(s=>`
     <div class="student-row">
       <div class="student-info">
-        <div class="student-avatar">${(s.full_name||'ط')[0]}</div>
+        <div class="student-avatar">${(s.name||'ط')[0]}</div>
         <div>
-          <div class="student-name">${s.full_name||'طالب/ة'}</div>
+          <div class="student-name">${s.name||'طالب/ة'}</div>
           <div class="student-id">${s.student_number||s.id}</div>
         </div>
       </div>
@@ -584,14 +620,15 @@ async function saveAttendance() {
   if (!classId || unsaved.size === 0) return;
 
   const records = Array.from(unsaved).map(sid=>({
-    student_id: sid, class_id: classId, date, status: attendance[sid] || 'P',
-    recorded_by: 'teacher', source: 'manual'
+    student_id: sid, class_name: currentClass, date, status: attendance[sid] || 'P',
+    recorded_by: currentUser?.id || 'teacher', attendance_type: 'daily'
   }));
 
   try {
-    const r = await fetch(`${SB}/rest/v1/attendance`, {
+    const token = currentUser?.access_token || KEY;
+    const r = await fetch(`${SB}/rest/v1/student_attendance`, {
       method:'POST',
-      headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
+      headers:{'apikey':KEY,'Authorization':'Bearer '+token,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
       body: JSON.stringify(records)
     });
     if (r.ok || r.status === 201) {
