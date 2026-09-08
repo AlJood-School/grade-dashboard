@@ -540,13 +540,32 @@ body{overflow:hidden}
 
     <!-- STAFF -->
     <div class="panel" id="panel-staff">
-      <div class="sec-title">&#x1F469;&#x200D;&#x1F3EB; الكادر التعليمي / Teaching Staff</div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>#</th><th>الاسم / Name</th><th>الدور / Role</th><th>التخصص / Subject</th><th>الحالة / Status</th></tr></thead>
-          <tbody id="staffBody"><tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">جاري التحميل...</td></tr></tbody>
-        </table>
+      <p class="sec-title">&#x1F469;&#x200D;&#x1F3EB; الكادر التعليمي / Teaching Staff</p>
+      <div id="staffAlerts" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
+        <input id="staffSearch" placeholder="ابحث بالاسم..." oninput="filterStaff()"
+          style="padding:8px 14px;border-radius:10px;border:1px solid var(--border);font-family:Tajawal,Arial,sans-serif;font-size:13px;flex:1;min-width:150px"/>
+        <select id="staffSubjectFilter" onchange="filterStaff()"
+          style="padding:8px 12px;border-radius:10px;border:1px solid var(--border);font-family:Tajawal,Arial,sans-serif;font-size:13px;background:var(--surface2);color:var(--text)">
+          <option value="">كل المواد</option>
+        </select>
+        <select id="staffCycleFilter" onchange="filterStaff()"
+          style="padding:8px 12px;border-radius:10px;border:1px solid var(--border);font-family:Tajawal,Arial,sans-serif;font-size:13px;background:var(--surface2);color:var(--text)">
+          <option value="">كل المراحل</option>
+          <option value="kg">الروضة KG</option>
+          <option value="c1">الحلقة الأولى G1-G4</option>
+          <option value="c2">الحلقة الثانية G5-G8</option>
+        </select>
+        <select id="staffRoleFilter" onchange="filterStaff()"
+          style="padding:8px 12px;border-radius:10px;border:1px solid var(--border);font-family:Tajawal,Arial,sans-serif;font-size:13px;background:var(--surface2);color:var(--text)">
+          <option value="">كل الأدوار</option>
+          <option value="teacher">معلمة</option>
+          <option value="coordinator">منسقة</option>
+          <option value="sub">احتياط</option>
+        </select>
+        <span id="staffCount" style="font-size:12px;color:var(--text2);white-space:nowrap"></span>
       </div>
+      <div id="staffGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px"></div>
     </div>
 
     <!-- STUDENTS -->
@@ -1588,27 +1607,69 @@ async function publishBulletin() {
 }
 
 /* ===== STAFF ===== */
+var _vpStaffAllData = [];
 async function loadStaff() {
   var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
   var sbKey = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
   if (!sbUrl || !sbKey) return;
+  var grid = document.getElementById('staffGrid');
+  if (grid) grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--text3)">جاري التحميل...</div>';
   var userSession = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
   var jwtToken = userSession.access_token || userSession.token || sbKey;
   try {
-    var response = await fetch(sbUrl + '/rest/v1/staff_profiles?select=id,name_ar,role_key,subject,department&order=name_ar&limit=100', {
+    var response = await fetch(sbUrl + '/rest/v1/staff_profiles?select=id,name_ar,role_key,subject,is_coordinator,coord_scope&order=name_ar&limit=300', {
       headers: { 'apikey': sbKey, 'Authorization': 'Bearer ' + jwtToken }
     });
-    var data = await response.json();
-    document.getElementById('staffBody').innerHTML = (Array.isArray(data) ? data : (data.data || [])).map(function(s,i) {
-      return '<tr>' +
-        '<td>' + (i+1) + '</td>' +
-        '<td style="font-weight:700;color:var(--text)">' + (s.name_ar||'—') + '</td>' +
-        '<td>' + (s.role_key||'—') + '</td>' +
-        '<td>' + (Array.isArray(s.department)?s.department.join(', '):(s.department||s.subject||'—')) + '</td>' +
-        '<td><span class="chip chip-green">نشط/ة</span></td>' +
-        '</tr>';
-    }).join('') || '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">لا بيانات</td></tr>';
+    var rows = await response.json();
+    rows = Array.isArray(rows) ? rows : (rows.data || []);
+    if (!rows.length) {
+      if (grid) grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text3)">لا بيانات</div>';
+      return;
+    }
+    _vpStaffAllData = rows;
+    // Populate subject filter
+    var subjects = [...new Set(rows.map(function(s){return s.subject;}).filter(Boolean))].sort();
+    var subSel = document.getElementById('staffSubjectFilter');
+    if (subSel && subSel.options.length <= 1) {
+      subjects.forEach(function(su){ subSel.innerHTML += '<option value="'+su+'">'+su+'</option>'; });
+    }
+    filterStaff();
   } catch(e) { console.warn('staff:', e); }
+}
+
+function filterStaff() {
+  var search = (document.getElementById('staffSearch')||{}).value||'';
+  var subj   = (document.getElementById('staffSubjectFilter')||{}).value||'';
+  var cycle  = (document.getElementById('staffCycleFilter')||{}).value||'';
+  var role   = (document.getElementById('staffRoleFilter')||{}).value||'';
+  var filtered = _vpStaffAllData.filter(function(s){
+    if (search && !(s.name_ar||'').includes(search)) return false;
+    if (subj && s.subject !== subj) return false;
+    if (role === 'teacher' && s.role_key !== 'teacher') return false;
+    if (role === 'coordinator' && !s.is_coordinator) return false;
+    if (role === 'sub' && s.role_key !== 'sub_teacher') return false;
+    return true;
+  });
+  var cnt = document.getElementById('staffCount');
+  if (cnt) cnt.textContent = filtered.length + ' موظفة';
+  var grid = document.getElementById('staffGrid');
+  if (!grid) return;
+  if (!filtered.length) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text3)">لا نتائج</div>'; return; }
+  var roleL = {teacher:'معلمة',principal:'مديرة',vice_principal:'وكيلة',admin:'أدمن',nurse:'تمريض',security:'أمن',coach:'مدرب',counselor:'مرشدة',sub_teacher:'احتياط'};
+  var sc = {'اللغة العربية':'#7C3AED','اللغة الإنجليزية':'#0284C7','الرياضيات':'#059669','العلوم':'#0891B2','التربية الإسلامية':'#D97706','الدراسات الاجتماعية':'#92400E','التربية البدنية':'#16A34A','الفنون':'#E11D48','الموسيقى':'#F59E0B','الذكاء الاصطناعي والتكنولوجيا':'#8B5CF6'};
+  grid.innerHTML = filtered.map(function(s){
+    var color = sc[s.subject] || '#6C3DD6';
+    var initials = (s.name_ar||'?').split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('');
+    return '<div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px">'+
+      '<div style="width:42px;height:42px;border-radius:50%;background:'+color+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;flex-shrink:0">'+initials+'</div>'+
+      '<div style="flex:1;min-width:0">'+
+        '<div style="font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(s.name_ar||'—')+'</div>'+
+        '<div style="font-size:11px;color:#64748B;margin-top:2px">'+(roleL[s.role_key]||s.role_key||'—')+'</div>'+
+        (s.subject?'<div style="font-size:11px;color:'+color+';font-weight:700;margin-top:2px">'+s.subject+'</div>':'')+
+        (s.is_coordinator?'<span style="display:inline-block;margin-top:5px;background:linear-gradient(135deg,#6C3DD6,#7C3AED);color:#fff;border-radius:8px;padding:3px 10px;font-size:12px;font-weight:800;letter-spacing:0.3px">⭐ منسقة</span>':'')+
+      '</div>'+
+    '</div>';
+  }).join('');
 }
 
 /* ===== STUDENTS ===== */
