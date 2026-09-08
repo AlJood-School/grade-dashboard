@@ -305,12 +305,20 @@ body{font-family:'Tajawal',Arial,sans-serif;background:#F1F5F9;color:#1E293B;min
       </div>
       <div class="form-group">
         <label class="form-label">المستهدفون</label>
-        <select class="form-select" id="fTargetType">
+        <select class="form-select" id="fTargetType" onchange="handleTargetTypeChange()">
           <option value="all">كل الموظفين</option>
           <option value="teachers">المعلمات</option>
           <option value="admin_staff">الإداريون</option>
           <option value="specific">أفراد محددون</option>
         </select>
+      </div>
+      <div class="form-group" id="specificStaffGroup" style="display:none">
+        <label class="form-label">اختاري الموظفين المستهدفين</label>
+        <input type="text" class="form-input" id="staffSearchInput" placeholder="ابحث بالاسم..." oninput="filterStaffList()" style="margin-bottom:8px">
+        <div id="staffCheckList" style="max-height:200px;overflow-y:auto;border:1px solid #E2E8F0;border-radius:10px;padding:8px;background:#F8FAFC">
+          <div style="text-align:center;color:#94A3B8;padding:20px">جاري التحميل...</div>
+        </div>
+        <div id="selectedStaffCount" style="margin-top:6px;font-size:12px;color:#6C3DD6;font-weight:700">لم يُختر أحد</div>
       </div>
       <div class="form-group">
         <label class="form-label">جدول الأعمال</label>
@@ -355,6 +363,9 @@ var MEET_TYPES = {
   'admin':       {label:'إداري',            color:'#475569', bg:'#F1F5F9'},
   'other':       {label:'أخرى',             color:'#64748B', bg:'#F8FAFC'}
 };
+
+var _allStaffList = [];
+var _selectedStaff = [];
 
 var MEET_STATUS = {
   'upcoming':   {label:'قادم',    color:'#0284C7', bg:'#DBEAFE'},
@@ -921,6 +932,80 @@ function switchTab (el, panel) {
 }
 
 function closeModal (id) { document.getElementById(id).classList.remove('open'); }
+
+async function handleTargetTypeChange() {
+  var val = document.getElementById('fTargetType').value;
+  var grp = document.getElementById('specificStaffGroup');
+  if (!grp) return;
+  if (val === 'specific') {
+    grp.style.display = 'block';
+    await loadStaffList();
+  } else {
+    grp.style.display = 'none';
+    _selectedStaff = [];
+  }
+}
+
+async function loadStaffList() {
+  var listEl = document.getElementById('staffCheckList');
+  if (!listEl) return;
+  if (_allStaffList.length) { renderStaffList(_allStaffList); return; }
+  listEl.innerHTML = '<div style="text-align:center;color:#94A3B8;padding:16px">جاري التحميل...</div>';
+  try {
+    var res = await fetch(SB_URL + '/rest/v1/staff_profiles?is_active=eq.true&select=staff_db_id,name_ar,role_key,subject&order=name_ar&limit=200', {
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+    });
+    var data = await res.json();
+    _allStaffList = Array.isArray(data) ? data : [];
+    renderStaffList(_allStaffList);
+  } catch(e) {
+    listEl.innerHTML = '<div style="color:#DC2626;padding:12px">خطأ في تحميل القائمة</div>';
+  }
+}
+
+function renderStaffList(list) {
+  var listEl = document.getElementById('staffCheckList');
+  if (!listEl) return;
+  if (!list.length) { listEl.innerHTML = '<div style="text-align:center;color:#94A3B8;padding:16px">لا بيانات</div>'; return; }
+  var roleLabels = {teacher:'معلمة',principal:'مديرة',vice_principal:'وكيلة',admin:'إدارة',nurse:'تمريض',security:'أمن',coach:'مدرب',counselor:'مرشدة',sub_teacher:'احتياط'};
+  listEl.innerHTML = list.map(function(s) {
+    var checked = _selectedStaff.includes(s.staff_db_id) ? 'checked' : '';
+    var role = roleLabels[s.role_key] || s.role_key || '';
+    return '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:background .12s" onmouseover="this.style.background=\'#EDE9FE\'" onmouseout="this.style.background=\'transparent\'">' +
+      '<input type="checkbox" value="'+s.staff_db_id+'" data-name="'+(s.name_ar||'')+'" '+checked+' onchange="toggleStaff(this)" style="width:16px;height:16px;accent-color:#6C3DD6">' +
+      '<div style="flex:1">' +
+        '<div style="font-size:13px;font-weight:700;color:#1E293B">'+(s.name_ar||'—')+'</div>' +
+        '<div style="font-size:11px;color:#94A3B8">'+role+(s.subject?' · '+s.subject:'')+'</div>' +
+      '</div>' +
+      '</label>';
+  }).join('');
+  updateSelectedCount();
+}
+
+function toggleStaff(cb) {
+  var id = cb.value;
+  var name = cb.dataset.name;
+  if (cb.checked) {
+    if (!_selectedStaff.includes(id)) _selectedStaff.push(id);
+  } else {
+    _selectedStaff = _selectedStaff.filter(function(x){ return x !== id; });
+  }
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  var el = document.getElementById('selectedStaffCount');
+  if (!el) return;
+  var checked = document.querySelectorAll('#staffCheckList input[type=checkbox]:checked');
+  if (!checked.length) { el.textContent = 'لم يُختر أحد'; }
+  else { el.textContent = 'تم اختيار ' + checked.length + ' موظف/ة'; }
+}
+
+function filterStaffList() {
+  var q = (document.getElementById('staffSearchInput')||{value:''}).value.toLowerCase().trim();
+  var filtered = q ? _allStaffList.filter(function(s){ return (s.name_ar||'').toLowerCase().includes(q) || (s.subject||'').toLowerCase().includes(q); }) : _allStaffList;
+  renderStaffList(filtered);
+}
 
 function showToast (msg) {
   var t = document.getElementById('toast');

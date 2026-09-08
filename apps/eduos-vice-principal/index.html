@@ -578,12 +578,10 @@ body{overflow:hidden}
           <option value="">كل الفصول / All Classes</option>
         </select>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>#</th><th>الاسم / Name</th><th>الفصل / Class</th><th>رقم الطالب/ة</th><th>الحالة / Status</th></tr></thead>
-          <tbody id="allStuBody"><tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">جاري التحميل...</td></tr></tbody>
-        </table>
+      <div id="stuGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:4px">
+        <div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--text3)">جاري التحميل...</div>
       </div>
+      <div id="stuTooltip" style="display:none;position:fixed;z-index:9999;background:#1E293B;color:#fff;border-radius:12px;padding:12px 16px;font-family:Tajawal,Arial,sans-serif;font-size:13px;min-width:200px;box-shadow:0 8px 32px rgba(0,0,0,0.3);pointer-events:none;direction:rtl"></div>
     </div>
 
     <!-- ATTENDANCE -->
@@ -1706,20 +1704,58 @@ async function loadAllStudents() {
     if (cf && cf.options.length === 1) {
       classes.sort().forEach(function(c) { var o=document.createElement('option'); o.value=c; o.textContent=c; cf.appendChild(o); });
     }
-    document.getElementById('allStuBody').innerHTML = data.map(function(s,i) {
-      return '<tr><td>' + (i+1) + '</td>' +
-        '<td style="font-weight:700;color:var(--text)">' + (s.name||'—') + '</td>' +
-        '<td>' + (s.class_name||'—') + '</td>' +
-        '<td>' + (s.student_number||'—') + '</td>' +
-        '<td><span class="chip chip-green">نشط/ة</span></td></tr>';
-    }).join('') || '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">لا طلاب</td></tr>';
+    var grid = document.getElementById('stuGrid');
+    if (!grid) return;
+    if (!data.length) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text3)">لا طلاب</div>'; return; }
+    _stuData = data;
+    renderStuCards(data);
   } catch(e) {}
 }
+var _stuData = [];
 function filterStu() {
-  var q = document.getElementById('stuSearch').value.toLowerCase();
-  document.querySelectorAll('#allStuBody tr').forEach(function(r) {
-    r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none';
+  var q = (document.getElementById('stuSearch')||{value:''}).value.toLowerCase();
+  var filtered = q ? _stuData.filter(function(s){ return (s.name||'').toLowerCase().includes(q); }) : _stuData;
+  renderStuCards(filtered);
+}
+function renderStuCards(list) {
+  var grid = document.getElementById('stuGrid');
+  if (!grid) return;
+  var tooltip = document.getElementById('stuTooltip');
+  var gradeColors = {'KG1':'#8B5CF6','KG2':'#8B5CF6','1A':'#0284C7','1B':'#0284C7','2A':'#059669','3A':'#D97706'};
+  grid.innerHTML = list.map(function(s,i) {
+    var cls = s.class_name || '—';
+    var initials = (s.name||'?').trim().split(/\s+/).slice(0,2).map(function(w){return w[0]||'';}).join('');
+    var grade = cls.replace(/[A-Z]/g,'').trim();
+    var colors = ['#6C3DD6','#0284C7','#059669','#D97706','#DC2626','#7C3AED','#0891B2','#16A34A'];
+    var color = colors[(parseInt(grade)||0) % colors.length] || '#6C3DD6';
+    return '<div class="stu-card" data-name="'+(s.name||'')+'" data-cls="'+cls+'" data-num="'+(s.student_number||'')+'" '+
+      'style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;cursor:default;transition:all .15s;display:flex;align-items:center;gap:12px;">' +
+      '<div style="width:40px;height:40px;border-radius:50%;background:'+color+';display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:800;flex-shrink:0">'+initials+'</div>' +
+      '<div style="flex:1;overflow:hidden">' +
+        '<div style="font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(s.name||'—')+'</div>' +
+        '<div style="font-size:12px;color:var(--text3);margin-top:2px">الصف '+cls+' · <span style="color:'+color+';font-weight:700">'+cls+'</span></div>' +
+      '</div>' +
+      '<div style="font-size:11px;color:#fff;background:'+color+';border-radius:8px;padding:2px 8px;flex-shrink:0">'+cls+'</div>' +
+      '</div>';
+  }).join('') || '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text3)">لا نتائج</div>';
+  // Tooltip events
+  grid.querySelectorAll('.stu-card').forEach(function(card) {
+    card.addEventListener('mouseenter', function(e) {
+      if (!tooltip) return;
+      tooltip.innerHTML = '<div style="font-size:14px;font-weight:800;margin-bottom:8px;color:#C9A84C">'+(card.dataset.name||'')+'</div>'+        '<div style="display:flex;flex-direction:column;gap:4px">'+        '<div>📚 الصف: <span style="font-weight:700;color:#7DD3FC">'+(card.dataset.cls||'—')+'</span></div>'+        '<div>🔢 رقم الطالب/ة: <span style="font-weight:700;color:#86EFAC">'+(card.dataset.num||'—')+'</span></div>'+        '<div>✅ الحالة: <span style="color:#34D399">نشط/ة</span></div>'+        '</div>';
+      tooltip.style.display = 'block';
+      positionTooltip(e);
+    });
+    card.addEventListener('mousemove', function(e) { positionTooltip(e); });
+    card.addEventListener('mouseleave', function() { if (tooltip) tooltip.style.display = 'none'; });
   });
+}
+function positionTooltip(e) {
+  var t = document.getElementById('stuTooltip'); if (!t) return;
+  var x = e.clientX + 16, y = e.clientY - 10;
+  if (x + 220 > window.innerWidth) x = e.clientX - 236;
+  if (y + 120 > window.innerHeight) y = e.clientY - 130;
+  t.style.left = x + 'px'; t.style.top = y + 'px';
 }
 
 /* ===== ATTENDANCE ===== */
