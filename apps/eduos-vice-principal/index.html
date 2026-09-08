@@ -149,11 +149,11 @@ body{overflow:hidden}
   .ftt-cell.current { background: #EEF9FF !important; border: 2px solid #22D3EE !important; }
   .ftt-cell.vacancy { background: #FFF1F2 !important; }
   .ftt-cell.vacancy .ftt-cell-subject { color: #EF4444; font-size: 11px; }
-  .ftt-break-col { background: linear-gradient(180deg,#FEF3C7,#FFFBEB) !important; min-width: 58px !important; max-width: 70px; padding: 4px 3px !important; text-align: center; border-right: 2px solid #F59E0B; border-left: 2px solid #F59E0B; }
+  .ftt-break-col { background: linear-gradient(180deg,#FEF3C7,#FFFBEB) !important; width: 22px !important; min-width: 22px !important; max-width: 22px !important; writing-mode: vertical-rl; padding: 4px 2px !important; text-align: center; border-right: 1px solid #F59E0B; border-left: 1px solid #F59E0B; }
   .ftt-break-col .bk-icon  { font-size: 16px; display: block; line-height: 1; }
   .ftt-break-col .bk-time  { font-size: 9px; color: #92400E; font-weight: 700; display: block; margin-top: 2px; white-space: nowrap; }
   .ftt-break-col .bk-empty { font-size: 9px; color: #D1D5DB; }
-  .ftt-break-head { background: #FEF3C7 !important; color: #92400E !important; font-weight: 900 !important; font-size: 11px !important; border-right: 2px solid #F59E0B; border-left: 2px solid #F59E0B; min-width: 58px; text-align: center !important; }
+  .ftt-break-head { background: #FEF3C7 !important; color: #92400E !important; font-weight: 900 !important; font-size: 11px !important; border-right: 2px solid #F59E0B; border-left: 2px solid #F59E0B; width: 22px; min-width: 22px; max-width: 22px; writing-mode: vertical-rl; text-align: center !important; }
   .ftt-break-cell { background: #F1F5F9 !important; color: #94A3B8; font-size: 11px; font-weight: 700; padding: 6px 4px; }
   .ftt-stage-header td { background: #1E293B !important; color: #CBD5E1; font-weight: 900; font-size: 12px; text-align: right; padding: 6px 12px; letter-spacing: 0.5px; }
   .ftt-class-cell { font-weight: 900; font-size: 14px; color: #6C3DD6; background: #F5F3FF; }
@@ -1589,11 +1589,17 @@ async function publishBulletin() {
 
 /* ===== STAFF ===== */
 async function loadStaff() {
-  if (!sb) return;
+  var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+  var sbKey = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+  if (!sbUrl || !sbKey) return;
+  var userSession = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+  var jwtToken = userSession.access_token || userSession.token || sbKey;
   try {
-    var res = await sb.from('staff_profiles').select('id,name_ar,role_key,subject,department').order('name_ar').limit(100);
-    var data = res.data || [];
-    document.getElementById('staffBody').innerHTML = data.map(function(s,i) {
+    var response = await fetch(sbUrl + '/rest/v1/staff_profiles?select=id,name_ar,role_key,subject,department&order=name_ar&limit=100', {
+      headers: { 'apikey': sbKey, 'Authorization': 'Bearer ' + jwtToken }
+    });
+    var data = await response.json();
+    document.getElementById('staffBody').innerHTML = (Array.isArray(data) ? data : (data.data || [])).map(function(s,i) {
       return '<tr>' +
         '<td>' + (i+1) + '</td>' +
         '<td style="font-weight:700;color:var(--text)">' + (s.name_ar||'—') + '</td>' +
@@ -1602,7 +1608,7 @@ async function loadStaff() {
         '<td><span class="chip chip-green">نشط/ة</span></td>' +
         '</tr>';
     }).join('') || '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">لا بيانات</td></tr>';
-  } catch(e) {}
+  } catch(e) { console.warn('staff:', e); }
 }
 
 /* ===== STUDENTS ===== */
