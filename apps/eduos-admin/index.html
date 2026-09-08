@@ -243,42 +243,25 @@ tr:hover td{background:#F8FAFC;}
       <div class="card">
         <div class="card-header">
           <div class="card-title">👥 قائمة الكادر · Staff List</div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <input class="search-box" type="text" id="staffSearch" placeholder="بحث بالاسم أو المادة…" oninput="filterStaff()" style="min-width:160px">
-            <select id="staffRoleFilter" onchange="filterStaff()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-family:Tajawal,Arial,sans-serif;font-size:13px;background:var(--surface);color:var(--text)">
-              <option value="">كل الأدوار</option>
-              <option value="teacher">معلمة</option>
-              <option value="coordinator">منسقة</option>
-              <option value="sub_teacher">احتياط</option>
-              <option value="principal">مديرة</option>
-              <option value="vice_principal">وكيلة</option>
-              <option value="admin">أدمن</option>
-            </select>
-            <select id="staffSubjectFilter" onchange="filterStaff()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-family:Tajawal,Arial,sans-serif;font-size:13px;background:var(--surface);color:var(--text)">
-              <option value="">كل المواد</option>
-            </select>
-            <button class="btn btn-primary btn-sm" onclick="openAddStaff()">+ إضافة موظف/ة</button>
-          </div>
+          <button class="btn btn-primary btn-sm" onclick="openAddStaff()">+ إضافة موظف/ة</button>
         </div>
-        <div class="tbl-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>الاسم · Name</th>
-                <th>اسم المستخدم · Username</th>
-                <th>الدور · Role</th>
-                <th>المادة · Subject</th>
-                <th>الفصل · Class</th>
-                <th>الحالة · Status</th>
-                <th>إجراءات</th>
-              </tr>
-            </thead>
-            <tbody id="staffBody">
-              <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">⏳ تحميل…</td></tr>
-            </tbody>
-          </table>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--border);align-items:center">
+          <input class="search-box" type="text" id="staffSearch" placeholder="ابحث بالاسم..." oninput="filterStaff()" style="min-width:150px;flex:1">
+          <select id="staffSubjectFilter" onchange="filterStaff()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-family:Tajawal,Arial,sans-serif;font-size:13px;background:var(--surface);color:var(--text)">
+            <option value="">كل المواد</option>
+          </select>
+          <select id="staffRoleFilter" onchange="filterStaff()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-family:Tajawal,Arial,sans-serif;font-size:13px;background:var(--surface);color:var(--text)">
+            <option value="">كل الأدوار</option>
+            <option value="teacher">معلمة</option>
+            <option value="coordinator">منسقة</option>
+            <option value="sub_teacher">احتياط</option>
+            <option value="principal">مديرة</option>
+            <option value="vice_principal">وكيلة</option>
+            <option value="admin">أدمن</option>
+          </select>
+          <span id="staffCount" style="font-size:12px;color:var(--text3);white-space:nowrap"></span>
         </div>
-        <div style="padding:12px 20px;border-top:1px solid var(--border);font-size:13px;color:var(--text3)" id="staffCount">—</div>
+        <div id="staffGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;padding:16px"></div>
       </div>
     </div>
 
@@ -842,17 +825,35 @@ async function loadStaff() {
   }
 }
 
+var _SUBJ_COLORS = {'اللغة العربية':'#7C3AED','اللغة الإنجليزية':'#0284C7','الرياضيات':'#059669','العلوم':'#0891B2','التربية الإسلامية':'#D97706','الدراسات الاجتماعية والتربية الأخلاقية':'#92400E','التربية البدنية والصحية':'#16A34A','الفنون البصرية':'#E11D48','التربية الموسيقية':'#F59E0B','الذكاء الاصطناعي والتكنولوجيا':'#8B5CF6','مجال عربي':'#7C3AED','مجال إنجليزي':'#0284C7','رياضيات وإنجليزي':'#059669'};
+var _ROLE_LABELS = {teacher:'معلمة',principal:'مديرة',vice_principal:'وكيلة',admin:'أدمن',nurse:'تمريض',security:'أمن',coach:'مدرب/ة',counselor:'مرشدة',sub_teacher:'احتياط',coordinator:'منسقة'};
 function renderStaff(list) {
+  var grid = document.getElementById('staffGrid');
   if (!list.length) {
-    document.getElementById('staffBody').innerHTML = '<tr><td colspan="7"><div class="empty"><div class="empty-icon">👥</div><p>لا يوجد كادر مسجّل</p></div></td></tr>';
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text3)"><div style="font-size:40px">👥</div><p>لا يوجد كادر مسجّل</p></div>';
     return;
   }
-  document.getElementById('staffBody').innerHTML = list.map(function(s) {
+  grid.innerHTML = list.map(function(s) {
     var effectiveRole = s.role_key || 'staff';
     var isActive = s.is_active !== false;
     var safeName = (s.name_ar || '').replace(/'/g, '').replace(/"/g, '');
-    var coordBadge = s.is_coordinator ? ' <span style="display:inline-block;background:linear-gradient(135deg,#6C3DD6,#7C3AED);color:#fff;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:800">⭐ منسقة</span>' : '';
-    return '<tr><td><strong>' + (s.name_ar || s.name_en || '—') + '</strong>' + (s.name_en ? '<div style="font-size:11px;color:var(--text3)">' + s.name_en + '</div>' : '') + coordBadge + '</td><td style="color:var(--text3);font-family:monospace;font-size:12px">' + (s.username || '—') + '</td><td>' + roleBadge(effectiveRole) + '</td><td>' + (s.subject || '<span style="color:var(--text3)">—</span>') + '</td><td>' + (s.department || '<span style="color:var(--text3)">—</span>') + '</td><td><span class="badge ' + (isActive ? 'b-green' : 'b-red') + '">' + (isActive ? 'نشط/ة' : 'موقوف/ة') + '</span></td><td><button class="btn btn-outline btn-sm" data-id="' + s.id + '" data-name="' + safeName + '" data-role="' + effectiveRole + '" onclick="openEditRole(this)">تعديل الدور</button></td></tr>';
+    var color = _SUBJ_COLORS[s.subject] || '#6C3DD6';
+    var initials = (s.name_ar || '?').split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('');
+    var coordBadge = s.is_coordinator ? '<span style="display:inline-block;margin-top:5px;background:linear-gradient(135deg,#6C3DD6,#7C3AED);color:#fff;border-radius:8px;padding:3px 10px;font-size:12px;font-weight:800;letter-spacing:0.3px">⭐ منسقة</span>' : '';
+    var statusDot = isActive ? 'background:#10B981' : 'background:#EF4444';
+    return '<div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:14px 16px 10px">' +
+      '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">' +
+        '<div style="width:42px;height:42px;border-radius:50%;background:'+color+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;flex-shrink:0">'+initials+'</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:13px;font-weight:800;color:var(--text)">'+(s.name_ar||'—')+'</div>' +
+          '<div style="font-size:11px;color:#64748B;margin-top:2px;font-family:monospace">'+(s.username||'—')+'</div>' +
+          '<div style="font-size:11px;color:'+color+';font-weight:700;margin-top:2px">'+(s.subject||(_ROLE_LABELS[effectiveRole]||effectiveRole))+'</div>' +
+          coordBadge +
+        '</div>' +
+        '<span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px;'+statusDot+'"></span>' +
+      '</div>' +
+      '<button class="btn btn-outline btn-sm" style="width:100%;font-size:12px" data-id="'+s.id+'" data-name="'+safeName+'" data-role="'+effectiveRole+'" onclick="openEditRole(this)">✏️ تعديل الدور</button>' +
+    '</div>';
   }).join('');
 }
 
