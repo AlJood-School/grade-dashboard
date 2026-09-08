@@ -1848,16 +1848,22 @@ async function loadVacantSlots() {
 
 var _staffAllData = [];
 function loadStaff() {
-  var _sb = window.sb || window.supabase;
-  if (!_sb) return;
-  _sb.from('staff_profiles').select('id,name_ar,role_key,subject,is_coordinator,coord_scope').order('name_ar').limit(300).then(function(r){
-    if (!r.data || !r.data.length) {
+  var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+  var sbKey = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+  if (!sbUrl || !sbKey) return;
+  var grid = document.getElementById('staffGrid');
+  if (grid) grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--text3)">جاري التحميل...</div>';
+  fetch(sbUrl + '/rest/v1/staff_profiles?select=id,name_ar,role_key,subject,is_coordinator,coord_scope&order=name_ar&limit=300', {
+    headers: { 'apikey': sbKey, 'Authorization': 'Bearer ' + sbKey }
+  }).then(function(res){ return res.json(); }).then(function(r){
+    var rows = Array.isArray(r) ? r : (r.data || []);
+    if (!rows.length) {
       document.getElementById('staffGrid').innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">لا بيانات</div>';
       return;
     }
-    _staffAllData = r.data;
+    _staffAllData = rows;
     // Populate subject filter
-    var subjects = [...new Set(r.data.map(s=>s.subject).filter(Boolean))].sort();
+    var subjects = [...new Set(rows.map(function(s){return s.subject;}).filter(Boolean))].sort();
     var subSel = document.getElementById('staffSubjectFilter');
     if (subSel && subSel.options.length <= 1) {
       subjects.forEach(function(su){ subSel.innerHTML += '<option value="'+su+'">'+su+'</option>'; });
