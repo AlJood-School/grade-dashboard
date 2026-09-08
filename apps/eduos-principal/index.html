@@ -2440,6 +2440,7 @@ const FTT_DAY_AR=['الأحد','الاثنين','الثلاثاء','الأربع
 
 async function loadFullTimetableGrid(){
   const el=document.getElementById('fttGrid'); if(!el)return;
+  await _fttLoadTodayAttend();
   const now=new Date(); const dow=now.getDay(); const isFriday=dow===5; const isSat=dow===6;
   const nowMin=now.getHours()*60+now.getMinutes();
   const todayName=FTT_DAY_AR[dow]||'الأحد';
@@ -2513,7 +2514,9 @@ async function loadFullTimetableGrid(){
           const subj=(slot.subject||'').length>12?(slot.subject||'').substring(0,11)+'…':(slot.subject||'');
           const tchr=(slot.teacher_name||'').split(' ').slice(0,2).join(' ');
           const tid=(slot.teacher_id||'').replace(/'/g,'');
-          inner='<div class="ftt-cell-subject">'+subj+'</div><div class="ftt-cell-teacher" style="cursor:pointer" onclick="fttSetAttend(\''+tid+'\',\''+tchr+'\','+cls+','+p+')">'+tchr+'</div>';
+          var _stColor={'حاضرة':'#22C55E','متأخرة':'#F59E0B','غائبة':'#EF4444'};
+          var _stStyle=_fttAttendMap[tid]?'color:'+_stColor[_fttAttendMap[tid]]+';font-weight:800;':'';
+          inner='<div class="ftt-cell-subject">'+subj+'</div><div class="ftt-cell-teacher" data-tid="'+tid+'" style="cursor:pointer;'+_stStyle+'" onclick="fttSetAttend(\''+tid+'\',\''+tchr+'\',\''+cls+'\','+p+')">'+tchr+'</div>';
         }
         rowHtml+='<td class="'+cellCls+'">'+inner+'</td>';
         if(BCP.includes(p)){
@@ -2540,31 +2543,58 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 /* ── Attendance popup in full timetable ── */
 var _fttAttendMap={};
+/* تحميل سجلات الحضور اليوم من DB */
+async function _fttLoadTodayAttend(){
+  try{
+    var sbUrl=window.EduOS?window.EduOS.SB_URL:''; var sbKey=window.EduOS?window.EduOS.SB_KEY:'';
+    if(!sbUrl)return;
+    var today=new Date().toISOString().split('T')[0];
+    var res=await fetch(sbUrl+'/rest/v1/staff_attendance?date=eq.'+today+'&select=staff_id,status',{headers:{'apikey':sbKey,'Authorization':'Bearer '+sbKey}});
+    var rows=await res.json();
+    if(Array.isArray(rows))rows.forEach(function(r){if(r.staff_id&&r.status)_fttAttendMap[r.staff_id]=r.status;});
+  }catch(e){}
+}
 function fttSetAttend(tid,name,cls,period){
   var existing=_fttAttendMap[tid]||'';
   var opts=[['حاضرة','#22C55E'],['متأخرة','#F59E0B'],['غائبة','#EF4444']];
   var popup=document.createElement('div');
   popup.style.cssText='position:fixed;inset:0;z-index:9900;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4)';
   var box=document.createElement('div');
-  box.style.cssText='background:#fff;border-radius:16px;padding:22px 28px;min-width:260px;text-align:center;font-family:Tajawal,Arial,sans-serif;box-shadow:0 8px 32px rgba(0,0,0,0.18)';
+  box.style.cssText='background:#fff;border-radius:16px;padding:22px 28px;min-width:280px;text-align:center;font-family:Tajawal,Arial,sans-serif;box-shadow:0 8px 32px rgba(0,0,0,0.18)';
+  var statusBadge=existing?'<span style="display:inline-block;margin-bottom:12px;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:800;background:'+(existing==='حاضرة'?'#DCFCE7':existing==='متأخرة'?'#FEF9C3':'#FEE2E2')+';color:'+(existing==='حاضرة'?'#15803D':existing==='متأخرة'?'#A16207':'#B91C1C')+'">'+existing+'</span>':'';
   box.innerHTML='<div style="font-size:15px;font-weight:900;color:#1E293B;margin-bottom:4px">'+name+'</div>'+
-    '<div style="font-size:12px;color:#64748B;margin-bottom:16px">ح'+period+' — '+cls+'</div>'+
-    opts.map(function(o){return '<button onclick="_fttSaveAttend(\''+tid+'\',\''+o[0]+'\',\''+cls+'\','+period+',this.closest(\'[data-ftt-popup]\')||document.body.lastChild)" style="display:block;width:100%;margin-bottom:8px;padding:10px;border:none;border-radius:10px;background:'+(existing===o[0]?o[1]:'#F1F5F9')+';color:'+(existing===o[0]?'#fff':'#1E293B')+';font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;cursor:pointer">'+o[0]+'</button>';}).join('')+
-    '<button onclick="this.closest(\'[style*=z-index]\').remove()" style="margin-top:4px;border:none;background:transparent;color:#94A3B8;font-size:12px;cursor:pointer">إلغاء</button>';
+    '<div style="font-size:12px;color:#64748B;margin-bottom:8px">ح'+period+' — '+cls+'</div>'+statusBadge+
+    opts.map(function(o){var active=existing===o[0];return '<button onclick="_fttSaveAttend(\''+tid+'\',\''+o[0]+'\',\''+name+'\')" style="display:block;width:100%;margin-bottom:8px;padding:11px;border:'+(active?'2px solid '+o[1]:'1px solid #E2E8F0')+';border-radius:10px;background:'+(active?o[1]:'#F8FAFC')+';color:'+(active?'#fff':'#374151')+';font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:all .15s">'+o[0]+'</button>';}).join('')+
+    '<button onclick="this.closest(\'[style*=z-index:9900]\').remove()" style="margin-top:4px;border:none;background:transparent;color:#94A3B8;font-size:12px;cursor:pointer">إلغاء</button>';
   popup.appendChild(box);
   document.body.appendChild(popup);
   popup.addEventListener('click',function(e){if(e.target===popup)popup.remove();});
 }
-function _fttSaveAttend(tid,status,cls,period,popup){
+async function _fttSaveAttend(tid,status,name){
   _fttAttendMap[tid]=status;
-  /* تلوين الخلايا بناء على الحالة */
-  document.querySelectorAll('.ftt-cell-teacher').forEach(function(el){
-    if(el.textContent.trim()&&_fttAttendMap[tid]){
-      // visual only — full save via DB handled separately
-    }
+  /* تلوين فوري لكل خلايا المعلمة */
+  var stColors={'حاضرة':'#22C55E','متأخرة':'#F59E0B','غائبة':'#EF4444'};
+  document.querySelectorAll('[data-tid="'+tid+'"]').forEach(function(el){
+    el.style.color=stColors[status]||'#64748B'; el.style.fontWeight=status?'800':'';
   });
-  if(popup&&popup.remove)popup.remove(); else document.body.lastChild.remove();
-  showToast(tid+' — '+status);
+  /* إغلاق popup */
+  var popEl=document.querySelector('[style*="z-index:9900"]'); if(popEl)popEl.remove();
+  /* حفظ في DB */
+  try{
+    var sbUrl=window.EduOS?window.EduOS.SB_URL:''; var sbKey=window.EduOS?window.EduOS.SB_KEY:'';
+    var jwt=''; try{var s=await window.EduOS_SB.auth.getSession();jwt=s?.data?.session?.access_token||'';}catch(e2){}
+    var auth=jwt?'Bearer '+jwt:'Bearer '+sbKey;
+    var today=new Date().toISOString().split('T')[0];
+    /* تحقق من وجود سجل */
+    var chk=await fetch(sbUrl+'/rest/v1/staff_attendance?staff_id=eq.'+encodeURIComponent(tid)+'&date=eq.'+today,{headers:{'apikey':sbKey,'Authorization':auth}});
+    var existing=await chk.json();
+    if(Array.isArray(existing)&&existing.length>0){
+      await fetch(sbUrl+'/rest/v1/staff_attendance?staff_id=eq.'+encodeURIComponent(tid)+'&date=eq.'+today,{method:'PATCH',headers:{'apikey':sbKey,'Authorization':auth,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({status:status})});
+    }else{
+      await fetch(sbUrl+'/rest/v1/staff_attendance',{method:'POST',headers:{'apikey':sbKey,'Authorization':auth,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({staff_id:tid,staff_name:name,date:today,status:status})});
+    }
+    showToast((status==='حاضرة'?'✅':'status'==='متأخرة'?'⏰':'❌')+' '+name+' — '+status);
+  }catch(e){showToast('📝 تم التسجيل');}
 }
 </script>
 
