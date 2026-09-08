@@ -266,6 +266,44 @@
   .cell-vacant .cell-subject { color: var(--red); font-size: 12px; }
 
   /* Break label */
+  /* Break separator inside each row */
+  .cell-break-before {
+    border-right: 4px solid rgba(201,168,76,0.55) !important;
+    position: relative;
+  }
+  .cell-break-before::before {
+    content: '';
+    position: absolute;
+    right: -4px; top: 0; bottom: 0;
+    width: 4px;
+    background: linear-gradient(to bottom, rgba(201,168,76,0.6), rgba(201,168,76,0.1));
+    pointer-events: none;
+  }
+  /* Break row inside grade separator */
+  .break-sep-row td {
+    background: rgba(201,168,76,0.08);
+    font-size: 11px;
+    color: rgba(201,168,76,0.85);
+    padding: 3px 4px;
+    text-align: center;
+    font-weight: 700;
+    border-top: none;
+  }
+  .break-sep-row .col-class {
+    color: var(--text3);
+    font-size: 11px;
+    text-align: right;
+  }
+  .break-time-badge {
+    display: inline-block;
+    background: rgba(201,168,76,0.15);
+    border: 1px solid rgba(201,168,76,0.35);
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-size: 10px;
+    color: rgba(201,168,76,0.9);
+    white-space: nowrap;
+  }
   .break-lbl {
     color: var(--gold);
     font-size: 11px;
@@ -719,9 +757,27 @@ function render() {
     const group = g===0 ? 'روضة' : g<=2 ? 'الصف الأول والثاني' : g<=4 ? 'الصف الثالث والرابع' : 'الصف الخامس إلى الثامن';
     if (group !== lastGroup) {
       lastGroup = group;
+      // Grade group header
       rowsHtml += '<tr class="grade-sep"><td class="grade-label col-class">' + group + '</td>';
       for (let p=1; p<=maxP; p++) rowsHtml += '<td></td>';
       rowsHtml += '</tr>';
+      // Break schedule row for this group
+      const grpBreaks = getBreaks(grade);
+      let breakRowHtml = '<tr class="break-sep-row"><td class="col-class">☕ استراحات</td>';
+      for (let p=1; p<=maxP; p++) {
+        const brk = grpBreaks.find(b => b.after === p);
+        if (brk) {
+          const bs = Math.floor(brk.s/60)+':'+(brk.s%60===0?'00':String(brk.s%60).padStart(2,'0'));
+          const be = Math.floor(brk.e/60)+':'+(brk.e%60===0?'00':String(brk.e%60).padStart(2,'0'));
+          const dur = brk.e - brk.s;
+          const isLarge = dur >= 20;
+          breakRowHtml += '<td style="text-align:center"><span class="break-time-badge">' + (isLarge ? '🕐' : '☕') + ' ' + bs + '–' + be + '</span></td>';
+        } else {
+          breakRowHtml += '<td></td>';
+        }
+      }
+      breakRowHtml += '</tr>';
+      rowsHtml += breakRowHtml;
     }
 
     rowsHtml += '<tr>';
@@ -742,9 +798,13 @@ function render() {
         else if (st === 'now') cellClass = 'cell-now';
       }
 
+      // If break happens BEFORE this period, add visual separator on previous cell
+      // We flag this period's cell with cell-break-before
+      const breakCls = isBreakHere ? ' cell-break-before' : '';
+
       if (!cell) {
         // No schedule entry
-        rowsHtml += '<td class="' + cellClass + ' cell-vacant"><span style="font-size:18px">—</span></td>';
+        rowsHtml += '<td class="' + cellClass + ' cell-vacant' + breakCls + '"><span style="font-size:18px">—</span></td>';
       } else if (cell.vacancy_reason) {
         // Vacant period
         vacancies.push({cls, period:p, reason:cell.vacancy_reason});
@@ -760,8 +820,7 @@ function render() {
         const isBadge = subj.includes('(AMT)') || subj.includes('(E)') || subj.includes('(CCDI)') || subj.includes('جيوجيتسو');
         const badgeTxt = subj.includes('(AMT)') ? 'AMT' : subj.includes('(E)') ? 'EMT' : subj.includes('(CCDI)') ? 'CCDI' : subj.includes('جيوجيتسو') ? 'JJJ' : '';
         const tooltip = subj + '\n' + tchr;
-        rowsHtml += '<td class="' + cellClass + '" title="' + tooltip.replace(/"/g,'') + '">'
-          + '<div class="cell-subject">' + shortSubj + (badgeTxt ? '<br><span class="cell-badge">' + badgeTxt + '</span>' : '') + '</div>'
+        rowsHtml += '<td class="' + cellClass + breakCls + '" title="' + tooltip.replace(/"/g,'') + '">' + '<div class="cell-subject">' + shortSubj + (badgeTxt ? '<br><span class="cell-badge">' + badgeTxt + '</span>' : '') + '</div>'
           + '<div class="cell-teacher">' + shortTchr + '</div>'
           + '</td>';
       }
