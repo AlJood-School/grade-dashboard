@@ -149,6 +149,11 @@ body{overflow:hidden}
   .ftt-cell.current { background: #EEF9FF !important; border: 2px solid #22D3EE !important; }
   .ftt-cell.vacancy { background: #FFF1F2 !important; }
   .ftt-cell.vacancy .ftt-cell-subject { color: #EF4444; font-size: 11px; }
+  .ftt-break-col { background: linear-gradient(180deg,#FEF3C7,#FFFBEB) !important; min-width: 58px !important; max-width: 70px; padding: 4px 3px !important; text-align: center; border-right: 2px solid #F59E0B; border-left: 2px solid #F59E0B; }
+  .ftt-break-col .bk-icon  { font-size: 16px; display: block; line-height: 1; }
+  .ftt-break-col .bk-time  { font-size: 9px; color: #92400E; font-weight: 700; display: block; margin-top: 2px; white-space: nowrap; }
+  .ftt-break-col .bk-empty { font-size: 9px; color: #D1D5DB; }
+  .ftt-break-head { background: #FEF3C7 !important; color: #92400E !important; font-weight: 900 !important; font-size: 11px !important; border-right: 2px solid #F59E0B; border-left: 2px solid #F59E0B; min-width: 58px; text-align: center !important; }
   .ftt-break-cell { background: #F1F5F9 !important; color: #94A3B8; font-size: 11px; font-weight: 700; padding: 6px 4px; }
   .ftt-stage-header td { background: #1E293B !important; color: #CBD5E1; font-weight: 900; font-size: 12px; text-align: right; padding: 6px 12px; letter-spacing: 0.5px; }
   .ftt-class-cell { font-weight: 900; font-size: 14px; color: #6C3DD6; background: #F5F3FF; }
@@ -2876,48 +2881,98 @@ async function loadFullTimetableGrid() {
   hdr += '</tr>';
 
   // Stage separators
+  // Break definitions per grade range
+  // Each entry: { afterP, time, grades: [min,max] }
+  const BREAK_DEFS = [
+    { afterP:2, time:'8:45-9:10',   grades:[1,2],  label:'استراحة ١' },
+    { afterP:3, time:'9:35-10:00',  grades:[3,4],  label:'استراحة ١' },
+    { afterP:2, time:'9:35-10:00',  grades:[5,8],  label:'استراحة ١' },
+    { afterP:5, time:'11:35-11:50', grades:[1,4],  label:'استراحة ٢' },
+    { afterP:6, time:'13:05-13:15', grades:[5,8],  label:'استراحة ٢' },
+  ];
+
+  // For each period column position, collect ALL possible breaks that follow it
+  // We'll insert break columns at positions: after 2, after 3, after 5, after 6
+  const BREAK_COL_POSITIONS = [2, 3, 5, 6]; // after these periods
+
+  // Build a lookup: breakColKey = afterP -> array of {grades, time, label}
+  const breakColMap = {};
+  BREAK_DEFS.forEach(b => {
+    if (!breakColMap[b.afterP]) breakColMap[b.afterP] = [];
+    breakColMap[b.afterP].push(b);
+  });
+
+  // Helper: get break info for a given grade and period
+  function getBreakForGrade(g, afterP) {
+    const defs = breakColMap[afterP] || [];
+    return defs.find(d => g >= d.grades[0] && g <= d.grades[1]) || null;
+  }
+
+  // Stages split by G1-2 and G3-4 separately for correct break rows
   const stages = [
-    {label: '🌱 الروضة KG', classes: sortedClasses.filter(c => c.startsWith('KG'))},
-    {label: '📚 G1 – G4', classes: sortedClasses.filter(c => gradeOf(c) >= 1 && gradeOf(c) <= 4)},
-    {label: '📖 G5 – G8', classes: sortedClasses.filter(c => gradeOf(c) >= 5)},
+    {label: '🌱 الروضة KG', classes: sortedClasses.filter(c => c.startsWith('KG')), gradeRange:[0,0]},
+    {label: '📚 G1 – G2',   classes: sortedClasses.filter(c => gradeOf(c)>=1&&gradeOf(c)<=2), gradeRange:[1,2]},
+    {label: '📚 G3 – G4',   classes: sortedClasses.filter(c => gradeOf(c)>=3&&gradeOf(c)<=4), gradeRange:[3,4]},
+    {label: '📖 G5 – G8',   classes: sortedClasses.filter(c => gradeOf(c)>=5), gradeRange:[5,8]},
   ].filter(s => s.classes.length > 0);
+
+  // Build header with break columns
+  let hdr2 = '<tr><th class="ftt-class-col">الصف</th>';
+  periods.forEach(p => {
+    const t = fttPeriodTime(3, p, isFriday);
+    const timeStr = t ? (Math.floor(t.start/60).toString().padStart(2,'0')+':'+((t.start%60).toString().padStart(2,'0'))) : '';
+    const st = periodState('3A', p);
+    hdr2 += '<th class="' + (st==='current'?'ftt-current':'') + '">ح' + p + (timeStr?'<br><span style="font-size:10px;opacity:.8">'+timeStr+'</span>':'') + '</th>';
+    // Insert break column header after this period if needed
+    if (BREAK_COL_POSITIONS.includes(p)) {
+      hdr2 += '<th class="ftt-break-head">☕<br><span style="font-size:9px">استراحة</span></th>';
+    }
+  });
+  hdr2 += '</tr>';
 
   let bodyHtml = '';
   stages.forEach(stage => {
-    // Stage separator row
-    bodyHtml += '<tr class="ftt-stage-header"><td colspan="' + (periods.length+1) + '">' + stage.label + '</td></tr>';
+    // Stage separator row (colspan = periods + break cols + 1 for class col)
+    const totalCols = periods.length + BREAK_COL_POSITIONS.length + 1;
+    bodyHtml += '<tr class="ftt-stage-header"><td colspan="' + totalCols + '">' + stage.label + '</td></tr>';
 
     stage.classes.forEach(cls => {
+      const g = gradeOf(cls);
       let rowHtml = '<tr><td class="ftt-class-cell">' + cls + '</td>';
       periods.forEach(p => {
         const slot = (schedMap[cls] || {})[p];
         const st = periodState(cls, p);
-        const classes = ['ftt-cell', st];
-        if (slot && !slot.subject) classes.push('vacancy');
-        else if (!slot) classes.push('vacancy');
+        const clist = ['ftt-cell', st];
+        if (!slot || !slot.subject || slot.subject.includes('شاغر') || slot.subject.includes('Vacancy')) clist.push('vacancy');
 
         let inner = '';
         if (!slot) {
           inner = '<span class="ftt-cell-subject" style="color:#CBD5E1">—</span>';
         } else if (!slot.subject || slot.subject.includes('شاغر') || slot.subject.includes('Vacancy')) {
           inner = '<span class="ftt-cell-subject" style="color:#EF4444;font-size:11px">⚠️ شاغر</span>';
-          classes.push('vacancy');
         } else {
-          // Shorten subject
           const subj = (slot.subject||'').length > 12 ? (slot.subject||'').substring(0,11)+'…' : (slot.subject||'');
-          // Shorten teacher
           const tchr = (slot.teacher_name||'').split(' ').slice(0,2).join(' ');
-          inner = '<div class="ftt-cell-subject">' + subj + '</div>'
-                + '<div class="ftt-cell-teacher">' + (tchr||'—') + '</div>';
+          inner = '<div class="ftt-cell-subject">' + subj + '</div><div class="ftt-cell-teacher">' + (tchr||'—') + '</div>';
         }
-        rowHtml += '<td class="' + classes.join(' ') + '">' + inner + '</td>';
+        rowHtml += '<td class="' + clist.join(' ') + '">' + inner + '</td>';
+
+        // Break column after this period
+        if (BREAK_COL_POSITIONS.includes(p)) {
+          const brk = getBreakForGrade(g, p);
+          if (brk) {
+            rowHtml += '<td class="ftt-break-col"><span class="bk-icon">☕</span><span class="bk-time">' + brk.time + '</span></td>';
+          } else {
+            rowHtml += '<td class="ftt-break-col" style="background:#F8FAFC!important;border-color:#E2E8F0"><span class="bk-empty">—</span></td>';
+          }
+        }
       });
       rowHtml += '</tr>';
       bodyHtml += rowHtml;
     });
   });
 
-  el.innerHTML = '<table class="ftt-table"><thead>' + hdr + '</thead><tbody>' + bodyHtml + '</tbody></table>';
+  el.innerHTML = '<table class="ftt-table"><thead>' + hdr2 + '</thead><tbody>' + bodyHtml + '</tbody></table>';
 }
 
 // Load when timetable panel becomes active
