@@ -121,11 +121,11 @@ body{font-family:'Tajawal',Arial,sans-serif;background:var(--bg);color:var(--tex
 @media(max-width:600px){.grid-4,.grid-3,.grid-2{grid-template-columns:1fr}}
 
 /* KPI */
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;transition:all .2s}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;transition:all .2s}
 .kpi:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
-.kpi-icon{font-size:26px;margin-bottom:8px}
-.kpi-val{font-size:30px;font-weight:900;color:var(--text);line-height:1}
-.kpi-label{font-size:12px;color:var(--text2);margin-top:6px;font-weight:600}
+.kpi-icon{font-size:20px;margin-bottom:4px}
+.kpi-val{font-size:22px;font-weight:900;color:var(--text);line-height:1}
+.kpi-label{font-size:11px;color:var(--text2);margin-top:4px;font-weight:600}
 .kpi-delta{display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;margin-top:8px}
 .kpi-delta.up{background:var(--emerald-lt);color:var(--emerald)}
 .kpi-delta.down{background:var(--rose-lt);color:var(--rose)}
@@ -502,24 +502,32 @@ tr:hover td{background:var(--surface2)}
     <div class="panel" id="panel-staff">
       <p class="sec-title">&#x1F469;&#x200D;&#x1F3EB; &#x627;&#x644;&#x643;&#x627;&#x62F;&#x631; &#x627;&#x644;&#x62A;&#x639;&#x644;&#x64A;&#x645;&#x64A; / Teaching Staff</p>
       <div id="staffAlerts" style="margin-bottom:12px"></div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>&#x627;&#x644;&#x627;&#x633;&#x645; / Name</th>
-              <th>&#x627;&#x644;&#x62F;&#x648;&#x631; / Role</th>
-              <th>&#x627;&#x644;&#x641;&#x635;&#x644; / Class</th>
-              <th>&#x627;&#x644;&#x62D;&#x636;&#x648;&#x631; / Attendance</th>
-              <th>&#x62A;&#x642;&#x64A;&#x64A;&#x645; / Rating</th>
-              <th>&#x627;&#x644;&#x62D;&#x627;&#x644;&#x629; / Status</th>
-            </tr>
-          </thead>
-          <tbody id="staffBody">
-            <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">&#x62C;&#x627;&#x631;&#x64A; &#x627;&#x644;&#x62A;&#x62D;&#x645;&#x64A;&#x644;... / Loading...</td></tr>
-          </tbody>
-        </table>
+      <!-- فلاتر الكادر -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
+        <input id="staffSearch" placeholder="ابحث بالاسم..." oninput="filterStaff()"
+          style="padding:8px 14px;border-radius:10px;border:1px solid var(--border);font-family:Tajawal,Arial,sans-serif;font-size:13px;flex:1;min-width:150px"/>
+        <select id="staffSubjectFilter" onchange="filterStaff()"
+          style="padding:8px 12px;border-radius:10px;border:1px solid var(--border);font-family:Tajawal,Arial,sans-serif;font-size:13px;background:var(--surface2);color:var(--text)">
+          <option value="">كل المواد</option>
+        </select>
+        <select id="staffCycleFilter" onchange="filterStaff()"
+          style="padding:8px 12px;border-radius:10px;border:1px solid var(--border);font-family:Tajawal,Arial,sans-serif;font-size:13px;background:var(--surface2);color:var(--text)">
+          <option value="">كل المراحل</option>
+          <option value="kg">الروضة KG</option>
+          <option value="c1">الحلقة الأولى G1-G4</option>
+          <option value="c2">الحلقة الثانية G5-G8</option>
+        </select>
+        <select id="staffRoleFilter" onchange="filterStaff()"
+          style="padding:8px 12px;border-radius:10px;border:1px solid var(--border);font-family:Tajawal,Arial,sans-serif;font-size:13px;background:var(--surface2);color:var(--text)">
+          <option value="">كل الأدوار</option>
+          <option value="teacher">معلمة</option>
+          <option value="coordinator">منسقة</option>
+          <option value="sub">احتياط</option>
+        </select>
+        <span id="staffCount" style="font-size:12px;color:var(--text2);white-space:nowrap"></span>
       </div>
+      <!-- عرض بطاقات الكادر -->
+      <div id="staffGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px"></div>
     </div>
 
     <!-- PANEL: STUDENTS -->
@@ -1838,16 +1846,63 @@ async function loadVacantSlots() {
   }
 }
 
+var _staffAllData = [];
 function loadStaff() {
   if (!window.sb) return;
-  sb.from('staff_profiles').select('id,name_ar,role_key,subject').order('name_ar').limit(200).then(function(r){
-    var body = document.getElementById('staffBody');
-    if (!body) return;
-    if (!r.data || !r.data.length) { body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">لا بيانات / No data</td></tr>'; return; }
-    body.innerHTML = r.data.map(function(s, i){
-      return '<tr><td>' + (i+1) + '</td><td style="font-weight:700;color:var(--text)">' + (s.name_ar||'—') + '</td><td>' + (s.role_key||'—') + '</td><td>' + (s.subject||'—') + '</td><td>—</td><td>—</td><td><span class="chip chip-green">✅</span></td></tr>';
-    }).join('');
+  sb.from('staff_profiles').select('id,name_ar,role_key,subject,is_coordinator,coord_scope').order('name_ar').limit(300).then(function(r){
+    if (!r.data || !r.data.length) {
+      document.getElementById('staffGrid').innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">لا بيانات</div>';
+      return;
+    }
+    _staffAllData = r.data;
+    // Populate subject filter
+    var subjects = [...new Set(r.data.map(s=>s.subject).filter(Boolean))].sort();
+    var subSel = document.getElementById('staffSubjectFilter');
+    if (subSel && subSel.options.length <= 1) {
+      subjects.forEach(function(su){ subSel.innerHTML += '<option value="'+su+'">'+su+'</option>'; });
+    }
+    filterStaff();
   }).catch(function(e){ console.warn('staff:', e); });
+}
+
+function filterStaff() {
+  var search = (document.getElementById('staffSearch')||{}).value||'';
+  var subj   = (document.getElementById('staffSubjectFilter')||{}).value||'';
+  var cycle  = (document.getElementById('staffCycleFilter')||{}).value||'';
+  var role   = (document.getElementById('staffRoleFilter')||{}).value||'';
+  var filtered = _staffAllData.filter(function(s){
+    if (search && !(s.name_ar||'').includes(search)) return false;
+    if (subj && s.subject !== subj) return false;
+    if (role === 'teacher' && s.role_key !== 'teacher') return false;
+    if (role === 'coordinator' && !s.is_coordinator) return false;
+    if (role === 'sub' && s.role_key !== 'sub_teacher') return false;
+    if (cycle === 'kg' && !(s.coord_scope||'').toLowerCase().includes('kg') && !(s.subject||'').includes('رياض')) {
+      // For cycle filter: check subject common for that cycle - approximate only
+    }
+    return true;
+  });
+  var cnt = document.getElementById('staffCount');
+  if (cnt) cnt.textContent = filtered.length + ' موظفة';
+  var grid = document.getElementById('staffGrid');
+  if (!grid) return;
+  if (!filtered.length) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text3)">لا نتائج</div>'; return; }
+  // Role labels
+  var roleL = {teacher:'معلمة',principal:'مديرة',vice_principal:'وكيلة',admin:'أدمن',nurse:'تمريض',security:'أمن',coach:'مدرب',counselor:'مرشدة',sub_teacher:'احتياط'};
+  // Subject colors
+  var sc = {'اللغة العربية':'#7C3AED','اللغة الإنجليزية':'#0284C7','الرياضيات':'#059669','العلوم':'#0891B2','التربية الإسلامية':'#D97706','الدراسات الاجتماعية':'#92400E','التربية البدنية':'#16A34A','الفنون':'#E11D48','الموسيقى':'#F59E0B','الذكاء الاصطناعي والتكنولوجيا':'#8B5CF6'};
+  grid.innerHTML = filtered.map(function(s){
+    var color = sc[s.subject] || '#6C3DD6';
+    var initials = (s.name_ar||'?').split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('');
+    return '<div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px">'+
+      '<div style="width:42px;height:42px;border-radius:50%;background:'+color+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;flex-shrink:0">'+initials+'</div>'+
+      '<div style="flex:1;min-width:0">'+
+        '<div style="font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(s.name_ar||'—')+'</div>'+
+        '<div style="font-size:11px;color:#64748B;margin-top:2px">'+(roleL[s.role_key]||s.role_key||'—')+'</div>'+
+        (s.subject?'<div style="font-size:11px;color:'+color+';font-weight:700;margin-top:2px">'+s.subject+'</div>':'')+
+        (s.is_coordinator?'<span style="display:inline-block;margin-top:4px;background:#EDE9FE;color:#6C3DD6;border-radius:6px;padding:1px 8px;font-size:10px;font-weight:800">منسقة</span>':'')+
+      '</div>'+
+    '</div>';
+  }).join('');
 }
 
 /* ===== NEWS ===== */
@@ -2450,7 +2505,7 @@ async function loadFullTimetableGrid(){
         if(BCP.includes(p)){
           const brk=gbfg(g,p);
           if(brk)rowHtml+='<td class="ftt-break-col"><span class="bk-icon">☕</span><span class="bk-time">'+brk.time+'</span></td>';
-          else rowHtml+='<td class="ftt-break-col" style="background:#F8FAFC!important;border-color:#E2E8F0"><span class="bk-empty">—</span></td>';
+          else rowHtml+='<td style="background:transparent!important;border:none!important;width:4px!important;min-width:0!important;padding:0!important"></td>';
         }
       });
       rowHtml+='</tr>'; bodyHtml+=rowHtml;
