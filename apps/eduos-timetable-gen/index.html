@@ -249,6 +249,10 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
     <div class="wnum">4</div>
     <span>التوليد والحفظ</span>
   </div>
+  <div class="wstep" id="ws5" data-step="5" onclick="goToStep(5)">
+    <div class="wnum">5</div>
+    <span>تعديل يدوي</span>
+  </div>
 </div>
 
 <!-- MAIN -->
@@ -553,11 +557,129 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
 
     <div class="wiz-nav">
       <button class="btn btn-secondary" onclick="goToStep(3)">&#8594; السابق</button>
+      <button class="btn btn-primary" onclick="goToStep(5)">التعديل اليدوي &#8592;</button>
+    </div>
+  </div>
+
+  <!-- STEP 5: تعديل يدوي -->
+  <div class="sp" id="sp5">
+    <div class="card">
+      <div class="card-title">✏️ تعديل يدوي على الجدول — Manual Timetable Edit</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+        <label style="font-size:13px;font-weight:700;color:#475569">السنة الدراسية:</label>
+        <select id="manualEditYear" style="padding:8px 12px;border:1.5px solid #D1D5DB;border-radius:8px;font-family:inherit;font-size:14px;font-weight:700">
+          <option value="2026-2027">2026–2027</option>
+          <option value="2025-2026">2025–2026</option>
+          <option value="2027-2028">2027–2028</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="loadManualEditGrid()">🔄 تحميل الجدول</button>
+        <span id="manualEditCount" style="font-size:13px;color:#6B7280;font-weight:700"></span>
+      </div>
+      <div id="manualEditAlert"></div>
+      <div id="manualEditWrap" style="overflow-x:auto;max-height:600px">
+        <div style="padding:24px;text-align:center;color:#9CA3AF">اضغطي "تحميل الجدول" لعرض الحصص القابلة للتعديل</div>
+      </div>
+    </div>
+    <div class="wiz-nav">
+      <button class="btn btn-secondary" onclick="goToStep(4)">&#8594; السابق</button>
       <div></div>
     </div>
   </div>
 
 </div>
+
+<script>
+/* ============ STEP 5: MANUAL EDIT ============ */
+var _manualEditRows = [];
+var _manualEditDirty = {};
+
+function _meHeaders() {
+  var sb = (window.EduOS && window.EduOS.SB_KEY) ? window.EduOS.SB_KEY : '';
+  return { 'apikey': sb, 'Authorization': 'Bearer ' + sb, 'Content-Type': 'application/json' };
+}
+function _meSbUrl() {
+  return (window.EduOS && window.EduOS.SB_URL) ? window.EduOS.SB_URL : '';
+}
+
+async function loadManualEditGrid() {
+  var wrap = document.getElementById('manualEditWrap');
+  var alertBox = document.getElementById('manualEditAlert');
+  var yearSel = document.getElementById('manualEditYear');
+  var year = yearSel ? yearSel.value : '2026-2027';
+  if (alertBox) alertBox.innerHTML = '';
+  wrap.innerHTML = '<div style="padding:24px;text-align:center;color:#9CA3AF">جارٍ التحميل...</div>';
+  try {
+    var sbUrl = _meSbUrl();
+    var url = sbUrl + '/rest/v1/schedules?academic_year=eq.' + encodeURIComponent(year) + '&is_active=eq.true&select=id,class_name,day,period,subject,teacher_name,teacher_id&order=class_name.asc,day.asc,period.asc';
+    var res = await fetch(url, { headers: _meHeaders() });
+    var rows = await res.json();
+    if (!Array.isArray(rows)) rows = [];
+    _manualEditRows = rows;
+    _manualEditDirty = {};
+    var cnt = document.getElementById('manualEditCount');
+    if (cnt) cnt.textContent = rows.length ? (rows.length + ' حصة محمَّلة') : '';
+    if (!rows.length) {
+      wrap.innerHTML = '<div style="padding:24px;text-align:center;color:#9CA3AF">لا توجد حصص للسنة الدراسية ' + year + '</div>';
+      return;
+    }
+    var html = '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+      '<thead><tr style="background:#F1F5F9">' +
+        '<th style="padding:8px 10px;text-align:right;border-bottom:2px solid #E2E8F0">الصف</th>' +
+        '<th style="padding:8px 10px;text-align:right;border-bottom:2px solid #E2E8F0">اليوم</th>' +
+        '<th style="padding:8px 10px;text-align:center;border-bottom:2px solid #E2E8F0">الحصة</th>' +
+        '<th style="padding:8px 10px;text-align:right;border-bottom:2px solid #E2E8F0">المادة</th>' +
+        '<th style="padding:8px 10px;text-align:right;border-bottom:2px solid #E2E8F0">المعلمة</th>' +
+        '<th style="padding:8px 10px;text-align:center;border-bottom:2px solid #E2E8F0">حفظ</th>' +
+      '</tr></thead><tbody>' +
+      rows.map(function(r, i) {
+        return '<tr style="border-bottom:1px solid #F1F5F9">' +
+          '<td style="padding:6px 10px;font-weight:700">' + (r.class_name||'') + '</td>' +
+          '<td style="padding:6px 10px">' + (r.day||'') + '</td>' +
+          '<td style="padding:6px 10px;text-align:center">' + (r.period||'') + '</td>' +
+          '<td style="padding:6px 10px"><input data-i="' + i + '" data-f="subject" value="' + (r.subject||'').replace(/"/g,'&quot;') + '" onchange="_meMarkDirty(this)" style="width:100%;padding:5px 8px;border:1px solid #E2E8F0;border-radius:6px;font-family:inherit;font-size:13px"></td>' +
+          '<td style="padding:6px 10px"><input data-i="' + i + '" data-f="teacher_name" value="' + (r.teacher_name||'').replace(/"/g,'&quot;') + '" onchange="_meMarkDirty(this)" style="width:100%;padding:5px 8px;border:1px solid #E2E8F0;border-radius:6px;font-family:inherit;font-size:13px"></td>' +
+          '<td style="padding:6px 10px;text-align:center"><button class="btn btn-success btn-sm" id="me-save-' + i + '" style="display:none" onclick="_meSaveRow(' + i + ')">💾</button></td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody></table>';
+    wrap.innerHTML = html;
+  } catch(e) {
+    wrap.innerHTML = '<div style="padding:24px;text-align:center;color:#EF4444">خطأ في التحميل</div>';
+  }
+}
+
+function _meMarkDirty(el) {
+  var i = el.getAttribute('data-i');
+  _manualEditDirty[i] = true;
+  var btn = document.getElementById('me-save-' + i);
+  if (btn) btn.style.display = 'inline-block';
+}
+
+async function _meSaveRow(i) {
+  var row = _manualEditRows[i];
+  if (!row) return;
+  var subjectInp = document.querySelector('input[data-i="' + i + '"][data-f="subject"]');
+  var teacherInp = document.querySelector('input[data-i="' + i + '"][data-f="teacher_name"]');
+  var body = {
+    subject: subjectInp ? subjectInp.value : row.subject,
+    teacher_name: teacherInp ? teacherInp.value : row.teacher_name
+  };
+  try {
+    var sbUrl = _meSbUrl();
+    await fetch(sbUrl + '/rest/v1/schedules?id=eq.' + encodeURIComponent(row.id), {
+      method: 'PATCH',
+      headers: Object.assign({}, _meHeaders(), {'Prefer':'return=minimal'}),
+      body: JSON.stringify(body)
+    });
+    var alertBox = document.getElementById('manualEditAlert');
+    if (alertBox) alertBox.innerHTML = '<div style="background:#ECFDF5;border:1px solid #A7F3D0;color:#059669;padding:8px 14px;border-radius:8px;font-size:13px;margin-bottom:10px">✓ تم حفظ التعديل</div>';
+    var btn = document.getElementById('me-save-' + i);
+    if (btn) btn.style.display = 'none';
+  } catch(e) {
+    alert('خطأ في الحفظ');
+  }
+}
+</script>
 
 <div class="toast" id="toast"></div>
 

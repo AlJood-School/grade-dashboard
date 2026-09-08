@@ -170,6 +170,7 @@
     'eduos-transport':            ['admin', 'principal', 'secretary'],
     'eduos-forms':                ['teacher','sub_teacher','principal','vice_principal','admin','specialist','nurse','secretary'],
     'eduos-meetings':             ['teacher','sub_teacher','principal','vice_principal','admin','specialist'],
+    'eduos-field-trips':          ['principal', 'vice_principal', 'admin'],
     'eduos-broadcasting':         ['principal', 'vice_principal', 'admin'],
     'eduos-news':                 ['admin', 'principal', 'vice_principal', 'secretary'],
     'eduos-calendar':             ['teacher','sub_teacher','principal','vice_principal','admin','specialist','secretary'],
