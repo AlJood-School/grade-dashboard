@@ -1962,6 +1962,18 @@ async function loadNews() {
 
 <!-- COORDINATOR PANEL INJECTION -->
 <script>
+// مساعد JWT للمنسقين — يستخدم access_token من الجلسة تماماً مثل loadStaff
+function getCoordHeaders() {
+  var sb = (window.EduOS && window.EduOS.SB_KEY) ? window.EduOS.SB_KEY : '';
+  var userSession = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+  var jwt = userSession.access_token || userSession.token || sb;
+  return { 'apikey': sb, 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' };
+}
+function getCoordSbUrl() {
+  return (window.EduOS && window.EduOS.SB_URL) ? window.EduOS.SB_URL : '';
+}
+</script>
+<script>
 (function injectCoordinatorPanel(){
   // Add panel HTML
   var panelHTML = '<div class="panel" id="panel-coordinators" style="padding:24px;overflow-y:auto;height:100%">' +
@@ -2052,7 +2064,7 @@ async function loadCoordinators() {
     var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
     var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
     var res = await fetch(sbUrl + '/rest/v1/staff_profiles?is_coordinator=eq.true&order=name_ar&select=staff_db_id,name_ar,subject,is_coordinator,coord_type,coord_scope,coordinator_subject', {
-      headers: { 'apikey': sb, 'Authorization': 'Bearer ' + sb }
+      headers: getCoordHeaders()
     });
     var rows = await res.json();
     if (!Array.isArray(rows) || !rows.length) {
@@ -2088,7 +2100,7 @@ async function loadCoordMeetings() {
     var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
     var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
     var res = await fetch(sbUrl + '/rest/v1/subject_meetings?academic_year=eq.2026-2027&order=meeting_date.desc&limit=50&select=id,subject,coordinator_name_ar,meeting_date,status,agenda', {
-      headers: { 'apikey': sb, 'Authorization': 'Bearer ' + sb }
+      headers: getCoordHeaders()
     });
     var rows = await res.json();
     if (!Array.isArray(rows) || !rows.length) {
@@ -2126,7 +2138,7 @@ async function loadCoordMinutes() {
     var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
     var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
     var res = await fetch(sbUrl + '/rest/v1/subject_meetings?academic_year=eq.2026-2027&status=eq.completed&minutes=not.is.null&order=meeting_date.desc&limit=50&select=id,subject,coordinator_name_ar,meeting_date,minutes', {
-      headers: { 'apikey': sb, 'Authorization': 'Bearer ' + sb }
+      headers: getCoordHeaders()
     });
     var rows = await res.json();
     if (!Array.isArray(rows) || !rows.length) {
@@ -2161,7 +2173,7 @@ async function showAssignModal() {
     var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
     var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
     var res = await fetch(sbUrl + '/rest/v1/staff_profiles?role_key=eq.teacher&is_active=eq.true&select=name_ar,staff_db_id&order=name_ar.asc', {
-      headers: { 'apikey': sb, 'Authorization': 'Bearer ' + sb }
+      headers: getCoordHeaders()
     });
     var rows = await res.json();
     _coordTeachers = Array.isArray(rows) ? rows : [];
@@ -2193,13 +2205,13 @@ async function saveCoordinator() {
     // Clear old coordinator for this subject
     await fetch(sbUrl + '/rest/v1/staff_profiles?coordinator_subject=eq.' + encodeURIComponent(subject), {
       method: 'PATCH',
-      headers: { 'apikey': sb, 'Authorization': 'Bearer ' + sb, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      headers: {...getCoordHeaders(), 'Prefer': 'return=minimal'},
       body: JSON.stringify({ is_coordinator: false, coordinator_subject: null })
     });
     // Set new coordinator
     await fetch(sbUrl + '/rest/v1/staff_profiles?staff_db_id=eq.' + encodeURIComponent(staffDbId), {
       method: 'PATCH',
-      headers: { 'apikey': sb, 'Authorization': 'Bearer ' + sb, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      headers: {...getCoordHeaders(), 'Prefer': 'return=minimal'},
       body: JSON.stringify({ is_coordinator: true, coordinator_subject: subject })
     });
     closeCoordModal();
@@ -2216,7 +2228,7 @@ async function removeCoordinator(staffDbId) {
     var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
     await fetch(sbUrl + '/rest/v1/staff_profiles?staff_db_id=eq.' + encodeURIComponent(staffDbId), {
       method: 'PATCH',
-      headers: { 'apikey': sb, 'Authorization': 'Bearer ' + sb, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      headers: {...getCoordHeaders(), 'Prefer': 'return=minimal'},
       body: JSON.stringify({ is_coordinator: false, coordinator_subject: null })
     });
     loadCoordinators();
@@ -2301,7 +2313,7 @@ async function loadSecCoordGroup(type) {
     var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
     var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
     var res = await fetch(sbUrl + '/rest/v1/staff_profiles?coord_type=eq.' + encodeURIComponent(type) + '&is_active=eq.true&select=name_ar,coord_type,coord_scope,staff_db_id&order=name_ar.asc', {
-      headers: { 'apikey': sb, 'Authorization': 'Bearer ' + sb }
+      headers: getCoordHeaders()
     });
     var rows = await res.json();
     if (!Array.isArray(rows) || !rows.length) {
@@ -2343,7 +2355,7 @@ async function showSecCoordModal(type) {
     var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
     var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
     var res = await fetch(sbUrl + '/rest/v1/staff_profiles?role_key=eq.teacher&is_active=eq.true&select=name_ar,staff_db_id&order=name_ar.asc', {
-      headers: { 'apikey': sb, 'Authorization': 'Bearer ' + sb }
+      headers: getCoordHeaders()
     });
     var rows = await res.json();
     _secCoordTeachers = Array.isArray(rows) ? rows : [];
@@ -2376,7 +2388,7 @@ async function saveSecCoordinator() {
     var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
     await fetch(sbUrl + '/rest/v1/staff_profiles?staff_db_id=eq.' + encodeURIComponent(staffDbId), {
       method: 'PATCH',
-      headers: { 'apikey': sb, 'Authorization': 'Bearer ' + sb, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      headers: {...getCoordHeaders(), 'Prefer': 'return=minimal'},
       body: JSON.stringify({ coord_type: type, coord_scope: scope })
     });
     closeSecCoordModal();
@@ -2393,7 +2405,7 @@ async function removeSecCoordinator(staffDbId) {
     var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
     await fetch(sbUrl + '/rest/v1/staff_profiles?staff_db_id=eq.' + encodeURIComponent(staffDbId), {
       method: 'PATCH',
-      headers: { 'apikey': sb, 'Authorization': 'Bearer ' + sb, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      headers: {...getCoordHeaders(), 'Prefer': 'return=minimal'},
       body: JSON.stringify({ coord_type: null, coord_scope: null })
     });
     loadSectionCoordinators();
