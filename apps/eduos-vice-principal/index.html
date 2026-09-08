@@ -123,7 +123,40 @@ body{overflow:hidden}
 .mob-ham{display:none;background:none;border:none;cursor:pointer;font-size:22px;padding:4px 8px;color:var(--text);margin-left:8px}
 @media(min-width:901px){.mob-ham,.mob-overlay{display:none!important}}
 @media(max-width:768px){.grid-4,.grid-3{grid-template-columns:repeat(2,1fr)}}
-</style>
+
+  /* ── FULL SCHOOL TIMETABLE GRID ── */
+  .ftt-wrap { overflow-x: auto; margin-top: 0; }
+  .ftt-table { border-collapse: collapse; width: 100%; min-width: 900px; font-size: 13px; }
+  .ftt-table th {
+    background: #6C3DD6; color: #fff;
+    padding: 8px 6px; text-align: center;
+    font-weight: 700; font-size: 12px;
+    white-space: nowrap; border: 1px solid rgba(255,255,255,0.15);
+    position: sticky; top: 0; z-index: 2;
+  }
+  .ftt-table th.ftt-class-col { background: #1E293B; min-width: 60px; }
+  .ftt-table th.ftt-current { background: #22D3EE; color: #0F172A; }
+  .ftt-table th.ftt-break-col { background: #475569; font-size: 11px; }
+  .ftt-table td {
+    padding: 6px 5px; text-align: center; border: 1px solid #E2E8F0;
+    vertical-align: top; min-width: 90px; max-width: 130px;
+  }
+  .ftt-table tr:nth-child(even) td { background: #F8FAFC; }
+  .ftt-table tr:hover td { background: #EEF2FF !important; }
+  .ftt-cell-subject { font-weight: 800; font-size: 13px; color: #1E293B; line-height: 1.3; }
+  .ftt-cell-teacher { font-size: 11px; color: #64748B; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+  .ftt-cell.past { opacity: 0.45; background: #F1F5F9 !important; }
+  .ftt-cell.current { background: #EEF9FF !important; border: 2px solid #22D3EE !important; }
+  .ftt-cell.vacancy { background: #FFF1F2 !important; }
+  .ftt-cell.vacancy .ftt-cell-subject { color: #EF4444; font-size: 11px; }
+  .ftt-break-cell { background: #F1F5F9 !important; color: #94A3B8; font-size: 11px; font-weight: 700; padding: 6px 4px; }
+  .ftt-stage-header td { background: #1E293B !important; color: #CBD5E1; font-weight: 900; font-size: 12px; text-align: right; padding: 6px 12px; letter-spacing: 0.5px; }
+  .ftt-class-cell { font-weight: 900; font-size: 14px; color: #6C3DD6; background: #F5F3FF; }
+  .ftt-legend { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; font-size:12px; align-items:center; }
+  .ftt-leg { display:inline-flex; align-items:center; gap:6px; }
+  .ftt-leg-dot { width:12px; height:12px; border-radius:3px; }
+
+  </style>
 </head>
 <body>
 
@@ -362,6 +395,21 @@ body{overflow:hidden}
             <div style="margin-top:16px;background:rgba(255,255,255,0.2);border-radius:10px;padding:8px 14px;font-size:12px">تغطية غياب المعلمات فوراً</div>
           </div>
         </a>
+      </div>
+      <div class="card" style="margin-top:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div class="sec-title" style="margin-bottom:0">📋 الجدول الكامل / Full School Timetable</div>
+          <div class="ftt-legend">
+            <span class="ftt-leg"><span class="ftt-leg-dot" style="background:#E2E8F0;opacity:0.5"></span>فائتة</span>
+            <span class="ftt-leg"><span class="ftt-leg-dot" style="background:#22D3EE"></span>جارية الآن</span>
+            <span class="ftt-leg"><span class="ftt-leg-dot" style="background:#fff;border:1px solid #6C3DD6"></span>قادمة</span>
+            <span class="ftt-leg"><span class="ftt-leg-dot" style="background:#FFF1F2;border:1px solid #EF4444"></span>شاغر</span>
+            <span id="fttCurrentTime" style="margin-right:auto;font-weight:700;color:#6C3DD6"></span>
+          </div>
+        </div>
+        <div class="ftt-wrap">
+          <div id="fttGrid"><div class="skeleton" style="height:300px"></div></div>
+        </div>
       </div>
       <div class="card">
         <div class="sec-title">&#x1F4CA; حالة الجداول / Timetable Status</div>
@@ -2646,6 +2694,257 @@ async function saveCoordinatorVP(){
     closeCoordModalVP();loadCoordinators();
   }catch(e){alert('خطأ في الحفظ');}
 }
+
+// ══════════════════════════════════════════════
+// FULL SCHOOL TIMETABLE GRID
+// ══════════════════════════════════════════════
+const FTT_DAYS = {'الأحد':0,'الاثنين':1,'الثلاثاء':2,'الأربعاء':3,'الخميس':4,'الجمعة':5};
+const FTT_DAY_NAMES = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+
+// Period times by grade group
+function fttPeriodTime(grade, period, isFriday) {
+  const g = parseInt(grade) || 0;
+  if (isFriday) {
+    // Friday 4 periods
+    const fri = [[7,0,7,40],[7,45,8,25],[8,30,9,10],[9,15,9,55]];
+    const r = fri[period-1];
+    return r ? {start: r[0]*60+r[1], end: r[2]*60+r[3]} : null;
+  }
+  if (g >= 1 && g <= 4) {
+    // G1-G4: 7:10 start
+    const times = [
+      [7,10,7,55],[8,0,8,45],[8,50,9,35],
+      null, // break 9:35-10:00
+      [10,0,10,45],[10,50,11,35],
+      null, // break 11:35-11:50
+      [11,50,12,35],[12,40,13,25]
+    ];
+    // periods 1-7 (skipping breaks)
+    const map = {1:0,2:1,3:2,4:4,5:5,6:7,7:8};
+    const idx = map[period];
+    if (idx === undefined) return null;
+    const t = times[idx];
+    if (!t) return null;
+    return {start: t[0]*60+t[1], end: t[2]*60+t[3]};
+  }
+  // G5-G8: 8:00 start
+  const times5 = [
+    [8,0,8,45],[8,50,9,35],
+    null, // break 9:35-10:00
+    [10,0,10,45],[10,50,11,35],[11,40,12,25],
+    null, // break 1:05-1:15 (13:05-13:15)
+    [13,15,14,0],[14,5,14,45]
+  ];
+  const map5 = {1:0,2:1,3:3,4:4,5:5,6:7,7:8};
+  const idx5 = map5[period];
+  if (idx5 === undefined) return null;
+  const t5 = times5[idx5];
+  if (!t5) return null;
+  return {start: t5[0]*60+t5[1], end: t5[2]*60+t5[3]};
+}
+
+function fttCurrentPeriod(grade, isFriday) {
+  const now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
+  const maxP = isFriday ? 4 : 7;
+  for (let p = 1; p <= maxP; p++) {
+    const t = fttPeriodTime(grade, p, isFriday);
+    if (!t) continue;
+    if (nowMin >= t.start && nowMin < t.end) return {period: p, state: 'current'};
+    if (nowMin < t.start) return {period: p, state: 'upcoming'};
+  }
+  return {period: -1, state: 'done'};
+}
+
+const FTT_CLASS_ORDER = [
+  // KG
+  'KG1A','KG1B','KG1C','KG1D','KG1E','KG1F',
+  'KG2A','KG2B','KG2C','KG2D','KG2E','KG2F',
+  // G1-G4
+  '1A','1B','1C','1D','1E','1F',
+  '2A','2B','2C','2D','2E','2F',
+  '3A','3B','3C','3D','3E','3F',
+  '4A','4B','4C','4D','4E','4F',
+  // G5-G8
+  '5A','5B','5C','5D',
+  '6A','6B','6C','6D',
+  '7A','7B','7C','7D',
+  '8A','8B','8C','8D',
+];
+
+async function loadFullTimetableGrid() {
+  const el = document.getElementById('fttGrid');
+  if (!el) return;
+
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0=Sun
+  const dayNames = FTT_DAY_NAMES;
+  // UAE week: Sun=0...Thu=4, Fri=5
+  const todayName = dayNames[dayOfWeek] || 'الأحد';
+  const isFriday = dayOfWeek === 5;
+  const isSat = dayOfWeek === 6;
+
+  // Update clock display
+  const timeEl = document.getElementById('fttCurrentTime');
+  if (timeEl) {
+    const hh = now.getHours().toString().padStart(2,'0');
+    const mm = now.getMinutes().toString().padStart(2,'0');
+    timeEl.textContent = todayName + ' — ' + hh + ':' + mm;
+  }
+
+  // Saturday = no school
+  if (isSat) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#94A3B8;font-size:16px">السبت — لا دوام 🏖️</div>';
+    return;
+  }
+
+  // Fetch today's schedules
+  const maxP = isFriday ? 4 : 8;
+  let rows;
+  try {
+    const res = await sb.from('schedules')
+      .select('class_name,subject,teacher_name,period,grade')
+      .eq('day', todayName)
+      .eq('is_active', true)
+      .lte('period', maxP);
+    if (res.error) throw res.error;
+    rows = res.data || [];
+  } catch(e) {
+    el.innerHTML = '<div style="color:#EF4444;padding:20px">خطأ في تحميل الجدول: ' + (e.message||e) + '</div>';
+    return;
+  }
+
+  // Build map: class_name -> period -> {subject, teacher_name}
+  const schedMap = {};
+  rows.forEach(r => {
+    if (!schedMap[r.class_name]) schedMap[r.class_name] = {};
+    schedMap[r.class_name][r.period] = r;
+  });
+
+  // Determine which classes are present
+  const presentClasses = [...new Set(rows.map(r => r.class_name))];
+  // Sort by FTT_CLASS_ORDER
+  const sortedClasses = FTT_CLASS_ORDER.filter(c => presentClasses.includes(c));
+  // Add any classes not in our predefined order
+  presentClasses.filter(c => !sortedClasses.includes(c)).sort().forEach(c => sortedClasses.push(c));
+
+  if (!sortedClasses.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#94A3B8">لا جداول لهذا اليوم</div>';
+    return;
+  }
+
+  // Determine breaks per stage
+  function getBreaks(cls) {
+    const g = parseInt(cls) || 0;
+    if (g >= 1 && g <= 2) return [{after:2, label:'استراحة١ 8:45-9:10'},{after:5, label:'استراحة٢ 11:35-11:50'}];
+    if (g >= 3 && g <= 4) return [{after:3, label:'استراحة١ 9:35-10:00'},{after:5, label:'استراحة٢ 11:35-11:50'}];
+    if (g >= 5) return [{after:2, label:'استراحة١ 9:35-10:00'},{after:6, label:'استراحة٢ 13:05-13:15'}];
+    return [];
+  }
+
+  // Current time in minutes
+  const nowMin = now.getHours()*60 + now.getMinutes();
+
+  // Get grade from class name
+  function gradeOf(cls) {
+    const m = cls.match(/^(\d+)/);
+    return m ? parseInt(m[1]) : 0;
+  }
+
+  // Determine period state
+  function periodState(cls, p) {
+    const g = gradeOf(cls);
+    const t = fttPeriodTime(g, p, isFriday);
+    if (!t) return 'future';
+    if (nowMin >= t.end) return 'past';
+    if (nowMin >= t.start && nowMin < t.end) return 'current';
+    return 'future';
+  }
+
+  // Build periods header (for G1-G4 as representative)
+  const periods = Array.from({length: maxP}, (_,i) => i+1);
+
+  // Build header row
+  let hdr = '<tr><th class="ftt-class-col">الصف</th>';
+  periods.forEach(p => {
+    const t = fttPeriodTime(3, p, isFriday);
+    const timeStr = t ? (Math.floor(t.start/60).toString().padStart(2,'0')+':'+((t.start%60).toString().padStart(2,'0'))) : '';
+    // Check if this period is "current" for G3 representative
+    const st = periodState('3A', p);
+    hdr += '<th class="' + (st==='current' ? 'ftt-current' : '') + '">ح' + p + (timeStr ? '<br><span style="font-size:10px;opacity:.8">'+timeStr+'</span>' : '') + '</th>';
+  });
+  hdr += '</tr>';
+
+  // Stage separators
+  const stages = [
+    {label: '🌱 الروضة KG', classes: sortedClasses.filter(c => c.startsWith('KG'))},
+    {label: '📚 G1 – G4', classes: sortedClasses.filter(c => gradeOf(c) >= 1 && gradeOf(c) <= 4)},
+    {label: '📖 G5 – G8', classes: sortedClasses.filter(c => gradeOf(c) >= 5)},
+  ].filter(s => s.classes.length > 0);
+
+  let bodyHtml = '';
+  stages.forEach(stage => {
+    // Stage separator row
+    bodyHtml += '<tr class="ftt-stage-header"><td colspan="' + (periods.length+1) + '">' + stage.label + '</td></tr>';
+
+    stage.classes.forEach(cls => {
+      let rowHtml = '<tr><td class="ftt-class-cell">' + cls + '</td>';
+      periods.forEach(p => {
+        const slot = (schedMap[cls] || {})[p];
+        const st = periodState(cls, p);
+        const classes = ['ftt-cell', st];
+        if (slot && !slot.subject) classes.push('vacancy');
+        else if (!slot) classes.push('vacancy');
+
+        let inner = '';
+        if (!slot) {
+          inner = '<span class="ftt-cell-subject" style="color:#CBD5E1">—</span>';
+        } else if (!slot.subject || slot.subject.includes('شاغر') || slot.subject.includes('Vacancy')) {
+          inner = '<span class="ftt-cell-subject" style="color:#EF4444;font-size:11px">⚠️ شاغر</span>';
+          classes.push('vacancy');
+        } else {
+          // Shorten subject
+          const subj = (slot.subject||'').length > 12 ? (slot.subject||'').substring(0,11)+'…' : (slot.subject||'');
+          // Shorten teacher
+          const tchr = (slot.teacher_name||'').split(' ').slice(0,2).join(' ');
+          inner = '<div class="ftt-cell-subject">' + subj + '</div>'
+                + '<div class="ftt-cell-teacher">' + (tchr||'—') + '</div>';
+        }
+        rowHtml += '<td class="' + classes.join(' ') + '">' + inner + '</td>';
+      });
+      rowHtml += '</tr>';
+      bodyHtml += rowHtml;
+    });
+  });
+
+  el.innerHTML = '<table class="ftt-table"><thead>' + hdr + '</thead><tbody>' + bodyHtml + '</tbody></table>';
+}
+
+// Load when timetable panel becomes active
+const _origShowPanelVP = typeof showPanel !== 'undefined' ? showPanel : null;
+document.addEventListener('DOMContentLoaded', () => {
+  // Intercept panel switch to load timetable on demand
+  document.querySelectorAll('[data-panel]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.panel === 'timetable') {
+        setTimeout(loadFullTimetableGrid, 100);
+      }
+    });
+  });
+  // Also load if timetable is the first/default panel
+  const activePanelEl = document.querySelector('.panel.active');
+  if (activePanelEl && activePanelEl.id === 'panel-timetable') {
+    loadFullTimetableGrid();
+  }
+  // Auto-refresh every 2 minutes
+  setInterval(() => {
+    const ttPanel = document.getElementById('panel-timetable');
+    if (ttPanel && !ttPanel.classList.contains('hidden') && ttPanel.style.display !== 'none') {
+      loadFullTimetableGrid();
+    }
+  }, 120000);
+});
+
 </script>
 </body>
 </html>
