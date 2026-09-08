@@ -243,8 +243,22 @@ tr:hover td{background:#F8FAFC;}
       <div class="card">
         <div class="card-header">
           <div class="card-title">👥 قائمة الكادر · Staff List</div>
-          <input class="search-box" type="text" id="staffSearch" placeholder="بحث بالاسم أو الدور أو المادة…" oninput="filterStaff()">
-          <button class="btn btn-primary btn-sm" onclick="openAddStaff()">+ إضافة موظف/ة</button>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input class="search-box" type="text" id="staffSearch" placeholder="بحث بالاسم أو المادة…" oninput="filterStaff()" style="min-width:160px">
+            <select id="staffRoleFilter" onchange="filterStaff()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-family:Tajawal,Arial,sans-serif;font-size:13px;background:var(--surface);color:var(--text)">
+              <option value="">كل الأدوار</option>
+              <option value="teacher">معلمة</option>
+              <option value="coordinator">منسقة</option>
+              <option value="sub_teacher">احتياط</option>
+              <option value="principal">مديرة</option>
+              <option value="vice_principal">وكيلة</option>
+              <option value="admin">أدمن</option>
+            </select>
+            <select id="staffSubjectFilter" onchange="filterStaff()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-family:Tajawal,Arial,sans-serif;font-size:13px;background:var(--surface);color:var(--text)">
+              <option value="">كل المواد</option>
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="openAddStaff()">+ إضافة موظف/ة</button>
+          </div>
         </div>
         <div class="tbl-scroll">
           <table>
@@ -806,8 +820,14 @@ async function loadOverview() {
 // ── STAFF ──
 var allStaff = [];
 async function loadStaff() {
-  var res = await dbGet('staff_profiles', 'select=id,name_ar,name_en,username,role_key,subject,department,is_active&order=name_ar.asc&limit=500');
+  var res = await dbGet('staff_profiles', 'select=id,name_ar,name_en,username,role_key,subject,department,is_active,is_coordinator&order=name_ar.asc&limit=500');
   allStaff = res.data;
+  // Populate subject filter
+  var subjects = [...new Set(allStaff.map(function(s){return s.subject;}).filter(Boolean))].sort();
+  var subSel = document.getElementById('staffSubjectFilter');
+  if (subSel && subSel.options.length <= 1) {
+    subjects.forEach(function(su){ subSel.innerHTML += '<option value="'+su+'">'+su+'</option>'; });
+  }
   renderStaff(allStaff);
   document.getElementById('staffCount').textContent = 'إجمالي: ' + allStaff.length + ' موظف/ة';
   var inactive = allStaff.filter(function(s) { return s.is_active === false; }).length;
@@ -827,20 +847,24 @@ function renderStaff(list) {
     var effectiveRole = s.role_key || 'staff';
     var isActive = s.is_active !== false;
     var safeName = (s.name_ar || '').replace(/'/g, '').replace(/"/g, '');
-    return '<tr><td><strong>' + (s.name_ar || s.name_en || '—') + '</strong>' + (s.name_en ? '<div style="font-size:11px;color:var(--text3)">' + s.name_en + '</div>' : '') + '</td><td style="color:var(--text3);font-family:monospace;font-size:12px">' + (s.username || '—') + '</td><td>' + roleBadge(effectiveRole) + '</td><td>' + (s.subject || '<span style="color:var(--text3)">—</span>') + '</td><td>' + (s.department || '<span style="color:var(--text3)">—</span>') + '</td><td><span class="badge ' + (isActive ? 'b-green' : 'b-red') + '">' + (isActive ? 'نشط/ة' : 'موقوف/ة') + '</span></td><td><button class="btn btn-outline btn-sm" data-id="' + s.id + '" data-name="' + safeName + '" data-role="' + effectiveRole + '" onclick="openEditRole(this)">تعديل الدور</button></td></tr>';
+    var coordBadge = s.is_coordinator ? ' <span style="display:inline-block;background:linear-gradient(135deg,#6C3DD6,#7C3AED);color:#fff;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:800">⭐ منسقة</span>' : '';
+    return '<tr><td><strong>' + (s.name_ar || s.name_en || '—') + '</strong>' + (s.name_en ? '<div style="font-size:11px;color:var(--text3)">' + s.name_en + '</div>' : '') + coordBadge + '</td><td style="color:var(--text3);font-family:monospace;font-size:12px">' + (s.username || '—') + '</td><td>' + roleBadge(effectiveRole) + '</td><td>' + (s.subject || '<span style="color:var(--text3)">—</span>') + '</td><td>' + (s.department || '<span style="color:var(--text3)">—</span>') + '</td><td><span class="badge ' + (isActive ? 'b-green' : 'b-red') + '">' + (isActive ? 'نشط/ة' : 'موقوف/ة') + '</span></td><td><button class="btn btn-outline btn-sm" data-id="' + s.id + '" data-name="' + safeName + '" data-role="' + effectiveRole + '" onclick="openEditRole(this)">تعديل الدور</button></td></tr>';
   }).join('');
 }
 
 function filterStaff() {
-  var q = document.getElementById('staffSearch').value.trim().toLowerCase();
-  if (!q) { renderStaff(allStaff); return; }
-  renderStaff(allStaff.filter(function(s) {
-    return (s.name_ar || '').toLowerCase().includes(q) ||
-           (s.name_en || '').toLowerCase().includes(q) ||
-           (s.username || '').toLowerCase().includes(q) ||
-           (s.role_key || '').toLowerCase().includes(q) ||
-           (s.subject || '').includes(q);
-  }));
+  var q = (document.getElementById('staffSearch').value||'').trim().toLowerCase();
+  var role = (document.getElementById('staffRoleFilter')||{}).value||'';
+  var subj = (document.getElementById('staffSubjectFilter')||{}).value||'';
+  var filtered = allStaff.filter(function(s) {
+    if (q && !((s.name_ar||'').toLowerCase().includes(q)||(s.name_en||'').toLowerCase().includes(q)||(s.username||'').toLowerCase().includes(q)||(s.subject||'').includes(q))) return false;
+    if (role === 'coordinator' && !s.is_coordinator) return false;
+    else if (role && role !== 'coordinator' && s.role_key !== role) return false;
+    if (subj && s.subject !== subj) return false;
+    return true;
+  });
+  renderStaff(filtered);
+  document.getElementById('staffCount').textContent = filtered.length + ' / ' + allStaff.length + ' موظف/ة';
 }
 
 // ── STUDENTS ──
