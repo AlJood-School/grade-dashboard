@@ -70,7 +70,7 @@
     s.textContent = [
       /* زر عائم */
       '#duty-float-btn{',
-        'position:fixed;bottom:24px;left:90px;z-index:9000;',
+        'position:fixed;bottom:82px;left:20px;z-index:9000;',
         'width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;',
         'background:linear-gradient(135deg,#f59e0b,#d97706);',
         'color:#fff;font-size:22px;box-shadow:0 4px 16px rgba(245,158,11,.45);',

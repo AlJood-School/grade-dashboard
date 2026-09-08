@@ -47,7 +47,7 @@
     s.id = 'msg-sys-style';
     s.textContent = [
       '#msg-float-btn{',
-        'position:fixed;bottom:24px;left:24px;z-index:9000;',
+        'position:fixed;bottom:24px;left:20px;z-index:9000;',
         'width:56px;height:56px;border-radius:50%;border:none;',
         'background:linear-gradient(135deg,#6C3DD6,#22D3EE);',
         'color:#fff;font-size:22px;cursor:pointer;',

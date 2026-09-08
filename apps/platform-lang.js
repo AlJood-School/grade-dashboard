@@ -468,17 +468,17 @@ window.EduLang = (function () {
       font-weight: 700;
       padding: 6px 14px;
       border-radius: 20px;
-      border: 1.5px solid var(--brand, #6C3DD6);
+      border: 1.5px solid rgba(255,255,255,0.65);
       background: transparent;
-      color: var(--brand, #6C3DD6);
+      color: #fff;
       cursor: pointer;
       transition: all .2s;
       letter-spacing: .3px;
       white-space: nowrap;
       margin: 0 4px;
     `;
-    btn.onmouseover = () => { btn.style.background = 'var(--brand,#6C3DD6)'; btn.style.color = '#fff'; };
-    btn.onmouseout  = () => { btn.style.background = 'transparent'; btn.style.color = 'var(--brand,#6C3DD6)'; };
+    btn.onmouseover = () => { btn.style.background = 'rgba(255,255,255,0.18)'; btn.style.color = '#fff'; };
+    btn.onmouseout  = () => { btn.style.background = 'transparent'; btn.style.color = '#fff'; };
     btn.onclick = () => toggle();
 
     const logoutBtn = target.querySelector(
