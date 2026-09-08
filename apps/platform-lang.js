@@ -462,6 +462,28 @@ window.EduLang = (function () {
     btn.title = _lang === 'en' ? 'تغيير إلى العربية' : 'Switch to English';
     btn.textContent = _lang === 'en' ? '🌐 العربية' : '🌐 English';
     btn.className = 'edu-lang-btn';
+    // كشف ثيم الصفحة: داكن أم فاتح؟
+    function detectDark() {
+      const bg = getComputedStyle(document.body).backgroundColor || '';
+      // استخرج RGB
+      const m = bg.match(/\d+/g);
+      if (m && m.length >= 3) {
+        const lum = (0.299 * +m[0] + 0.587 * +m[1] + 0.114 * +m[2]);
+        return lum < 128;
+      }
+      // fallback: تحقق من متغير CSS أو data-theme
+      const theme = document.documentElement.getAttribute('data-theme') || document.body.getAttribute('data-theme') || '';
+      return !theme.includes('light');
+    }
+    function applyBtnTheme() {
+      const dark = detectDark();
+      const txtColor = dark ? '#fff' : '#1E293B';
+      const borderColor = dark ? 'rgba(255,255,255,0.65)' : 'rgba(30,41,59,0.4)';
+      btn.style.color = txtColor;
+      btn.style.borderColor = borderColor;
+    }
+    applyBtnTheme();
+
     btn.style.cssText = `
       font-family: 'Tajawal', Arial, sans-serif;
       font-size: 13px;
@@ -477,8 +499,10 @@ window.EduLang = (function () {
       white-space: nowrap;
       margin: 0 4px;
     `;
-    btn.onmouseover = () => { btn.style.background = 'rgba(255,255,255,0.18)'; btn.style.color = '#fff'; };
-    btn.onmouseout  = () => { btn.style.background = 'transparent'; btn.style.color = '#fff'; };
+    // طبّق اللون الصحيح بعد تعيين cssText (يُعيد الضبط)
+    applyBtnTheme();
+    btn.onmouseover = () => { const dark = detectDark(); btn.style.background = dark ? 'rgba(255,255,255,0.18)' : 'rgba(30,41,59,0.08)'; };
+    btn.onmouseout  = () => { btn.style.background = 'transparent'; applyBtnTheme(); };
     btn.onclick = () => toggle();
 
     const logoutBtn = target.querySelector(
