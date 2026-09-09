@@ -296,31 +296,32 @@ tr:hover td{background:#F8FAFC;}
 
     <!-- ═══ PANEL: ROLES ═══ -->
     <div class="panel" id="panel-roles">
-      <div class="card" style="margin-bottom:20px">
-        <div class="card-header">
-          <div class="card-title">🔐 خريطة الأدوار · Role Map</div>
-        </div>
-        <div class="card-body">
-          <div id="roleMap" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px">
-            <div style="text-align:center;padding:24px;color:var(--text3)">⏳</div>
-          </div>
+      <div class="section-header">
+        <div>
+          <div class="section-title">الأدوار والصلاحيات</div>
+          <div class="section-sub">إدارة الأدوار والصلاحيات المخصصة لكل موظف/ة</div>
         </div>
       </div>
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">⚠️ الكادر بدون role_key محدد</div>
-          <span class="badge b-orange" id="noRoleCount">—</span>
+      <div style="display:flex;gap:8px;margin-bottom:20px">
+        <button class="btn btn-primary" id="roleTab1" onclick="switchRoleTab(1)">🗺️ خريطة الأدوار</button>
+        <button class="btn" id="roleTab2" onclick="switchRoleTab(2)" style="background:var(--bg2)">🔑 الصلاحيات الدقيقة</button>
+      </div>
+      <div id="roleTabContent1">
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-header"><div class="card-title">🔐 خريطة الأدوار · Role Map</div></div>
+          <div class="card-body"><div id="roleMap" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px"><div style="text-align:center;padding:24px;color:var(--text3)">⏳</div></div></div>
         </div>
-        <div class="tbl-scroll">
-          <table>
-            <thead>
-              <tr><th>الاسم</th><th>اسم المستخدم</th><th>role الحالي</th><th>تعيين</th></tr>
-            </thead>
-            <tbody id="noRoleBody">
-              <tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">⏳</td></tr>
-            </tbody>
-          </table>
+        <div class="card">
+          <div class="card-header"><div class="card-title">⚠️ الكادر بدون role_key محدد</div><span class="badge b-orange" id="noRoleCount">—</span></div>
+          <div class="tbl-scroll"><table><thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>role الحالي</th><th>تعيين</th></tr></thead><tbody id="noRoleBody"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">⏳</td></tr></tbody></table></div>
         </div>
+      </div>
+      <div id="roleTabContent2" style="display:none">
+        <div style="margin-bottom:16px;display:flex;gap:10px;align-items:center">
+          <input type="text" id="permSearchInput" placeholder="🔍 بحث باسم الموظف/ة أو اسم المستخدم..." oninput="filterPermTable(this.value)" style="flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg2);font-family:Tajawal,Arial,sans-serif;font-size:14px;color:var(--text)">
+          <button class="btn btn-primary btn-sm" onclick="loadPermissions()">🔄 تحديث</button>
+        </div>
+        <div id="permList"><div style="text-align:center;padding:32px;color:var(--text3)">اضغط تحديث لتحميل القائمة</div></div>
       </div>
     </div>
 
@@ -1561,6 +1562,72 @@ document.addEventListener('DOMContentLoaded', function() {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sync);else sync();
   new MutationObserver(sync).observe(document.documentElement,{childList:true,subtree:true});
 })();
+</script>
+
+<!-- Permission Modal -->
+<div class="modal-overlay" id="permModal">
+  <div class="modal" style="width:600px;max-width:95vw">
+    <div class="modal-header">
+      <div class="modal-title" id="permModalTitle">الصلاحيات</div>
+      <button class="modal-close" onclick="closeModal('permModal')">✕</button>
+    </div>
+    <div class="modal-body" id="permModalBody"></div>
+    <div class="modal-footer" style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+      <button class="btn" onclick="closeModal('permModal')">إلغاء</button>
+      <button class="btn btn-primary" onclick="savePermissions()">💾 حفظ الصلاحيات</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── الصلاحيات الدقيقة ── */
+if (typeof window.showToast !== 'function') {
+  window.showToast = function(message, type) {
+    var toast = document.createElement('div');
+    toast.textContent = message;
+    toast.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:10000;padding:12px 18px;border-radius:10px;background:' + (type === 'success' ? '#10B981' : '#EF4444') + ';color:#fff;font-family:Tajawal,Arial,sans-serif;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.18)';
+    document.body.appendChild(toast);
+    setTimeout(function() { toast.remove(); }, 3000);
+  };
+}
+var FINE_PERMISSIONS = {
+  'الصفحات الإضافية': {'page_analytics':'عرض التحليلات والإحصاءات','page_timetable_gen':'منشئ الجداول الذكي','page_school_timetable':'الجدول الشامل للمدرسة','page_staff_management':'إدارة الموظفين','page_field_trips':'إدارة الرحلات الميدانية','page_digital_safety':'السلامة الرقمية','page_achievements':'إدارة الإنجازات','page_behavior_report':'تقارير السلوك','page_meetings_admin':'إدارة الاجتماعات (مسؤول)'},
+  'الأقسام داخل البوابات': {'panel_achievements':'قسم الإنجازات في البوابة','panel_behavior':'قسم السلوك والمخالفات','panel_meetings':'قسم الاجتماعات','panel_analytics':'قسم التحليلات','panel_digital_safety':'قسم السلامة الرقمية','panel_broadcast':'قسم الإذاعة المدرسية','panel_news':'قسم الأخبار والإعلانات'},
+  'الإجراءات الحساسة': {'action_approve_reports':'اعتماد التقارير','action_edit_timetable':'تعديل الجداول','action_send_parent_msg':'إرسال رسائل لأولياء الأمور','action_view_all_students':'عرض جميع الطلاب (كل الصفوف)','action_export_data':'تصدير البيانات'}
+};
+var permSearchList = [];
+var currentPermStaffId = null;
+function switchRoleTab(n) {
+  document.getElementById('roleTabContent1').style.display = n === 1 ? '' : 'none';
+  document.getElementById('roleTabContent2').style.display = n === 2 ? '' : 'none';
+  document.getElementById('roleTab1').className = 'btn' + (n === 1 ? ' btn-primary' : '');
+  document.getElementById('roleTab2').className = 'btn' + (n === 2 ? ' btn-primary' : '');
+  if (n === 2) loadPermissions();
+}
+function filterPermTable(q) { q=(q||'').trim(); renderPermTable(permSearchList.filter(function(s){return !q || (s.name_ar||'').includes(q) || (s.username||'').includes(q);})); }
+async function loadPermissions() {
+  var wrap=document.getElementById('permList'); if(!wrap)return;
+  wrap.innerHTML='<div style="text-align:center;padding:24px;color:var(--text3)">جاري التحميل...</div>';
+  var res=await dbGet('staff_profiles','select=id,name_ar,username,role_key,extra_permissions,custom_panels&is_active=eq.true&order=name_ar.asc&limit=500');
+  permSearchList=res.data||[]; renderPermTable(permSearchList);
+}
+function renderPermTable(list) {
+  var wrap=document.getElementById('permList'); if(!wrap)return;
+  if(!list.length){wrap.innerHTML='<div style="text-align:center;padding:32px;color:var(--text3)">لا نتائج</div>';return;}
+  var roleLabels={teacher:'معلمة',principal:'مديرة',vice_principal:'نائبة المديرة',admin:'مدير النظام',nurse:'ممرضة',specialist:'أخصائية',social_worker:'أخصائية اجتماعية',secretary:'أمينة سر',technician:'تقنية',security:'أمن',coach:'مدربة',sub_teacher:'معلمة احتياطية'};
+  wrap.innerHTML='<div class="tbl-scroll"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--bg2)"><th style="padding:10px;text-align:right;font-size:13px">الاسم</th><th style="padding:10px;text-align:right;font-size:13px">الدور</th><th style="padding:10px;text-align:right;font-size:13px">الصلاحيات الإضافية</th><th style="padding:10px;text-align:center;font-size:13px">تعديل</th></tr></thead><tbody>'+list.map(function(s){var ep=s.extra_permissions||[];return '<tr style="border-bottom:1px solid var(--border)"><td style="padding:10px;font-size:13px;font-weight:700">'+(s.name_ar||'—')+'</td><td style="padding:10px"><span style="background:rgba(108,61,214,.1);color:#6C3DD6;padding:3px 8px;border-radius:20px;font-size:12px">'+(roleLabels[s.role_key]||s.role_key||'—')+'</span></td><td style="padding:10px;font-size:12px;color:var(--text3)">'+(ep.length?'<span style="color:#10B981;font-weight:700">✓ '+ep.length+' صلاحية</span>':'لا صلاحيات إضافية')+'</td><td style="padding:10px;text-align:center"><button class="btn btn-primary btn-sm" data-perm-id="'+s.id+'" style="font-size:12px">✏️ تعديل</button></td></tr>';}).join('')+'</tbody></table></div>';
+  wrap.querySelectorAll('[data-perm-id]').forEach(function(btn){btn.addEventListener('click',function(){var staff=permSearchList.find(function(x){return x.id===btn.dataset.permId;});if(staff)openPermModal(staff.id,staff.name_ar||'');});});
+}
+async function openPermModal(staffId,staffName) {
+  currentPermStaffId=staffId; var res=await dbGet('staff_profiles','select=extra_permissions,custom_panels&id=eq.'+encodeURIComponent(staffId));
+  var current=(res.data&&res.data[0])?(res.data[0].extra_permissions||[]):[]; var html='<div style="max-height:70vh;overflow-y:auto">';
+  Object.entries(FINE_PERMISSIONS).forEach(function(group){html+='<div style="margin-bottom:20px"><div style="font-size:13px;font-weight:800;color:#6C3DD6;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid rgba(108,61,214,.2)">'+group[0]+'</div>';Object.entries(group[1]).forEach(function(perm){html+='<label style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;cursor:pointer;transition:background .2s"><input type="checkbox" value="'+perm[0]+'" '+(current.includes(perm[0])?'checked':'')+' style="width:16px;height:16px;accent-color:#6C3DD6"><span style="font-size:13px">'+perm[1]+'</span><span style="font-size:11px;color:var(--text3);font-family:monospace;margin-right:auto">'+perm[0]+'</span></label>';});html+='</div>';});html+='</div>';
+  document.getElementById('permModalTitle').textContent='صلاحيات: '+staffName; document.getElementById('permModalBody').innerHTML=html; document.getElementById('permModal').classList.add('open');
+}
+async function savePermissions() {
+  if(!currentPermStaffId)return; var selected=[];document.querySelectorAll('#permModalBody input[type=checkbox]').forEach(function(cb){if(cb.checked)selected.push(cb.value);});
+  try { var res=await fetch((window.EduOS?.SB_URL||'')+'/rest/v1/staff_profiles?id=eq.'+encodeURIComponent(currentPermStaffId),{method:'PATCH',headers:{'apikey':window.EduOS?.SB_KEY||'','Authorization':'Bearer '+_getJWT(),'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({extra_permissions:selected})}); if(res.ok||res.status===204){closeModal('permModal');showToast('✅ تم حفظ الصلاحيات بنجاح','success');loadPermissions();}else showToast('❌ فشل حفظ الصلاحيات','error'); } catch(e){showToast('❌ فشل حفظ الصلاحيات','error');}
+}
 </script>
 </body>
 </html>
