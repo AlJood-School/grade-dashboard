@@ -4467,33 +4467,45 @@ function closeBehDetail() {
 // ── DUTY SCHEDULE ──
 var _dutyData = null;
 var DUTY_DAYS = ['الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
-var DUTY_ZONES = ['المدخل الرئيسي','الممر العلوي','ساحة الروضة','ساحة الحلقة الأولى','ساحة الحلقة الثانية','الكافتيريا'];
+var DUTY_DAYS = ['الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+var DUTY_SLOTS = [
+  { key: 'morning_buses_c1',  label: '🚌 حافلات — حلقة أولى',  time: '6:40',  section: 'morning' },
+  { key: 'morning_buses_c2',  label: '🚌 حافلات — حلقة ثانية', time: '7:40',  section: 'morning' },
+  { key: 'morning_cars_c1',   label: '🚗 سيارات — حلقة أولى',  time: '6:40',  section: 'morning' },
+  { key: 'morning_cars_c2',   label: '🚗 سيارات — حلقة ثانية', time: '7:40',  section: 'morning' },
+  { key: 'afternoon_cars_c1', label: '🚗 سيارات — حلقة أولى',  time: '1:20',  section: 'afternoon' },
+  { key: 'afternoon_cars_c2', label: '🚗 سيارات — حلقة ثانية', time: '2:40',  section: 'afternoon' },
+  { key: 'afternoon_buses_c1',label: '🚌 حافلات — حلقة أولى',  time: '1:20',  section: 'afternoon' },
+  { key: 'afternoon_buses_c2',label: '🚌 حافلات — حلقة ثانية', time: '2:40',  section: 'afternoon' }
+];
 
 async function loadDutySchedule() {
   var grid = document.getElementById('dutyGrid');
   if (!grid) return;
-  grid.innerHTML = '<div style="text-align:center;padding:24px;color:#9CA3AF">&#x23F3; جارٍ التحميل...</div>';
+  grid.innerHTML = '<div style="text-align:center;padding:24px;color:#9CA3AF">⏳ جارٍ التحميل...</div>';
   try {
-    // حساب week_key للأسبوع الحالي
-    var now = new Date();
-    var mon = new Date(now);
-    var day = now.getDay();
-    var diff = day === 0 ? -6 : 1 - day;
-    mon.setDate(now.getDate() + diff);
-    var wk = mon.toISOString().split('T')[0];
-    var res = await fetch(SB_URL + '/rest/v1/duty_weekly_schedule?week_key=eq.' + wk + '&select=*&limit=1', {
-      headers: { apikey: SB_KEY, 'Authorization': 'Bearer ' + AUTH_TOKEN }
-    });
+    // أولاً: جرّب أسبوع محدد من القائمة
+    var selWeek = (document.getElementById('dutyWeekSel')||{}).value || '';
+    var templateKey = '2026-2027-S1-FIXED';
+    var url = SB_URL + '/rest/v1/duty_weekly_schedule?week_key=eq.' + encodeURIComponent(selWeek || templateKey) + '&select=*&limit=1';
+    var res = await fetch(url, { headers: { apikey: SB_KEY, 'Authorization': 'Bearer ' + AUTH_TOKEN } });
     var data = await res.json();
+    // إذا لم يُوجد الأسبوع المحدد، ارجع للقالب الثابت
+    if ((!data || !data.length) && selWeek) {
+      var res2 = await fetch(SB_URL + '/rest/v1/duty_weekly_schedule?week_key=eq.' + encodeURIComponent(templateKey) + '&select=*&limit=1', {
+        headers: { apikey: SB_KEY, 'Authorization': 'Bearer ' + AUTH_TOKEN }
+      });
+      data = await res2.json();
+    }
     if (data && data.length && data[0].schedule) {
       _dutyData = data[0];
       renderDutyGrid(data[0].schedule);
     } else {
       _dutyData = null;
-      grid.innerHTML = '<div style="text-align:center;padding:48px;color:#9CA3AF"><div style="font-size:48px;margin-bottom:12px">&#x1F6E1;</div><div style="font-size:14px;margin-bottom:16px">لا يوجد جدول مناوبة لهذا الأسبوع</div><button class="btn btn-primary" onclick="generateDutySchedule()">&#x2728; إنشاء جدول تلقائي</button></div>';
+      grid.innerHTML = '<div style="text-align:center;padding:48px;color:#9CA3AF"><div style="font-size:48px;margin-bottom:12px">🛡</div><div style="font-size:14px;margin-bottom:16px">لا يوجد جدول مناوبة</div></div>';
       document.getElementById('dutyKpiTotal').textContent = '0';
       document.getElementById('dutyKpiPresent').textContent = '0';
-      document.getElementById('dutyKpiZones').textContent = DUTY_ZONES.length;
+      document.getElementById('dutyKpiZones').textContent = '0';
     }
   } catch(e) {
     grid.innerHTML = '<div style="color:#EF4444;padding:16px">خطأ: ' + e.message + '</div>';
@@ -4505,79 +4517,76 @@ function renderDutyGrid(schedule) {
   if (!grid) return;
   var totalCount = 0;
   var staffSet = new Set();
-  var html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:600px">';
-  html += '<thead><tr style="background:#F9FAFB"><th style="padding:10px;text-align:right;font-weight:700">المنطقة / Zone</th>';
-  DUTY_DAYS.forEach(function(d) { html += '<th style="padding:10px;text-align:center;font-weight:700">' + d + '</th>'; });
+
+  var html = '<div style="overflow-x:auto">';
+  // قسم الصباح
+  html += '<div style="margin-bottom:24px"><div style="background:#FEF3C7;border-radius:10px;padding:10px 16px;font-weight:700;color:#92400E;margin-bottom:8px;font-size:14px">🌅 بوابة دخول الطلاب — الفترة الصباحية</div>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:700px">';
+  html += '<thead><tr style="background:#FFFBEB"><th style="padding:10px;text-align:right;font-weight:700;border-bottom:2px solid #F59E0B;min-width:160px">الفترة</th>';
+  DUTY_DAYS.forEach(function(d) { html += '<th style="padding:10px;text-align:center;font-weight:700;border-bottom:2px solid #F59E0B">' + d + '</th>'; });
   html += '</tr></thead><tbody>';
-  DUTY_ZONES.forEach(function(zone) {
-    html += '<tr style="border-bottom:1px solid #F3F4F6"><td style="padding:10px;font-weight:700;color:#374151">' + zone + '</td>';
+  DUTY_SLOTS.filter(function(s){ return s.section==='morning'; }).forEach(function(slot, idx) {
+    var bg = idx%2===0 ? '#fff' : '#FAFAFA';
+    html += '<tr style="border-bottom:1px solid #F3F4F6;background:' + bg + '"><td style="padding:10px;font-weight:600;color:#374151">' + slot.label + '<br><span style="color:#9CA3AF;font-size:11px">' + slot.time + '</span></td>';
     DUTY_DAYS.forEach(function(day) {
-      var assignments = (schedule[day] || []).filter(function(a) { return a.zone === zone; });
-      html += '<td style="padding:8px;text-align:center">';
-      if (assignments.length) {
-        assignments.forEach(function(a) {
-          staffSet.add(a.staff_name || a.staff_id);
-          totalCount++;
-          html += '<div style="background:#EDE9FE;color:#6C3DD6;border-radius:8px;padding:4px 8px;font-size:12px;font-weight:600;margin:2px">' + (a.staff_name || a.staff_id) + '</div>';
+      var names = (schedule[day] && schedule[day][slot.key]) || [];
+      html += '<td style="padding:8px;text-align:center;vertical-align:top">';
+      if (names.length) {
+        names.forEach(function(n) {
+          staffSet.add(n); totalCount++;
+          html += '<div style="background:#EDE9FE;color:#6C3DD6;border-radius:8px;padding:3px 8px;font-size:11px;font-weight:600;margin:2px;white-space:nowrap">' + n + '</div>';
         });
       } else {
-        html += '<div style="color:#D1D5DB;font-size:18px" onclick="addDutySlot(\'' + day + '\',\'' + zone + '\')">&#x2795;</div>';
+        html += '<div style="color:#E5E7EB;font-size:18px">—</div>';
       }
       html += '</td>';
     });
     html += '</tr>';
   });
   html += '</tbody></table></div>';
+
+  // قسم المساء
+  html += '<div><div style="background:#D1FAE5;border-radius:10px;padding:10px 16px;font-weight:700;color:#065F46;margin-bottom:8px;font-size:14px">🌆 بوابة خروج الطلاب — الفترة المسائية</div>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:700px">';
+  html += '<thead><tr style="background:#F0FDF4"><th style="padding:10px;text-align:right;font-weight:700;border-bottom:2px solid #10B981;min-width:160px">الفترة</th>';
+  DUTY_DAYS.forEach(function(d) { html += '<th style="padding:10px;text-align:center;font-weight:700;border-bottom:2px solid #10B981">' + d + '</th>'; });
+  html += '</tr></thead><tbody>';
+  DUTY_SLOTS.filter(function(s){ return s.section==='afternoon'; }).forEach(function(slot, idx) {
+    var bg = idx%2===0 ? '#fff' : '#F0FDF4';
+    html += '<tr style="border-bottom:1px solid #F3F4F6;background:' + bg + '"><td style="padding:10px;font-weight:600;color:#374151">' + slot.label + '<br><span style="color:#9CA3AF;font-size:11px">' + slot.time + '</span></td>';
+    DUTY_DAYS.forEach(function(day) {
+      var names = (schedule[day] && schedule[day][slot.key]) || [];
+      html += '<td style="padding:8px;text-align:center;vertical-align:top">';
+      if (names.length) {
+        names.forEach(function(n) {
+          staffSet.add(n); totalCount++;
+          html += '<div style="background:#D1FAE5;color:#065F46;border-radius:8px;padding:3px 8px;font-size:11px;font-weight:600;margin:2px;white-space:nowrap">' + n + '</div>';
+        });
+      } else {
+        html += '<div style="color:#E5E7EB;font-size:18px">—</div>';
+      }
+      html += '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+
+  // ملاحظة
+  if (schedule['ملاحظة']) {
+    html += '<div style="margin-top:16px;padding:12px 16px;background:#FEF9C3;border-radius:10px;font-size:12px;color:#713F12;border-right:4px solid #F59E0B">📌 ' + schedule['ملاحظة'] + '</div>';
+  }
+
+  html += '</div>';
   grid.innerHTML = html;
   document.getElementById('dutyKpiTotal').textContent = totalCount;
   document.getElementById('dutyKpiPresent').textContent = staffSet.size;
-  document.getElementById('dutyKpiZones').textContent = DUTY_ZONES.length;
-}
-
-async function generateDutySchedule() {
-  if (!confirm('سيتم إنشاء جدول مناوبة تلقائي عادل لهذا الأسبوع. هل توافقين؟')) return;
-  var grid = document.getElementById('dutyGrid');
-  if (grid) grid.innerHTML = '<div style="text-align:center;padding:24px;color:#9CA3AF">&#x23F3; جارٍ التوليد الذكي...</div>';
-  try {
-    // جلب الكادر النشط
-    var res = await fetch(SB_URL + '/rest/v1/staff_profiles?is_active=eq.true&role_key=neq.principal&role_key=neq.admin&select=staff_db_id,name_ar&order=name_ar.asc&limit=60', {
-      headers: { apikey: SB_KEY, 'Authorization': 'Bearer ' + AUTH_TOKEN }
-    });
-    var staff = await res.json();
-    if (!staff || staff.length === 0) { showToast('لا يوجد كادر للتوزيع', 'error'); return; }
-    var schedule = {};
-    var staffIdx = 0;
-    DUTY_DAYS.forEach(function(day) {
-      schedule[day] = [];
-      DUTY_ZONES.forEach(function(zone) {
-        var s = staff[staffIdx % staff.length];
-        schedule[day].push({ staff_id: s.staff_db_id, staff_name: s.name_ar, zone: zone, time_from: '07:00', time_to: '13:30', status: 'scheduled' });
-        staffIdx++;
-      });
-    });
-    var now = new Date();
-    var mon = new Date(now);
-    var day = now.getDay();
-    var diff = day === 0 ? -6 : 1 - day;
-    mon.setDate(now.getDate() + diff);
-    var wk = mon.toISOString().split('T')[0];
-    var saveRes = await fetch(SB_URL + '/rest/v1/duty_weekly_schedule', {
-      method: 'POST',
-      headers: { apikey: SB_KEY, 'Authorization': 'Bearer ' + AUTH_TOKEN, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify({ week_key: wk, schedule: schedule, generated_at: new Date().toISOString() })
-    });
-    if (saveRes.ok || saveRes.status === 201 || saveRes.status === 204) {
-      _dutyData = { week_key: wk, schedule: schedule };
-      renderDutyGrid(schedule);
-      showToast('✅ تم إنشاء جدول المناوبات تلقائياً', 'success');
-    } else showToast('خطأ في حفظ الجدول', 'error');
-  } catch(e) { showToast('خطأ: ' + e.message, 'error'); }
+  document.getElementById('dutyKpiZones').textContent = '4';
 }
 
 async function saveDutySchedule() {
-  if (!_dutyData) { showToast('لا يوجد جدول لحفظه', 'error'); return; }
-  showToast('✅ الجدول محفوظ', 'success');
+  showToast('✅ الجدول محفوظ من الملف الرسمي', 'success');
 }
+
 
 // ── LEAVE REQUESTS ──
 async function loadLeaveRequests() {
