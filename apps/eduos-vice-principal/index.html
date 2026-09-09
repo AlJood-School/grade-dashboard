@@ -380,6 +380,64 @@ body{overflow:hidden}
         <div class="sec-title">&#x1F4DD; المعلمون البدلاء المتاحون / Available Substitutes</div>
         <div id="subsAvailList"><div class="skeleton" style="height:80px"></div></div>
       </div>
+      <!-- LEAVE REQUESTS -->
+      <div class="card" style="margin-top:18px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="sec-title" style="margin-bottom:0">&#x1F4C4; طلبات الإجازة الرسمية / Leave Requests</div>
+          <div style="display:flex;gap:8px">
+            <select id="leaveStatusFilter" onchange="loadLeaveRequests()" style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'Tajawal',Arial,sans-serif">
+              <option value="">كل الحالات</option>
+              <option value="pending">بانتظار الموافقة</option>
+              <option value="approved">معتمدة</option>
+              <option value="rejected">مرفوضة</option>
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="showAddLeaveModal()">&#x2795; إضافة إجازة</button>
+          </div>
+        </div>
+        <div id="leaveList"><div class="skeleton" style="height:120px"></div></div>
+      </div>
+    </div>
+    <!-- ADD LEAVE MODAL -->
+    <div id="leaveModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;display:none;align-items:center;justify-content:center">
+      <div style="background:#fff;border-radius:16px;padding:24px;width:540px;max-width:95vw">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+          <div style="font-size:16px;font-weight:800">&#x1F4C4; طلب إجازة رسمية</div>
+          <button onclick="document.getElementById('leaveModal').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer">&#x2715;</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#6B7280;display:block;margin-bottom:4px">عضو الكادر</label>
+            <select id="lvStaffSel" style="width:100%;padding:8px;border:1px solid #D1D5DB;border-radius:8px;font-family:'Tajawal',Arial,sans-serif;font-size:13px"><option value="">-- اختر --</option></select>
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#6B7280;display:block;margin-bottom:4px">نوع الإجازة</label>
+            <select id="lvType" style="width:100%;padding:8px;border:1px solid #D1D5DB;border-radius:8px;font-family:'Tajawal',Arial,sans-serif;font-size:13px">
+              <option value="سنوية">سنوية / Annual</option>
+              <option value="مرضية">مرضية / Sick</option>
+              <option value="وضع">وضع / Maternity</option>
+              <option value="طارئة">طارئة / Emergency</option>
+              <option value="دراسية">دراسية / Study</option>
+              <option value="أخرى">أخرى / Other</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#6B7280;display:block;margin-bottom:4px">من تاريخ</label>
+            <input type="date" id="lvFrom" style="width:100%;padding:8px;border:1px solid #D1D5DB;border-radius:8px;font-family:'Tajawal',Arial,sans-serif;font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#6B7280;display:block;margin-bottom:4px">إلى تاريخ</label>
+            <input type="date" id="lvTo" style="width:100%;padding:8px;border:1px solid #D1D5DB;border-radius:8px;font-family:'Tajawal',Arial,sans-serif;font-size:13px">
+          </div>
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:12px;font-weight:700;color:#6B7280;display:block;margin-bottom:4px">السبب / Reason</label>
+          <textarea id="lvReason" rows="2" style="width:100%;padding:8px;border:1px solid #D1D5DB;border-radius:8px;font-family:'Tajawal',Arial,sans-serif;font-size:13px;resize:vertical"></textarea>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button onclick="document.getElementById('leaveModal').style.display='none'" class="btn">إلغاء</button>
+          <button onclick="saveLeaveRequest()" class="btn btn-primary">&#x1F4BE; حفظ الطلب</button>
+        </div>
+      </div>
     </div>
 
     <!-- TIMETABLE -->
@@ -1580,6 +1638,7 @@ async function loadAbsencePanel() {
   }
   await loadTodayAbsences();
   await loadAvailableSubs();
+  await loadLeaveRequests();
 }
 
 async function populateAbsStaffDD() {
@@ -4360,6 +4419,104 @@ async function updateBehStatus(id, newStatus) {
 
 function closeBehDetail() {
   document.getElementById('behDetailModal').style.display = 'none';
+}
+
+// ── LEAVE REQUESTS ──
+async function loadLeaveRequests() {
+  var list = document.getElementById('leaveList');
+  if (!list) return;
+  var statusF = (document.getElementById('leaveStatusFilter')||{}).value || '';
+  var url = SB_URL + '/rest/v1/leaves?order=created_at.desc&limit=50';
+  if (statusF) url += '&status=eq.' + encodeURIComponent(statusF);
+  url += '&select=id,staff_id,staff_name,leave_type,date_from,date_to,duration_days,reason,status,approved_by,notes';
+  try {
+    var res = await fetch(url, { headers: { apikey: SB_KEY, 'Authorization': 'Bearer ' + AUTH_TOKEN } });
+    var data = await res.json();
+    if (!data || !data.length) { list.innerHTML = '<div style="text-align:center;padding:24px;color:#9CA3AF">لا توجد طلبات إجازة</div>'; return; }
+    var stColors = { pending: '#F59E0B', approved: '#10B981', rejected: '#EF4444' };
+    var stLabels = { pending: 'بانتظار الموافقة', approved: 'معتمدة', rejected: 'مرفوضة' };
+    var html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
+    html += '<thead><tr style="background:#F9FAFB"><th style="padding:10px;text-align:right">الاسم</th><th style="padding:10px;text-align:right">النوع</th><th style="padding:10px;text-align:right">من</th><th style="padding:10px;text-align:right">إلى</th><th style="padding:10px;text-align:center">الأيام</th><th style="padding:10px;text-align:center">الحالة</th><th style="padding:10px;text-align:center">إجراء</th></tr></thead><tbody>';
+    data.forEach(function(l) {
+      var col = stColors[l.status] || '#6B7280';
+      var lbl = stLabels[l.status] || l.status;
+      html += '<tr style="border-bottom:1px solid #F3F4F6">';
+      html += '<td style="padding:10px;font-weight:700">' + (l.staff_name||l.staff_id||'—') + '</td>';
+      html += '<td style="padding:10px">' + (l.leave_type||'—') + '</td>';
+      html += '<td style="padding:10px">' + (l.date_from||'—') + '</td>';
+      html += '<td style="padding:10px">' + (l.date_to||'—') + '</td>';
+      html += '<td style="padding:10px;text-align:center;font-weight:700">' + (l.duration_days||'—') + '</td>';
+      html += '<td style="padding:10px;text-align:center"><span style="background:' + col + '22;color:' + col + ';padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700">' + lbl + '</span></td>';
+      html += '<td style="padding:10px;text-align:center">';
+      if (l.status === 'pending') {
+        html += '<button onclick="approveLeave(\'' + l.id + '\',\'approved\')" style="background:#10B981;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;margin-left:4px">✅ اعتماد</button>';
+        html += '<button onclick="approveLeave(\'' + l.id + '\',\'rejected\')" style="background:#EF4444;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer">❌ رفض</button>';
+      } else {
+        html += '<span style="color:#9CA3AF;font-size:12px">—</span>';
+      }
+      html += '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    list.innerHTML = html;
+  } catch(e) { list.innerHTML = '<div style="color:#EF4444;padding:12px">خطأ: ' + e.message + '</div>'; }
+}
+
+async function approveLeave(id, status) {
+  var user = JSON.parse(sessionStorage.getItem('edoos_user')||'{}');
+  try {
+    var res = await fetch(SB_URL + '/rest/v1/leaves?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { apikey: SB_KEY, 'Authorization': 'Bearer ' + AUTH_TOKEN, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ status: status, approved_by: user.name_ar || user.name || user.id, approved_at: new Date().toISOString() })
+    });
+    if (res.ok || res.status === 204) { loadLeaveRequests(); showToast((status === 'approved' ? '✅' : '❌') + ' تم ' + (status === 'approved' ? 'اعتماد' : 'رفض') + ' الإجازة', status === 'approved' ? 'success' : 'error'); }
+    else showToast('خطأ في التحديث', 'error');
+  } catch(e) { showToast('خطأ: ' + e.message, 'error'); }
+}
+
+function showAddLeaveModal() {
+  var modal = document.getElementById('leaveModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  // تحميل قائمة الكادر
+  var sel = document.getElementById('lvStaffSel');
+  if (sel && sel.options.length <= 1) {
+    var absSel = document.getElementById('absStaffSel');
+    if (absSel) {
+      Array.from(absSel.options).forEach(function(op) {
+        if (op.value) { var o = document.createElement('option'); o.value = op.value; o.textContent = op.textContent; sel.appendChild(o); }
+      });
+    }
+  }
+}
+
+async function saveLeaveRequest() {
+  var staffSel = document.getElementById('lvStaffSel');
+  var staffName = staffSel ? staffSel.options[staffSel.selectedIndex]?.textContent : '';
+  var payload = {
+    staff_id: (document.getElementById('lvStaffSel')||{}).value || '',
+    staff_name: staffName,
+    leave_type: (document.getElementById('lvType')||{}).value || '',
+    date_from: (document.getElementById('lvFrom')||{}).value || '',
+    date_to: (document.getElementById('lvTo')||{}).value || '',
+    reason: (document.getElementById('lvReason')||{}).value || '',
+    status: 'pending'
+  };
+  if (!payload.staff_id || !payload.date_from || !payload.date_to) { showToast('يرجى إدخال كل البيانات الإلزامية', 'error'); return; }
+  var d1 = new Date(payload.date_from), d2 = new Date(payload.date_to);
+  payload.duration_days = Math.max(1, Math.round((d2-d1)/(1000*60*60*24))+1);
+  try {
+    var res = await fetch(SB_URL + '/rest/v1/leaves', {
+      method: 'POST',
+      headers: { apikey: SB_KEY, 'Authorization': 'Bearer ' + AUTH_TOKEN, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok || res.status === 201) {
+      document.getElementById('leaveModal').style.display = 'none';
+      showToast('✅ تم حفظ طلب الإجازة بنجاح', 'success');
+      loadLeaveRequests();
+    } else showToast('خطأ في الحفظ', 'error');
+  } catch(e) { showToast('خطأ: ' + e.message, 'error'); }
 }
 </script>
 </body>
