@@ -274,7 +274,13 @@ body{overflow:hidden}
       <span class="snav-icon">🛡️</span>
       <span class="snav-text"><span class="snav-label">السلامة الرقمية</span><span class="snav-sub">Digital Safety</span></span>
     </button>
-  </nav>
+  
+    <button class="snav" data-panel="counselor" id="nav-counselor" onclick="showPanel('counselor',this);loadCounselorOverview()">
+      <span class="snav-icon">🤝</span>
+      <span class="snav-text"><span class="snav-label">الأخصائية الاجتماعية</span><span class="snav-sub">Counselor</span></span>
+      <span class="snav-badge" id="counselorBadge" style="display:none">0</span>
+    </button>
+    </nav>
   <div class="sidebar-footer">
     <button class="logout-btn" id="logoutBtn">&#x1F6AA; تسجيل الخروج / Logout</button>
   </div>
@@ -3131,6 +3137,184 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 });
+</script>
+
+
+<!-- PANEL: COUNSELOR OVERVIEW -->
+<div class="panel" id="panel-counselor" style="display:none">
+  <p class="sec-title">🤝 الأخصائية الاجتماعية</p>
+
+  <!-- KPIs -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px" id="counselorKpis">
+    <div style="background:#fff;border-radius:14px;padding:18px;text-align:center;border:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+      <div style="font-size:28px;font-weight:900;color:#6C3DD6" id="kpiOpenCases">—</div>
+      <div style="font-size:12px;color:#6b7280;margin-top:4px">حالات مفتوحة</div>
+    </div>
+    <div style="background:#fff;border-radius:14px;padding:18px;text-align:center;border:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+      <div style="font-size:28px;font-weight:900;color:#f59e0b" id="kpiUrgent">—</div>
+      <div style="font-size:12px;color:#6b7280;margin-top:4px">حالات عاجلة</div>
+    </div>
+    <div style="background:#fff;border-radius:14px;padding:18px;text-align:center;border:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+      <div style="font-size:28px;font-weight:900;color:#10b981" id="kpiClosedMonth">—</div>
+      <div style="font-size:12px;color:#6b7280;margin-top:4px">أُغلقت هذا الشهر</div>
+    </div>
+    <div style="background:#fff;border-radius:14px;padding:18px;text-align:center;border:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+      <div style="font-size:28px;font-weight:900;color:#3b82f6" id="kpiPendingReports">—</div>
+      <div style="font-size:12px;color:#6b7280;margin-top:4px">تقارير معلقة</div>
+    </div>
+  </div>
+
+  <!-- زر فتح البوابة الكاملة -->
+  <div style="display:flex;gap:12px;margin-bottom:20px;align-items:center">
+    <a href="../eduos-counselor/" target="_blank" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border-radius:10px;text-decoration:none;font-weight:700;font-size:13px">🔗 فتح بوابة الأخصائية الكاملة</a>
+    <button class="btn btn-primary" onclick="loadCounselorOverview()" style="font-size:12px;padding:8px 14px">🔄 تحديث</button>
+  </div>
+
+  <!-- الحالات العاجلة -->
+  <div style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:18px;margin-bottom:20px">
+    <div style="font-weight:800;font-size:14px;color:#1e293b;margin-bottom:14px;display:flex;align-items:center;gap:8px">
+      <span style="background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:20px;font-size:12px">⚠️ عاجل</span>
+      الحالات التي تحتاج متابعة
+    </div>
+    <div id="counselorUrgentList">
+      <div style="text-align:center;color:#9ca3af;padding:20px">جارٍ التحميل...</div>
+    </div>
+  </div>
+
+  <!-- التصعيدات الواردة من الأخصائية -->
+  <div style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:18px;margin-bottom:20px">
+    <div style="font-weight:800;font-size:14px;color:#1e293b;margin-bottom:14px">📨 رسائل التصعيد من الأخصائية</div>
+    <div id="counselorEscalations">
+      <div style="text-align:center;color:#9ca3af;padding:20px">جارٍ التحميل...</div>
+    </div>
+  </div>
+
+  <!-- آخر الحالات -->
+  <div style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:18px">
+    <div style="font-weight:800;font-size:14px;color:#1e293b;margin-bottom:14px">📋 آخر الحالات المسجّلة</div>
+    <div id="counselorRecentCases">
+      <div style="text-align:center;color:#9ca3af;padding:20px">جارٍ التحميل...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+async function loadCounselorOverview() {
+  var SB_URL = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+  var SB_KEY = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+  if (!SB_URL || !SB_KEY) return;
+  var jwt = sessionStorage.getItem('sb_jwt') || SB_KEY;
+
+  function hdrs() {
+    return { apikey: SB_KEY, Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json' };
+  }
+
+  try {
+    // جلب إحصاءات الحالات
+    var [openRes, urgentRes, closedRes, pendingRes, escalRes] = await Promise.all([
+      fetch(SB_URL + '/rest/v1/student_cases?status=eq.open&select=id', { headers: hdrs() }),
+      fetch(SB_URL + '/rest/v1/student_cases?priority=eq.urgent&status=neq.closed&select=id,student_name,class_name,case_type,created_at', { headers: hdrs() }),
+      fetch(SB_URL + '/rest/v1/student_cases?status=eq.closed&select=id', { headers: hdrs() }),
+      fetch(SB_URL + '/rest/v1/counselor_reports?status=eq.pending_approval&select=id', { headers: hdrs() }),
+      fetch(SB_URL + '/rest/v1/admin_messages?message_type=eq.escalation&status=eq.pending&select=id,subject,from_name,created_at&order=created_at.desc&limit=5', { headers: hdrs() })
+    ]);
+
+    var openData = openRes.ok ? await openRes.json() : [];
+    var urgentData = urgentRes.ok ? await urgentRes.json() : [];
+    var closedData = closedRes.ok ? await closedRes.json() : [];
+    var pendingData = pendingRes.ok ? await pendingRes.json() : [];
+    var escalData = escalRes.ok ? await escalRes.json() : [];
+
+    // KPIs
+    var kpiOpen = document.getElementById('kpiOpenCases');
+    var kpiUrg = document.getElementById('kpiUrgent');
+    var kpiClosed = document.getElementById('kpiClosedMonth');
+    var kpiPending = document.getElementById('kpiPendingReports');
+    var badge = document.getElementById('counselorBadge');
+
+    if (kpiOpen) kpiOpen.textContent = openData.length;
+    if (kpiUrg) kpiUrg.textContent = urgentData.length;
+    if (kpiClosed) kpiClosed.textContent = closedData.length;
+    if (kpiPending) kpiPending.textContent = pendingData.length;
+
+    var total = urgentData.length + pendingData.length;
+    if (badge) {
+      badge.textContent = total;
+      badge.style.display = total > 0 ? 'flex' : 'none';
+    }
+
+    // الحالات العاجلة
+    var urgList = document.getElementById('counselorUrgentList');
+    if (urgList) {
+      if (!urgentData.length) {
+        urgList.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:16px">لا توجد حالات عاجلة ✅</div>';
+      } else {
+        var html = '';
+        urgentData.forEach(function(c) {
+          html += '<div style="display:flex;align-items:center;gap:12px;padding:10px;border-bottom:1px solid #f1f5f9">';
+          html += '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">عاجل</span>';
+          html += '<div style="flex:1"><div style="font-weight:700;font-size:13px">' + (c.student_name || '—') + '</div>';
+          html += '<div style="font-size:11px;color:#6b7280">' + (c.class_name || '') + ' · ' + (c.case_type || '') + '</div></div>';
+          html += '<div style="font-size:11px;color:#9ca3af">' + (c.created_at ? new Date(c.created_at).toLocaleDateString('ar-AE') : '') + '</div></div>';
+        });
+        urgList.innerHTML = html;
+      }
+    }
+
+    // التصعيدات
+    var escalEl = document.getElementById('counselorEscalations');
+    if (escalEl) {
+      if (!escalData.length) {
+        escalEl.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:16px">لا توجد تصعيدات معلقة ✅</div>';
+      } else {
+        var html2 = '';
+        escalData.forEach(function(m) {
+          html2 += '<div style="display:flex;align-items:center;gap:12px;padding:10px;border-bottom:1px solid #f1f5f9">';
+          html2 += '<span style="font-size:20px">📨</span>';
+          html2 += '<div style="flex:1"><div style="font-weight:700;font-size:13px">' + (m.subject || 'تصعيد') + '</div>';
+          html2 += '<div style="font-size:11px;color:#6b7280">من: ' + (m.from_name || '—') + '</div></div>';
+          html2 += '<div style="font-size:11px;color:#9ca3af">' + (m.created_at ? new Date(m.created_at).toLocaleDateString('ar-AE') : '') + '</div></div>';
+        });
+        escalEl.innerHTML = html2;
+      }
+    }
+
+    // آخر الحالات
+    var recRes = await fetch(SB_URL + '/rest/v1/student_cases?select=id,student_name,class_name,case_type,status,priority,created_at&order=created_at.desc&limit=8', { headers: hdrs() });
+    var recData = recRes.ok ? await recRes.json() : [];
+    var recEl = document.getElementById('counselorRecentCases');
+    if (recEl) {
+      if (!recData.length) {
+        recEl.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:16px">لا توجد حالات مسجلة</div>';
+      } else {
+        var statusMap = { open: ['مفتوحة', '#3b82f6'], in_progress: ['قيد المتابعة', '#f59e0b'], closed: ['مغلقة', '#10b981'], referred: ['محالة', '#8b5cf6'] };
+        var priorMap = { low: ['منخفضة', '#9ca3af'], medium: ['متوسطة', '#3b82f6'], high: ['عالية', '#f59e0b'], urgent: ['عاجلة', '#ef4444'] };
+        var html3 = '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+        html3 += '<thead><tr style="background:#f8fafc">';
+        ['الطالبة', 'الصف', 'النوع', 'الأولوية', 'الحالة', 'التاريخ'].forEach(function(h) {
+          html3 += '<th style="padding:8px 12px;text-align:right;color:#374151;font-weight:700;font-size:12px">' + h + '</th>';
+        });
+        html3 += '</tr></thead><tbody>';
+        recData.forEach(function(c, idx) {
+          var sm = statusMap[c.status] || [c.status, '#9ca3af'];
+          var pm = priorMap[c.priority] || [c.priority, '#9ca3af'];
+          html3 += '<tr style="border-bottom:1px solid #f1f5f9;background:' + (idx % 2 === 0 ? '#fff' : '#f8fafc') + '">';
+          html3 += '<td style="padding:8px 12px;font-weight:600">' + (c.student_name || '—') + '</td>';
+          html3 += '<td style="padding:8px 12px;color:#6b7280">' + (c.class_name || '—') + '</td>';
+          html3 += '<td style="padding:8px 12px">' + (c.case_type || '—') + '</td>';
+          html3 += '<td style="padding:8px 12px"><span style="background:' + pm[1] + '22;color:' + pm[1] + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">' + pm[0] + '</span></td>';
+          html3 += '<td style="padding:8px 12px"><span style="background:' + sm[1] + '22;color:' + sm[1] + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">' + sm[0] + '</span></td>';
+          html3 += '<td style="padding:8px 12px;color:#9ca3af;font-size:11px">' + (c.created_at ? new Date(c.created_at).toLocaleDateString('ar-AE') : '—') + '</td>';
+          html3 += '</tr>';
+        });
+        html3 += '</tbody></table>';
+        recEl.innerHTML = html3;
+      }
+    }
+  } catch(e) {
+    console.error('counselor overview error', e);
+  }
+}
 </script>
 
 <script>
