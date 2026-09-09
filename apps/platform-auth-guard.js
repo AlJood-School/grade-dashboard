@@ -167,7 +167,7 @@
     'eduos-kg':                   ['teacher', 'sub_teacher', 'principal', 'vice_principal'],
     'eduos-library':              ['technician', 'teacher', 'principal', 'admin', 'secretary'],
     'eduos-cafeteria':            ['admin', 'principal', 'secretary'],
-    'eduos-financial':            ['admin', 'principal'],
+    'eduos-financial':            ['admin', 'principal', 'vice_principal'],
     'eduos-maintenance':          ['technician', 'admin', 'principal'],
     'eduos-transport':            ['admin', 'principal', 'secretary'],
     'eduos-forms':                ['teacher','sub_teacher','principal','vice_principal','admin','specialist','nurse','secretary'],
