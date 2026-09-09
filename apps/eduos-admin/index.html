@@ -216,6 +216,10 @@ tr:hover td{background:#F8FAFC;}
       <div class="snav-icon">🛡️</div>
       <div><div class="snav-label">السلامة الرقمية</div><div class="snav-sub">برنامج أقدر</div></div>
     </button>
+    <button class="snav nav-btn" id="nav-admissions" data-panel="admissions" onclick="switchPanel('admissions')">
+      <span class="snav-icon nav-icon">🎓</span>
+      <span><span class="snav-label nav-label">القبول والتسجيل</span><span class="snav-sub nav-sub">Admissions</span></span>
+    </button>
   </nav>
 
   <!-- MAIN -->
@@ -447,6 +451,25 @@ tr:hover td{background:#F8FAFC;}
             <div style="text-align:center;padding:24px;color:var(--text3)">⏳ تحميل…</div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-admissions" style="display:none">
+      <div class="card" style="margin-bottom:18px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <div style="font-size:16px;font-weight:800">🎓 القبول والتسجيل / Admissions</div>
+          <div style="display:flex;gap:8px">
+            <select id="admStatusFilter" onchange="loadAdmissions()" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px">
+              <option value="">كل الحالات</option>
+              <option value="pending">بانتظار المراجعة</option>
+              <option value="approved">مقبول</option>
+              <option value="rejected">مرفوض</option>
+              <option value="enrolled">مسجّل</option>
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="showAddAdmissionModal()">➕ طلب جديد</button>
+          </div>
+        </div>
+        <div id="admList"><div class="skeleton" style="height:200px"></div></div>
       </div>
     </div>
 
@@ -707,9 +730,9 @@ window.showPanel = function showPanel(p, btnEl) {
   document.querySelectorAll('.snav').forEach(b => b.classList.remove('active'));
   const btn = btnEl || document.querySelector('[data-panel="' + p + '"]');
   if (btn) btn.classList.add('active');
-  document.querySelectorAll('.panel').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(el => { el.classList.remove('active'); el.style.display = ''; });
   const panel = document.getElementById('panel-' + p);
-  if (panel) panel.classList.add('active');
+  if (panel) { panel.classList.add('active'); panel.style.display = 'block'; }
   if (p === 'overview') loadOverview();
   else if (p === 'staff') loadStaff();
   else if (p === 'students') loadStudents();
@@ -719,7 +742,11 @@ window.showPanel = function showPanel(p, btnEl) {
   else if (p === 'system') loadSystem();
   else if (p === 'sub-teachers') loadSubTeachers();
   else if (p === 'aqdar') loadAqdarData();
+  else if (p === 'admissions') loadAdmissions();
 };
+
+// توافق زر القبول والتسجيل مع نظام التنقل الحالي
+function switchPanel(p) { window.showPanel(p); }
 
 document.querySelectorAll('.snav').forEach(btn => {
   btn.addEventListener('click', function() {
@@ -1627,6 +1654,53 @@ async function openPermModal(staffId,staffName) {
 async function savePermissions() {
   if(!currentPermStaffId)return; var selected=[];document.querySelectorAll('#permModalBody input[type=checkbox]').forEach(function(cb){if(cb.checked)selected.push(cb.value);});
   try { var res=await fetch((window.EduOS?.SB_URL||'')+'/rest/v1/staff_profiles?id=eq.'+encodeURIComponent(currentPermStaffId),{method:'PATCH',headers:{'apikey':window.EduOS?.SB_KEY||'','Authorization':'Bearer '+_getJWT(),'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({extra_permissions:selected})}); if(res.ok||res.status===204){closeModal('permModal');showToast('✅ تم حفظ الصلاحيات بنجاح','success');loadPermissions();}else showToast('❌ فشل حفظ الصلاحيات','error'); } catch(e){showToast('❌ فشل حفظ الصلاحيات','error');}
+}
+
+async function loadAdmissions() {
+  var list = document.getElementById('admList');
+  if (!list) return;
+  var sf = (document.getElementById('admStatusFilter')||{}).value || '';
+  var url = (window.EduOS&&window.EduOS.SB_URL||'') + '/rest/v1/admissions?order=created_at.desc&limit=50';
+  if (sf) url += '&status=eq.' + sf;
+  url += '&select=id,student_name,grade,parent_name,parent_phone,nationality,status,admission_date,notes';
+  try {
+    var res = await fetch(url, {headers:{apikey:window.EduOS&&window.EduOS.SB_KEY||'','Authorization':'Bearer '+(_getJWT&&_getJWT()||'')}});
+    var data = await res.json();
+    if (!data || !data.length) { list.innerHTML = '<div style="text-align:center;padding:32px;color:#9CA3AF">لا توجد طلبات قبول</div>'; return; }
+    var stColors = {pending:'#F59E0B',approved:'#10B981',rejected:'#EF4444',enrolled:'#6C3DD6'};
+    var stLabels = {pending:'بانتظار المراجعة',approved:'مقبول',rejected:'مرفوض',enrolled:'مسجّل'};
+    var html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:var(--bg2)"><th style="padding:10px;text-align:right">اسم الطالبة</th><th style="padding:10px;text-align:right">الصف</th><th style="padding:10px;text-align:right">ولي الأمر</th><th style="padding:10px;text-align:right">الجنسية</th><th style="padding:10px;text-align:center">الحالة</th><th style="padding:10px;text-align:center">إجراء</th></tr></thead><tbody>';
+    data.forEach(function(a) {
+      var col = stColors[a.status]||'#6B7280'; var lbl = stLabels[a.status]||a.status;
+      html += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:10px;font-weight:700">' + (a.student_name||'—') + '</td><td style="padding:10px">' + (a.grade||'—') + '</td><td style="padding:10px">' + (a.parent_name||'—') + '</td><td style="padding:10px">' + (a.nationality||'—') + '</td>';
+      html += '<td style="padding:10px;text-align:center"><span style="background:' + col + '22;color:' + col + ';padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700">' + lbl + '</span></td>';
+      html += '<td style="padding:10px;text-align:center">';
+      if (a.status === 'pending') {
+        html += '<button onclick="updateAdmission(\'' + a.id + '\',\'approved\')" style="background:#10B981;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;margin-left:4px">✅</button>';
+        html += '<button onclick="updateAdmission(\'' + a.id + '\',\'rejected\')" style="background:#EF4444;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer">❌</button>';
+      } else if (a.status === 'approved') {
+        html += '<button onclick="updateAdmission(\'' + a.id + '\',\'enrolled\')" style="background:#6C3DD6;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer">📋 تسجيل</button>';
+      } else { html += '<span style="color:#9CA3AF">—</span>'; }
+      html += '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    list.innerHTML = html;
+  } catch(e) { list.innerHTML = '<div style="color:#EF4444;padding:12px">خطأ: ' + e.message + '</div>'; }
+}
+
+async function updateAdmission(id, status) {
+  try {
+    var res = await fetch((window.EduOS&&window.EduOS.SB_URL||'') + '/rest/v1/admissions?id=eq.' + id, {
+      method: 'PATCH', headers: {apikey:window.EduOS&&window.EduOS.SB_KEY||'','Authorization':'Bearer '+(_getJWT&&_getJWT()||''),'Content-Type':'application/json','Prefer':'return=minimal'},
+      body: JSON.stringify({status:status})
+    });
+    if (res.ok || res.status===204) { showToast('✅ تم التحديث'); loadAdmissions(); }
+    else showToast('❌ فشل التحديث', 'error');
+  } catch(e) { showToast('خطأ: ' + e.message, 'error'); }
+}
+
+function showAddAdmissionModal() {
+  showToast('💡 ميزة الإضافة اليدوية ستكون متاحة قريباً');
 }
 </script>
 </body>

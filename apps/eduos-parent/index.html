@@ -305,6 +305,12 @@ tr:hover td { background: #FAFBFC; }
     <div class="sb-item" data-tab="announcements" onclick="switchTab('announcements', this)">
       <span class="sb-icon">📢</span> الإعلانات | News
     </div>
+    <div class="sb-item" data-tab="reports" onclick="switchTab('reports', this)">
+      <span class="sb-icon">📄</span> التقارير | Reports
+    </div>
+    <div class="sb-item" data-tab="objections" onclick="switchTab('objections', this)">
+      <span class="sb-icon">⚖️</span> الاعتراضات | Objections
+    </div>
   </nav>
 
   <!-- MAIN -->
@@ -409,6 +415,40 @@ tr:hover td { background: #FAFBFC; }
       <div id="announceList"><div class="empty"><div class="empty-icon">📢</div>جاري التحميل...</div></div>
     </div>
 
+    <!-- TAB: REPORTS -->
+    <div id="tab-reports" class="tab-content">
+      <div class="page-title">📄 التقارير | Reports</div>
+      <div class="child-tabs" id="reportsChildTabs"></div>
+      <div class="card">
+        <div class="card-title">📄 تقارير المدرسة | School Reports</div>
+        <div id="parentReportsList"><div class="empty"><div class="empty-icon">📄</div>اختر الابن/البنت أولاً</div></div>
+      </div>
+    </div>
+
+    <!-- TAB: OBJECTIONS -->
+    <div id="tab-objections" class="tab-content">
+      <div class="page-title">⚖️ الاعتراضات | Objections</div>
+      <div class="child-tabs" id="objectionsChildTabs"></div>
+      <div class="card">
+        <div class="card-title">⚖️ رفع اعتراض رسمي | Submit Official Objection</div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:14px;font-weight:700;color:var(--text2);display:block;margin-bottom:6px">نوع الاعتراض | Type</label>
+          <select id="objType" style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 16px;font-family:'Tajawal',sans-serif;font-size:15px;background:#fff">
+            <option value="general">عام</option>
+            <option value="grades">الدرجات</option>
+            <option value="attendance">الحضور</option>
+            <option value="behavior">السلوك</option>
+            <option value="other">أخرى</option>
+          </select>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="font-size:14px;font-weight:700;color:var(--text2);display:block;margin-bottom:6px">نص الاعتراض | Objection</label>
+          <textarea id="objText" placeholder="اكتب/ي تفاصيل الاعتراض هنا..."></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="submitObjection()">📤 رفع الاعتراض | Submit</button>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -478,7 +518,7 @@ async function loadChildren() {
 }
 
 function renderChildTabs() {
-  const containers = ['childTabs', 'gradesChildTabs', 'attChildTabs', 'schedChildTabs', 'behChildTabs'];
+  const containers = ['childTabs', 'gradesChildTabs', 'attChildTabs', 'schedChildTabs', 'behChildTabs', 'reportsChildTabs', 'objectionsChildTabs'];
   if (!children.length) {
     containers.forEach(id => {
       const el = document.getElementById(id);
@@ -510,6 +550,8 @@ async function selectChild(id, btn, name) {
 
   document.getElementById('parentName').textContent = `· ${name}`;
   await loadChildData(id);
+  var reportsTab = document.getElementById('tab-reports');
+  if (reportsTab && reportsTab.classList.contains('active')) loadParentReports();
 }
 
 async function loadChildData(id) {
@@ -865,6 +907,40 @@ async function loadMessages() {
   }).join('');
 }
 
+async function loadParentReports() {
+  if (!selectedChild) return;
+  var el = document.getElementById('parentReportsList');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:24px">⏳ جارٍ التحميل...</div>';
+  try {
+    var res = await fetch((window.EduOS?window.EduOS.SB_URL:'') + '/rest/v1/parent_notifications?student_id=eq.' + selectedChild + '&order=sent_at.desc&limit=20', {
+      headers: {apikey:window.EduOS?window.EduOS.SB_KEY:'','Authorization':'Bearer '+(window.EduOS?window.EduOS.SB_KEY:'')}
+    });
+    var data = await res.json();
+    if (!data||!data.length){el.innerHTML='<div style="text-align:center;padding:24px;color:#9CA3AF">لا توجد تقارير مرسلة بعد</div>';return;}
+    el.innerHTML = data.map(function(r){
+      var typeMap = {attendance:'الحضور',grades:'الدرجات',behavior:'السلوك',progress:'التقدم'};
+      return '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:16px;margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="background:#EDE9FE;color:#6C3DD6;padding:3px 10px;border-radius:8px;font-size:12px;font-weight:700">' + (typeMap[r.report_type]||r.report_type||'تقرير') + '</span><span style="font-size:12px;color:#9CA3AF">' + (r.sent_at?new Date(r.sent_at).toLocaleDateString('ar-AE'):'—') + '</span></div><div style="font-size:14px;line-height:1.7;color:#374151">' + (r.content||'') + '</div></div>';
+    }).join('');
+  } catch(e){el.innerHTML='<div style="color:#EF4444">خطأ: '+e.message+'</div>';}
+}
+
+async function submitObjection() {
+  var text = (document.getElementById('objText')||{}).value||'';
+  var type = (document.getElementById('objType')||{}).value||'general';
+  if (!text.trim()){showToast('⚠️ اكتب نص الاعتراض أولاً');return;}
+  var user = getUser();
+  try {
+    var res = await fetch((window.EduOS?window.EduOS.SB_URL:'') + '/rest/v1/parent_messages', {
+      method:'POST',
+      headers:{apikey:window.EduOS?window.EduOS.SB_KEY:'','Authorization':'Bearer '+(window.EduOS?window.EduOS.SB_KEY:''),'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({student_id:selectedChild||'',parent_phone:user.national_id||user.id||'',message_type:'objection',subject:'اعتراض رسمي — ' + type,body:text,direction:'inbound',status:'pending'})
+    });
+    if(res.ok||res.status===201){showToast('✅ تم رفع الاعتراض بنجاح');document.getElementById('objText').value='';}
+    else showToast('❌ فشل الإرسال');
+  } catch(e){showToast('خطأ: '+e.message);}
+}
+
 // --- ANNOUNCEMENTS ---
 async function loadAnnouncements() {
   var rows = await dbGet('school_news', 'select=title,summary,published_at,category&order=published_at.desc&limit=20');
@@ -888,6 +964,7 @@ function switchTab(name, el) {
   if (el) el.classList.add('active');
 
   if (name === 'announcements') loadAnnouncements();
+  if (name === 'reports') { if (selectedChild) loadParentReports(); }
   if (name === 'messages') { loadTeachersForMsg(); if (selectedChild) loadMessages(); }
 }
 
