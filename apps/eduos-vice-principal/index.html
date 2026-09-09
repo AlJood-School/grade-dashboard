@@ -262,6 +262,10 @@ body{overflow:hidden}
       <span class="snav-icon">&#x1F91D;</span>
       <span class="snav-text"><span class="snav-label">الاجتماعات</span><span class="snav-sub">Meetings</span></span>
     </button>
+    <button class="snav" data-panel="duty" onclick="showPanel('duty',this);loadDutySchedule()" id="nav-duty">
+      <span class="snav-icon">&#x1F6E1;</span>
+      <span class="snav-text"><span class="snav-label">المناوبات</span><span class="snav-sub">Duty Schedule</span></span>
+    </button>
     <button class="snav" data-panel="coordinators" onclick="showPanel('coordinators',this);loadCoordinators()">
       <span class="snav-icon">&#x1F4CB;</span>
       <span class="snav-text"><span class="snav-label">منسقات المواد</span><span class="snav-sub">Subject Coordinators</span></span>
@@ -3199,6 +3203,45 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 
+<!-- PANEL: DUTY SCHEDULE -->
+<div class="panel" id="panel-duty" style="display:none">
+  <div style="padding:24px;overflow-y:auto;height:100%">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div class="sec-title" style="margin-bottom:0">&#x1F6E1; جدول المناوبات الأسبوعية / Duty Schedule</div>
+      <div style="display:flex;gap:8px">
+        <select id="dutyWeekSel" onchange="loadDutySchedule()" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'Tajawal',Arial,sans-serif">
+          <option value="">الأسبوع الحالي</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="generateDutySchedule()">&#x2728; توليد تلقائي</button>
+        <button class="btn btn-sm" style="background:#10B981;color:#fff" onclick="saveDutySchedule()">&#x1F4BE; حفظ</button>
+      </div>
+    </div>
+    <!-- KPI Row -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+      <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:16px;text-align:center">
+        <div style="font-size:24px;font-weight:900;color:#6C3DD6" id="dutyKpiTotal">—</div>
+        <div style="font-size:12px;color:#6B7280;margin-top:4px">إجمالي المناوبات</div>
+      </div>
+      <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:16px;text-align:center">
+        <div style="font-size:24px;font-weight:900;color:#10B981" id="dutyKpiPresent">—</div>
+        <div style="font-size:12px;color:#6B7280;margin-top:4px">موظفات في مناوبة</div>
+      </div>
+      <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:16px;text-align:center">
+        <div style="font-size:24px;font-weight:900;color:#F59E0B" id="dutyKpiZones">—</div>
+        <div style="font-size:12px;color:#6B7280;margin-top:4px">مناطق المناوبة</div>
+      </div>
+    </div>
+    <!-- Duty Grid -->
+    <div id="dutyGrid">
+      <div style="text-align:center;padding:48px;color:#9CA3AF">
+        <div style="font-size:48px;margin-bottom:12px">&#x1F6E1;</div>
+        <div style="font-size:14px;margin-bottom:16px">لا يوجد جدول مناوبة لهذا الأسبوع</div>
+        <button class="btn btn-primary" onclick="generateDutySchedule()">&#x2728; إنشاء جدول تلقائي</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- PANEL: COUNSELOR OVERVIEW -->
 <div class="panel" id="panel-counselor" style="display:none">
   <p class="sec-title">🤝 الأخصائية الاجتماعية</p>
@@ -4419,6 +4462,121 @@ async function updateBehStatus(id, newStatus) {
 
 function closeBehDetail() {
   document.getElementById('behDetailModal').style.display = 'none';
+}
+
+// ── DUTY SCHEDULE ──
+var _dutyData = null;
+var DUTY_DAYS = ['الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+var DUTY_ZONES = ['المدخل الرئيسي','الممر العلوي','ساحة الروضة','ساحة الحلقة الأولى','ساحة الحلقة الثانية','الكافتيريا'];
+
+async function loadDutySchedule() {
+  var grid = document.getElementById('dutyGrid');
+  if (!grid) return;
+  grid.innerHTML = '<div style="text-align:center;padding:24px;color:#9CA3AF">&#x23F3; جارٍ التحميل...</div>';
+  try {
+    // حساب week_key للأسبوع الحالي
+    var now = new Date();
+    var mon = new Date(now);
+    var day = now.getDay();
+    var diff = day === 0 ? -6 : 1 - day;
+    mon.setDate(now.getDate() + diff);
+    var wk = mon.toISOString().split('T')[0];
+    var res = await fetch(SB_URL + '/rest/v1/duty_weekly_schedule?week_key=eq.' + wk + '&select=*&limit=1', {
+      headers: { apikey: SB_KEY, 'Authorization': 'Bearer ' + AUTH_TOKEN }
+    });
+    var data = await res.json();
+    if (data && data.length && data[0].schedule) {
+      _dutyData = data[0];
+      renderDutyGrid(data[0].schedule);
+    } else {
+      _dutyData = null;
+      grid.innerHTML = '<div style="text-align:center;padding:48px;color:#9CA3AF"><div style="font-size:48px;margin-bottom:12px">&#x1F6E1;</div><div style="font-size:14px;margin-bottom:16px">لا يوجد جدول مناوبة لهذا الأسبوع</div><button class="btn btn-primary" onclick="generateDutySchedule()">&#x2728; إنشاء جدول تلقائي</button></div>';
+      document.getElementById('dutyKpiTotal').textContent = '0';
+      document.getElementById('dutyKpiPresent').textContent = '0';
+      document.getElementById('dutyKpiZones').textContent = DUTY_ZONES.length;
+    }
+  } catch(e) {
+    grid.innerHTML = '<div style="color:#EF4444;padding:16px">خطأ: ' + e.message + '</div>';
+  }
+}
+
+function renderDutyGrid(schedule) {
+  var grid = document.getElementById('dutyGrid');
+  if (!grid) return;
+  var totalCount = 0;
+  var staffSet = new Set();
+  var html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:600px">';
+  html += '<thead><tr style="background:#F9FAFB"><th style="padding:10px;text-align:right;font-weight:700">المنطقة / Zone</th>';
+  DUTY_DAYS.forEach(function(d) { html += '<th style="padding:10px;text-align:center;font-weight:700">' + d + '</th>'; });
+  html += '</tr></thead><tbody>';
+  DUTY_ZONES.forEach(function(zone) {
+    html += '<tr style="border-bottom:1px solid #F3F4F6"><td style="padding:10px;font-weight:700;color:#374151">' + zone + '</td>';
+    DUTY_DAYS.forEach(function(day) {
+      var assignments = (schedule[day] || []).filter(function(a) { return a.zone === zone; });
+      html += '<td style="padding:8px;text-align:center">';
+      if (assignments.length) {
+        assignments.forEach(function(a) {
+          staffSet.add(a.staff_name || a.staff_id);
+          totalCount++;
+          html += '<div style="background:#EDE9FE;color:#6C3DD6;border-radius:8px;padding:4px 8px;font-size:12px;font-weight:600;margin:2px">' + (a.staff_name || a.staff_id) + '</div>';
+        });
+      } else {
+        html += '<div style="color:#D1D5DB;font-size:18px" onclick="addDutySlot(\'' + day + '\',\'' + zone + '\')">&#x2795;</div>';
+      }
+      html += '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  grid.innerHTML = html;
+  document.getElementById('dutyKpiTotal').textContent = totalCount;
+  document.getElementById('dutyKpiPresent').textContent = staffSet.size;
+  document.getElementById('dutyKpiZones').textContent = DUTY_ZONES.length;
+}
+
+async function generateDutySchedule() {
+  if (!confirm('سيتم إنشاء جدول مناوبة تلقائي عادل لهذا الأسبوع. هل توافقين؟')) return;
+  var grid = document.getElementById('dutyGrid');
+  if (grid) grid.innerHTML = '<div style="text-align:center;padding:24px;color:#9CA3AF">&#x23F3; جارٍ التوليد الذكي...</div>';
+  try {
+    // جلب الكادر النشط
+    var res = await fetch(SB_URL + '/rest/v1/staff_profiles?is_active=eq.true&role_key=neq.principal&role_key=neq.admin&select=staff_db_id,name_ar&order=name_ar.asc&limit=60', {
+      headers: { apikey: SB_KEY, 'Authorization': 'Bearer ' + AUTH_TOKEN }
+    });
+    var staff = await res.json();
+    if (!staff || staff.length === 0) { showToast('لا يوجد كادر للتوزيع', 'error'); return; }
+    var schedule = {};
+    var staffIdx = 0;
+    DUTY_DAYS.forEach(function(day) {
+      schedule[day] = [];
+      DUTY_ZONES.forEach(function(zone) {
+        var s = staff[staffIdx % staff.length];
+        schedule[day].push({ staff_id: s.staff_db_id, staff_name: s.name_ar, zone: zone, time_from: '07:00', time_to: '13:30', status: 'scheduled' });
+        staffIdx++;
+      });
+    });
+    var now = new Date();
+    var mon = new Date(now);
+    var day = now.getDay();
+    var diff = day === 0 ? -6 : 1 - day;
+    mon.setDate(now.getDate() + diff);
+    var wk = mon.toISOString().split('T')[0];
+    var saveRes = await fetch(SB_URL + '/rest/v1/duty_weekly_schedule', {
+      method: 'POST',
+      headers: { apikey: SB_KEY, 'Authorization': 'Bearer ' + AUTH_TOKEN, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ week_key: wk, schedule: schedule, generated_at: new Date().toISOString() })
+    });
+    if (saveRes.ok || saveRes.status === 201 || saveRes.status === 204) {
+      _dutyData = { week_key: wk, schedule: schedule };
+      renderDutyGrid(schedule);
+      showToast('✅ تم إنشاء جدول المناوبات تلقائياً', 'success');
+    } else showToast('خطأ في حفظ الجدول', 'error');
+  } catch(e) { showToast('خطأ: ' + e.message, 'error'); }
+}
+
+async function saveDutySchedule() {
+  if (!_dutyData) { showToast('لا يوجد جدول لحفظه', 'error'); return; }
+  showToast('✅ الجدول محفوظ', 'success');
 }
 
 // ── LEAVE REQUESTS ──
