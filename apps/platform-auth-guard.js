@@ -119,7 +119,7 @@
     'eduos-vice-principal':       ['vice_principal'],
     'eduos-admin':                ['admin'],
     'eduos-specialist':           ['specialist'],
-    'eduos-counselor':            ['social_worker', 'specialist', 'counselor'],
+    'eduos-counselor':            ['social_worker', 'specialist', 'counselor', 'admin', 'principal', 'vice_principal'],
     'eduos-nurse':                ['nurse'],
     'eduos-nursing':              ['nurse'],
     'eduos-security':             ['security'],
