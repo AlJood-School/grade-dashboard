@@ -3497,12 +3497,41 @@ async function loadCoordinators() {
   wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div>';
   try {
     var sbUrl = window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
-    var res = await fetch(sbUrl+'/rest/v1/staff_profiles?is_coordinator=eq.true&is_active=eq.true&select=name_ar,coordinator_subject,staff_db_id&order=coordinator_subject.asc',{headers:getCoordHeadersVP()});
+    // جلب الكل مرة واحدة ثم تقسيمهم حسب coord_type
+    var res = await fetch(sbUrl+'/rest/v1/staff_profiles?is_coordinator=eq.true&is_active=eq.true&select=name_ar,coord_type,coord_scope,staff_db_id,extra_permissions&order=coord_scope.asc',{headers:getCoordHeadersVP()});
     var rows = await res.json();
     if (!Array.isArray(rows)||!rows.length){wrap.innerHTML='<div style="text-align:center;padding:40px;color:#94A3B8">لا توجد منسقات معيَّنات</div>';return;}
-    var colors={'اللغة العربية':'#6C3DD6','التربية الإسلامية':'#059669','الدراسات الاجتماعية':'#D97706','اللغة الإنجليزية':'#0284C7','الرياضيات':'#7C3AED','العلوم':'#0891B2','التربية البدنية':'#16A34A','الفنون':'#E11D48','الموسيقى':'#F59E0B','الذكاء الاصطناعي والتكنولوجيا':'#8B5CF6'};
-    wrap.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px">'+rows.map(function(r){var c=colors[r.coordinator_subject]||'#6C3DD6';return'<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:18px;border-right:4px solid '+c+'"><div style="font-size:15px;font-weight:800;color:#1E293B">'+(r.name_ar||'')+'</div><div style="font-size:13px;color:'+c+';font-weight:700;margin-top:3px">'+(r.coordinator_subject||'')+'</div><div style="margin-top:8px;font-size:12px;color:#94A3B8">اجتماع أسبوعي — محضر الأربعاء</div></div>';}).join('')+'</div>';
-  } catch(e){wrap.innerHTML='<div style="text-align:center;padding:32px;color:#EF4444">خطأ</div>';}
+    var typeColors = {section:'#6C3DD6', planning:'#0284C7', track:'#059669'};
+    var typeLabels = {section:'منسقة قسم', planning:'منسقة تخطيط', track:'منسقة مسار'};
+    var groups = {section:[], planning:[], track:[]};
+    rows.forEach(function(r){
+      var t = r.coord_type || 'section';
+      if (!groups[t]) groups[t] = [];
+      groups[t].push(r);
+      // رندا حسون: تظهر في القسم والمسار معاً
+      if (Array.isArray(r.extra_permissions) && r.extra_permissions.indexOf('coord_track_g3') !== -1 && t !== 'track') {
+        groups['track'].push(r);
+      }
+    });
+    var html = '';
+    ['section','planning','track'].forEach(function(type){
+      var list = groups[type] || [];
+      var c = typeColors[type];
+      var label = typeLabels[type];
+      html += '<div style="margin-bottom:24px">' +
+        '<div style="font-size:16px;font-weight:900;color:#1E293B;margin-bottom:12px;padding-bottom:6px;border-bottom:2px solid '+c+'">' + label + ' (' + list.length + ')</div>' +
+        (list.length ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">' +
+          list.map(function(r){
+            return '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px;border-right:4px solid '+c+'">' +
+              '<div style="font-size:14px;font-weight:800;color:#1E293B">'+(r.name_ar||'')+'</div>' +
+              '<div style="font-size:12px;color:'+c+';font-weight:700;margin-top:3px">'+(r.coord_scope||'')+'</div>' +
+            '</div>';
+          }).join('') + '</div>'
+        : '<div style="color:#94A3B8;font-size:13px;padding:10px">لا يوجد</div>') +
+      '</div>';
+    });
+    wrap.innerHTML = html;
+  } catch(e){wrap.innerHTML='<div style="text-align:center;padding:32px;color:#EF4444">خطأ في التحميل</div>';}
 }
 
 async function loadCoordMeetingsVP() {
