@@ -1937,10 +1937,259 @@ async function sendAI() {
 }
 
 // ── REPORTS ──
+// ── نظام التقارير الحقيقي ──
+var reportState = { type: null, classFilter: null, studentFilter: null, generated: [] };
+
 function genReport(type) {
-  const o = document.getElementById('reportOutput');
-  o.innerHTML = '<div class="alert-banner info">🔄 جارٍ توليد تقرير ' + type + '… / Generating…</div>';
-  setTimeout(() => { o.innerHTML = '<div class="alert-banner info" style="background:var(--emerald-lt);border-color:var(--emerald);color:var(--emerald)">✅ تم التوليد / Report generated</div>'; }, 1500);
+  reportState.type = type;
+  var titles = {
+    attendance: 'تقرير الحضور والغياب',
+    grades: 'تقرير الدرجات والتقييم',
+    behavior: 'تقرير السلوك والانضباط',
+    progress: 'تقرير التقدم الأكاديمي الشامل'
+  };
+  var o = document.getElementById('reportOutput');
+  // بناء واجهة الفلاتر
+  var html = '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:20px;margin-top:16px">';
+  html += '<div style="font-size:16px;font-weight:800;margin-bottom:16px;color:#111827">📋 ' + (titles[type]||type) + '</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;margin-bottom:16px">';
+  html += '<div><label style="font-size:12px;font-weight:700;color:#6B7280;display:block;margin-bottom:4px">الفصل / Class</label>';
+  html += '<select id="rpt-class" onchange="loadReportStudents()" style="width:100%;border:1px solid #D1D5DB;border-radius:8px;padding:8px;font-family:inherit;font-size:13px"><option value="">-- كل فصولي --</option></select></div>';
+  html += '<div><label style="font-size:12px;font-weight:700;color:#6B7280;display:block;margin-bottom:4px">الطالبة / Student</label>';
+  html += '<select id="rpt-student" style="width:100%;border:1px solid #D1D5DB;border-radius:8px;padding:8px;font-family:inherit;font-size:13px"><option value="">-- كل الطالبات --</option></select></div>';
+  html += '<div style="display:flex;align-items:flex-end"><button class="btn btn-primary" onclick="generateReportData()">⚡ توليد / Generate</button></div>';
+  html += '</div>';
+  html += '<div id="rpt-results"></div>';
+  html += '</div>';
+  o.innerHTML = html;
+  loadReportClasses();
+}
+
+async function loadReportClasses() {
+  var teacherId = (JSON.parse(sessionStorage.getItem('edoos_user')||'{}')).staff_db_id || '';
+  var sel = document.getElementById('rpt-class');
+  if (!sel) return;
+  try {
+    var res = await fetch((window.EduOS&&window.EduOS.SB_URL||'') + '/rest/v1/teacher_assignments?staff_db_id=eq.' + encodeURIComponent(teacherId) + '&select=class_name&is_active=eq.true', {
+      headers: { 'apikey': window.EduOS&&window.EduOS.SB_KEY||'', 'Authorization': 'Bearer ' + (_getJWT&&_getJWT()||'') }
+    });
+    var data = await res.json();
+    var classes = [...new Set((data||[]).map(function(r){return r.class_name;}))].filter(Boolean).sort();
+    classes.forEach(function(c) {
+      var op = document.createElement('option');
+      op.value = c; op.textContent = c;
+      sel.appendChild(op);
+    });
+  } catch(e) {}
+}
+
+async function loadReportStudents() {
+  var cls = document.getElementById('rpt-class');
+  var stu = document.getElementById('rpt-student');
+  if (!cls || !stu) return;
+  stu.innerHTML = '<option value="">-- كل الطالبات --</option>';
+  if (!cls.value) return;
+  try {
+    var res = await fetch((window.EduOS&&window.EduOS.SB_URL||'') + '/rest/v1/students?class_name=eq.' + encodeURIComponent(cls.value) + '&select=id,name,student_number&order=name.asc', {
+      headers: { 'apikey': window.EduOS&&window.EduOS.SB_KEY||'', 'Authorization': 'Bearer ' + (_getJWT&&_getJWT()||'') }
+    });
+    var data = await res.json();
+    (data||[]).forEach(function(s) {
+      var op = document.createElement('option');
+      op.value = s.id; op.textContent = s.name + ' (' + (s.student_number||'') + ')';
+      stu.appendChild(op);
+    });
+  } catch(e) {}
+}
+
+async function generateReportData() {
+  var type = reportState.type;
+  var cls = (document.getElementById('rpt-class')||{}).value || '';
+  var stu = (document.getElementById('rpt-student')||{}).value || '';
+  var out = document.getElementById('rpt-results');
+  if (!out) return;
+  out.innerHTML = '<div style="text-align:center;padding:24px;color:#6B7280">⏳ جارٍ توليد التقارير من قاعدة البيانات...</div>';
+
+  try {
+    // جلب الطالبات
+    var query = '/rest/v1/students?select=id,name,class_name,student_number';
+    if (stu) query += '&id=eq.' + encodeURIComponent(stu);
+    else if (cls) query += '&class_name=eq.' + encodeURIComponent(cls);
+    query += '&order=class_name.asc,name.asc&limit=100';
+    var sRes = await fetch((window.EduOS&&window.EduOS.SB_URL||'') + query, {
+      headers: { 'apikey': window.EduOS&&window.EduOS.SB_KEY||'', 'Authorization': 'Bearer ' + (_getJWT&&_getJWT()||'') }
+    });
+    var students = await sRes.json();
+    if (!students || students.length === 0) { out.innerHTML = '<div style="text-align:center;padding:24px;color:#EF4444">لا توجد طالبات في هذا الفصل</div>'; return; }
+
+    // جلب بيانات التقرير حسب النوع
+    var reports = [];
+    for (var i = 0; i < students.length; i++) {
+      var s = students[i];
+      var rData = await fetchStudentReportData(type, s.id, s.class_name);
+      reports.push({ student: s, data: rData, text: buildReportText(type, s, rData), edited: false, approved: false });
+    }
+    reportState.generated = reports;
+    renderReportCards(reports);
+  } catch(e) {
+    out.innerHTML = '<div style="color:#EF4444;padding:16px">خطأ في توليد التقارير: ' + e.message + '</div>';
+  }
+}
+
+async function fetchStudentReportData(type, studentId, className) {
+  var base = (window.EduOS&&window.EduOS.SB_URL||'');
+  var key = window.EduOS&&window.EduOS.SB_KEY||'';
+  var jwt = _getJWT&&_getJWT()||'';
+  var h = { 'apikey': key, 'Authorization': 'Bearer ' + jwt };
+  var data = {};
+  try {
+    if (type === 'attendance') {
+      var r = await fetch(base + '/rest/v1/student_attendance?student_id=eq.' + encodeURIComponent(studentId) + '&select=status,date&order=date.desc&limit=30', {headers:h});
+      data.records = await r.json();
+      var recs = data.records || [];
+      data.total = recs.length;
+      data.present = recs.filter(function(x){return x.status==='present';}).length;
+      data.absent = recs.filter(function(x){return x.status==='absent';}).length;
+      data.late = recs.filter(function(x){return x.status==='late';}).length;
+      data.pct = data.total > 0 ? Math.round(data.present / data.total * 100) : 0;
+    } else if (type === 'behavior') {
+      var r2 = await fetch(base + '/rest/v1/behavior_incidents?student_id=eq.' + encodeURIComponent(studentId) + '&select=degree,description,date,incident_type&order=date.desc&limit=10', {headers:h});
+      data.incidents = await r2.json();
+      data.count = (data.incidents||[]).length;
+      data.serious = (data.incidents||[]).filter(function(x){return x.degree>=3;}).length;
+    } else if (type === 'grades') {
+      var r3 = await fetch(base + '/rest/v1/student_grades?student_id=eq.' + encodeURIComponent(studentId) + '&select=subject,score,max_score,term&order=subject.asc&limit=20', {headers:h});
+      data.grades = await r3.json();
+      var gs = data.grades || [];
+      data.avg = gs.length > 0 ? Math.round(gs.reduce(function(s,g){return s+(g.max_score>0?g.score/g.max_score*100:0);},0)/gs.length) : 0;
+    } else if (type === 'progress') {
+      // ملخص شامل
+      var rA = await fetch(base + '/rest/v1/student_attendance?student_id=eq.' + encodeURIComponent(studentId) + '&select=status&limit=30', {headers:h});
+      var att = await rA.json();
+      data.attendancePct = att&&att.length ? Math.round(att.filter(function(x){return x.status==='present';}).length/att.length*100) : 0;
+      var rB = await fetch(base + '/rest/v1/behavior_incidents?student_id=eq.' + encodeURIComponent(studentId) + '&select=degree&limit=10', {headers:h});
+      var beh = await rB.json();
+      data.behaviorCount = (beh||[]).length;
+    }
+  } catch(e) { data.error = e.message; }
+  return data;
+}
+
+function buildReportText(type, student, data) {
+  var name = student.name || 'الطالبة';
+  var cls = student.class_name || '';
+  var templates = {
+    attendance: function(d) {
+      var lvl = d.pct >= 90 ? 'ممتازة' : d.pct >= 75 ? 'جيدة' : 'تحتاج متابعة';
+      return 'نُفيدكم بأن نسبة حضور الطالبة ' + name + ' من الصف ' + cls + ' بلغت ' + (d.pct||0) + '٪ خلال الفترة المرصودة، وهي نسبة ' + lvl + '. عدد أيام الحضور: ' + (d.present||0) + ' يوماً، والغياب: ' + (d.absent||0) + ' يوماً، والتأخر: ' + (d.late||0) + ' مرة.';
+    },
+    behavior: function(d) {
+      if (!d.count) return 'يسعدنا إفادتكم بأن سلوك الطالبة ' + name + ' من الصف ' + cls + ' كان مثالياً خلال الفترة المرصودة، ولم تسجَّل بحقها أي ملاحظات سلوكية.';
+      return 'نُفيدكم بوجود ' + d.count + ' ملاحظة سلوكية مسجَّلة للطالبة ' + name + ' من الصف ' + cls + '. ' + (d.serious > 0 ? 'منها ' + d.serious + ' حالة تستوجب المتابعة المباشرة. ' : '') + 'نأمل التعاون في مناقشة هذا الأمر.';
+    },
+    grades: function(d) {
+      var lvl = d.avg >= 90 ? 'ممتازة' : d.avg >= 75 ? 'جيدة' : d.avg >= 60 ? 'مقبولة' : 'تحتاج دعماً';
+      return 'نُفيدكم بأن الطالبة ' + name + ' من الصف ' + cls + ' حققت متوسطاً دراسياً بلغ ' + (d.avg||0) + '٪، وهو مستوى ' + lvl + '. نتطلع إلى استمرار تعاونكم لدعم مسيرتها التعليمية.';
+    },
+    progress: function(d) {
+      return 'يطيب لنا إفادتكم بأن الطالبة ' + name + ' من الصف ' + cls + ' تسير بخطى ' + (d.attendancePct>=85&&d.behaviorCount===0?'ثابتة ومتميزة':'تستدعي المتابعة') + ' في مسيرتها الدراسية. نسبة الحضور: ' + d.attendancePct + '٪' + (d.behaviorCount>0?'، وقد سُجِّلت ' + d.behaviorCount + ' ملاحظة سلوكية':'، ولم تُسجَّل أي ملاحظات سلوكية') + '.';
+    }
+  };
+  var fn = templates[type];
+  return fn ? fn(data) : 'التقرير قيد الإعداد.';
+}
+
+function renderReportCards(reports) {
+  var out = document.getElementById('rpt-results');
+  if (!out) return;
+  var html = '<div style="margin-top:16px">';
+  html += '<div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#92400E">';
+  html += '⚠️ <strong>تنبيه:</strong> هذه المسودات الأولية — راجعي كل تقرير وعدّليه قبل الإرسال. الإرسال يتطلب موافقتكِ الصريحة على كل تقرير.';
+  html += '</div>';
+  html += '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">';
+  html += '<button class="btn btn-primary btn-sm" onclick="approveAllReports()">✅ اعتماد الكل / Approve All</button>';
+  html += '<button class="btn btn-sm" style="background:#10B981;color:#fff" onclick="sendApprovedReports()">📤 إرسال المعتمدة / Send Approved</button>';
+  html += '<span style="font-size:12px;color:#6B7280;align-self:center">المعتمدة: <span id="approved-count">0</span> / ' + reports.length + '</span>';
+  html += '</div>';
+  reports.forEach(function(r, idx) {
+    html += '<div id="rcard-' + idx + '" style="background:#fff;border:2px solid ' + (r.approved?'#10B981':'#E5E7EB') + ';border-radius:12px;padding:16px;margin-bottom:12px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+    html += '<div><span style="font-weight:800;font-size:14px">' + (r.student.name||'') + '</span>';
+    html += ' <span style="background:#F3F4F6;padding:2px 8px;border-radius:8px;font-size:12px;color:#6B7280">' + (r.student.class_name||'') + '</span></div>';
+    html += '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:' + (r.approved?'#10B981':'#6B7280') + '">';
+    html += '<input type="checkbox" ' + (r.approved?'checked':'') + ' onchange="toggleApprove(' + idx + ',this.checked)" style="width:16px;height:16px;accent-color:#10B981"> ';
+    html += (r.approved ? '✅ معتمد' : 'اعتماد') + '</label></div>';
+    html += '<textarea id="rtext-' + idx + '" rows="3" style="width:100%;border:1px solid #D1D5DB;border-radius:8px;padding:10px;font-family:Tajawal,Arial,sans-serif;font-size:13px;resize:vertical;color:#111827" oninput="markEdited(' + idx + ')">' + r.text + '</textarea>';
+    html += '<div style="font-size:11px;color:#9CA3AF;margin-top:4px" id="rcard-info-' + idx + '">' + (r.edited?'✏️ معدَّل':'المسودة الأولية') + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  out.innerHTML = html;
+}
+
+function toggleApprove(idx, val) {
+  if (!reportState.generated[idx]) return;
+  reportState.generated[idx].approved = val;
+  var card = document.getElementById('rcard-' + idx);
+  if (card) card.style.borderColor = val ? '#10B981' : '#E5E7EB';
+  var count = reportState.generated.filter(function(r){return r.approved;}).length;
+  var el = document.getElementById('approved-count');
+  if (el) el.textContent = count;
+}
+
+function markEdited(idx) {
+  if (!reportState.generated[idx]) return;
+  reportState.generated[idx].edited = true;
+  var ta = document.getElementById('rtext-' + idx);
+  if (ta) reportState.generated[idx].text = ta.value;
+  var info = document.getElementById('rcard-info-' + idx);
+  if (info) info.textContent = '✏️ معدَّل';
+}
+
+function approveAllReports() {
+  reportState.generated.forEach(function(r, idx) {
+    r.approved = true;
+    toggleApprove(idx, true);
+    var cb = document.querySelector('#rcard-' + idx + ' input[type=checkbox]');
+    if (cb) cb.checked = true;
+  });
+}
+
+async function sendApprovedReports() {
+  var approved = reportState.generated.filter(function(r){return r.approved;});
+  if (approved.length === 0) { alert('لا توجد تقارير معتمدة للإرسال. يرجى الاعتماد أولاً.'); return; }
+  if (!confirm('سيتم إرسال ' + approved.length + ' تقرير لأولياء الأمور. هل أنتِ متأكدة؟')) return;
+  var user = JSON.parse(sessionStorage.getItem('edoos_user')||'{}');
+  var base = (window.EduOS&&window.EduOS.SB_URL||'');
+  var key = window.EduOS&&window.EduOS.SB_KEY||'';
+  var jwt = _getJWT&&_getJWT()||'';
+  var h = { 'apikey': key, 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
+  var sent = 0;
+  for (var i = 0; i < approved.length; i++) {
+    var r = approved[i];
+    try {
+      await fetch(base + '/rest/v1/parent_notifications', {
+        method: 'POST', headers: h,
+        body: JSON.stringify({
+          student_id: String(r.student.id),
+          report_type: reportState.type,
+          content: r.text,
+          sent_by: user.staff_db_id || user.id || '',
+          sent_at: new Date().toISOString(),
+          status: 'sent',
+          class_name: r.student.class_name
+        })
+      });
+      sent++;
+    } catch(e) {}
+  }
+  var out = document.getElementById('rpt-results');
+  if (out) {
+    var banner = document.createElement('div');
+    banner.style.cssText = 'background:#D1FAE5;border:1px solid #6EE7B7;border-radius:10px;padding:14px;margin-bottom:12px;font-weight:700;color:#065F46;font-size:14px';
+    banner.textContent = '✅ تم الإرسال بنجاح: ' + sent + ' تقرير من أصل ' + approved.length;
+    out.insertBefore(banner, out.firstChild);
+  }
 }
 
 // ── NAVIGATION ──
