@@ -162,6 +162,7 @@
     'eduos-inclusion-smart':      ['specialist', 'social_worker', 'principal', 'vice_principal', 'admin'],
     'eduos-social-worker':        ['specialist', 'social_worker'],
     'eduos-socialworker':         ['specialist', 'social_worker'],
+    'eduos-counselor':            ['specialist', 'social_worker', 'counselor'],
     'eduos-kg':                   ['teacher', 'sub_teacher', 'principal', 'vice_principal'],
     'eduos-library':              ['technician', 'teacher', 'principal', 'admin', 'secretary'],
     'eduos-cafeteria':            ['admin', 'principal', 'secretary'],
@@ -199,6 +200,7 @@
     'eduos-agent-control':        ['admin'],
     'eduos-control-plane':        [],
     'eduos-school-wizard':        ['admin'],
+    'eduos-permissions':          ['admin'],
   };
 
   // استخراج اسم البوابة من المسار
@@ -291,6 +293,48 @@
             sessionStorage.setItem('edoos_user', JSON.stringify(s2));
           }
         } catch (e) { /* صامت */ }
+
+        // ─── جلب الصلاحيات الإضافية ────────────────────────────
+        try {
+          var sbUrl = window.EduOS?.school?.supabaseUrl || SB_URL || '';
+          var sbKey = window.EduOS?.SB_KEY || '';
+          if (sbUrl && sbKey && session.staff_db_id) {
+            var permRes = await fetch(sbUrl + '/rest/v1/staff_profiles?staff_db_id=eq.' + encodeURIComponent(session.staff_db_id) + '&select=extra_permissions,custom_panels&limit=1', {
+              headers: { 'apikey': sbKey, 'Authorization': 'Bearer ' + token }
+            });
+            if (permRes.ok) {
+              var permData = await permRes.json();
+              if (permData && permData[0]) {
+                var s3 = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+                s3.extra_permissions = permData[0].extra_permissions || [];
+                s3.custom_panels = permData[0].custom_panels || [];
+                sessionStorage.setItem('edoos_user', JSON.stringify(s3));
+              }
+            }
+          }
+        } catch(e) { /* صامت */ }
+
+        // دالة عامة للفحص السريع
+        window.EduOS = window.EduOS || {};
+        window.EduOS.can = function(perm) {
+          try {
+            var s = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+            var rk = s.role_key || '';
+            // المدير والمديرة لهم كل شيء
+            if (['admin','principal'].includes(rk)) return true;
+            var ep = s.extra_permissions || [];
+            return ep.includes(perm);
+          } catch(e) { return false; }
+        };
+        window.EduOS.hasPanel = function(panel) {
+          try {
+            var s = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+            var rk = s.role_key || '';
+            if (['admin','principal'].includes(rk)) return true;
+            var cp = s.custom_panels || [];
+            return cp.includes(panel);
+          } catch(e) { return false; }
+        };
       }
       // res.status غير 200 وغير 401 (مثل 503) — شبكة — نسمح بالدخول gracefully
     } catch (netErr) {
