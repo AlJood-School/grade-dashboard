@@ -311,6 +311,13 @@ tr:hover td { background: #FAFBFC; }
     <div class="sb-item" data-tab="objections" onclick="switchTab('objections', this)">
       <span class="sb-icon">⚖️</span> الاعتراضات | Objections
     </div>
+    <div class="sb-label">التعليم</div>
+    <div class="sb-item" data-tab="staff" onclick="switchTab('staff', this)">
+      <span class="sb-icon">👩‍🏫</span> الكادر التعليمي
+    </div>
+    <div class="sb-item" data-tab="weekly" onclick="switchTab('weekly', this)">
+      <span class="sb-icon">📖</span> المسار الأسبوعي
+    </div>
   </nav>
 
   <!-- MAIN -->
@@ -425,6 +432,40 @@ tr:hover td { background: #FAFBFC; }
       </div>
     </div>
 
+    <!-- TAB: STAFF -->
+    <div id="tab-staff" class="tab-content">
+      <div class="page-title">👩‍🏫 الكادر التعليمي | Teaching Staff</div>
+      <div class="child-tabs" id="staffChildTabs"></div>
+
+      <!-- مربية الصف -->
+      <div class="card" id="homeroomCard">
+        <div class="card-title">🏡 مربية الصف | Homeroom Teacher</div>
+        <div id="homeroomInfo"><div class="empty"><div class="empty-icon">⏳</div>اختر الابن/البنت أولاً</div></div>
+      </div>
+
+      <!-- الأخصائية -->
+      <div class="card">
+        <div class="card-title">💙 الأخصائية الاجتماعية | Social Worker</div>
+        <div id="counselorInfo"><div class="empty"><div class="empty-icon">⏳</div>جارٍ التحميل...</div></div>
+      </div>
+
+      <!-- معلمات المواد -->
+      <div class="card">
+        <div class="card-title">📚 معلمات المواد | Subject Teachers</div>
+        <div id="subjectTeachersTable"><div class="empty"><div class="empty-icon">⏳</div>اختر الابن/البنت أولاً</div></div>
+      </div>
+    </div>
+
+    <!-- TAB: WEEKLY TRACK -->
+    <div id="tab-weekly" class="tab-content">
+      <div class="page-title">📖 المسار الأسبوعي | Weekly Track</div>
+      <div class="child-tabs" id="weeklyChildTabs"></div>
+      <div class="card">
+        <div class="card-title">📖 خطط الدروس هذا الأسبوع | This Week's Lesson Plans</div>
+        <div id="weeklyPlansList"><div class="empty"><div class="empty-icon">⏳</div>اختر الابن/البنت أولاً</div></div>
+      </div>
+    </div>
+
     <!-- TAB: OBJECTIONS -->
     <div id="tab-objections" class="tab-content">
       <div class="page-title">⚖️ الاعتراضات | Objections</div>
@@ -500,8 +541,11 @@ async function loadChildren() {
   const sessionIds = Array.isArray(user.student_ids) ? user.student_ids.filter(Boolean) : [];
 
   if (sessionIds.length) {
-    // Query students by TEXT student_id column
-    children = await dbGet('students', `select=student_id,name,class_name,grade_level&student_id=in.(${sessionIds.join(',')})`);
+    // Try student_number first, fallback to id
+    children = await dbGet('students', `select=id,student_number,name,class_name,grade&student_number=in.(${sessionIds.join(',')})`);
+    if (!children.length) {
+      children = await dbGet('students', `select=id,student_number,name,class_name,grade&id=in.(${sessionIds.join(',')})`);
+    }
   } else {
     // Fallback: query parent_credentials by national_id
     const nat = user.national_id;
@@ -509,16 +553,21 @@ async function loadChildren() {
       const pc = await dbGet('parent_credentials', `select=student_ids&national_id=eq.${nat}&limit=1`);
       const ids2 = (pc[0] && pc[0].student_ids) ? pc[0].student_ids : [];
       if (ids2.length) {
-        children = await dbGet('students', `select=student_id,name,class_name,grade_level&student_id=in.(${ids2.join(',')})`);
+        children = await dbGet('students', `select=id,student_number,name,class_name,grade&student_number=in.(${ids2.join(',')})`);
+        if (!children.length) {
+          children = await dbGet('students', `select=id,student_number,name,class_name,grade&id=in.(${ids2.join(',')})`);
+        }
       }
     }
   }
+  // normalize: use student_number as child uid, fallback to id
+  children = children.map(c => ({ ...c, uid: c.student_number || String(c.id) }));
 
   renderChildTabs();
 }
 
 function renderChildTabs() {
-  const containers = ['childTabs', 'gradesChildTabs', 'attChildTabs', 'schedChildTabs', 'behChildTabs', 'reportsChildTabs', 'objectionsChildTabs'];
+  const containers = ['childTabs', 'gradesChildTabs', 'attChildTabs', 'schedChildTabs', 'behChildTabs', 'reportsChildTabs', 'objectionsChildTabs', 'staffChildTabs', 'weeklyChildTabs'];
   if (!children.length) {
     containers.forEach(id => {
       const el = document.getElementById(id);
@@ -528,7 +577,7 @@ function renderChildTabs() {
   }
 
   const html = children.map((c, i) =>
-    `<button class="child-tab${i===0?' active':''}" data-sid="${c.student_id}" onclick="selectChild('${c.student_id}', this, '${c.name}')">${c.name} · ${c.class_name || ''}</button>`
+    `<button class="child-tab${i===0?' active':''}" data-sid="${c.uid}" onclick="selectChild('${c.uid}', this, '${c.name}')">${c.name} · ${c.class_name || ''}</button>`
   ).join('');
 
   containers.forEach(id => {
@@ -537,21 +586,28 @@ function renderChildTabs() {
   });
 
   // auto-select first child
-  if (children.length) selectChild(children[0].student_id, null, children[0].name);
+  if (children.length) selectChild(children[0].uid, null, children[0].name);
 }
 
 async function selectChild(id, btn, name) {
   selectedChild = id;
   // update active buttons
   document.querySelectorAll('.child-tab').forEach(b => {
-    if (b.textContent.includes(name)) b.classList.add('active');
+    if (b.dataset.sid === String(id)) b.classList.add('active');
     else b.classList.remove('active');
   });
 
-  document.getElementById('parentName').textContent = `· ${name}`;
+  document.getElementById('parentName').textContent = '· ' + name;
   await loadChildData(id);
+
   var reportsTab = document.getElementById('tab-reports');
   if (reportsTab && reportsTab.classList.contains('active')) loadParentReports();
+
+  var staffTab = document.getElementById('tab-staff');
+  if (staffTab && staffTab.classList.contains('active')) loadStaffInfo(id);
+
+  var weeklyTab = document.getElementById('tab-weekly');
+  if (weeklyTab && weeklyTab.classList.contains('active')) loadWeeklyTrack(id);
 }
 
 async function loadChildData(id) {
@@ -562,6 +618,168 @@ async function loadChildData(id) {
     loadSchedule(id)
   ]);
   updateHomeKpis();
+  // preload staff info for home card
+  loadStaffHomeCard(id);
+}
+
+// --- STAFF INFO ---
+async function loadStaffInfo(uid) {
+  var child = children.find(function(c) { return String(c.uid) === String(uid); });
+  if (!child || !child.class_name) return;
+  var className = child.class_name;
+
+  // Homeroom teacher
+  var homeEl = document.getElementById('homeroomInfo');
+  if (homeEl) homeEl.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div>جارٍ التحميل...</div>';
+
+  // Subject teachers
+  var subEl = document.getElementById('subjectTeachersTable');
+  if (subEl) subEl.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div>جارٍ التحميل...</div>';
+
+  var assignments = await dbGet('teacher_assignments',
+    'select=subject,teacher_name_ar&class_name=eq.' + encodeURIComponent(className) +
+    '&academic_year=eq.2026-2027&order=subject'
+  );
+
+  var homeroom = assignments.find(function(a) { return a.subject && a.subject.includes('مربي'); });
+  if (homeEl) {
+    if (homeroom && homeroom.teacher_name_ar && homeroom.teacher_name_ar !== 'شاغر') {
+      homeEl.innerHTML = '<div style="display:flex;align-items:center;gap:16px;padding:8px 0">' +
+        '<div style="width:52px;height:52px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">👩‍🏫</div>' +
+        '<div><div style="font-size:18px;font-weight:800;color:var(--text)">' + homeroom.teacher_name_ar + '</div>' +
+        '<div style="font-size:14px;color:var(--text3);margin-top:4px">مربية الصف · ' + className + '</div></div></div>';
+    } else {
+      homeEl.innerHTML = '<div class="empty"><div class="empty-icon">👩‍🏫</div>لا تعيين مربية لهذا الصف</div>';
+    }
+  }
+
+  // Counselor (social workers)
+  var cslEl = document.getElementById('counselorInfo');
+  if (cslEl) cslEl.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div>جارٍ التحميل...</div>';
+  var counselors = await dbGet('staff_profiles', 'select=name_ar&role_key=eq.social_worker&order=name_ar');
+  if (cslEl) {
+    if (counselors && counselors.length) {
+      cslEl.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:12px;">' +
+        counselors.map(function(c) {
+          return '<div style="display:flex;align-items:center;gap:10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:10px 14px">' +
+            '<span style="font-size:22px">💙</span>' +
+            '<div><div style="font-weight:700;color:#1E293B">' + (c.name_ar || '—') + '</div>' +
+            '<div style="font-size:12px;color:#64748B">أخصائية اجتماعية</div></div></div>';
+        }).join('') + '</div>';
+    } else {
+      cslEl.innerHTML = '<div class="empty"><div class="empty-icon">💙</div>لا بيانات</div>';
+    }
+  }
+
+  // Subject teachers table
+  var subjects = assignments.filter(function(a) { return !a.subject || !a.subject.includes('مربي'); });
+  if (subEl) {
+    if (subjects.length) {
+      subEl.innerHTML = '<div class="tbl-wrap"><table>' +
+        '<thead><tr><th>المادة | Subject</th><th>المعلمة | Teacher</th></tr></thead>' +
+        '<tbody>' + subjects.map(function(a) {
+          var isVacant = !a.teacher_name_ar || a.teacher_name_ar === 'شاغر';
+          return '<tr>' +
+            '<td style="font-weight:700">' + (a.subject || '—') + '</td>' +
+            '<td>' + (isVacant
+              ? '<span class="badge badge-red">شاغر</span>'
+              : '<span style="font-weight:600">' + a.teacher_name_ar + '</span>'
+            ) + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>';
+    } else {
+      subEl.innerHTML = '<div class="empty"><div class="empty-icon">📚</div>لا بيانات تعيينات لهذا الصف</div>';
+    }
+  }
+}
+
+async function loadStaffHomeCard(uid) {
+  var child = children.find(function(c) { return String(c.uid) === String(uid); });
+  if (!child || !child.class_name) return;
+
+  var assignments = await dbGet('teacher_assignments',
+    'select=subject,teacher_name_ar&class_name=eq.' + encodeURIComponent(child.class_name) +
+    '&academic_year=eq.2026-2027&subject=eq.مربية الصف&limit=1'
+  );
+  var homeroom = assignments[0];
+
+  // Inject into home summary if exists
+  var sumEl = document.getElementById('homeSummary');
+  if (!sumEl) return;
+  var existing = sumEl.innerHTML;
+  if (homeroom && homeroom.teacher_name_ar && homeroom.teacher_name_ar !== 'شاغر') {
+    var tag = '<div style="margin-top:14px;padding:12px 16px;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:10px;display:flex;align-items:center;gap:10px">' +
+      '<span style="font-size:20px">👩‍🏫</span>' +
+      '<div><div style="font-size:13px;color:#6B7280;font-weight:600">مربية الصف</div>' +
+      '<div style="font-weight:800;color:#1E293B">' + homeroom.teacher_name_ar + '</div></div></div>';
+    sumEl.innerHTML = existing + tag;
+  }
+}
+
+// --- WEEKLY TRACK ---
+async function loadWeeklyTrack(uid) {
+  var child = children.find(function(c) { return String(c.uid) === String(uid); });
+  if (!child || !child.class_name) return;
+  var el = document.getElementById('weeklyPlansList');
+  if (!el) return;
+  el.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div>جارٍ التحميل...</div>';
+
+  // Calculate this week's date range (Mon-Fri UAE)
+  var now = new Date();
+  var day = now.getDay(); // 0=Sun, 1=Mon...6=Sat
+  var diffToMon = (day === 0) ? -6 : 1 - day;
+  var monday = new Date(now);
+  monday.setDate(now.getDate() + diffToMon);
+  var friday = new Date(monday);
+  friday.setDate(monday.getDate() + 4);
+
+  function toISO(d) {
+    return d.toISOString().slice(0, 10);
+  }
+
+  var plans = await dbGet('lesson_plans',
+    'select=plan_date,subject,period,objectives,activities,homework&class_name=eq.' + encodeURIComponent(child.class_name) +
+    '&plan_date=gte.' + toISO(monday) + '&plan_date=lte.' + toISO(friday) +
+    '&order=plan_date,period'
+  );
+
+  if (!plans || !plans.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📖</div>' +
+      'لا توجد خطط درسية مسجّلة لهذا الأسبوع (' + toISO(monday) + ' – ' + toISO(friday) + ')</div>';
+    return;
+  }
+
+  var DAYS_AR = {0:'الأحد', 1:'الاثنين', 2:'الثلاثاء', 3:'الأربعاء', 4:'الخميس', 5:'الجمعة', 6:'السبت'};
+  // Group by date
+  var byDate = {};
+  plans.forEach(function(p) {
+    if (!byDate[p.plan_date]) byDate[p.plan_date] = [];
+    byDate[p.plan_date].push(p);
+  });
+
+  var html = '';
+  Object.keys(byDate).sort().forEach(function(date) {
+    var d = new Date(date + 'T00:00:00');
+    var dayName = DAYS_AR[d.getDay()] || date;
+    html += '<div style="margin-bottom:18px">';
+    html += '<div style="font-size:16px;font-weight:800;color:#6C3DD6;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #EDE9FE">' +
+      '📅 ' + dayName + ' — ' + date + '</div>';
+    byDate[date].forEach(function(p) {
+      html += '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:12px 16px;margin-bottom:8px">';
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+      html += '<span style="background:#EDE9FE;color:#6C3DD6;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700">ح' + (p.period || '—') + '</span>';
+      html += '<span style="font-weight:800;color:#1E293B">' + (p.subject || '—') + '</span>';
+      html += '</div>';
+      if (p.objectives) html += '<div style="font-size:14px;color:#374151;margin-bottom:4px"><strong>🎯 الأهداف:</strong> ' + p.objectives + '</div>';
+      if (p.activities) html += '<div style="font-size:14px;color:#374151;margin-bottom:4px"><strong>🎨 الأنشطة:</strong> ' + p.activities + '</div>';
+      if (p.homework) html += '<div style="font-size:14px;color:#D97706"><strong>📝 الواجب:</strong> ' + p.homework + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+
+  el.innerHTML = html;
 }
 
 // --- GRADES ---
@@ -650,7 +868,7 @@ function renderBehavior() {
 
 // --- SCHEDULE ---
 async function loadSchedule(id) {
-  var child = children.find(function(c) { return c.student_id === id; });
+  var child = children.find(function(c) { return String(c.uid) === String(id); });
   if (!child) return;
   var el = document.getElementById('schedTable');
   if (!child.class_name) {
@@ -852,7 +1070,7 @@ async function sendMessage() {
       body: JSON.stringify({
         parent_phone: natId,
         student_id: selectedChild || '',
-        student_name: selectedChild ? (children.find(function(c) { return c.student_id === selectedChild; }) || {}).name || '' : '',
+        student_name: selectedChild ? (children.find(function(c) { return String(c.uid) === String(selectedChild); }) || {}).name || '' : '',
         message_type: 'parent_inquiry',
         subject: subjectVal || 'استفسار من ولي الأمر',
         body: text,
@@ -966,6 +1184,8 @@ function switchTab(name, el) {
   if (name === 'announcements') loadAnnouncements();
   if (name === 'reports') { if (selectedChild) loadParentReports(); }
   if (name === 'messages') { loadTeachersForMsg(); if (selectedChild) loadMessages(); }
+  if (name === 'staff') { if (selectedChild) loadStaffInfo(selectedChild); }
+  if (name === 'weekly') { if (selectedChild) loadWeeklyTrack(selectedChild); }
 }
 
 // --- TOAST ---
