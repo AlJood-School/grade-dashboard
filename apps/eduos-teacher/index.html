@@ -2214,11 +2214,41 @@ function renderReportCards(reports) {
     html += '<input type="checkbox" ' + (r.approved?'checked':'') + ' onchange="toggleApprove(' + idx + ',this.checked)" style="width:16px;height:16px;accent-color:#10B981"> ';
     html += (r.approved ? '✅ معتمد' : 'اعتماد') + '</label></div>';
     html += '<textarea id="rtext-' + idx + '" rows="3" style="width:100%;border:1px solid #D1D5DB;border-radius:8px;padding:10px;font-family:Tajawal,Arial,sans-serif;font-size:13px;resize:vertical;color:#111827" oninput="markEdited(' + idx + ')">' + r.text + '</textarea>';
-    html += '<div style="font-size:11px;color:#9CA3AF;margin-top:4px" id="rcard-info-' + idx + '">' + (r.edited?'✏️ معدَّل':'المسودة الأولية') + '</div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px"><div style="font-size:11px;color:#9CA3AF" id="rcard-info-' + idx + '">' + (r.edited?'✏️ معدَّل':'المسودة الأولية') + '</div>';
+    html += '<button onclick="aiEnhanceReport(' + idx + ')" style="background:linear-gradient(135deg,#7C3AED,#22D3EE);color:#fff;border:none;border-radius:8px;padding:4px 12px;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">✨ تحسين بالذكاء</button></div>';
     html += '</div>';
   });
   html += '</div>';
   out.innerHTML = html;
+}
+
+async function aiEnhanceReport(idx) {
+  const r = reportState.generated[idx];
+  if (!r) return;
+  const btn = document.querySelector('#rcard-' + idx + ' button[onclick="aiEnhanceReport(' + idx + ')"]');
+  if (btn) { btn.textContent = '⏳ جارٍ التوليد...'; btn.disabled = true; }
+  try {
+    const student = r.student;
+    const d = r.data;
+    const type = reportState.type;
+    const typeAr = {attendance:'الحضور والغياب', behavior:'السلوك والانضباط', grades:'الدرجات والتقييم', progress:'التقدم الأكاديمي'}[type] || type;
+    let dataStr = '';
+    if (type==='attendance') dataStr = 'نسبة الحضور: ' + (d.pct||0) + '%، حاضر: ' + (d.present||0) + ' يوماً، غائب: ' + (d.absent||0) + ' يوماً، متأخر: ' + (d.late||0) + ' مرة';
+    else if (type==='behavior') dataStr = (d.count===0?'لا ملاحظات سلوكية — سلوك مثالي':'عدد الملاحظات: ' + d.count + '، منها شديدة: ' + (d.serious||0));
+    else if (type==='grades') dataStr = 'متوسط الدرجات: ' + (d.avg||0) + '٪';
+    else if (type==='progress') dataStr = 'نسبة الحضور: ' + (d.attendancePct||0) + '٪، ملاحظات سلوكية: ' + (d.behaviorCount||0);
+    const prompt = 'اكتب تقرير ' + typeAr + ' لولي أمر الطالبة ' + student.name + ' في الصف ' + student.class_name + '. البيانات: ' + dataStr + '. التقرير يجب أن يكون: باللغة العربية الفصحى، مهني ومحترم، لا يزيد عن 4 جمل، يذكر اسم الطالبة، يختم بجملة تشجيعية أو دعوة للتعاون. لا تضف سلام أو تحية في البداية فقط المحتوى.';
+    const { data: aiData } = await sb.functions.invoke('askAI', { body: { question: prompt, context: 'teacher_report' } });
+    const aiText = aiData?.answer || aiData?.text || aiData?.content || '';
+    if (aiText && aiText.length > 20) {
+      const ta = document.getElementById('rtext-' + idx);
+      if (ta) { ta.value = aiText; reportState.generated[idx].text = aiText; reportState.generated[idx].edited = true; }
+      const info = document.getElementById('rcard-info-' + idx);
+      if (info) info.textContent = '✨ مُوَلَّد بالذكاء الاصطناعي';
+      showToast('✅ تم توليد التقرير بالذكاء');
+    } else { showToast('⚠️ تعذّر التوليد — القالب محفوظ'); }
+  } catch(e) { showToast('⚠️ خطأ في الاتصال بالذكاء'); }
+  if (btn) { btn.textContent = '✨ تحسين بالذكاء'; btn.disabled = false; }
 }
 
 function toggleApprove(idx, val) {
