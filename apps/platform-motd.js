@@ -240,9 +240,14 @@ const TYPE_META = {
     }, 8500);
   }
 
-  // أول ظهور بعد 5 ثوانٍ، ثم كل دقيقتين
-  setTimeout(showNext, 5000);
-  setInterval(showNext, 120000);
+  // يظهر مرة واحدة في الجلسة فقط — بعد 5 ثوانٍ من الفتح
+  var _motdKey = 'motd_shown_' + new Date().toDateString();
+  if (!sessionStorage.getItem(_motdKey)) {
+    setTimeout(function() {
+      showNext();
+      sessionStorage.setItem(_motdKey, '1');
+    }, 5000);
+  }
 
   window.EduMOTD = window.EduMOTD || {};
   window.EduMOTD.showNow = showNext;
