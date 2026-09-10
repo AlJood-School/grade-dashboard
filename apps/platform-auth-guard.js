@@ -242,6 +242,7 @@
       // في Demo: نقبل الجلسة بدون JWT (بيئة تجريبية)
       if (isDemo && session.role_key) {
         // Demo session valid — skip JWT verification
+        document.documentElement.style.visibility = 'visible';
         return;
       }
       // ولي الأمر والطالب: يتحققان عبر EF عند تسجيل الدخول — لا JWT
@@ -250,6 +251,7 @@
       if (noJwtRoles.indexOf(roleKey) !== -1 && session.loginTime) {
         var age = Date.now() - (session.loginTime || 0);
         if (age < 15 * 60 * 1000) { // 15 دقيقة
+          document.documentElement.style.visibility = 'visible';
           return;
         }
       }
