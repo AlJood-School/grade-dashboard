@@ -3654,8 +3654,19 @@ async function initLessonPlanForm() {
   if (_lpTeacherAssignments) return;
   const teacherId = teacherNumericId;
   if (!teacherId) return;
-  const { data } = await sb.from('teacher_assignments').select('class_name,subject').eq('staff_db_id', teacherId).eq('academic_year', '2026-2027').order('class_name');
-  _lpTeacherAssignments = data || [];
+  // استخدام Bearer token لتجاوز RLS
+  const sess = JSON.parse(sessionStorage.getItem('edoos_user')||'{}');
+  const token = sess.token || '';
+  const sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+  const sbKey = window.EduOS && window.EduOS.ANON ? window.EduOS.ANON : '';
+  let data = null;
+  try {
+    const res = await fetch(sbUrl + '/rest/v1/teacher_assignments?staff_db_id=eq.' + encodeURIComponent(teacherId) + '&academic_year=eq.2026-2027&select=class_name,subject&order=class_name', {
+      headers: { 'apikey': sbKey, 'Authorization': 'Bearer ' + token }
+    });
+    data = await res.json();
+  } catch(e) { data = []; }
+  _lpTeacherAssignments = Array.isArray(data) ? data : [];
   const classSet = [...new Set((_lpTeacherAssignments).map(r => r.class_name))].sort();
   const sel = document.getElementById('lp-class');
   if (!sel) return;
