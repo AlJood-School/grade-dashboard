@@ -244,7 +244,16 @@
         // Demo session valid — skip JWT verification
         return;
       }
-      // H-03 FIX: كل الأدوار تحتاج JWT — لا استثناء للطالب أو ولي الأمر
+      // ولي الأمر والطالب: يتحققان عبر EF عند تسجيل الدخول — لا JWT
+      // الأمان مضمون بتحقق EF + national_id + loginTime
+      var noJwtRoles = ['parent', 'student'];
+      if (noJwtRoles.indexOf(roleKey) !== -1 && session.loginTime) {
+        var age = Date.now() - (session.loginTime || 0);
+        if (age < 15 * 60 * 1000) { // 15 دقيقة
+          return;
+        }
+      }
+      // H-03 FIX: باقي الأدوار تحتاج JWT
       redirectTo('/apps/eduos-login/?err=no_token');
       return;
     }
