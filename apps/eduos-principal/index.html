@@ -402,6 +402,14 @@ tr:hover td{background:var(--surface2)}
         <span class="snav-sub">Subject Coordinators</span>
       </span>
     </button>
+    <button class="snav" data-panel="daily-leave" onclick="showPanel('daily-leave',this);loadPrincipalLeave()">
+      <span class="snav-icon">🕐</span>
+      <span class="snav-text">
+        <span class="snav-label">الاستئذانات</span>
+        <span class="snav-sub">Leave Requests</span>
+      </span>
+      <span class="snav-badge" id="dailyLeaveBadge" style="display:none">0</span>
+    </button>
   </nav>
 
   <div class="sidebar-footer">
@@ -2147,7 +2155,8 @@ var panelTitles = {
   platform:   ['حالة المنصة', 'Platform State'],
   achievements: ['الإنجازات', 'Achievements'],
   'digital-safety': ['السلامة الرقمية', 'Digital Safety'],
-  behavior: ['السلوك والمخالفات', 'Behavior & Incidents']
+  behavior: ['السلوك والمخالفات', 'Behavior & Incidents'],
+  'daily-leave': ['الاستئذانات', 'Leave Requests']
 };
 
 window.showPanel = function showPanel(name, btnEl) {
@@ -3916,5 +3925,114 @@ async function saveLeaveRequest() {
     </div>
   </div>
 </div>
+
+<!-- ══ DAILY LEAVE PANEL — استئذانات المديرة ══ -->
+<div class="panel" id="panel-daily-leave">
+  <!-- الرسمي: المديرة تعتمد -->
+  <div class="card" style="margin-bottom:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-size:15px;font-weight:800;color:var(--text)">📋 الاستئذانات الرسمية — بانتظار اعتمادك</div>
+      <span id="principalOfficialCount" style="background:var(--rose);color:#fff;border-radius:20px;padding:2px 10px;font-size:12px;font-weight:800">0</span>
+    </div>
+    <div id="principalOfficialList">
+      <div style="text-align:center;padding:24px;color:var(--text3)">جارٍ التحميل...</div>
+    </div>
+  </div>
+
+  <!-- الشخصي: المديرة تطّلع -->
+  <div class="card">
+    <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:16px">🕐 الاستئذانات الشخصية (للاطلاع — تُعتمَد من النائبة)</div>
+    <div id="principalPersonalList">
+      <div style="text-align:center;padding:24px;color:var(--text3)">جارٍ التحميل...</div>
+    </div>
+  </div>
+</div>
+<!-- ══ END DAILY LEAVE PANEL ══ -->
+
+<script>
+// ─── استئذانات المديرة ─────────────────────────────
+function _leaveSB() {
+  try { if (typeof sb !== 'undefined' && sb) return sb; } catch(e) {}
+  return window.sb || window._supabase || null;
+}
+
+async function loadPrincipalLeave() {
+  const sb = _leaveSB();
+  if (!sb) return;
+
+  // الرسمي المعلق
+  const {data:official} = await sb.from('leave_requests')
+    .select('*').eq('leave_type','official').eq('status','pending')
+    .order('created_at',{ascending:false});
+
+  const officialList = document.getElementById('principalOfficialList');
+  const cnt = document.getElementById('principalOfficialCount');
+  const badge = document.getElementById('dailyLeaveBadge');
+  cnt.textContent = (official||[]).length;
+  if (badge) { badge.style.display=(official||[]).length?'inline':'none'; badge.textContent=(official||[]).length; }
+
+  if (!official||!official.length) {
+    officialList.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)">لا توجد طلبات رسمية معلقة ✅</div>';
+  } else {
+    officialList.innerHTML = official.map(r => `
+      <div style="background:#EFF6FF;border-radius:12px;padding:14px 18px;margin-bottom:10px;border-right:4px solid var(--brand)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+          <div>
+            <div style="font-size:14px;font-weight:800;color:var(--text)">${r.staff_name||r.staff_db_id}</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:3px">
+              📅 ${r.date_from||r.request_date}${r.date_to&&r.date_to!==r.date_from?' → '+r.date_to:''}
+            </div>
+            ${r.reason_short?`<div style="font-size:12px;color:var(--text3);margin-top:2px">${r.reason_short}</div>`:''}
+            ${r.document_url?`<a href="${r.document_url}" target="_blank" style="font-size:12px;color:var(--brand);margin-top:4px;display:inline-block">📎 عرض الوثيقة</a>`:'<div style="font-size:12px;color:var(--rose);margin-top:4px">⚠️ لا توجد وثيقة</div>'}
+          </div>
+          <div style="display:flex;gap:8px">
+            <button onclick="principalDecideLeave(${r.id},'approved')" style="padding:8px 16px;border-radius:8px;border:none;background:#F0FDF4;color:#166534;font-family:'Tajawal',Arial,sans-serif;font-size:13px;font-weight:700;cursor:pointer">✅ اعتمدت</button>
+            <button onclick="principalDecideLeave(${r.id},'rejected')" style="padding:8px 16px;border-radius:8px;border:none;background:#FFF1F2;color:#BE123C;font-family:'Tajawal',Arial,sans-serif;font-size:13px;font-weight:700;cursor:pointer">❌ ترفض</button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // الشخصي للاطلاع
+  const {data:personal} = await sb.from('leave_requests')
+    .select('*').eq('leave_type','personal')
+    .order('created_at',{ascending:false}).limit(30);
+  const personalList = document.getElementById('principalPersonalList');
+  if (!personal||!personal.length) {
+    personalList.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)">لا توجد طلبات شخصية</div>';
+  } else {
+    const statusMap = {pending:'⏳ معلق', approved:'✅ مُعتمَد', rejected:'❌ مرفوض'};
+    personalList.innerHTML = personal.map(r => {
+      const locked = r.locked ? ' 🔒' : '';
+      const stc = r.status==='approved'?'#166534':r.status==='rejected'?'#BE123C':'#92400E';
+      return `<div style="background:var(--surface2);border-radius:10px;padding:12px 16px;margin-bottom:8px;border-right:4px solid ${stc}">
+        <div style="display:flex;justify-content:space-between">
+          <span style="font-size:13px;font-weight:700">${r.staff_name||r.staff_db_id} — ${r.hours} ساعة — ${r.request_date}${locked}</span>
+          <span style="font-size:12px;color:${stc};font-weight:700">${statusMap[r.status]||r.status}</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+}
+
+async function principalDecideLeave(id, status) {
+  if (!confirm(`هل تريدين ${status==='approved'?'اعتماد':'رفض'} هذا الطلب؟`)) return;
+  const sb = _leaveSB();
+  if (!sb) return;
+  const user = JSON.parse(sessionStorage.getItem('edoos_user')||'{}');
+
+  const {data:req} = await sb.from('leave_requests').select('locked').eq('id',id).single();
+  if (req && req.locked) { alert('🔒 هذا الطلب مقفول — انتهى وقت التعديل'); return; }
+
+  const {error} = await sb.from('leave_requests').update({
+    status, decided_by: String(user.id||''), decided_at: new Date().toISOString()
+  }).eq('id',id).eq('leave_type','official');
+  if (error) { alert('خطأ: '+error.message); return; }
+  alert(status==='approved'?'✅ تم اعتماد الاستئذان الرسمي':'❌ تم رفض الطلب');
+  loadPrincipalLeave();
+}
+// ──────────────────────────────────────────────────────
+</script>
 </body>
 </html>
