@@ -199,6 +199,10 @@ body{overflow:hidden}
       <span class="snav-icon">&#x1F4CB;</span>
       <span class="snav-text"><span class="snav-label">تعيين الكادر</span><span class="snav-sub">Teacher Assignments</span></span>
     </button>
+    <button class="snav" data-panel="swaps" id="nav-swaps" onclick="showPanel('swaps',this);loadSwaps()">
+      <span class="snav-icon">🔄</span>
+      <span class="snav-text"><span class="snav-label">التبديل المؤقت</span><span class="snav-sub">Schedule Swaps</span></span>
+    </button>
     <div class="sidebar-divider"></div>
     <!-- الإدارة -->
     <button class="snav" data-panel="approvals" id="nav-approvals">
@@ -517,6 +521,37 @@ body{overflow:hidden}
       <div class="card">
         <div class="sec-title">&#x1F4CA; حالة الجداول / Timetable Status</div>
         <div id="vpTimetableStatus" style="color:var(--text3);font-size:14px">جاري التحميل...</div>
+      </div>
+    </div>
+
+    <!-- SWAPS -->
+    <div class="panel" id="panel-swaps">
+      <div class="sec-title">🔄 التبديل المؤقت / Schedule Swaps</div>
+
+      <!-- فلاتر -->
+      <div class="card" style="padding:14px 18px">
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <label style="font-size:13px;color:var(--text2);font-weight:600">التاريخ:</label>
+          <button class="btn-sm-filter active" id="swapF-today" onclick="setSwapFilter('today')">اليوم</button>
+          <button class="btn-sm-filter" id="swapF-week" onclick="setSwapFilter('week')">هذا الأسبوع</button>
+          <button class="btn-sm-filter" id="swapF-all" onclick="setSwapFilter('all')">الكل</button>
+          <label style="font-size:13px;color:var(--text2);font-weight:600;margin-right:12px">النوع:</label>
+          <button class="btn-sm-filter active" id="swapT-all" onclick="setSwapType('all')">الكل</button>
+          <button class="btn-sm-filter" id="swapT-cover" onclick="setSwapType('cover')">تغطية غياب</button>
+          <button class="btn-sm-filter" id="swapT-swap" onclick="setSwapType('swap')">تبديل بين معلمتين</button>
+        </div>
+      </div>
+
+      <!-- قسم التغطيات اليومية (temporary_schedule_overrides) -->
+      <div class="card" style="margin-top:14px">
+        <div class="sec-title" style="color:#ef4444;margin-bottom:12px">🔴 تغطيات الغياب اليوم</div>
+        <div id="swapsCoverList"><div class="skeleton" style="height:80px"></div></div>
+      </div>
+
+      <!-- قسم التبديلات بين معلمتين (schedule_swaps) -->
+      <div class="card" style="margin-top:14px">
+        <div class="sec-title" style="color:#6C3DD6;margin-bottom:12px">🔄 تبديلات بين معلمتين</div>
+        <div id="swapsSwapList"><div class="skeleton" style="height:80px"></div></div>
       </div>
     </div>
 
@@ -4278,6 +4313,16 @@ async function loadEarlyWarning() {
   #eduos-floating-actions #duty-float-btn{order:2;}
   #eduos-floating-actions #msg-float-btn{order:3;}
   @media(max-width:600px){#eduos-floating-actions{left:14px;bottom:14px;gap:10px;}}
+
+  /* === swap filters === */
+  .btn-sm-filter{padding:5px 14px;border-radius:20px;border:1.5px solid var(--border);background:#fff;font-size:12px;font-family:'Tajawal',Arial,sans-serif;cursor:pointer;color:var(--text2);transition:all .18s}
+  .btn-sm-filter.active{background:var(--primary);color:#fff;border-color:var(--primary);font-weight:700}
+  .swap-row{display:grid;gap:0;border-radius:10px;border:1px solid var(--border);overflow:hidden;margin-bottom:8px}
+  .swap-row-hd{background:#F8FAFC;padding:9px 14px;display:flex;gap:10px;align-items:center;font-weight:700;font-size:13px}
+  .swap-row-bd{padding:9px 14px;font-size:13px;color:var(--text2);display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .swap-badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700}
+  .swap-badge-ok{background:#D1FAE5;color:#065F46}
+  .swap-badge-pend{background:#FEF3C7;color:#92400E}
 </style>
 <script>
 (function organizeEduOSFloatingActions(){
@@ -4746,6 +4791,112 @@ async function saveLeaveRequest() {
     } else showToast('خطأ في الحفظ', 'error');
   } catch(e) { showToast('خطأ: ' + e.message, 'error'); }
 }
+
+// === التبديل المؤقت ===
+var _swapFilter = 'today';
+var _swapType   = 'all';
+
+function setSwapFilter(f) {
+  _swapFilter = f;
+  ['today','week','all'].forEach(x => {
+    var b = document.getElementById('swapF-'+x);
+    if (b) b.classList.toggle('active', x === f);
+  });
+  loadSwaps();
+}
+function setSwapType(t) {
+  _swapType = t;
+  ['all','cover','swap'].forEach(x => {
+    var b = document.getElementById('swapT-'+x);
+    if (b) b.classList.toggle('active', x === t);
+  });
+  loadSwaps();
+}
+
+async function loadSwaps() {
+  var coverEl = document.getElementById('swapsCoverList');
+  var swapEl  = document.getElementById('swapsSwapList');
+  if (!coverEl || !swapEl) return;
+  coverEl.innerHTML = '<div class="skeleton" style="height:60px"></div>';
+  swapEl.innerHTML  = '<div class="skeleton" style="height:60px"></div>';
+
+  var today = new Date().toISOString().slice(0,10);
+  var weekAgo = new Date(Date.now()-7*86400000).toISOString().slice(0,10);
+  var dateParam = _swapFilter === 'today' ? ('&override_date=eq.'+today)
+                : _swapFilter === 'week'  ? ('&override_date=gte.'+weekAgo)
+                : '';
+
+  try {
+    // تغطيات الغياب
+    if (_swapType !== 'swap') {
+      var r1 = await fetch(SB_URL+'/rest/v1/temporary_schedule_overrides?order=override_date.desc,period_number.asc'+dateParam+'&limit=60', {
+        headers:{'apikey':SB_ANON,'Authorization':'Bearer '+SB_ANON}
+      });
+      var covers = await r1.json();
+      if (!covers.length) {
+        coverEl.innerHTML = '<p style="color:var(--text3);padding:10px">لا تغطيات في هذه الفترة</p>';
+      } else {
+        coverEl.innerHTML = covers.map(function(c) {
+          return '<div class="swap-row">'
+            +'<div class="swap-row-hd">'
+            +'<span>📅 '+c.override_date+'</span>'
+            +'<span style="color:#64748B">|</span>'
+            +'<span>الحصة '+c.period_number+'</span>'
+            +'<span style="color:#64748B">|</span>'
+            +'<span>'+( c.class_key||'—' )+'</span>'
+            +'</div>'
+            +'<div class="swap-row-bd">'
+            +'<span>المعلمة الأصلية: <b>'+(c.original_teacher_name||'—')+'</b></span>'
+            +'<span>التغطية: <b>'+(c.actual_teacher_name||'—')+'</b></span>'
+            +'<span>السبب: '+(c.reason||'—')+'</span>'
+            +'</div>'
+            +'</div>';
+        }).join('');
+      }
+    } else {
+      coverEl.innerHTML = '<p style="color:var(--text3);padding:10px">تم تصفية التغطيات</p>';
+    }
+
+    // تبديلات بين معلمتين
+    if (_swapType !== 'cover') {
+      var dateParam2 = _swapFilter === 'today' ? ('&swap_date=eq.'+today)
+                     : _swapFilter === 'week'  ? ('&swap_date=gte.'+weekAgo) : '';
+      var r2 = await fetch(SB_URL+'/rest/v1/schedule_swaps?order=swap_date.desc'+dateParam2+'&limit=60', {
+        headers:{'apikey':SB_ANON,'Authorization':'Bearer '+SB_ANON}
+      });
+      var swaps = await r2.json();
+      if (!swaps.length) {
+        swapEl.innerHTML = '<p style="color:var(--text3);padding:10px">لا تبديلات في هذه الفترة</p>';
+      } else {
+        swapEl.innerHTML = swaps.map(function(s) {
+          var badge = s.approved
+            ? '<span class="swap-badge swap-badge-ok">✅ مُعتمَد</span>'
+            : '<span class="swap-badge swap-badge-pend">⏳ بانتظار</span>';
+          return '<div class="swap-row">'
+            +'<div class="swap-row-hd">'
+            +'<span>📅 '+s.swap_date+'</span>'
+            +'<span style="color:#64748B">|</span>'
+            +'<span>ح'+(s.period_a||'?')+' ↔ ح'+(s.period_b||'?')+'</span>'
+            +''+badge
+            +'</div>'
+            +'<div class="swap-row-bd">'
+            +'<span><b>'+(s.teacher_a||'—')+'</b> → '+(s.class_name||'—')+'</span>'
+            +'<span><b>'+(s.teacher_b||'—')+'</b> → '+(s.class_b||'—')+'</span>'
+            +'<span>السبب: '+(s.reason||'—')+'</span>'
+            +'</div>'
+            +'</div>';
+        }).join('');
+      }
+    } else {
+      swapEl.innerHTML = '<p style="color:var(--text3);padding:10px">تم تصفية التبديلات</p>';
+    }
+  } catch(e) {
+    coverEl.innerHTML = '<p style="color:#ef4444">خطأ في التحميل: '+e.message+'</p>';
+    swapEl.innerHTML  = '';
+  }
+}
+// === نهاية التبديل المؤقت ===
+
 </script>
 
 <!-- ===== modal VP: اختيار نمط منشئ الجدول ===== -->
