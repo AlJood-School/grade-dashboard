@@ -4163,28 +4163,18 @@ switchPanel = function(name) {
     <!-- الطالبة -->
     <div style="margin-bottom:14px;">
       <label style="font-size:14px;font-weight:700;color:#475569;display:block;margin-bottom:6px;">الطالبة / Student</label>
-      <select id="viol_student" style="width:100%;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 14px;font-family:'Tajawal',Arial;font-size:15px;">
+      <select id="viol_student" onchange="onViolStudentChange()" style="width:100%;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 14px;font-family:'Tajawal',Arial;font-size:15px;">
         <option value="">— اختر الطالبة —</option>
       </select>
     </div>
 
-    <!-- نوع الإجراء -->
+    <!-- الإجراء التلقائي (يُحسب من عدد مخالفات هذه المعلمة مع هذه الطالبة) -->
     <div style="margin-bottom:14px;">
-      <label style="font-size:14px;font-weight:700;color:#475569;display:block;margin-bottom:8px;">نوع الإجراء / Action Type</label>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <label style="flex:1;min-width:100px;cursor:pointer;">
-          <input type="radio" name="viol_action" value="verbal" checked style="margin-left:6px;">
-          <span style="font-size:14px;font-weight:600;color:#1E293B;">🗣 شفهي</span>
-        </label>
-        <label style="flex:1;min-width:100px;cursor:pointer;">
-          <input type="radio" name="viol_action" value="written" style="margin-left:6px;">
-          <span style="font-size:14px;font-weight:600;color:#1E293B;">📝 كتابي</span>
-        </label>
-        <label style="flex:1;min-width:100px;cursor:pointer;">
-          <input type="radio" name="viol_action" value="parent_summon" style="margin-left:6px;">
-          <span style="font-size:14px;font-weight:600;color:#DC2626;">📞 استدعاء ولي الأمر</span>
-        </label>
+      <label style="font-size:14px;font-weight:700;color:#475569;display:block;margin-bottom:8px;">الإجراء التلقائي / Auto Action</label>
+      <div id="violAutoActionBox" style="border:1.5px solid #CBD5E1;border-radius:10px;padding:12px 14px;background:#F8FAFC;font-size:14px;font-weight:700;color:#475569;">
+        اختاري الصف ثم الطالبة لحساب الإجراء تلقائياً
       </div>
+      <input type="hidden" id="viol_auto_action" value="">
     </div>
 
     <!-- سبب المخالفة -->
@@ -4239,7 +4229,6 @@ switchPanel = function(name) {
 <!-- Degree radio visual toggle -->
 <style>
 input[name="viol_degree"]:checked + div { transform:scale(1.05); }
-input[name="viol_action"]:checked ~ span { color:#DC2626; }
 </style>
 
 <script>
@@ -4259,6 +4248,7 @@ function openViolationModal(preStudentId) {
   document.getElementById('viol_student').innerHTML = '<option value="">— اختر الطالبة —</option>';
   document.getElementById('viol_desc').value = '';
   document.getElementById('violMsg').style.display = 'none';
+  resetViolAutoAction();
   // إذا تم تمرير طالبة مباشرة
   if (preStudentId && allStudents) {
     const s = allStudents.find(x => String(x.id) === String(preStudentId));
@@ -4277,6 +4267,7 @@ async function violLoadStudents(preSelectId) {
   const cls = document.getElementById('viol_class').value;
   const sSel = document.getElementById('viol_student');
   sSel.innerHTML = '<option value="">جاري التحميل...</option>';
+  resetViolAutoAction();
   if (!cls) { sSel.innerHTML = '<option value="">— اختر الطالبة —</option>'; return; }
   try {
     const { data } = await sb.from('students').select('id,name,student_number').eq('class_name', cls).order('name');
@@ -4289,21 +4280,69 @@ async function violLoadStudents(preSelectId) {
     });
     if (preSelectId) {
       const found = (data || []).find(x => String(x.id) === String(preSelectId));
-      if (found) sSel.value = JSON.stringify({ id: found.id, name: found.name, student_number: found.student_number });
+      if (found) {
+        sSel.value = JSON.stringify({ id: found.id, name: found.name, student_number: found.student_number });
+        onViolStudentChange();
+      }
     }
   } catch(e) { sSel.innerHTML = '<option value="">خطأ في التحميل</option>'; }
 }
 
+// ══════════ الإجراء التلقائي: يُحسب من عدد مخالفات هذه المعلمة مع هذه الطالبة ══════════
+// 0 مخالفات سابقة → شفهي | 1 مخالفة سابقة → كتابي | مخالفتان فأكثر → إحالة للأخصائية
+let violAutoActionCount = null;
+
+function resetViolAutoAction() {
+  violAutoActionCount = null;
+  document.getElementById('viol_auto_action').value = '';
+  const box = document.getElementById('violAutoActionBox');
+  box.style.background = '#F8FAFC'; box.style.color = '#475569';
+  box.textContent = 'اختاري الصف ثم الطالبة لحساب الإجراء تلقائياً';
+}
+
+function violAutoActionInfo(count) {
+  if (count === 0) return { label: 'شفهي', color: '#065F46', bg: '#D1FAE5' };
+  if (count === 1) return { label: 'كتابي', color: '#92400E', bg: '#FEF3C7' };
+  return { label: 'إحالة للأخصائية', color: '#991B1B', bg: '#FEE2E2' };
+}
+
+async function onViolStudentChange() {
+  const stuRaw = document.getElementById('viol_student').value;
+  const box = document.getElementById('violAutoActionBox');
+  if (!stuRaw) { resetViolAutoAction(); return; }
+  const stu = JSON.parse(stuRaw);
+  box.style.background = '#F8FAFC'; box.style.color = '#475569';
+  box.textContent = '⏳ جاري حساب المخالفات السابقة...';
+  try {
+    const { count, error } = await sb.from('behavior_incidents')
+      .select('id', { count: 'exact', head: true })
+      .eq('teacher_id', String(teacherId))
+      .eq('student_id', String(stu.id));
+    if (error) throw error;
+    violAutoActionCount = count || 0;
+    const info = violAutoActionInfo(violAutoActionCount);
+    document.getElementById('viol_auto_action').value = info.label;
+    box.style.background = info.bg; box.style.color = info.color;
+    box.textContent = 'مخالفاتك مع هذه الطالبة: ' + violAutoActionCount + ' — الإجراء التلقائي: ' + info.label;
+  } catch(e) {
+    violAutoActionCount = 0;
+    document.getElementById('viol_auto_action').value = 'شفهي';
+    box.style.background = '#FEE2E2'; box.style.color = '#991B1B';
+    box.textContent = 'تعذّر حساب الإجراء تلقائياً — سيُسجَّل كـ "شفهي" افتراضياً';
+  }
+}
+
+const VIOL_TOPIC_MAP = { uniform: 'زي وأدوات', book: 'زي وأدوات', equipment: 'زي وأدوات', behavior: 'مخالفة سلوكية', other: 'أخرى' };
+
 async function saveViolation() {
   const stuRaw = document.getElementById('viol_student').value;
   const cls    = document.getElementById('viol_class').value;
-  const action = document.querySelector('input[name="viol_action"]:checked')?.value;
   const cat    = document.getElementById('viol_category').value;
   const deg    = parseInt(document.querySelector('input[name="viol_degree"]:checked')?.value || '1');
   const desc   = document.getElementById('viol_desc').value.trim();
   const msgEl  = document.getElementById('violMsg');
 
-  if (!stuRaw || !cls || !action || !cat) {
+  if (!stuRaw || !cls || !cat) {
     msgEl.style.display = 'block';
     msgEl.style.background = '#FEE2E2'; msgEl.style.color = '#991B1B';
     msgEl.textContent = '⚠️ يرجى تعبئة جميع الحقول الإلزامية';
@@ -4312,61 +4351,57 @@ async function saveViolation() {
 
   const stu = JSON.parse(stuRaw);
   const catAr = { uniform:'الزي المدرسي', book:'عدم إحضار الكتاب', equipment:'عدم إحضار الأدوات', behavior:'سلوك مخالف', other:'أخرى' }[cat] || cat;
-  const actionAr = { verbal:'شفهي', written:'كتابي', parent_summon:'استدعاء ولي الأمر' }[action] || action;
+
+  // إعادة حساب الإجراء التلقائي فور الحفظ لضمان الدقة (تحسّباً لأي مخالفة سُجّلت أثناء فتح النافذة)
+  await onViolStudentChange();
+  const actionAr = document.getElementById('viol_auto_action').value || 'شفهي';
+  const isReferral = actionAr === 'إحالة للأخصائية';
+  const teacherNameVal = session?.name_ar || session?.name || session?.full_name || '';
 
   try {
-    const { error } = await sb.from('behavior_incidents').insert({
+    const { data: incRows, error } = await sb.from('behavior_incidents').insert({
       student_id: String(stu.id),
       student_name: stu.name,
       grade: cls.replace(/[A-Z]/g,'').trim(),
       class_name: cls,
       degree: deg,
       violation_type: catAr,
-      violation_category: cat,
-      action_type: action,
       description: desc || (actionAr + ' بسبب: ' + catAr),
       action_taken: actionAr,
       teacher_id: teacherId,
-      teacher_name: teacherName || '',
-      parent_notified: action === 'parent_summon',
-      status: 'open'
-    });
+      teacher_name: teacherNameVal,
+      specialist_notified: isReferral,
+      parent_notified: false,
+      status: isReferral ? 'مفتوحة' : 'open'
+    }).select();
     if (error) throw error;
+
+    if (isReferral) {
+      const newIncident = (incRows && incRows[0]) || null;
+      const { error: refErr } = await sb.from('counselor_referrals').insert({
+        student_db_id: String(stu.id),
+        student_name: stu.name,
+        class_name: cls,
+        incident_id: newIncident ? newIncident.id : null,
+        referred_by: String(teacherId),
+        referred_by_name: teacherNameVal,
+        subject: catAr,
+        topic: VIOL_TOPIC_MAP[cat] || 'أخرى',
+        notes: desc || ('تكرار المخالفة (' + (violAutoActionCount + 1) + ' مرات) مع هذه المعلمة — بسبب: ' + catAr),
+        status: 'pending'
+      });
+      if (refErr) console.warn('counselor_referrals insert error:', refErr);
+    }
 
     msgEl.style.display = 'block';
     msgEl.style.background = '#D1FAE5'; msgEl.style.color = '#065F46';
-    msgEl.textContent = '✅ تم تسجيل المخالفة بنجاح';
+    msgEl.textContent = isReferral ? '✅ تم التسجيل — تمت الإحالة للأخصائية' : '✅ تم تسجيل المخالفة بنجاح';
     setTimeout(() => closeViolationModal(), 1500);
-
-    // إشعار واتساب عند الاستدعاء (UltraMsg — إن كان مفعّلاً)
-    if (action === 'parent_summon') {
-      notifyParentSummon(stu, cls, catAr);
-    }
   } catch(e) {
     msgEl.style.display = 'block';
     msgEl.style.background = '#FEE2E2'; msgEl.style.color = '#991B1B';
     msgEl.textContent = '❌ ' + (e.message || 'خطأ في الحفظ');
   }
-}
-
-async function notifyParentSummon(student, cls, reason) {
-  try {
-    // جلب رقم هاتف ولي الأمر من parent_credentials
-    const { data: creds } = await sb.from('parent_credentials').select('phone').eq('student_db_id', String(student.id)).limit(1);
-    const phone = creds?.[0]?.phone;
-    if (!phone) return;
-    // إرسال عبر UltraMsg EF
-    await fetch(window._SB_URL + '/functions/v1/eduos-ultramsg-send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + window._SB_ANON },
-      body: JSON.stringify({
-        phone,
-        message: 'بوابة الجود | ' + student.name + ' (الصف ' + cls + ')\n' +
-                 'يُرجى التواصل مع المدرسة بخصوص:\n' + reason + '\n' +
-                 'نشكر تعاونكم 🏫'
-      })
-    });
-  } catch(e) { console.warn('whatsapp notify:', e); }
 }
 
 // إضافة زر مخالفة في جدول الطلاب
