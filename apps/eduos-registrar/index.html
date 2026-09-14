@@ -219,9 +219,9 @@ body{font-family:'Tajawal',Arial,sans-serif;background:#f0f4f8;color:#1e293b;min
             <option value="male">ذكر</option>
           </select>
         </div>
-        <div class="form-group">
-          <label class="form-label">رقم الهوية الوطنية</label>
-          <input class="form-input" id="regNatId" placeholder="784-XXXX-XXXXXXX-X">
+          <div class="form-group">
+          <label class="form-label">هاتف ولي الأمر</label>
+          <input class="form-input" id="regNatId" placeholder="+971XXXXXXXXX">
         </div>
       </div>
 
@@ -281,7 +281,7 @@ body{font-family:'Tajawal',Arial,sans-serif;background:#f0f4f8;color:#1e293b;min
           <select class="form-select" id="editStuClass"></select>
         </div>
         <div class="form-group">
-          <label class="form-label">رقم الهوية</label>
+          <label class="form-label">رقم هوية ولي الأمر</label>
           <input class="form-input" id="editStuNatId">
         </div>
       </div>
@@ -417,7 +417,7 @@ async function loadClasses() {
 // ── STUDENTS ──
 async function loadStudents() {
   document.getElementById('stuTableWrap').innerHTML = '<div class="loading"><div class="spinner"></div><br>جارٍ التحميل...</div>';
-  var data = await dbGet('students', 'select=id,name,class_name,student_number,gender,national_id,grade&order=class_name,name&limit=2000');
+  var data = await dbGet('students', 'select=id,name,class_name,student_number,grade,parent_phone,parent_national_id&order=class_name,name&limit=2000');
   if (!Array.isArray(data)) { document.getElementById('stuTableWrap').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-txt">خطأ في التحميل</div></div>'; return; }
   allStudents = data;
   document.getElementById('statTotal').textContent = data.length;
@@ -426,14 +426,14 @@ async function loadStudents() {
 
 function renderStudents(list) {
   if (!list.length) { document.getElementById('stuTableWrap').innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-txt">لا نتائج</div></div>'; return; }
-  var html = '<table class="tbl"><thead><tr><th>الاسم</th><th>الصف</th><th>رقم الطالبة</th><th>الجنس</th><th>رقم الهوية</th><th>إجراء</th></tr></thead><tbody>';
+  var html = '<table class="tbl"><thead><tr><th>الاسم</th><th>الصف</th><th>رقم الطالبة</th><th>المرحلة</th><th>هاتف ولي الأمر</th><th>إجراء</th></tr></thead><tbody>';
   list.forEach(function(s) {
     html += '<tr>';
     html += '<td style="font-weight:600">' + (s.name || '—') + '</td>';
     html += '<td>' + (s.class_name || '—') + '</td>';
     html += '<td style="font-family:monospace">' + (s.student_number || '—') + '</td>';
-    html += '<td>' + (s.gender === 'female' ? '👧 أنثى' : s.gender === 'male' ? '👦 ذكر' : '—') + '</td>';
-    html += '<td style="font-size:12px;color:#64748b">' + (s.national_id || '—') + '</td>';
+    html += '<td style="font-size:13px;color:#64748b">' + (s.grade || '—') + '</td>';
+    html += '<td style="font-size:13px;color:#64748b;direction:ltr">' + (s.parent_phone || '—') + '</td>';
     html += '<td><button class="btn btn-outline btn-sm" onclick="openStuEdit(' + JSON.stringify(s).replace(/"/g,'&quot;') + ')">✏️ تعديل</button></td>';
     html += '</tr>';
   });
@@ -456,7 +456,7 @@ function openStuEdit(s) {
   document.getElementById('editStuId').value = s.id;
   document.getElementById('editStuName').value = s.name || '';
   document.getElementById('editStuNum').value = s.student_number || '';
-  document.getElementById('editStuNatId').value = s.national_id || '';
+  document.getElementById('editStuNatId').value = s.parent_national_id || '';
   var sel = document.getElementById('editStuClass');
   for (var i = 0; i < sel.options.length; i++) { if (sel.options[i].value === s.class_name) { sel.selectedIndex = i; break; } }
   document.getElementById('stuModal').classList.add('open');
@@ -469,7 +469,7 @@ async function saveStuEdit() {
     name: document.getElementById('editStuName').value.trim(),
     student_number: document.getElementById('editStuNum').value.trim(),
     class_name: document.getElementById('editStuClass').value,
-    national_id: document.getElementById('editStuNatId').value.trim()
+    parent_national_id: document.getElementById('editStuNatId').value.trim()
   };
   if (!body.name) { toast('⚠️ الاسم مطلوب'); return; }
   var res = await dbPatch('students', 'id=eq.' + id, body);
@@ -585,8 +585,7 @@ async function submitRegister() {
   var name = document.getElementById('regName').value.trim();
   var stuNum = document.getElementById('regStudentNum').value.trim();
   var cls = document.getElementById('regClass').value;
-  var gender = document.getElementById('regGender').value;
-  var natId = document.getElementById('regNatId').value.trim();
+  var parentPhone2 = document.getElementById('regNatId').value.trim();
   var pName = document.getElementById('regParentName').value.trim();
   var pNatId = document.getElementById('regParentNatId').value.trim();
   var pPhone = document.getElementById('regParentPhone').value.trim();
@@ -594,7 +593,7 @@ async function submitRegister() {
   if (!name || !stuNum || !cls || !pName || !pNatId || !pPhone) { toast('⚠️ يرجى ملء الحقول الإلزامية'); return; }
 
   // Insert student
-  var stuRes = await dbPost('students', { name: name, student_number: stuNum, class_name: cls, gender: gender, national_id: natId });
+  var stuRes = await dbPost('students', { name: name, student_number: stuNum, class_name: cls, parent_phone: pPhone, parent_national_id: pNatId });
   if (!Array.isArray(stuRes) || !stuRes[0]) { toast('❌ خطأ في تسجيل الطالبة'); return; }
 
   var stuDbId = stuRes[0].id;
