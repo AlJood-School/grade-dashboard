@@ -876,25 +876,32 @@ function renderAttendance() {
 // --- BEHAVIOR ---
 let behData = [];
 async function loadBehavior(id) {
-  behData = await dbGet('behavior_incidents', `select=created_at,violation_type,description,degree&student_id=eq.${id}&order=created_at.desc&limit=20`);
+  behData = await dbGet('behavior_incidents', `select=created_at,violation_type,violation_category,action_type,description,degree,teacher_name&student_id=eq.${id}&order=created_at.desc&limit=20`);
   renderBehavior();
 }
 
 function renderBehavior() {
   const el = document.getElementById('behTable');
   if (!behData.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🌟</div>لا بيانات</div>'; return; }
+  const ACTION_AR = { verbal:'🗣 شفهي', written:'📝 كتابي', parent_summon:'📞 استدعاء' };
+  const CAT_AR = { uniform:'👗 الزي', book:'📚 كتاب', equipment:'✏️ أدوات', behavior:'😤 سلوك', other:'📋 أخرى' };
   el.innerHTML = `
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>التاريخ | Date</th><th>النوع | Type</th><th>الوصف | Description</th><th>النقاط | Points</th></tr></thead>
+        <thead><tr><th>التاريخ</th><th>الإجراء</th><th>السبب</th><th>الوصف</th><th>الشدة</th><th>المعلمة</th></tr></thead>
         <tbody>${behData.map(b => {
           const deg = b.degree != null ? (b.degree === 1 ? 'خفيف' : b.degree === 2 ? 'متوسط' : b.degree >= 3 ? 'شديد' : b.degree) : '—';
-          const badge = b.degree === 1 ? 'badge-amber' : b.degree >= 2 ? 'badge-red' : 'badge-green';
+          const degBadge = b.degree === 1 ? 'badge-amber' : b.degree === 2 ? 'badge-orange' : b.degree >= 3 ? 'badge-red' : 'badge-blue';
+          const actionLabel = ACTION_AR[b.action_type] || b.action_type || '—';
+          const catLabel = CAT_AR[b.violation_category] || b.violation_type || '—';
+          const actionColor = b.action_type === 'parent_summon' ? '#DC2626' : b.action_type === 'written' ? '#D97706' : '#2563EB';
           return `<tr>
             <td>${(b.created_at||'').slice(0,10) || '—'}</td>
-            <td><span class="badge badge-blue">${b.violation_type || '—'}</span></td>
-            <td>${b.description || '—'}</td>
-            <td><span class="badge ${badge}">${deg}</span></td>
+            <td><span style="font-weight:700;color:${actionColor};font-size:13px;">${actionLabel}</span></td>
+            <td><span class="badge badge-blue" style="font-size:12px;">${catLabel}</span></td>
+            <td style="font-size:13px;color:#475569;">${b.description || '—'}</td>
+            <td><span class="badge ${degBadge}">${deg}</span></td>
+            <td style="font-size:12px;color:#64748B;">${b.teacher_name || '—'}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>

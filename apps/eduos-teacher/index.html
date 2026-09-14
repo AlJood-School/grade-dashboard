@@ -739,6 +739,11 @@ tr:hover td{background:var(--surface2)}
           <p style="font-size:15px;color:var(--text2);margin-bottom:20px;line-height:1.7">امنح النجوم وتتبع تقدم الطلاب السلوكي والأكاديمي.</p>
           <button class="btn-brand" style="width:100%;background:var(--amber)" onclick="window.location.href='../eduos-reinforcement/'">إدارة التعزيز / Manage Stars</button>
         </div>
+        <div class="session-card" style="border:2px solid #FEE2E2;">
+          <div class="session-card-title" style="color:#991B1B;">⚠️ تسجيل مخالفة / Behavior Incident</div>
+          <p style="font-size:15px;color:var(--text2);margin-bottom:20px;line-height:1.7">سجّل مخالفة سلوكية أو تنظيمية لطالبة — شفهي / كتابي / استدعاء.</p>
+          <button class="btn-brand" style="width:100%;background:#DC2626" onclick="openViolationModal(null)">تسجيل مخالفة / Log Incident</button>
+        </div>
         <div class="session-card">
           <div class="session-card-title">📱 واجب رقمي / Digital HW</div>
           <p style="font-size:15px;color:var(--text2);margin-bottom:20px;line-height:1.7">أنشئ واجباً رقمياً وتتبع التسليم والدرجات فورياً.</p>
@@ -1841,7 +1846,7 @@ function renderStudentsTable(students, avgMap, flagSet) {
     const stars = s.reinforcement_stars || 0;
     const sb1 = avg ? Math.min(100, Math.round(avg*0.4 + (att||80)*0.3 + e*3)) : null;
     return '<tr><td>' + (i+1) + '</td>'
-      + '<td style="font-weight:700">' + ((window.EduLang?.getLang()==='en'&&s.name_en)?s.name_en:(s.name||'—')) + '</td>'
+      + '<td style="font-weight:700" data-student-id="' + s.id + '" data-student-name="' + (s.name||'') + '" data-class-name="' + (s.class_name||'') + '">' + ((window.EduLang?.getLang()==='en'&&s.name_en)?s.name_en:(s.name||'—')) + '</td>'
       + '<td>' + (s.class_name||'—') + '</td>'
       + '<td>' + (att!==null?att+'%':'—') + '</td>'
       + '<td>' + (avg!==null?avg+'%':'—') + '</td>'
@@ -1849,7 +1854,10 @@ function renderStudentsTable(students, avgMap, flagSet) {
       + '<td>' + (sb1!==null?'<div class="sb1-bar"><div class="sb1-fill" style="width:'+sb1+'%"></div></div> '+sb1:'—') + '</td>'
       + '<td>⭐ ' + stars + '</td>'
       + '<td>' + (flagSet.has(s.id)?'<span class="flag-chip">⚠️</span>':'<span class="grade-chip grade-'+(lvl||'x').toLowerCase()+'">'+lvl+'</span>') + '</td>'
-      + '<td><button class="btn-sm btn-ghost" onclick="viewStudent(\'' + s.id + '\')">عرض / View</button></td></tr>';
+      + '<td style="white-space:nowrap">'
+        + '<button class="btn-sm btn-ghost" onclick="viewStudent(\'' + s.id + '\')">عرض</button> '
+        + '<button class="btn-sm" style="background:#FEE2E2;color:#991B1B;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;font-family:Tajawal,Arial;font-size:12px;font-weight:700" onclick="openViolationModal(\'' + s.id + '\')">⚠️</button>'
+      + '</td></tr>';
   }).join('');
 }
 
@@ -4135,5 +4143,245 @@ switchPanel = function(name) {
 };
 // ─────────────────────────────────────────────────
 </script>
+
+<!-- ══════════ VIOLATION MODAL ══════════ -->
+<div id="violationModal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.55);align-items:center;justify-content:center;direction:rtl;">
+  <div style="background:#fff;border-radius:18px;padding:28px 24px;max-width:480px;width:95%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);font-family:'Tajawal',Arial,sans-serif;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h3 style="margin:0;font-size:20px;color:#991B1B;">⚠️ تسجيل مخالفة</h3>
+      <button onclick="closeViolationModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748B;">✕</button>
+    </div>
+
+    <!-- الصف -->
+    <div style="margin-bottom:14px;">
+      <label style="font-size:14px;font-weight:700;color:#475569;display:block;margin-bottom:6px;">الصف / Classroom</label>
+      <select id="viol_class" onchange="violLoadStudents()" style="width:100%;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 14px;font-family:'Tajawal',Arial;font-size:15px;">
+        <option value="">— اختر الصف —</option>
+      </select>
+    </div>
+
+    <!-- الطالبة -->
+    <div style="margin-bottom:14px;">
+      <label style="font-size:14px;font-weight:700;color:#475569;display:block;margin-bottom:6px;">الطالبة / Student</label>
+      <select id="viol_student" style="width:100%;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 14px;font-family:'Tajawal',Arial;font-size:15px;">
+        <option value="">— اختر الطالبة —</option>
+      </select>
+    </div>
+
+    <!-- نوع الإجراء -->
+    <div style="margin-bottom:14px;">
+      <label style="font-size:14px;font-weight:700;color:#475569;display:block;margin-bottom:8px;">نوع الإجراء / Action Type</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <label style="flex:1;min-width:100px;cursor:pointer;">
+          <input type="radio" name="viol_action" value="verbal" checked style="margin-left:6px;">
+          <span style="font-size:14px;font-weight:600;color:#1E293B;">🗣 شفهي</span>
+        </label>
+        <label style="flex:1;min-width:100px;cursor:pointer;">
+          <input type="radio" name="viol_action" value="written" style="margin-left:6px;">
+          <span style="font-size:14px;font-weight:600;color:#1E293B;">📝 كتابي</span>
+        </label>
+        <label style="flex:1;min-width:100px;cursor:pointer;">
+          <input type="radio" name="viol_action" value="parent_summon" style="margin-left:6px;">
+          <span style="font-size:14px;font-weight:600;color:#DC2626;">📞 استدعاء ولي الأمر</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- سبب المخالفة -->
+    <div style="margin-bottom:14px;">
+      <label style="font-size:14px;font-weight:700;color:#475569;display:block;margin-bottom:6px;">سبب المخالفة / Category</label>
+      <select id="viol_category" style="width:100%;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 14px;font-family:'Tajawal',Arial;font-size:15px;">
+        <option value="uniform">👗 الزي المدرسي</option>
+        <option value="book">📚 عدم إحضار الكتاب</option>
+        <option value="equipment">✏️ عدم إحضار الأدوات</option>
+        <option value="behavior">😤 سلوك مخالف</option>
+        <option value="other">📋 أخرى</option>
+      </select>
+    </div>
+
+    <!-- الدرجة -->
+    <div style="margin-bottom:14px;">
+      <label style="font-size:14px;font-weight:700;color:#475569;display:block;margin-bottom:8px;">درجة الشدة / Severity</label>
+      <div style="display:flex;gap:8px;">
+        <label style="flex:1;cursor:pointer;text-align:center;border:2px solid #D1FAE5;border-radius:10px;padding:8px;background:#F0FDF4;">
+          <input type="radio" name="viol_degree" value="1" checked style="display:none;">
+          <div style="font-size:18px;">🟡</div>
+          <div style="font-size:13px;font-weight:700;color:#065F46;">خفيف</div>
+        </label>
+        <label style="flex:1;cursor:pointer;text-align:center;border:2px solid #FEF3C7;border-radius:10px;padding:8px;background:#FFFBEB;">
+          <input type="radio" name="viol_degree" value="2" style="display:none;">
+          <div style="font-size:18px;">🟠</div>
+          <div style="font-size:13px;font-weight:700;color:#92400E;">متوسط</div>
+        </label>
+        <label style="flex:1;cursor:pointer;text-align:center;border:2px solid #FEE2E2;border-radius:10px;padding:8px;background:#FFF5F5;">
+          <input type="radio" name="viol_degree" value="3" style="display:none;">
+          <div style="font-size:18px;">🔴</div>
+          <div style="font-size:13px;font-weight:700;color:#991B1B;">شديد</div>
+        </label>
+      </div>
+    </div>
+
+    <!-- وصف اختياري -->
+    <div style="margin-bottom:20px;">
+      <label style="font-size:14px;font-weight:700;color:#475569;display:block;margin-bottom:6px;">ملاحظات إضافية (اختياري)</label>
+      <textarea id="viol_desc" rows="3" style="width:100%;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 14px;font-family:'Tajawal',Arial;font-size:15px;resize:vertical;box-sizing:border-box;" placeholder="أضف أي تفاصيل إضافية..."></textarea>
+    </div>
+
+    <div id="violMsg" style="display:none;padding:10px 14px;border-radius:10px;margin-bottom:14px;font-weight:700;font-size:14px;"></div>
+
+    <div style="display:flex;gap:10px;">
+      <button onclick="saveViolation()" style="flex:2;background:#DC2626;color:#fff;border:none;border-radius:10px;padding:13px;font-family:'Tajawal',Arial;font-size:16px;font-weight:700;cursor:pointer;">⚠️ تسجيل المخالفة</button>
+      <button onclick="closeViolationModal()" style="flex:1;background:#F1F5F9;color:#475569;border:none;border-radius:10px;padding:13px;font-family:'Tajawal',Arial;font-size:16px;font-weight:700;cursor:pointer;">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- Degree radio visual toggle -->
+<style>
+input[name="viol_degree"]:checked + div { transform:scale(1.05); }
+input[name="viol_action"]:checked ~ span { color:#DC2626; }
+</style>
+
+<script>
+// ══════════ VIOLATION LOGIC ══════════
+
+function openViolationModal(preStudentId) {
+  const modal = document.getElementById('violationModal');
+  modal.style.display = 'flex';
+  // ملء قائمة الصفوف من صفوف المعلمة
+  const clsSel = document.getElementById('viol_class');
+  clsSel.innerHTML = '<option value="">— اختر الصف —</option>';
+  (teacherClasses || []).forEach(c => {
+    const o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    clsSel.appendChild(o);
+  });
+  document.getElementById('viol_student').innerHTML = '<option value="">— اختر الطالبة —</option>';
+  document.getElementById('viol_desc').value = '';
+  document.getElementById('violMsg').style.display = 'none';
+  // إذا تم تمرير طالبة مباشرة
+  if (preStudentId && allStudents) {
+    const s = allStudents.find(x => String(x.id) === String(preStudentId));
+    if (s) {
+      clsSel.value = s.class_name;
+      violLoadStudents(preStudentId);
+    }
+  }
+}
+
+function closeViolationModal() {
+  document.getElementById('violationModal').style.display = 'none';
+}
+
+async function violLoadStudents(preSelectId) {
+  const cls = document.getElementById('viol_class').value;
+  const sSel = document.getElementById('viol_student');
+  sSel.innerHTML = '<option value="">جاري التحميل...</option>';
+  if (!cls) { sSel.innerHTML = '<option value="">— اختر الطالبة —</option>'; return; }
+  try {
+    const { data } = await sb.from('students').select('id,name,student_number').eq('class_name', cls).order('name');
+    sSel.innerHTML = '<option value="">— اختر الطالبة —</option>';
+    (data || []).forEach(s => {
+      const o = document.createElement('option');
+      o.value = JSON.stringify({ id: s.id, name: s.name, student_number: s.student_number });
+      o.textContent = s.name;
+      sSel.appendChild(o);
+    });
+    if (preSelectId) {
+      const found = (data || []).find(x => String(x.id) === String(preSelectId));
+      if (found) sSel.value = JSON.stringify({ id: found.id, name: found.name, student_number: found.student_number });
+    }
+  } catch(e) { sSel.innerHTML = '<option value="">خطأ في التحميل</option>'; }
+}
+
+async function saveViolation() {
+  const stuRaw = document.getElementById('viol_student').value;
+  const cls    = document.getElementById('viol_class').value;
+  const action = document.querySelector('input[name="viol_action"]:checked')?.value;
+  const cat    = document.getElementById('viol_category').value;
+  const deg    = parseInt(document.querySelector('input[name="viol_degree"]:checked')?.value || '1');
+  const desc   = document.getElementById('viol_desc').value.trim();
+  const msgEl  = document.getElementById('violMsg');
+
+  if (!stuRaw || !cls || !action || !cat) {
+    msgEl.style.display = 'block';
+    msgEl.style.background = '#FEE2E2'; msgEl.style.color = '#991B1B';
+    msgEl.textContent = '⚠️ يرجى تعبئة جميع الحقول الإلزامية';
+    return;
+  }
+
+  const stu = JSON.parse(stuRaw);
+  const catAr = { uniform:'الزي المدرسي', book:'عدم إحضار الكتاب', equipment:'عدم إحضار الأدوات', behavior:'سلوك مخالف', other:'أخرى' }[cat] || cat;
+  const actionAr = { verbal:'شفهي', written:'كتابي', parent_summon:'استدعاء ولي الأمر' }[action] || action;
+
+  try {
+    const { error } = await sb.from('behavior_incidents').insert({
+      student_id: String(stu.id),
+      student_name: stu.name,
+      grade: cls.replace(/[A-Z]/g,'').trim(),
+      class_name: cls,
+      degree: deg,
+      violation_type: catAr,
+      violation_category: cat,
+      action_type: action,
+      description: desc || (actionAr + ' بسبب: ' + catAr),
+      action_taken: actionAr,
+      teacher_id: teacherId,
+      teacher_name: teacherName || '',
+      parent_notified: action === 'parent_summon',
+      status: 'open'
+    });
+    if (error) throw error;
+
+    msgEl.style.display = 'block';
+    msgEl.style.background = '#D1FAE5'; msgEl.style.color = '#065F46';
+    msgEl.textContent = '✅ تم تسجيل المخالفة بنجاح';
+    setTimeout(() => closeViolationModal(), 1500);
+
+    // إشعار واتساب عند الاستدعاء (UltraMsg — إن كان مفعّلاً)
+    if (action === 'parent_summon') {
+      notifyParentSummon(stu, cls, catAr);
+    }
+  } catch(e) {
+    msgEl.style.display = 'block';
+    msgEl.style.background = '#FEE2E2'; msgEl.style.color = '#991B1B';
+    msgEl.textContent = '❌ ' + (e.message || 'خطأ في الحفظ');
+  }
+}
+
+async function notifyParentSummon(student, cls, reason) {
+  try {
+    // جلب رقم هاتف ولي الأمر من parent_credentials
+    const { data: creds } = await sb.from('parent_credentials').select('phone').eq('student_db_id', String(student.id)).limit(1);
+    const phone = creds?.[0]?.phone;
+    if (!phone) return;
+    // إرسال عبر UltraMsg EF
+    await fetch(window._SB_URL + '/functions/v1/eduos-ultramsg-send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + window._SB_ANON },
+      body: JSON.stringify({
+        phone,
+        message: 'بوابة الجود | ' + student.name + ' (الصف ' + cls + ')\n' +
+                 'يُرجى التواصل مع المدرسة بخصوص:\n' + reason + '\n' +
+                 'نشكر تعاونكم 🏫'
+      })
+    });
+  } catch(e) { console.warn('whatsapp notify:', e); }
+}
+
+// إضافة زر مخالفة في جدول الطلاب
+// يُضاف data-student-id لكل اسم طالبة للـ Tooltip
+document.addEventListener('DOMContentLoaded', () => {
+  // تفعيل Tooltip على الجدول عند تحميل البيانات
+  const obs = new MutationObserver(() => {
+    if (window.EduStudentBadge && sb) {
+      window.EduStudentBadge.initStudentTooltips('#studentsBody', sb);
+    }
+  });
+  const tbody = document.getElementById('studentsBody');
+  if (tbody) obs.observe(tbody, { childList: true });
+});
+</script>
+<script src="../platform-student-badge.js"></script>
 </body>
 </html>
