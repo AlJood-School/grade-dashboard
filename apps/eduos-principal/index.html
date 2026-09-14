@@ -1391,6 +1391,37 @@ tr:hover td{background:var(--surface2)}
           <div id="behDetailContent"></div>
         </div>
       </div>
+
+      <!-- ═══ قوالب أسئلة التواصل مع ولي الأمر ═══ -->
+      <div style="margin-top:32px;padding-top:24px;border-top:2px solid #1e3a5a">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+          <div class="sec-title" style="margin:0">📋 قوالب أسئلة التواصل مع ولي الأمر <span id="tplPendingBadge" style="background:#e74c3c;color:#fff;border-radius:20px;padding:2px 10px;font-size:0.75rem;margin-right:8px;display:none">0</span></div>
+          <button class="btn btn-info" onclick="loadPendingTemplates()">🔄 تحديث</button>
+        </div>
+        <div id="pendingTemplatesList"><div class="skeleton" style="height:120px;border-radius:12px"></div></div>
+      </div>
+
+      <!-- ═══ لوحة الحالات المصعّدة ═══ -->
+      <div style="margin-top:32px;padding-top:24px;border-top:2px solid #1e3a5a">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+          <div class="sec-title" style="margin:0">🚨 لوحة الحالات المصعّدة</div>
+          <button class="btn btn-info" onclick="loadEscalatedCases()">🔄 تحديث</button>
+        </div>
+        <div id="escalatedCasesList"><div class="skeleton" style="height:120px;border-radius:12px"></div></div>
+      </div>
+
+      <!-- مودال رفض القالب -->
+      <div id="tplRejectModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9100;align-items:center;justify-content:center">
+        <div style="background:#1e2d3d;border-radius:16px;padding:24px;width:min(440px,92vw);position:relative">
+          <button onclick="closeTplRejectModal()" style="position:absolute;top:10px;left:10px;background:none;border:none;color:#94a3b8;font-size:1.3rem;cursor:pointer">✕</button>
+          <h3 style="color:#e2e8f0;margin:0 0 14px;font-family:'Tajawal',Arial,sans-serif;font-size:1rem">سبب رفض القالب</h3>
+          <textarea id="tplRejectReason" rows="3" style="width:100%;padding:10px;border:1px solid #334155;border-radius:10px;background:#162132;color:#e2e8f0;font-family:'Tajawal',Arial,sans-serif;font-size:14px;resize:vertical;box-sizing:border-box" placeholder="اكتبي سبب الرفض..."></textarea>
+          <div style="margin-top:14px;display:flex;gap:10px;justify-content:flex-end">
+            <button class="btn" onclick="closeTplRejectModal()" style="background:#334155;color:#e2e8f0">إلغاء</button>
+            <button class="btn" style="background:#e74c3c;color:#fff" onclick="confirmRejectTemplate()">❌ تأكيد الرفض</button>
+          </div>
+        </div>
+      </div>
     </div>
 
 
@@ -3532,7 +3563,110 @@ if (!window.SB_URL) window.SB_URL = SB_URL;
 if (!window.SB_KEY) window.SB_KEY = SB_KEY;
 var _behData=[],_behClasses=[],_behStudentsCache={};
 function behEsc(value){return String(value==null?'':value).replace(/[&<>\"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch];});}
-async function initBehavior(){await loadBehClasses();await loadBehavior();}
+async function initBehavior(){await loadBehClasses();await loadBehavior();loadPendingTemplates();loadEscalatedCases();}
+
+/* ══ قوالب أسئلة التواصل (behavior_question_templates) ══ */
+var _tplPendingCache=[],_tplRejectId=null;
+function tplOptsArr(o){if(Array.isArray(o))return o;try{return JSON.parse(o);}catch(e){return [];}}
+async function loadPendingTemplates(){
+  var el=document.getElementById('pendingTemplatesList');if(!el)return;
+  el.innerHTML='<div class="skeleton" style="height:120px;border-radius:12px"></div>';
+  try{
+    var r=await fetch(SB_URL+'/rest/v1/behavior_question_templates?status=eq.pending&select=*&order=created_at.desc',{headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}});
+    var d=await r.json();
+    if(!Array.isArray(d))throw new Error('bad response');
+    _tplPendingCache=d;
+    var badge=document.getElementById('tplPendingBadge');
+    if(badge){if(d.length){badge.style.display='inline-block';badge.textContent=d.length;}else badge.style.display='none';}
+    renderPendingTemplates(d);
+  }catch(e){el.innerHTML='<p style="color:#e74c3c;padding:16px">تعذر تحميل القوالب — تأكدي من إعداد جدول behavior_question_templates</p>';}
+}
+function renderPendingTemplates(list){
+  var el=document.getElementById('pendingTemplatesList');if(!el)return;
+  if(!list||!list.length){el.innerHTML='<div style="text-align:center;padding:32px;color:#64748b"><div style="font-size:2rem;margin-bottom:10px">✅</div>لا توجد قوالب أسئلة بانتظار الاعتماد</div>';return;}
+  var html='<div style="display:flex;flex-direction:column;gap:12px">';
+  list.forEach(function(t){
+    var opts=tplOptsArr(t.options);
+    var dt=t.created_at?new Date(t.created_at).toLocaleDateString('ar-AE'):'—';
+    html+='<div style="background:#162132;border:1px solid #f39c1244;border-radius:12px;padding:16px">'
+      +'<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">'
+      +'<span style="background:#f39c1222;color:#f39c12;border-radius:20px;padding:3px 12px;font-size:0.78rem;font-weight:700">📌 '+behEsc(t.topic||'—')+'</span>'
+      +'<span style="font-size:0.75rem;color:#64748b">أنشأتها: '+behEsc(t.created_by||'—')+' · '+behEsc(dt)+'</span></div>'
+      +'<div style="color:#e2e8f0;font-weight:700;margin-bottom:8px">'+behEsc(t.question_text||'')+'</div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'+opts.map(function(o){return '<span style="background:#33415522;color:#94a3b8;border-radius:16px;padding:3px 10px;font-size:0.78rem">'+behEsc(o)+'</span>';}).join('')+'</div>'
+      +'<div style="display:flex;gap:8px;justify-content:flex-end">'
+      +'<button class="btn" style="background:#e74c3c;color:#fff;font-size:0.8rem" onclick="openTplRejectModal('+JSON.stringify(String(t.id))+')">❌ رفض</button>'
+      +'<button class="btn" style="background:#27ae60;color:#fff;font-size:0.8rem" onclick="approveTemplate('+JSON.stringify(String(t.id))+')">✅ اعتماد</button>'
+      +'</div></div>';
+  });
+  html+='</div>';el.innerHTML=html;
+}
+async function approveTemplate(id){
+  var user=JSON.parse(sessionStorage.getItem('edoos_user')||'{}');
+  var payload={status:'approved',approved_by:String(user.id||user.name||'principal'),approved_at:new Date().toISOString()};
+  try{
+    var r=await fetch(SB_URL+'/rest/v1/behavior_question_templates?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(payload)});
+    if(r.ok||r.status===204){showToast('✅ تم اعتماد القالب');loadPendingTemplates();}
+    else showToast('خطأ في الاعتماد');
+  }catch(e){showToast('خطأ: '+e.message);}
+}
+function openTplRejectModal(id){_tplRejectId=id;var t=document.getElementById('tplRejectReason');if(t)t.value='';var m=document.getElementById('tplRejectModal');if(m)m.style.display='flex';}
+function closeTplRejectModal(){var m=document.getElementById('tplRejectModal');if(m)m.style.display='none';_tplRejectId=null;}
+async function confirmRejectTemplate(){
+  if(!_tplRejectId)return;
+  var reason=(document.getElementById('tplRejectReason')||{}).value||'';
+  var user=JSON.parse(sessionStorage.getItem('edoos_user')||'{}');
+  var payload={status:'rejected',rejection_reason:reason,approved_by:String(user.id||user.name||'principal'),approved_at:new Date().toISOString()};
+  try{
+    var r=await fetch(SB_URL+'/rest/v1/behavior_question_templates?id=eq.'+encodeURIComponent(_tplRejectId),{method:'PATCH',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(payload)});
+    if(r.ok||r.status===204){showToast('تم رفض القالب');closeTplRejectModal();loadPendingTemplates();}
+    else showToast('خطأ في الرفض');
+  }catch(e){showToast('خطأ: '+e.message);}
+}
+
+/* ══ لوحة الحالات المصعّدة (counselor_referrals + counselor_communications) ══ */
+async function loadEscalatedCases(){
+  var el=document.getElementById('escalatedCasesList');if(!el)return;
+  el.innerHTML='<div class="skeleton" style="height:120px;border-radius:12px"></div>';
+  try{
+    var cutoff=new Date(Date.now()-48*3600*1000).toISOString();
+    var results=await Promise.all([
+      fetch(SB_URL+'/rest/v1/counselor_referrals?status=eq.contact_failed&select=*&order=created_at.asc',{headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}}),
+      fetch(SB_URL+'/rest/v1/counselor_referrals?status=eq.pending&created_at=lt.'+encodeURIComponent(cutoff)+'&select=*&order=created_at.asc',{headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}}),
+      fetch(SB_URL+'/rest/v1/counselor_communications?contact_type=eq.parent_denied&select=*&order=created_at.desc',{headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}})
+    ]);
+    var failed=results[0].ok?await results[0].json():[];
+    var stale=results[1].ok?await results[1].json():[];
+    var denied=results[2].ok?await results[2].json():[];
+    var refIdsForDenied=denied.map(function(d){return d.referral_id;}).filter(Boolean);
+    var deniedReferrals=[];
+    if(refIdsForDenied.length){
+      var dr=await fetch(SB_URL+'/rest/v1/counselor_referrals?id=in.('+refIdsForDenied.join(',')+')&select=*',{headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}});
+      deniedReferrals=dr.ok?await dr.json():[];
+    }
+    renderEscalatedCases(failed,stale,deniedReferrals);
+  }catch(e){el.innerHTML='<p style="color:#e74c3c;padding:16px">تعذر تحميل الحالات المصعّدة</p>';}
+}
+function renderEscalatedCases(failed,stale,deniedReferrals){
+  var el=document.getElementById('escalatedCasesList');if(!el)return;
+  var cards=[];
+  (failed||[]).forEach(function(r){cards.push({r:r,tag:'⚠️ تعذّر التواصل',color:'#e74c3c'});});
+  (stale||[]).forEach(function(r){cards.push({r:r,tag:'⏰ لم تُعالَج (أكثر من 48 ساعة)',color:'#f39c12'});});
+  (deniedReferrals||[]).forEach(function(r){cards.push({r:r,tag:'🔴 أنكر ولي الأمر المعلومة',color:'#9b59b6'});});
+  if(!cards.length){el.innerHTML='<div style="text-align:center;padding:32px;color:#64748b"><div style="font-size:2rem;margin-bottom:10px">✅</div>لا توجد حالات مصعّدة حالياً</div>';return;}
+  cards.sort(function(a,b){return new Date(a.r.created_at)-new Date(b.r.created_at);});
+  var html='<div style="display:flex;flex-direction:column;gap:10px">';
+  cards.forEach(function(c){
+    var r=c.r;var dt=r.created_at?new Date(r.created_at).toLocaleString('ar-AE'):'—';
+    html+='<div style="background:#162132;border:1px solid '+c.color+'44;border-radius:12px;padding:14px">'
+      +'<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">'
+      +'<div><div style="font-weight:700;color:#e2e8f0">'+behEsc(r.student_name||'—')+'</div>'
+      +'<div style="font-size:0.8rem;color:#94a3b8">الصف: '+behEsc(r.class_name||'—')+' · المعلمة: '+behEsc(r.referred_by_name||'—')+' · '+behEsc(r.topic||'—')+'</div></div>'
+      +'<span style="background:'+c.color+'22;color:'+c.color+';border-radius:20px;padding:3px 10px;font-size:0.75rem;height:fit-content;white-space:nowrap">'+c.tag+'</span></div>'
+      +'<div style="font-size:0.78rem;color:#64748b;margin-top:8px">📅 '+behEsc(dt)+'</div></div>';
+  });
+  html+='</div>';el.innerHTML=html;
+}
 async function loadBehClasses(){
   if(!window.SB_URL||!window.SB_KEY)return;
   try{
