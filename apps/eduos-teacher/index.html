@@ -627,6 +627,15 @@ tr:hover td{background:var(--surface2)}
 
       <div id="studentAlerts"></div>
 
+      <!-- شريط تنبيه التبديل المؤقت -->
+      <div id="swapAlertBanner" style="display:none;background:linear-gradient(135deg,rgba(245,158,11,0.10),rgba(251,146,60,0.06));border:1.5px solid rgba(245,158,11,0.4);border-radius:12px;padding:12px 18px;margin-bottom:12px;align-items:flex-start;gap:12px">
+        <span style="font-size:22px;flex-shrink:0">🔄</span>
+        <div style="flex:1">
+          <div style="font-weight:800;color:#D97706;font-size:14px">تبديل مؤقت مجدول اليوم / Temporary Swap Today</div>
+          <div id="swapAlertDetail" style="font-size:13px;color:#92400E;margin-top:4px;line-height:1.6"></div>
+        </div>
+      </div>
+
       <!-- View toggle: اليوم / الأسبوع -->
       <div class="schedule-section">
         <div class="schedule-header">
@@ -1474,6 +1483,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   startCountdown();
   await loadTeacherProfile();
   await loadTodaySchedule();
+  await checkTodaySwaps(); // فحص التبديلات المؤقتة اليوم
   await loadKPIs();
   await checkBrainSuggestions();
   loadNotifications(); // تحقق من إشعارات جديدة في الخلفية
@@ -1481,6 +1491,64 @@ document.addEventListener('DOMContentLoaded', async () => {
   const hash = window.location.hash.replace('#','');
   if (hash) restoreHash(hash);
 });
+
+// ── فحص التبديلات المؤقتة لهذه المعلمة اليوم ──
+async function checkTodaySwaps() {
+  try {
+    if (!sb || !teacherNumericId) return;
+    const todayDate = new Date().toISOString().split('T')[0];
+    const myId = String(teacherNumericId);
+    const { data } = await sb.from('schedule_swaps')
+      .select('*')
+      .eq('swap_date', todayDate)
+      .eq('is_permanent', false)
+      .or('teacher_a.eq.' + myId + ',teacher_b.eq.' + myId);
+    if (!data || !data.length) return;
+
+    // جلب أسماء المعلمات من staff_profiles
+    const otherIds = data.map(s => String(s.teacher_a) === myId ? s.teacher_b : s.teacher_a).filter(Boolean);
+    let nameMap = {};
+    if (otherIds.length) {
+      const { data: profs } = await sb.from('staff_profiles').select('staff_db_id,name_ar').in('staff_db_id', otherIds);
+      if (profs) profs.forEach(p => { nameMap[String(p.staff_db_id)] = p.name_ar || '—'; });
+    }
+
+    // بناء نص التنبيه
+    const lines = data.map(s => {
+      const isA = String(s.teacher_a) === myId;
+      const otherId = isA ? s.teacher_b : s.teacher_a;
+      const otherName = nameMap[String(otherId)] || otherId;
+      const myClass = isA ? s.class_name : s.class_b;
+      const myPeriod = isA ? s.period_a : s.period_b;
+      const otherClass = isA ? s.class_b : s.class_name;
+      const otherPeriod = isA ? s.period_b : s.period_a;
+      return '• ستدرّسين <strong>' + (otherClass||'—') + '</strong> ح' + (otherPeriod||'—')
+           + ' بدلاً من <strong>' + (myClass||'—') + '</strong> ح' + (myPeriod||'—')
+           + ' — تبديل مع <strong>' + otherName + '</strong>'
+           + (s.reason ? ' (' + s.reason + ')' : '');
+    });
+
+    const banner = document.getElementById('swapAlertBanner');
+    const detail = document.getElementById('swapAlertDetail');
+    if (banner && detail) {
+      detail.innerHTML = lines.join('<br>');
+      banner.style.display = 'flex';
+    }
+
+    // بادج تنبيه على أيقونة الجدول في التنقل
+    const navBtn = document.getElementById('nav-today');
+    if (navBtn && !navBtn.querySelector('.swap-dot')) {
+      const dot = document.createElement('span');
+      dot.className = 'swap-dot';
+      dot.style.cssText = 'position:absolute;top:6px;right:8px;width:8px;height:8px;background:#F59E0B;border-radius:50%;border:1.5px solid var(--surface)';
+      navBtn.style.position = 'relative';
+      navBtn.appendChild(dot);
+    }
+
+    // خزّن بيانات التبديل عالمياً لاستخدامها في عرض الجدول
+    window._todaySwaps = data;
+  } catch(e) { console.warn('checkTodaySwaps:', e); }
+}
 
 // ── DATETIME ──
 function setupDateTime() {
@@ -1746,6 +1814,18 @@ async function loadTodaySchedule() {
     } catch(e) {}
 
     const colors = ['brand','emerald','amber','sky','brand','emerald','amber','sky'];
+    // بناء خريطة التبديلات لهذا اليوم
+    const myIdStr = String(teacherNumericId || '');
+    const swapMap = {}; // period → swap info
+    if (window._todaySwaps && window._todaySwaps.length) {
+      window._todaySwaps.forEach(sw => {
+        const isA = String(sw.teacher_a) === myIdStr;
+        const myPeriod = isA ? sw.period_a : sw.period_b;
+        const otherClass = isA ? sw.class_b : sw.class_name;
+        const otherPeriod = isA ? sw.period_b : sw.period_a;
+        if (myPeriod) swapMap[String(myPeriod)] = { otherClass, otherPeriod, reason: sw.reason };
+      });
+    }
     let schedHtml = '';
     data.forEach((s, i) => {
       const p = s.period || (i+1);
@@ -1753,6 +1833,8 @@ async function loadTodaySchedule() {
       const isCurrent = nowMin >= startMin && nowMin < endMin;
       const isDone    = nowMin >= endMin;
       const col       = colors[i % colors.length];
+      // هل هذه الحصة مبدَّلة؟
+      const swapInfo  = swapMap[String(p)];
 
       // Break before this period?
       const gNum = parseInt((s.class_name||'').replace(/[^0-9]/g,'')) || 1;
@@ -1780,14 +1862,25 @@ async function loadTodaySchedule() {
           + '</div>';
       }
 
-      const liveTag  = isCurrent ? ' <span class="sched-now-badge">● الآن</span>' : isDone ? ' <span style="color:#fff;font-size:11px;font-weight:800;background:rgba(255,255,255,0.25);padding:2px 10px;border-radius:10px;margin-right:6px">انتهت</span>' : '';
-      const rowStyle = '';
+      // شارة تبديل مؤقت
+      const swapBadge = swapInfo
+        ? '<span style="background:rgba(245,158,11,0.18);color:#D97706;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:800;margin-right:6px">🔄 تبديل مؤقت</span>'
+        : '';
+      const swapNote = swapInfo
+        ? '<div style="font-size:11px;color:#D97706;margin-top:3px">ستدرّسين: <strong>' + (swapInfo.otherClass||'—') + '</strong> ح' + (swapInfo.otherPeriod||'—') + '</div>'
+        : '';
 
-      schedHtml += '<div class="sched-item ' + (isCurrent?'current':'') + ' ' + (isDone?'done':'') + '" style="' + rowStyle + '">'
+      const liveTag  = isCurrent ? ' <span class="sched-now-badge">● الآن</span>' : isDone ? ' <span style="color:#fff;font-size:11px;font-weight:800;background:rgba(255,255,255,0.25);padding:2px 10px;border-radius:10px;margin-right:6px">انتهت</span>' : '';
+      // خلفية مميزة للحصة المبدَّلة
+      const swapBg = swapInfo ? 'rgba(245,158,11,0.06)' : '';
+      const swapBorder = swapInfo ? 'border:1.5px dashed rgba(245,158,11,0.4);' : '';
+
+      schedHtml += '<div class="sched-item ' + (isCurrent?'current':'') + ' ' + (isDone?'done':'') + '" style="' + swapBg + swapBorder + '">'
         + '<div class="sched-time">' + start + '<br><span style="color:var(--text3);font-size:12px">' + end + '</span></div>'
         + '<div class="sched-bar ' + col + '"></div>'
-        + '<div class="sched-info" style="flex:1"><div class="sched-subject">' + (s.subject||'—') + liveTag + '</div>'
+        + '<div class="sched-info" style="flex:1"><div class="sched-subject">' + (s.subject||'—') + liveTag + swapBadge + '</div>'
         + '<div class="sched-class">' + (s.class_name||'') + ' · الحصة ' + p + '</div>'
+        + swapNote
         + attBadge
         + '</div>'
         + '<div class="sched-actions">'

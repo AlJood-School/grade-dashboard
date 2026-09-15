@@ -393,6 +393,15 @@ body{overflow:hidden}
         <div class="sec-title">&#x1F4DD; المعلمون البدلاء المتاحون / Available Substitutes</div>
         <div id="subsAvailList"><div class="skeleton" style="height:80px"></div></div>
       </div>
+      <!-- التبديلات النشطة اليوم -->
+      <div class="card" id="todaySwapsCard" style="margin-top:18px;border:1.5px solid rgba(245,158,11,0.35);background:rgba(245,158,11,0.04)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div class="sec-title" style="margin-bottom:0">&#x1F504; التبديلات النشطة اليوم / Today's Active Swaps</div>
+          <button class="btn btn-ghost btn-sm" onclick="loadTodayActiveSwaps()">&#x1F504; تحديث</button>
+        </div>
+        <div id="todaySwapsList"><div class="skeleton" style="height:60px"></div></div>
+      </div>
+
       <!-- TEMP SWAP SECTION -->
       <div class="card" style="margin-top:18px;border:2px solid #7C3AED22">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
@@ -1862,8 +1871,57 @@ async function loadSwapHistory() {
   }).join('');
 }
 
+// ── التبديلات النشطة اليوم ──
+async function loadTodayActiveSwaps() {
+  const list = document.getElementById('todaySwapsList');
+  if (!list || !sb) return;
+  list.innerHTML = '<div class="skeleton" style="height:60px"></div>';
+  try {
+    const todayDate = new Date().toISOString().split('T')[0];
+    const { data } = await sb.from('schedule_swaps')
+      .select('*')
+      .eq('swap_date', todayDate)
+      .eq('is_permanent', false)
+      .order('created_at', { ascending: false });
+
+    if (!data || !data.length) {
+      list.innerHTML = '<p style="color:var(--text3);font-size:13px;text-align:center;padding:16px">لا توجد تبديلات مجدولة اليوم ✓</p>';
+      return;
+    }
+
+    // جلب أسماء المعلمات
+    const allIds = [...new Set(data.flatMap(s => [s.teacher_a, s.teacher_b]).filter(Boolean))];
+    let nameMap = {};
+    if (allIds.length) {
+      const { data: profs } = await sb.from('staff_profiles').select('staff_db_id,name_ar').in('staff_db_id', allIds);
+      if (profs) profs.forEach(p => { nameMap[String(p.staff_db_id)] = p.name_ar || p.staff_db_id; });
+    }
+
+    list.innerHTML = data.map(function(s) {
+      const nameA = nameMap[String(s.teacher_a)] || s.teacher_a;
+      const nameB = nameMap[String(s.teacher_b)] || s.teacher_b;
+      return '<div style="display:flex;align-items:center;gap:14px;padding:12px 14px;border-radius:10px;background:var(--surface);margin-bottom:8px;border:1px solid var(--border)">'
+        + '<span style="font-size:22px">🔄</span>'
+        + '<div style="flex:1">'
+        + '<div style="font-weight:800;font-size:13px;color:var(--text)">'
+        + (nameA) + ' <span style="color:var(--text3);font-weight:400">(' + (s.class_name||'—') + ' · ح' + (s.period_a||'—') + ')</span>'
+        + ' <span style="color:var(--amber);font-size:16px">↔</span> '
+        + (nameB) + ' <span style="color:var(--text3);font-weight:400">(' + (s.class_b||'—') + ' · ح' + (s.period_b||'—') + ')</span>'
+        + '</div>'
+        + (s.reason ? '<div style="font-size:12px;color:var(--text3);margin-top:3px">📋 ' + s.reason + '</div>' : '')
+        + '</div>'
+        + '<span style="background:#DCFCE7;color:#16A34A;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;flex-shrink:0">✅ مُنفَّذ</span>'
+        + '</div>';
+    }).join('');
+  } catch(e) {
+    list.innerHTML = '<p style="color:#EF4444;font-size:13px;text-align:center">خطأ في تحميل التبديلات</p>';
+    console.warn('loadTodayActiveSwaps:', e);
+  }
+}
+
 var _absInited = false;
 async function loadAbsencePanel() {
+  loadTodayActiveSwaps(); // تحميل التبديلات النشطة اليوم دائماً
   if (!_absInited) {
     _absInited = true;
     await populateAbsStaffDD();
