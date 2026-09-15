@@ -606,8 +606,8 @@ const EduTheme = (function(){
   // ── تهيئة عند التحميل ───────────────────────────────────────
   function init(){
     injectDesignSystem();
-    let saved = 'default';
-    try { saved = sessionStorage.getItem('eduos_theme') || 'default'; } catch(e){}
+    let saved = 'light';
+    try { saved = sessionStorage.getItem('eduos_theme') || 'light'; } catch(e){}
     apply(saved);
   }
 
