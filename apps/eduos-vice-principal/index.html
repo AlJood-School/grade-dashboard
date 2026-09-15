@@ -1747,9 +1747,9 @@ async function loadSwapPeriods(side) {
   document.getElementById('swapCompatMsg').style.display = 'none';
   document.getElementById('executeSwapBtn').disabled = true;
   if (!tid) return;
-  // جلب جدول هذه المعلمة
-  const r = await apiGet('schedules?teacher_id=eq.'+encodeURIComponent(tid)+'&is_active=eq.true&select=day,period,class_name,subject&order=day.asc,period.asc');
-  _swapSchedules[side] = r || [];
+  // جلب جدول هذه المعلمة عبر sb client (يحمل JWT تلقائياً)
+  var res = await sb.from('schedules').select('day,period,class_name,subject').eq('teacher_id',tid).eq('is_active',true).order('day').order('period');
+  _swapSchedules[side] = res?.data || [];
   const periods = r || [];
   if (!periods.length) { sel.innerHTML = '<option value="">لا توجد حصص</option>'; return; }
   // اجمع الأيام الفريدة والحصص
@@ -1816,7 +1816,8 @@ async function executeSwap() {
     swap_type: 'temporary', is_permanent: false, approved: true,
     created_by: sessionStorage.getItem('edoos_user') ? JSON.parse(sessionStorage.getItem('edoos_user')).id : 'vp'
   };
-  const ok = await apiPost('schedule_swaps', body);
+  var swapInsert = await sb.from('schedule_swaps').insert(body);
+  const ok = !swapInsert.error;
   if (ok) {
     showSwapMsg('✅ تم تسجيل التبديل المؤقت بنجاح', '#16A34A');
     document.getElementById('executeSwapBtn').disabled = true;
@@ -1831,7 +1832,8 @@ async function loadSwapHistory() {
   const list = document.getElementById('swapHistoryList');
   wrap.style.display = 'block';
   list.innerHTML = '<div class="skeleton" style="height:80px"></div>';
-  const r = await apiGet('schedule_swaps?is_permanent=eq.false&order=created_at.desc&limit=20&select=*');
+  var swapRes = await sb.from('schedule_swaps').select('*').eq('is_permanent',false).order('created_at',{ascending:false}).limit(20);
+  const r = swapRes?.data;
   if (!r || !r.length) { list.innerHTML = '<p style="color:var(--text3);font-size:13px;text-align:center">لا توجد تبديلات مسجلة</p>'; return; }
   list.innerHTML = r.map(function(s) {
     return '<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px">'
