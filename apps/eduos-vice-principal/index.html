@@ -1724,18 +1724,34 @@ var _swapSchedules = {}; // staff_db_id → [{day,period,class_name,subject}]
 async function initSwapSection() {
   if (_swapInited) return;
   _swapInited = true;
-  // جلب جميع المعلمات من staff_profiles
-  const r = await apiGet('staff_profiles?select=staff_db_id,name_ar,role_key&role_key=eq.teacher&order=name_ar');
-  if (!r || !r.length) return;
+  // نسخ المعلمات من absStaffSel (تُعبَّأ من populateAbsStaffDD)
   const selA = document.getElementById('swapTeacherA');
   const selB = document.getElementById('swapTeacherB');
-  r.forEach(function(s) {
-    const o1 = document.createElement('option'); o1.value = s.staff_db_id; o1.textContent = s.name_ar || s.staff_db_id;
-    const o2 = document.createElement('option'); o2.value = s.staff_db_id; o2.textContent = s.name_ar || s.staff_db_id;
-    selA.appendChild(o1); selB.appendChild(o2);
-  });
+  const srcSel = document.getElementById('absStaffSel');
+  // انتظر حتى يُعبَّأ absStaffSel
+  var tries = 0;
+  while ((!srcSel || srcSel.options.length <= 1) && tries++ < 20) {
+    await new Promise(function(r){setTimeout(r,200);});
+  }
+  if (srcSel && srcSel.options.length > 1) {
+    for (var i = 1; i < srcSel.options.length; i++) {
+      var o1 = document.createElement('option'); o1.value = srcSel.options[i].value; o1.textContent = srcSel.options[i].textContent.replace(/ \(.*?\)$/,'');
+      var o2 = document.createElement('option'); o2.value = srcSel.options[i].value; o2.textContent = srcSel.options[i].textContent.replace(/ \(.*?\)$/,'');
+      selA.appendChild(o1); selB.appendChild(o2);
+    }
+  } else {
+    // fallback: apiGet
+    const r = await apiGet('staff_profiles?select=staff_db_id,name_ar&role_key=eq.teacher&order=name_ar');
+    if (r && r.length) {
+      r.forEach(function(s) {
+        var o1 = document.createElement('option'); o1.value = s.staff_db_id; o1.textContent = s.name_ar||s.staff_db_id;
+        var o2 = document.createElement('option'); o2.value = s.staff_db_id; o2.textContent = s.name_ar||s.staff_db_id;
+        selA.appendChild(o1); selB.appendChild(o2);
+      });
+    }
+  }
   // ضبط تاريخ اليوم
-  const d = document.getElementById('swapDate');
+  var d = document.getElementById('swapDate');
   if (d) d.value = new Date().toISOString().split('T')[0];
 }
 
