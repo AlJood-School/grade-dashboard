@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="../platform-auth-guard.js"></script>
 <script src="../platform-config.js"></script>
 <script src="../platform-lang.js" defer></script>
 <script src="../platform-shield.js" defer></script>
@@ -326,7 +327,9 @@ textarea{resize:vertical;min-height:70px;}
     <div class="form-row">
       <div class="form-group">
         <label>المادة *</label>
-        <input type="text" id="f-subject" placeholder="مثال: رياضيات">
+        <select id="f-subject" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;font-family:inherit;background:#fff;color:#111827;">
+          <option value="">— اختر المادة —</option>
+        </select>
       </div>
       <div class="form-group">
         <label>رقم الدرس</label>
@@ -485,9 +488,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const k1='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9';
   const k2='.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTU1MjI4MDAsImV4cCI6MjAzMTA5ODgwMH0';
   const k3='.Vf4uGJDwvAg1V3n0h1OAtW35A1FMKbEXRaGzFxXfx48';
-  const SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
-  const SB_KEY  = window.EduOS?.SB_KEY || (k1+k2+k3);
-  _supabase = window.supabase.createClient(SB_URL, SB_KEY);
+  _supabase = window.supabase.createClient((window.EduOS?window.EduOS.SB_URL:''), (window.EduOS?window.EduOS.SB_KEY:''));
 
   _baseWeekNum     = getBaseWeekNum();
   _effectiveWeekNum = _baseWeekNum;
@@ -558,17 +559,46 @@ async function onClassChange() {
 }
 
 async function loadClasses() {
-  const { data } = await _supabase.from('classes').select('id,name').order('name').limit(60);
+  // قراءة صفوف المعلمة من teacher_assignments باستخدام staff_db_id
+  const staffId = _user.id || _user.staff_db_id;
+  const { data } = await _supabase
+    .from('teacher_assignments')
+    .select('class_name, subject')
+    .eq('staff_db_id', staffId)
+    .eq('academic_year', ACADEMIC_YEAR)
+    .eq('is_active', true)
+    .neq('subject', 'مربية الصف')
+    .order('class_name');
+
+  const uniqueClasses = [...new Set((data||[]).map(r => r.class_name).filter(Boolean))].sort();
+  const uniqueSubjects = [...new Set((data||[]).map(r => r.subject).filter(Boolean))].sort();
+
+  // ملء قائمة الصفوف
   const sel = document.getElementById('class-select');
-  (data || []).forEach(c => {
+  uniqueClasses.forEach(cls => {
     const opt = document.createElement('option');
-    opt.value = c.id || c.name;
-    opt.textContent = c.name;
+    opt.value = cls;
+    opt.textContent = cls;
     sel.appendChild(opt);
   });
-  if (_user.class_id) {
-    sel.value = _user.class_id;
-    _currentClass = _user.class_id;
+
+  // ملء قائمة المواد في modal الإضافة
+  const subSel = document.getElementById('f-subject');
+  uniqueSubjects.forEach(sub => {
+    const opt = document.createElement('option');
+    opt.value = sub;
+    opt.textContent = sub;
+    subSel.appendChild(opt);
+  });
+
+  // اختيار الصف الأول تلقائياً إذا كان الوحيد
+  if (uniqueClasses.length === 1) {
+    sel.value = uniqueClasses[0];
+    _currentClass = uniqueClasses[0];
+    await loadWeekTrack();
+  } else if (_user.class_name && uniqueClasses.includes(_user.class_name)) {
+    sel.value = _user.class_name;
+    _currentClass = _user.class_name;
     await loadWeekTrack();
   }
 }
