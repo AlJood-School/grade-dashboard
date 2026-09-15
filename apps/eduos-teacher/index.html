@@ -507,6 +507,14 @@ tr:hover td{background:var(--surface2)}
         <span class="snav-sub">Weekly Track</span>
       </span>
     </button>
+    <button id="nav-behavior" class="snav" onclick="switchPanel('behavior');loadMyIncidents()">
+      <span class="snav-icon">⚠️</span>
+      <span class="snav-text">
+        <span class="snav-label">المخالفات</span>
+        <span class="snav-sub">Behavior Incidents</span>
+      </span>
+      <span class="snav-badge" id="behaviorBadge" style="display:none">0</span>
+    </button>
     <button id="nav-leave" class="snav" onclick="switchPanel('leave')">
       <span class="snav-icon">🕐</span>
       <span class="snav-text">
@@ -1260,6 +1268,55 @@ tr:hover td{background:var(--surface2)}
         <div id="pdp-container" style="padding:4px 0"><div class="empty">&#8987; جار التحميل...</div></div>
       </div>
     </div>
+
+    <!-- ══ BEHAVIOR INCIDENTS PANEL ══ -->
+    <div class="tab-panel" id="panel-behavior">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+        <div>
+          <h2 style="margin:0;font-size:20px;font-weight:800;color:var(--text)">⚠️ المخالفات السلوكية</h2>
+          <p style="margin:4px 0 0;font-size:13px;color:var(--text3)">مخالفاتك المسجّلة فقط — كل معلمة ترى مخالفاتها مع طالباتها</p>
+        </div>
+        <button class="btn-brand" style="background:#DC2626;padding:10px 20px;font-size:14px" onclick="openViolationModal(null)">+ تسجيل مخالفة جديدة</button>
+      </div>
+
+      <!-- فلتر الصف -->
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+        <select id="behavFilterClass" onchange="loadMyIncidents()" style="border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-family:'Tajawal',Arial;font-size:14px;background:var(--surface);color:var(--text);min-width:160px">
+          <option value="">كل الفصول</option>
+        </select>
+        <select id="behavFilterStatus" onchange="loadMyIncidents()" style="border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-family:'Tajawal',Arial;font-size:14px;background:var(--surface);color:var(--text)">
+          <option value="">كل الإجراءات</option>
+          <option value="verbal">شفهي</option>
+          <option value="written">كتابي</option>
+          <option value="referral">إحالة للأخصائية</option>
+        </select>
+      </div>
+
+      <!-- إحصاءات سريعة -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center">
+          <div id="bStatTotal" style="font-size:28px;font-weight:800;color:var(--brand)">—</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px">إجمالي المخالفات</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center">
+          <div id="bStatReferral" style="font-size:28px;font-weight:800;color:#DC2626">—</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px">إحالات للأخصائية</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center">
+          <div id="bStatStudents" style="font-size:28px;font-weight:800;color:#D97706">—</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px">طالبات مسجّلة</div>
+        </div>
+      </div>
+
+      <!-- جدول المخالفات -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+        <div style="padding:14px 18px;background:var(--surface2);border-bottom:1px solid var(--border);font-weight:700;color:var(--text);font-size:14px">سجل المخالفات</div>
+        <div id="behavIncidentList" style="padding:16px">
+          <div style="text-align:center;color:var(--text3);padding:32px;font-size:14px">⏳ جارٍ التحميل...</div>
+        </div>
+      </div>
+    </div>
+    <!-- ══ END BEHAVIOR INCIDENTS PANEL ══ -->
 
     <!-- ══ LEAVE REQUEST PANEL — نظام الاستئذان ══ -->
     <div class="tab-panel" id="panel-leave">
@@ -3937,6 +3994,77 @@ async function loadLessonPlans() {
 </div>
 
 <script>
+// ══════════ PANEL: المخالفات ══════════
+async function loadMyIncidents() {
+  if (!TEACHER || !sb) return;
+  const teacherId = TEACHER.staff_db_id || TEACHER.id;
+  const filterClass = document.getElementById('behavFilterClass')?.value || '';
+  const filterStatus = document.getElementById('behavFilterStatus')?.value || '';
+  const listEl = document.getElementById('behavIncidentList');
+  if (!listEl) return;
+  listEl.innerHTML = '<div style="text-align:center;color:var(--text3);padding:32px;font-size:14px">⏳ جارٍ التحميل...</div>';
+
+  try {
+    let query = sb.from('behavior_incidents')
+      .select('id,student_id,incident_type,degree,description,created_at,action_taken,students!inner(name,class_name)')
+      .eq('teacher_id', teacherId)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (filterClass) query = query.eq('students.class_name', filterClass);
+    if (filterStatus === 'verbal') query = query.eq('degree', 1);
+    else if (filterStatus === 'written') query = query.eq('degree', 2);
+    else if (filterStatus === 'referral') query = query.gte('degree', 3);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    // إحصاءات
+    const total = data.length;
+    const referrals = data.filter(x => x.degree >= 3).length;
+    const uniqueStudents = new Set(data.map(x => x.student_id)).size;
+    document.getElementById('bStatTotal').textContent = total;
+    document.getElementById('bStatReferral').textContent = referrals;
+    document.getElementById('bStatStudents').textContent = uniqueStudents;
+
+    // تحديث badge في sidebar
+    const badge = document.getElementById('behaviorBadge');
+    if (badge) { if (referrals > 0) { badge.textContent = referrals; badge.style.display = ''; } else badge.style.display = 'none'; }
+
+    // ملء فلتر الصفوف
+    const classSet = new Set(data.map(x => x.students?.class_name).filter(Boolean));
+    const classSelect = document.getElementById('behavFilterClass');
+    if (classSelect && classSelect.options.length <= 1) {
+      [...classSet].sort().forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; classSelect.appendChild(o); });
+    }
+
+    if (!data.length) { listEl.innerHTML = '<div style="text-align:center;color:var(--text3);padding:40px;font-size:15px">✅ لا توجد مخالفات مسجّلة</div>'; return; }
+
+    const degreeLabel = { 1:'شفهي', 2:'كتابي', 3:'إحالة للأخصائية' };
+    const degreeColor = { 1:'#16A34A', 2:'#D97706', 3:'#DC2626' };
+    const typeAr = { uniform:'زي مدرسي', book:'عدم إحضار الكتاب', equipment:'عدم إحضار الأدوات', behavior:'سلوك مخالف', other:'أخرى' };
+
+    listEl.innerHTML = data.map(r => {
+      const d = r.degree || 1;
+      const clr = degreeColor[d] || '#64748B';
+      const lbl = degreeLabel[d] || 'شفهي';
+      const dt = new Date(r.created_at).toLocaleDateString('ar-AE', {day:'numeric',month:'short',year:'numeric'});
+      const stName = r.students?.name || '—';
+      const stClass = r.students?.class_name || '—';
+      const cat = typeAr[r.incident_type] || r.incident_type || '—';
+      return `<div style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <div style="flex:1;min-width:160px">
+          <div style="font-weight:700;color:var(--text);font-size:14px">${stName}</div>
+          <div style="font-size:12px;color:var(--text3)">${stClass} · ${cat}</div>
+        </div>
+        <div style="font-size:12px;color:var(--text3)">${dt}</div>
+        <div style="background:${clr}22;color:${clr};border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700;white-space:nowrap">${lbl}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    listEl.innerHTML = `<div style="text-align:center;color:#DC2626;padding:32px;font-size:14px">خطأ في التحميل: ${e.message}</div>`;
+  }
+}
+
 // ─── نظام الاستئذان ───────────────────────────────
 function _leaveSB() {
   try { if (typeof sb !== 'undefined' && sb) return sb; } catch(e) {}
