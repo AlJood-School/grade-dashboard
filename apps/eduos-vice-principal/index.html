@@ -393,6 +393,55 @@ body{overflow:hidden}
         <div class="sec-title">&#x1F4DD; المعلمون البدلاء المتاحون / Available Substitutes</div>
         <div id="subsAvailList"><div class="skeleton" style="height:80px"></div></div>
       </div>
+      <!-- TEMP SWAP SECTION -->
+      <div class="card" style="margin-top:18px;border:2px solid #7C3AED22">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <div class="sec-title" style="margin-bottom:0">&#x1F501; تبديل مؤقت بين المعلمتين / Temporary Swap</div>
+          <button class="btn btn-info btn-sm" onclick="loadSwapHistory()">&#x1F504; سجل التبديلات</button>
+        </div>
+        <p style="font-size:12px;color:var(--text3);margin-bottom:14px">يتبادل معلمتان حصتيهما في نفس الصف لفترة مؤقتة — لا يُعدّل الجدول الرسمي</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:12px">
+          <!-- المعلمة أ -->
+          <div style="background:var(--surface2);border-radius:10px;padding:12px">
+            <div style="font-weight:700;font-size:13px;color:var(--brand);margin-bottom:8px">&#x1F9D1;&#x200D;&#x1F3EB; المعلمة أ</div>
+            <select id="swapTeacherA" onchange="loadSwapPeriods('A')" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:'Tajawal',Arial,sans-serif;font-size:13px;margin-bottom:8px">
+              <option value="">-- اختري المعلمة أ --</option>
+            </select>
+            <select id="swapPeriodA" onchange="checkSwapCompatibility()" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:'Tajawal',Arial,sans-serif;font-size:13px" disabled>
+              <option value="">-- اختري الحصة --</option>
+            </select>
+          </div>
+          <!-- المعلمة ب -->
+          <div style="background:var(--surface2);border-radius:10px;padding:12px">
+            <div style="font-weight:700;font-size:13px;color:#059669;margin-bottom:8px">&#x1F9D1;&#x200D;&#x1F3EB; المعلمة ب</div>
+            <select id="swapTeacherB" onchange="loadSwapPeriods('B')" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:'Tajawal',Arial,sans-serif;font-size:13px;margin-bottom:8px">
+              <option value="">-- اختري المعلمة ب --</option>
+            </select>
+            <select id="swapPeriodB" onchange="checkSwapCompatibility()" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:'Tajawal',Arial,sans-serif;font-size:13px" disabled>
+              <option value="">-- اختري الحصة --</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div>
+            <label style="font-size:12px;font-weight:700;color:var(--text2);display:block;margin-bottom:4px">تاريخ التبديل</label>
+            <input type="date" id="swapDate" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:'Tajawal',Arial,sans-serif;font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;color:var(--text2);display:block;margin-bottom:4px">السبب</label>
+            <input type="text" id="swapReason" placeholder="سبب التبديل المؤقت..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:'Tajawal',Arial,sans-serif;font-size:13px">
+          </div>
+        </div>
+        <div id="swapCompatMsg" style="display:none;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:700;margin-bottom:12px"></div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-primary" id="executeSwapBtn" onclick="executeSwap()" disabled style="flex:1">&#x2705; تنفيذ التبديل المؤقت</button>
+        </div>
+        <!-- سجل التبديلات -->
+        <div id="swapHistoryWrap" style="display:none;margin-top:16px">
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--text2)">&#x1F4DC; سجل التبديلات المؤقتة</div>
+          <div id="swapHistoryList"></div>
+        </div>
+      </div>
       <!-- LEAVE REQUESTS -->
       <div class="card" style="margin-top:18px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -1666,11 +1715,140 @@ async function loadOverviewCards() {
 }
 
 /* ===== ABSENCE PANEL ===== */
+/* =========================================================
+   TEMP SWAP — التبديل المؤقت بين المعلمتين
+   ========================================================= */
+var _swapInited = false;
+var _swapSchedules = {}; // staff_db_id → [{day,period,class_name,subject}]
+
+async function initSwapSection() {
+  if (_swapInited) return;
+  _swapInited = true;
+  // جلب جميع المعلمات من staff_profiles
+  const r = await apiGet('staff_profiles?select=staff_db_id,name_ar,role_key&role_key=eq.teacher&order=name_ar');
+  if (!r || !r.length) return;
+  const selA = document.getElementById('swapTeacherA');
+  const selB = document.getElementById('swapTeacherB');
+  r.forEach(function(s) {
+    const o1 = document.createElement('option'); o1.value = s.staff_db_id; o1.textContent = s.name_ar || s.staff_db_id;
+    const o2 = document.createElement('option'); o2.value = s.staff_db_id; o2.textContent = s.name_ar || s.staff_db_id;
+    selA.appendChild(o1); selB.appendChild(o2);
+  });
+  // ضبط تاريخ اليوم
+  const d = document.getElementById('swapDate');
+  if (d) d.value = new Date().toISOString().split('T')[0];
+}
+
+async function loadSwapPeriods(side) {
+  const tid = document.getElementById('swapTeacher'+side).value;
+  const sel = document.getElementById('swapPeriod'+side);
+  sel.innerHTML = '<option value="">-- اختري الحصة --</option>';
+  sel.disabled = !tid;
+  document.getElementById('swapCompatMsg').style.display = 'none';
+  document.getElementById('executeSwapBtn').disabled = true;
+  if (!tid) return;
+  // جلب جدول هذه المعلمة
+  const r = await apiGet('schedules?teacher_id=eq.'+encodeURIComponent(tid)+'&is_active=eq.true&select=day,period,class_name,subject&order=day.asc,period.asc');
+  _swapSchedules[side] = r || [];
+  const periods = r || [];
+  if (!periods.length) { sel.innerHTML = '<option value="">لا توجد حصص</option>'; return; }
+  // اجمع الأيام الفريدة والحصص
+  const seen = new Set();
+  periods.forEach(function(p) {
+    const key = p.day+'|'+p.period+'|'+p.class_name;
+    if (seen.has(key)) return; seen.add(key);
+    const o = document.createElement('option');
+    o.value = JSON.stringify({day:p.day,period:p.period,class_name:p.class_name,subject:p.subject});
+    o.textContent = p.day+' | ح'+p.period+' | '+p.class_name+' ('+p.subject+')';
+    sel.appendChild(o);
+  });
+  sel.disabled = false;
+  checkSwapCompatibility();
+}
+
+async function checkSwapCompatibility() {
+  const btnEl = document.getElementById('executeSwapBtn');
+  const msgEl = document.getElementById('swapCompatMsg');
+  msgEl.style.display = 'none';
+  btnEl.disabled = true;
+  const valA = document.getElementById('swapPeriodA').value;
+  const valB = document.getElementById('swapPeriodB').value;
+  const tidA = document.getElementById('swapTeacherA').value;
+  const tidB = document.getElementById('swapTeacherB').value;
+  if (!valA || !valB || !tidA || !tidB) return;
+  if (tidA === tidB) { showSwapMsg('❌ لا يمكن تبديل معلمة مع نفسها', '#DC2626'); return; }
+  const pA = JSON.parse(valA); // {day,period,class_name,subject}
+  const pB = JSON.parse(valB);
+  // فحص: نفس الصف إلزامي
+  if (pA.class_name !== pB.class_name) {
+    showSwapMsg('⚠️ يجب أن تكون الحصتان في نفس الصف ('+pA.class_name+' ≠ '+pB.class_name+')', '#D97706');
+    return;
+  }
+  // فحص: هل A فارغة في وقت B؟
+  const aFreeAtB = !(_swapSchedules['A']||[]).some(function(s){ return s.day===pB.day && String(s.period)===String(pB.period) && s.class_name!==pA.class_name; });
+  const bFreeAtA = !(_swapSchedules['B']||[]).some(function(s){ return s.day===pA.day && String(s.period)===String(pA.period) && s.class_name!==pB.class_name; });
+  if (!aFreeAtB) { showSwapMsg('❌ المعلمة أ لديها حصة أخرى في وقت حصة ب ('+pB.day+' ح'+pB.period+')', '#DC2626'); return; }
+  if (!bFreeAtA) { showSwapMsg('❌ المعلمة ب لديها حصة أخرى في وقت حصة أ ('+pA.day+' ح'+pA.period+')', '#DC2626'); return; }
+  showSwapMsg('✅ التبديل متوافق — يمكن التنفيذ', '#16A34A');
+  btnEl.disabled = false;
+}
+
+function showSwapMsg(txt, color) {
+  const el = document.getElementById('swapCompatMsg');
+  el.textContent = txt; el.style.display = 'block';
+  el.style.background = color+'22'; el.style.color = color; el.style.border = '1px solid '+color+'55';
+}
+
+async function executeSwap() {
+  const tidA = document.getElementById('swapTeacherA').value;
+  const tidB = document.getElementById('swapTeacherB').value;
+  const valA = document.getElementById('swapPeriodA').value;
+  const valB = document.getElementById('swapPeriodB').value;
+  const swapDate = document.getElementById('swapDate').value;
+  const reason = document.getElementById('swapReason').value.trim();
+  if (!tidA||!tidB||!valA||!valB||!swapDate) { alert('يرجى إكمال جميع الحقول'); return; }
+  const pA = JSON.parse(valA); const pB = JSON.parse(valB);
+  const body = {
+    teacher_a: tidA, teacher_b: tidB,
+    class_name: pA.class_name, class_b: pB.class_name,
+    period_a: String(pA.period), period_b: String(pB.period),
+    swap_date: swapDate, reason: reason || 'تبديل مؤقت',
+    swap_type: 'temporary', is_permanent: false, approved: true,
+    created_by: sessionStorage.getItem('edoos_user') ? JSON.parse(sessionStorage.getItem('edoos_user')).id : 'vp'
+  };
+  const ok = await apiPost('schedule_swaps', body);
+  if (ok) {
+    showSwapMsg('✅ تم تسجيل التبديل المؤقت بنجاح', '#16A34A');
+    document.getElementById('executeSwapBtn').disabled = true;
+    loadSwapHistory();
+  } else {
+    showSwapMsg('❌ فشل تسجيل التبديل — حاولي مجدداً', '#DC2626');
+  }
+}
+
+async function loadSwapHistory() {
+  const wrap = document.getElementById('swapHistoryWrap');
+  const list = document.getElementById('swapHistoryList');
+  wrap.style.display = 'block';
+  list.innerHTML = '<div class="skeleton" style="height:80px"></div>';
+  const r = await apiGet('schedule_swaps?is_permanent=eq.false&order=created_at.desc&limit=20&select=*');
+  if (!r || !r.length) { list.innerHTML = '<p style="color:var(--text3);font-size:13px;text-align:center">لا توجد تبديلات مسجلة</p>'; return; }
+  list.innerHTML = r.map(function(s) {
+    return '<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px">'
+      +'<div style="flex:1"><strong>'+s.teacher_a+'</strong> ↔ <strong>'+s.teacher_b+'</strong></div>'
+      +'<div style="color:var(--text3)">'+s.class_name+' | ح'+s.period_a+' ↔ ح'+s.period_b+'</div>'
+      +'<div style="color:var(--text3)">'+s.swap_date+'</div>'
+      +'<span style="background:#DCFCE7;color:#16A34A;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">'+( s.approved ? '✅ مُعتمَد' : '⏳ معلق')+'</span>'
+      +'</div>';
+  }).join('');
+}
+
 var _absInited = false;
 async function loadAbsencePanel() {
   if (!_absInited) {
     _absInited = true;
     await populateAbsStaffDD();
+    await initSwapSection();
   }
   await loadTodayAbsences();
   await loadAvailableSubs();
