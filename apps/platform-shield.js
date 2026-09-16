@@ -346,7 +346,12 @@
   // التهيئة
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   function init() {
-    injectReportButton();
+    // انتظر حتى يكون header-tools جاهزاً (قد يُنشأ ديناميكياً)
+    if (document.getElementById('header-tools')) {
+      injectReportButton();
+    } else {
+      setTimeout(injectReportButton, 800);
+    }
     setTimeout(checkLinks, 1500); // بعد تحميل الروابط
     // Shield v${SHIELD_VERSION} active (suppressed for security)
   }
