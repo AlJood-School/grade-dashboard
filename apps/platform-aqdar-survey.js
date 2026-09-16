@@ -233,8 +233,9 @@
     var hasContainer = headerTools || !!document.getElementById('eduos-floating-actions');
     if (headerTools) {
       /* أيقونة قائمة تحقق — مناسبة للاستطلاع */
-      btn.innerHTML = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg><span style="font-size:11px;font-weight:700">أقدر</span>';
-      btn.style.cssText = 'position:relative;background:rgba(245,158,11,0.1);border:1.5px solid rgba(245,158,11,0.35);cursor:pointer;padding:7px 11px;border-radius:12px;display:flex;align-items:center;gap:5px;justify-content:center;color:#d97706;transition:all 0.2s;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;';
+      btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>';
+      btn.title = 'استطلاع الجاهزية الرقمية — أكملوه من فضلك';
+      btn.style.cssText = 'position:relative;background:none;border:none;cursor:pointer;padding:7px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#d97706;transition:background 0.2s;';
       headerTools.appendChild(btn);
       btn.addEventListener('click', function() { buildModal(sess); });
       return;

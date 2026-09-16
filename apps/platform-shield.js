@@ -106,8 +106,9 @@
     btn.title = "أبلغ عن مشكلة";
     btn.setAttribute("aria-label", "أبلغ عن مشكلة تقنية");
     if (headerTools) {
-      btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span style="font-size:11px">مشكلة</span>';
-      btn.style.cssText = "position:relative;background:rgba(220,38,38,0.1);border:1.5px solid rgba(220,38,38,0.35);cursor:pointer;padding:7px 11px;border-radius:12px;display:flex;align-items:center;gap:5px;justify-content:center;color:#dc2626;transition:all 0.2s;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;";
+      btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+      btn.title = 'أبلغ عن مشكلة تقنية';
+      btn.style.cssText = "position:relative;background:none;border:none;cursor:pointer;padding:7px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#dc2626;transition:background 0.2s;";
       headerTools.appendChild(btn);
     } else {
       btn.innerHTML = "🚩";
