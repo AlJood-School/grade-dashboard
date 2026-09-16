@@ -232,8 +232,8 @@
     var headerTools = document.getElementById('header-tools');
     var hasContainer = headerTools || !!document.getElementById('eduos-floating-actions');
     if (headerTools) {
-      btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
-      btn.style.cssText = 'position:relative;background:none;border:none;cursor:pointer;padding:7px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#F59E0B;transition:background 0.2s;';
+      btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span style="font-size:11px">استطلاع</span>';
+      btn.style.cssText = 'position:relative;background:rgba(245,158,11,0.1);border:1.5px solid rgba(245,158,11,0.35);cursor:pointer;padding:7px 11px;border-radius:12px;display:flex;align-items:center;gap:5px;justify-content:center;color:#d97706;transition:all 0.2s;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;';
       headerTools.appendChild(btn);
       btn.addEventListener('click', function() { buildModal(sess); });
       return;
