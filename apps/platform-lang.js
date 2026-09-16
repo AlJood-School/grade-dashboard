@@ -580,3 +580,76 @@ window.eduosLogout = function() {
   // Navigate to first candidate (always use relative path)
   window.location.href = '../eduos-login/index.html?bye=manual';
 };
+
+/* ═══════════════════════════════════════════════════════════════
+ * نظام تسجيل الخروج التلقائي بعد 15 دقيقة خمول
+ * يعمل في جميع البوابات التي تحمّل platform-lang.js
+ * ══════════════════════════════════════════════════════════════ */
+(function() {
+  var IDLE_LIMIT = 15 * 60 * 1000; // 15 دقيقة
+  var idleTimer = null;
+  var warningTimer = null;
+  var warningShown = false;
+  var WARNING_BEFORE = 60 * 1000; // تحذير قبل دقيقة واحدة
+
+  function doAutoLogout() {
+    if (sessionStorage.getItem('edoos_user')) {
+      // أظهر toast قبل الخروج
+      var toast = document.createElement('div');
+      toast.textContent = '⏱ انتهت مدة الجلسة — جارٍ تسجيل الخروج...';
+      toast.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1E293B;color:#fff;padding:16px 28px;border-radius:14px;font-size:16px;font-family:Tajawal,Arial,sans-serif;z-index:99999;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.4);direction:rtl;';
+      document.body.appendChild(toast);
+      setTimeout(function() {
+        if (typeof window.eduosLogout === 'function') {
+          window.eduosLogout();
+        } else {
+          sessionStorage.removeItem('edoos_user');
+          window.location.href = '../eduos-login/index.html?bye=idle';
+        }
+      }, 1500);
+    }
+  }
+
+  function showWarning() {
+    if (warningShown) return;
+    warningShown = true;
+    var warn = document.createElement('div');
+    warn.id = 'idle-warning-toast';
+    warn.innerHTML = '⚠️ ستنتهي جلستك خلال دقيقة &nbsp;<button onclick="document.getElementById(\'idle-warning-toast\').remove();resetIdleTimer();" style="background:#6C3DD6;color:#fff;border:none;padding:4px 12px;border-radius:8px;cursor:pointer;font-family:Tajawal,Arial,sans-serif;font-size:13px;">تجديد الجلسة</button>';
+    warn.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#92400E;color:#fff;padding:14px 20px;border-radius:12px;font-size:14px;font-family:Tajawal,Arial,sans-serif;z-index:99998;direction:rtl;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:flex;align-items:center;gap:12px;';
+    document.body.appendChild(warn);
+  }
+
+  function resetIdleTimer() {
+    clearTimeout(idleTimer);
+    clearTimeout(warningTimer);
+    warningShown = false;
+    var existing = document.getElementById('idle-warning-toast');
+    if (existing) existing.remove();
+    if (!sessionStorage.getItem('edoos_user')) return;
+    warningTimer = setTimeout(showWarning, IDLE_LIMIT - WARNING_BEFORE);
+    idleTimer = setTimeout(doAutoLogout, IDLE_LIMIT);
+  }
+
+  // جعل resetIdleTimer متاحة عالمياً لزر "تجديد الجلسة"
+  window.resetIdleTimer = resetIdleTimer;
+
+  // استمع لأي نشاط من المستخدم
+  var events = ['mousemove', 'keydown', 'mousedown', 'click', 'scroll', 'touchstart', 'touchmove'];
+  events.forEach(function(evt) {
+    document.addEventListener(evt, resetIdleTimer, { passive: true, capture: true });
+  });
+
+  // ابدأ العداد عند تحميل الصفحة إذا هناك جلسة
+  function startIfLoggedIn() {
+    if (sessionStorage.getItem('edoos_user')) {
+      resetIdleTimer();
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startIfLoggedIn);
+  } else {
+    setTimeout(startIfLoggedIn, 500);
+  }
+})();
