@@ -212,6 +212,18 @@
     });
   }
 
+
+  function getOrCreateFabContainer() {
+    var c = document.getElementById('eduos-fab-container');
+    if (!c) {
+      c = document.createElement('div');
+      c.id = 'eduos-fab-container';
+      c.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9000;display:flex;flex-direction:column;gap:8px;align-items:center;';
+      document.body.appendChild(c);
+    }
+    return c;
+  }
+
   function buildFloatingBtn() {
     var btn = document.createElement('button');
     btn.id = 'aqFloatingBtn';
@@ -226,16 +238,11 @@
       btn.addEventListener('click', function() { buildModal(sess); });
       return;
     }
-    btn.innerHTML = '🛡️ أقدر';
-    btn.style.cssText = (hasContainer ? '' : 'position:fixed;bottom:100px;left:16px;') +
-      'z-index:9997;' +
-      'background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:50px;' +
-      'padding:10px 18px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;' +
-      'cursor:pointer;box-shadow:0 4px 16px rgba(108,61,214,0.35);animation:aqPulse 2s infinite;';
-    document.head.insertAdjacentHTML('beforeend',
-      '<style>@keyframes aqPulse{0%,100%{box-shadow:0 4px 16px rgba(108,61,214,0.35)}50%{box-shadow:0 4px 24px rgba(108,61,214,0.7)}}</style>'
-    );
-    document.body.appendChild(btn);
+    // زر في #eduos-fab-container الموحّد
+    btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
+    btn.style.cssText = 'width:46px;height:46px;border-radius:50%;border:none;background:#fff;color:#F59E0B;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(245,158,11,0.25);transition:transform 0.2s;position:relative;';
+    btn.title = 'استطلاع الجاهزية الرقمية';
+    getOrCreateFabContainer().appendChild(btn);
 
     var sess = getSession();
     btn.addEventListener('click', function() { buildModal(sess); });

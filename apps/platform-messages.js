@@ -41,19 +41,34 @@
   /* ══════════════════════════════════
      4. CSS — لا يؤثر على تصميم البوابة
      ══════════════════════════════════ */
+
+  /* ══════════════════════════════════
+     FAB Container — مشترك مع جميع scripts
+     ══════════════════════════════════ */
+  function getOrCreateFabContainer() {
+    var c = document.getElementById('eduos-fab-container');
+    if (!c) {
+      c = document.createElement('div');
+      c.id = 'eduos-fab-container';
+      c.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9000;display:flex;flex-direction:column;gap:8px;align-items:center;';
+      document.body.appendChild(c);
+    }
+    return c;
+  }
+
   function injectStyles() {
     if (document.getElementById('msg-sys-style')) return;
     var s = document.createElement('style');
     s.id = 'msg-sys-style';
     s.textContent = [
       '#msg-float-btn{',
-        'position:fixed;bottom:24px;left:20px;z-index:9000;',
-        'width:56px;height:56px;border-radius:50%;border:none;',
-        'background:linear-gradient(135deg,#6C3DD6,#22D3EE);',
-        'color:#fff;font-size:22px;cursor:pointer;',
+        'width:46px;height:46px;border-radius:50%;border:none;',
+        'background:#fff;',
+        'color:#6C3DD6;font-size:20px;cursor:pointer;',
         'display:flex;align-items:center;justify-content:center;',
-        'box-shadow:0 4px 18px rgba(108,61,214,0.5);',
+        'box-shadow:0 2px 12px rgba(108,61,214,0.25);',
         'transition:transform 0.2s,box-shadow 0.2s;',
+        'position:relative;',
       '}',
       // زر الهيدر
       '#msg-header-icon{',
@@ -289,18 +304,17 @@
       headerTools.appendChild(btn);
       btn.addEventListener('click', togglePanel);
     } else {
-      // Fallback: زر عائم ثابت
+      // Fallback: زر في #eduos-fab-container الموحّد
       var btn = document.createElement('button');
       btn.id = 'msg-float-btn';
       btn.setAttribute('aria-label', 'الرسائل الداخلية');
       btn.setAttribute('title', 'الرسائل الداخلية');
-      btn.textContent = '✉';
+      btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>';
       var badge = document.createElement('span');
       badge.id = 'msg-badge';
-      badge.style.display = 'none';
-      badge.textContent = '0';
+      badge.style.cssText = 'position:absolute;top:1px;right:1px;background:#EF4444;color:#fff;min-width:14px;height:14px;border-radius:8px;padding:0 3px;font-size:9px;font-weight:900;display:none;align-items:center;justify-content:center;';
       btn.appendChild(badge);
-      document.body.appendChild(btn);
+      getOrCreateFabContainer().appendChild(btn);
       btn.addEventListener('click', togglePanel);
     }
   }
