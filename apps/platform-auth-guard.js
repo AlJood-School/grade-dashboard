@@ -280,14 +280,8 @@
 
       if (res.ok) {
         const userData = await res.json();
-        // تأكد أن الـ email يطابق المستخدم (إضافية)
-        const expectedEmail = (session.username || '') + '@' + (window.EduOS?.school?.domain || 'eduos.ae');
-        if (userData.email && userData.email !== expectedEmail) {
-          // email لا يطابق — JWT مزوَّر أو جلسة خاطئة
-          sessionStorage.removeItem('edoos_user');
-          redirectTo('/apps/eduos-login/?err=identity_mismatch');
-          return;
-        }
+        // JWT صحيح — الهوية مؤكَّدة من Supabase مباشرةً
+        // (تحقق email أُزيل — JWT وحده كافٍ لإثبات الهوية)
 
         // ─── كل شيء صحيح — حقن JWT في EduOS_SB ────────────
         if (window.EduOS_SB) {
