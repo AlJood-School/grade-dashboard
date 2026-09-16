@@ -299,6 +299,9 @@ tr:hover td{background:var(--surface2)}
 
 /* ── TOAST ── */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--text);color:#fff;padding:12px 24px;border-radius:12px;font-size:15px;font-weight:700;z-index:9999;opacity:0;transition:all .3s;box-shadow:0 4px 20px rgba(0,0,0,0.3)}
+/* ── تنظيم الأزرار العائمة: أقدر مخفي (يوجد tab تقييمي) · shield في اليمين ── */
+#aqFloatingBtn{display:none!important}
+#shield-report-btn{left:auto!important;right:16px!important;bottom:24px!important}
 .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
 
 /* ── SCROLLBAR ── */
@@ -548,7 +551,7 @@ tr:hover td{background:var(--surface2)}
         <div class="user-avatar" id="userAvatar">م</div>
         <div>
           <div class="user-name" id="userName">جارٍ التحميل…</div>
-          <div class="user-role">معلم/ة</div>
+          <div class="user-role" id="userRoleLabel">كادر أكاديمي</div>
         </div>
       </div>
       <button class="notif-btn" onclick="openNotif()" title="الإشعارات / Notifications">
@@ -1475,6 +1478,7 @@ const sb = window.supabase?.createClient((window.EduOS?window.EduOS.SB_URL:''), 
 // ── SESSION ──
 const session = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
 let teacherId = session?.id || null;
+let teacherUsername = session?.username || null;
 let teacherData = null;
 let teacherNumericId = session?.staff_db_id || null;
 let teacherClasses = [];
@@ -1679,19 +1683,41 @@ function startCountdown() {
   tick(); // run immediately
 }
 
+// ── ROLE LABELS ──
+const ROLE_LABELS_AR = {
+  'teacher': 'كادر أكاديمي', 'vice_principal': 'نائب المدير',
+  'principal': 'المدير', 'admin': 'مدير النظام',
+  'counselor': 'الأخصائي', 'registrar': 'المسجّل',
+  'financial_coordinator': 'المنسق المالي', 'coordinator': 'المنسق',
+  'librarian': 'أمين المكتبة', 'coach': 'المدرب'
+};
+
 // ── TEACHER PROFILE ──
 async function loadTeacherProfile() {
-  if (!sb || !teacherId) return;
+  if (!sb) return;
+  // البحث بـ username أولاً (الأصح) — ثم بـ staff_db_id احتياطياً
+  if (!teacherUsername && !teacherNumericId && !teacherId) return;
   try {
-    const { data } = await sb.from('staff_profiles')
-      .select('name_ar,name_en,role_key,department,subject,subjects_en,grades_taught,username,staff_db_id')
-      .eq('staff_db_id', teacherId).single();
+    let query = sb.from('staff_profiles')
+      .select('name_ar,name_en,role_key,department,subject,subjects_en,grades_taught,username,staff_db_id');
+    if (teacherUsername) {
+      query = query.eq('username', teacherUsername);
+    } else if (teacherNumericId) {
+      query = query.eq('staff_db_id', teacherNumericId);
+    } else {
+      query = query.eq('staff_db_id', teacherId);
+    }
+    const { data } = await query.single();
     if (!data) return;
     teacherData = data;
-    if (data.staff_db_id && !teacherNumericId) teacherNumericId = data.staff_db_id;
-    const displayName = data.name_ar || data.name_en || 'المعلم/ة';
+    // تحديث teacherNumericId بالقيمة الصحيحة من DB
+    if (data.staff_db_id) teacherNumericId = data.staff_db_id;
+    const displayName = data.name_ar || data.name_en || 'الكادر الأكاديمي';
     document.getElementById('userName').textContent = displayName;
-    document.getElementById('userAvatar').textContent = displayName[0] || 'م';
+    document.getElementById('userAvatar').textContent = displayName[0] || 'ك';
+    // تحديث الدور ديناميكياً
+    const roleEl = document.getElementById('userRoleLabel');
+    if (roleEl) roleEl.textContent = ROLE_LABELS_AR[data.role_key] || data.role_key || 'كادر أكاديمي';
     const hClass = data.department || data.grades_taught || '';
     document.getElementById('greetSub').textContent = 'أهلاً ' + displayName + (hClass ? ' — ' + hClass : '') + ' · يوم موفق إن شاء الله';
     const classSet = new Set();
