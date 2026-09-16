@@ -63,6 +63,18 @@
   /* ══════════════════════════════════
      4. CSS
      ══════════════════════════════════ */
+
+  function getOrCreateFabContainer() {
+    var c = document.getElementById('eduos-fab-container');
+    if (!c) {
+      c = document.createElement('div');
+      c.id = 'eduos-fab-container';
+      c.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9000;display:flex;flex-direction:column;gap:8px;align-items:center;';
+      document.body.appendChild(c);
+    }
+    return c;
+  }
+
   function injectStyles() {
     if (document.getElementById('duties-sys-style')) return;
     var s = document.createElement('style');
@@ -70,7 +82,7 @@
     s.textContent = [
       /* زر عائم */
       '#duty-float-btn{',
-        'position:fixed;bottom:82px;left:20px;z-index:9000;',
+        'position:relative;z-index:1;',
         'width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;',
         'background:linear-gradient(135deg,#f59e0b,#d97706);',
         'color:#fff;font-size:22px;box-shadow:0 4px 16px rgba(245,158,11,.45);',
@@ -208,12 +220,23 @@
      ══════════════════════════════════ */
   function buildDOM() {
     /* زر عائم */
+    var headerTools = document.getElementById('header-tools');
     var btn = document.createElement('button');
-    btn.id = 'duty-float-btn';
-    btn.title = 'المناوبات';
-    btn.innerHTML = '<span>📋</span><span id="duty-badge"></span>';
-    btn.addEventListener('click', togglePanel);
-    document.body.appendChild(btn);
+    if (headerTools) {
+      btn.id = 'duty-header-icon';
+      btn.title = 'المناوبات';
+      btn.setAttribute('aria-label', 'المناوبات');
+      btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span id="duty-badge" style="position:absolute;top:1px;right:1px;background:#EF4444;color:#fff;min-width:14px;height:14px;border-radius:8px;font-size:9px;font-weight:900;display:none;align-items:center;justify-content:center;"></span>';
+      btn.style.cssText = 'position:relative;background:none;border:none;cursor:pointer;padding:7px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#f59e0b;transition:background 0.2s;';
+      btn.addEventListener('click', togglePanel);
+      headerTools.appendChild(btn);
+    } else {
+      btn.id = 'duty-float-btn';
+      btn.title = 'المناوبات';
+      btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span id="duty-badge"></span>';
+      btn.addEventListener('click', togglePanel);
+      getOrCreateFabContainer().appendChild(btn);
+    }
 
     /* اللوحة */
     var panel = document.createElement('div');

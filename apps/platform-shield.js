@@ -84,34 +84,36 @@
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   // الطبقة 1: زر التبليغ اليدوي 🚩
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  function getOrCreateFabContainer() {
+    let c = document.getElementById('eduos-fab-container');
+    if (!c) {
+      c = document.createElement('div');
+      c.id = 'eduos-fab-container';
+      c.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9000;display:flex;flex-direction:column;gap:8px;align-items:center;';
+      document.body.appendChild(c);
+    }
+    return c;
+  }
+
   function injectReportButton() {
     // لا تُضف في صفحة login
     if (window.location.pathname.includes("login") || window.location.pathname === "/") return;
 
+    const headerTools = document.getElementById("header-tools");
     const btn = document.createElement("button");
     btn.id = "shield-report-btn";
-    btn.innerHTML = "🚩";
     btn.title = "أبلغ عن مشكلة";
     btn.setAttribute("aria-label", "أبلغ عن مشكلة تقنية");
-    btn.style.cssText = `
-      position: fixed;
-      bottom: 80px;
-      left: 16px;
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background: rgba(220,38,38,0.15);
-      border: 1.5px solid rgba(220,38,38,0.4);
-      color: #ef4444;
-      font-size: 18px;
-      cursor: pointer;
-      z-index: 9997;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s ease;
-      backdrop-filter: blur(8px);
-    `;
+    if (headerTools) {
+      btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+      btn.style.cssText = "position:relative;background:none;border:none;cursor:pointer;padding:7px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#ef4444;transition:background 0.2s;";
+      headerTools.appendChild(btn);
+    } else {
+      btn.innerHTML = "🚩";
+      btn.style.cssText = "width:40px;height:40px;border-radius:50%;background:rgba(220,38,38,0.15);border:1.5px solid rgba(220,38,38,0.4);color:#ef4444;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease;backdrop-filter:blur(8px);";
+      getOrCreateFabContainer().appendChild(btn);
+    }
     btn.addEventListener("mouseenter", () => {
       btn.style.background = "rgba(220,38,38,0.3)";
       btn.style.transform = "scale(1.1)";
