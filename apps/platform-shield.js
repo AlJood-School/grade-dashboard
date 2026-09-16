@@ -123,7 +123,7 @@
       btn.style.transform = "scale(1)";
     });
     btn.addEventListener("click", openReportModal);
-    document.body.appendChild(btn);
+    // ملاحظة: الزر أُضيف بالفعل إما لـ headerTools أو fabContainer أعلاه — لا نُضيفه لـ body
   }
 
   // نافذة التبليغ
