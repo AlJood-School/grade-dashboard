@@ -227,6 +227,7 @@
   function buildFloatingBtn() {
     var btn = document.createElement('button');
     btn.id = 'aqFloatingBtn';
+    btn.setAttribute('data-tooltip', 'استطلاع أقدر للجاهزية الرقمية');
     btn.title = 'استطلاع الجاهزية الرقمية — أكملوه من فضلك';
     // ذكي: إذا وُجد #header-tools → أيقونة في الهيدر؛ وإلا عائم
     var headerTools = document.getElementById('header-tools');

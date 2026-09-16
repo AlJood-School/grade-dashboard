@@ -462,6 +462,7 @@ window.EduLang = (function () {
     btn.title = _lang === 'en' ? 'تغيير إلى العربية' : 'Switch to English';
     btn.textContent = _lang === 'en' ? '🌐 العربية' : '🌐 English';
     btn.className = 'edu-lang-btn';
+    btn.setAttribute('data-tooltip', 'تغيير لغة الواجهة');
     // كشف ثيم الصفحة: داكن أم فاتح؟
     function detectDark() {
       const bg = getComputedStyle(document.body).backgroundColor || '';
@@ -544,8 +545,72 @@ window.EduLang = (function () {
   /* ─────────────────────────────────────────────────────────────
    * تهيئة
    * ──────────────────────────────────────────────────────────── */
+  /* ─────────────────────────────────────────────────────────────
+   * نظام Tooltip الشامل — يُطبَّق على كل عنصر بـ data-tooltip
+   * يعمل تلقائياً على الأيقونات القادمة من platform-*.js
+   * ──────────────────────────────────────────────────────────── */
+  function injectTooltipSystem() {
+    if (document.getElementById('eduos-tooltip-style')) return;
+    const s = document.createElement('style');
+    s.id = 'eduos-tooltip-style';
+    s.textContent = `
+      .eduos-has-tooltip { position: relative !important; }
+      .eduos-has-tooltip .eduos-tip {
+        display: none;
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(15,23,42,0.92);
+        color: #fff;
+        padding: 5px 11px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-family: 'Tajawal', Arial, sans-serif;
+        white-space: nowrap;
+        pointer-events: none;
+        z-index: 999999;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        direction: rtl;
+      }
+      .eduos-has-tooltip .eduos-tip::after {
+        content: '';
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        border: 5px solid transparent;
+        border-top-color: rgba(15,23,42,0.92);
+      }
+      .eduos-has-tooltip:hover .eduos-tip { display: block !important; }
+    `;
+    document.head.appendChild(s);
+
+    // ربط الـ tooltip بكل عناصر data-tooltip في الصفحة
+    function bindTooltips() {
+      document.querySelectorAll('[data-tooltip]').forEach(function(el) {
+        if (el.dataset.tooltipBound) return;
+        el.dataset.tooltipBound = '1';
+        el.classList.add('eduos-has-tooltip');
+        const tip = document.createElement('span');
+        tip.className = 'eduos-tip';
+        tip.textContent = el.getAttribute('data-tooltip');
+        el.appendChild(tip);
+      });
+    }
+
+    bindTooltips();
+    // مراقب: يُضيف الـ tooltip تلقائياً لأي عنصر جديد
+    var tipObserver = new MutationObserver(function() {
+      clearTimeout(window._tipRebindTimer);
+      window._tipRebindTimer = setTimeout(bindTooltips, 200);
+    });
+    tipObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
   function init() {
     injectLangBtn();
+    injectTooltipSystem();
     observer.observe(document.body, { childList: true, subtree: true });
     if (_lang === 'en') setLang('en');
   }

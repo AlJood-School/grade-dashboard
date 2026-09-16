@@ -103,6 +103,7 @@
     const headerTools = document.getElementById("header-tools");
     const btn = document.createElement("button");
     btn.id = "shield-report-btn";
+    btn.setAttribute("data-tooltip", "الإبلاغ عن مشكلة تقنية");
     btn.title = "أبلغ عن مشكلة";
     btn.setAttribute("aria-label", "أبلغ عن مشكلة تقنية");
     if (headerTools) {
