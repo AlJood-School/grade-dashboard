@@ -1615,37 +1615,60 @@ function startCountdown() {
     const lblEl = document.getElementById('countdownLbl');
     if (!valEl) return;
     let found = null;
+    const card = document.getElementById('periodNowCard');
+    let cardShown = false;
     for (const s of todayScheduleData) {
       const {startMin, endMin} = getPeriodTime(s.period || 1, s.class_name);
       if (nowMin >= startMin && nowMin < endMin) {
+        // حصة نشطة الآن
         found = { rem: (endMin - nowMin)*60 - nowSec, label: 'حتى انتهاء الحصة ' + (s.period||''), subject: s.subject||'—', cls: s.class_name||'', period: s.period||'' };
-        // Show period-now card
-        const card = document.getElementById('periodNowCard');
-        if (card) { card.style.display = 'flex'; }
-        document.getElementById('periodNowSubject').textContent = s.subject || '—';
-        document.getElementById('periodNowClass').textContent = s.class_name || '—';
-        document.getElementById('periodNow').textContent = s.period || '—';
+        if (card) {
+          card.style.display = 'flex';
+          card.style.background = 'linear-gradient(90deg,var(--emerald),#10B981)';
+          card.querySelector('.period-now-title').innerHTML = '● <span id="periodNowSubject">' + (s.subject||'—') + '</span>';
+          card.querySelector('.period-now-sub').innerHTML = '<span id="periodNowClass">' + (s.class_name||'—') + '</span> · الحصة <span id="periodNow">' + (s.period||'—') + '</span>';
+          const timerEl = document.getElementById('periodNowTimer');
+          const m = Math.floor(found.rem / 60);
+          if (timerEl) timerEl.textContent = m + ' دقيقة';
+          const startBtn = card.querySelector('.btn-start-session');
+          if (startBtn) startBtn.style.display = '';
+        }
+        cardShown = true;
         break;
       }
       if (nowMin < startMin) {
-        found = { rem: (startMin - nowMin)*60 - nowSec, label: 'حتى بداية الحصة ' + (s.period||'') };
+        // حصة قادمة
+        found = { rem: (startMin - nowMin)*60 - nowSec, label: 'حتى بداية الحصة ' + (s.period||''), subject: s.subject||'—', cls: s.class_name||'', period: s.period||'', upcoming: true };
+        if (card) {
+          card.style.display = 'flex';
+          card.style.background = 'linear-gradient(90deg,var(--brand),#7C3AED)';
+          card.querySelector('.period-now-title').innerHTML = '🔔 <span id="periodNowSubject">' + (s.subject||'—') + '</span>';
+          card.querySelector('.period-now-sub').innerHTML = '<span id="periodNowClass">' + (s.class_name||'—') + '</span> · الحصة <span id="periodNow">' + (s.period||'—') + '</span>';
+          const m = Math.floor(found.rem / 60);
+          const timerEl = document.getElementById('periodNowTimer');
+          if (timerEl) timerEl.textContent = m + ' دقيقة';
+          const startBtn = card.querySelector('.btn-start-session');
+          if (startBtn) startBtn.style.display = 'none';
+        }
+        cardShown = true;
         break;
       }
     }
+    if (!cardShown && card) card.style.display = 'none';
     if (found && found.rem > 0) {
       const m = Math.floor(found.rem / 60);
       const sc = found.rem % 60;
       const timeStr = m + ':' + String(sc).padStart(2,'0');
       valEl.textContent = timeStr;
       lblEl.textContent = found.label;
-      const timerEl = document.getElementById('periodNowTimer');
-      if (timerEl && found.subject) timerEl.textContent = m + ' دقيقة';
     } else {
       valEl.textContent = '——';
       lblEl.textContent = 'لا حصص / No period';
+      if (card) card.style.display = 'none';
     }
   }
   setInterval(tick, 1000);
+  tick(); // run immediately
 }
 
 // ── TEACHER PROFILE ──
@@ -1867,7 +1890,7 @@ async function loadTodaySchedule() {
         schedHtml += '<div style="background:' + (isBreakNow?'rgba(245,158,11,0.12)':isBreakDone?'rgba(0,0,0,0.02)':'rgba(255,255,255,0.02)') + ';border-radius:8px;padding:6px 14px;margin:4px 0;display:flex;align-items:center;gap:10px">'
           + '<span style="font-size:15px">☕</span>'
           + '<span style="font-size:12px;font-weight:700;color:' + (isBreakNow?'#D97706':'var(--text3)') + '">' + brk.label + '</span>'
-          + '<span style="font-size:11px;color:var(--text3);margin-right:auto">' + brk.start + '–' + brk.end + '</span>'
+          + '<span style="font-size:11px;color:var(--text3);margin-right:auto" dir="ltr">' + brk.start + '–' + brk.end + '</span>'
           + (isBreakNow ? '<span style="background:rgba(245,158,11,0.2);color:#D97706;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:800">الآن</span>' : '')
           + '</div>';
       }
