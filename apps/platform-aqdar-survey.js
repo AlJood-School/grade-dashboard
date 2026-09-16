@@ -215,10 +215,18 @@
   function buildFloatingBtn() {
     var btn = document.createElement('button');
     btn.id = 'aqFloatingBtn';
+    btn.title = 'استطلاع الجاهزية الرقمية — أكملوه من فضلك';
+    // ذكي: إذا وُجد #header-tools → أيقونة في الهيدر؛ وإلا عائم
+    var headerTools = document.getElementById('header-tools');
+    var hasContainer = headerTools || !!document.getElementById('eduos-floating-actions');
+    if (headerTools) {
+      btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
+      btn.style.cssText = 'position:relative;background:none;border:none;cursor:pointer;padding:7px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#F59E0B;transition:background 0.2s;';
+      headerTools.appendChild(btn);
+      btn.addEventListener('click', function() { buildModal(sess); });
+      return;
+    }
     btn.innerHTML = '🛡️ أقدر';
-    btn.title = 'استطلاع الجاهزية الرقمية — ارجو الإكمال';
-    // إذا وُجد container منظّم للأزرار العائمة → لا تضع position:fixed (الـ container يتحكم)
-    var hasContainer = !!document.getElementById('eduos-floating-actions');
     btn.style.cssText = (hasContainer ? '' : 'position:fixed;bottom:100px;left:16px;') +
       'z-index:9997;' +
       'background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:50px;' +
