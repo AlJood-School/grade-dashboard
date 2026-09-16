@@ -292,7 +292,7 @@
       btn.id = 'msg-header-icon';
       btn.setAttribute('aria-label', 'الرسائل الداخلية');
       btn.setAttribute('title', 'الرسائل الداخلية');
-      btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>';
+      btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg><span style="font-size:11px">رسائل</span>';
       var badge = document.createElement('span');
       badge.id = 'msg-badge';
       badge.style.display = 'none';
@@ -300,7 +300,7 @@
       btn.appendChild(badge);
       // أضف style للـ badge داخل الهيدر
       badge.style.cssText = 'position:absolute;top:2px;right:2px;background:#EF4444;color:#fff;min-width:15px;height:15px;border-radius:8px;padding:0 3px;font-size:9px;font-weight:900;display:none;align-items:center;justify-content:center;border:1.5px solid var(--surface,#fff);';
-      btn.style.cssText = 'position:relative;background:none;border:none;cursor:pointer;padding:7px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--text2,#64748B);transition:background 0.2s;';
+      btn.style.cssText = 'position:relative;background:rgba(108,61,214,0.1);border:1.5px solid rgba(108,61,214,0.35);cursor:pointer;padding:7px 11px;border-radius:12px;display:flex;align-items:center;gap:5px;justify-content:center;color:#6C3DD6;transition:all 0.2s;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;';
       headerTools.appendChild(btn);
       btn.addEventListener('click', togglePanel);
     } else {
@@ -309,7 +309,7 @@
       btn.id = 'msg-float-btn';
       btn.setAttribute('aria-label', 'الرسائل الداخلية');
       btn.setAttribute('title', 'الرسائل الداخلية');
-      btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>';
+      btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg><span style="font-size:11px">رسائل</span>';
       var badge = document.createElement('span');
       badge.id = 'msg-badge';
       badge.style.cssText = 'position:absolute;top:1px;right:1px;background:#EF4444;color:#fff;min-width:14px;height:14px;border-radius:8px;padding:0 3px;font-size:9px;font-weight:900;display:none;align-items:center;justify-content:center;';

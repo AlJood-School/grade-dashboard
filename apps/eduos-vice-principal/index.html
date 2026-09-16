@@ -157,6 +157,8 @@ body{overflow:hidden}
   .ftt-break-col .bk-empty { font-size: 9px; color: #D1D5DB; }
   .ftt-break-head { background: #FEF3C7 !important; color: #92400E !important; font-weight: 900 !important; font-size: 11px !important; border-right: 2px solid #F59E0B; border-left: 2px solid #F59E0B; width: 22px; min-width: 22px; max-width: 22px; writing-mode: vertical-rl; text-align: center !important; }
   .ftt-break-cell { background: #F1F5F9 !important; color: #94A3B8; font-size: 11px; font-weight: 700; padding: 6px 4px; }
+  .ftt-period-subhead { background: #dde4f0 !important; }
+  .ftt-period-subhead th { font-size: 11px !important; font-weight: 700 !important; color: #334155 !important; padding: 5px 6px !important; text-align: center !important; border-bottom: 1px solid #c2cfe0 !important; }
   .ftt-stage-header td { background: #1E293B !important; color: #CBD5E1; font-weight: 900; font-size: 12px; text-align: right; padding: 6px 12px; letter-spacing: 0.5px; }
   .ftt-class-cell { font-weight: 900; font-size: 14px; color: #6C3DD6; background: #F5F3FF; }
   .ftt-legend { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; font-size:12px; align-items:center; }
@@ -559,7 +561,13 @@ body{overflow:hidden}
       </div>
       <div class="card" style="margin-top:0">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-          <div class="sec-title" style="margin-bottom:0">📋 الجدول الكامل / Full School Timetable</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <div class="sec-title" style="margin-bottom:0">📋 الجدول الكامل / Full School Timetable</div>
+            <div style="display:flex;gap:8px">
+              <button onclick="printTimetableByTeacher()" style="background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;padding:8px 16px;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:13px;font-weight:700;cursor:pointer;">🖨️ طباعة بالمعلم</button>
+              <button onclick="printTimetableByClass()" style="background:linear-gradient(135deg,#0ea5e9,#22D3EE);color:#fff;border:none;padding:8px 16px;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:13px;font-weight:700;cursor:pointer;">🖨️ طباعة بالصف</button>
+            </div>
+          </div>
           <div class="ftt-legend">
             <span class="ftt-leg"><span class="ftt-leg-dot" style="background:#E2E8F0;opacity:0.5"></span>فائتة</span>
             <span class="ftt-leg"><span class="ftt-leg-dot" style="background:#22D3EE"></span>جارية الآن</span>
@@ -4172,7 +4180,7 @@ async function loadFullTimetableGrid() {
   }
 
   // Build map: class_name -> period -> {subject, teacher_name}
-  const schedMap = {};
+  const schedMap = {}; window._fttSchedMap = schedMap;
   rows.forEach(r => {
     if (!schedMap[r.class_name]) schedMap[r.class_name] = {};
     schedMap[r.class_name][r.period] = r;
@@ -4287,6 +4295,9 @@ async function loadFullTimetableGrid() {
     // Stage separator row (colspan = periods + break cols + 1 for class col)
     const totalCols = periods.length + BREAK_COL_POSITIONS.length + 1;
     bodyHtml += '<tr class="ftt-stage-header"><td colspan="' + totalCols + '">' + stage.label + '</td></tr>';
+    // Repeat period header below each stage separator
+    bodyHtml += hdr2.replace('<tr>', '<tr class="ftt-period-subhead">');
+
 
     stage.classes.forEach(cls => {
       const g = gradeOf(cls);
@@ -5258,6 +5269,105 @@ document.querySelectorAll('[data-panel]').forEach(btn => {
 });
 // ──────────────────────────────────────────────────────
 // ──
+
+// ===== PRINT TIMETABLE FUNCTIONS =====
+function printTimetableByTeacher() {
+  // Collect all unique teachers from the schedule
+  var schedMap = window._fttSchedMap || {};
+  var teacherMap = {}; // teacher_id -> {name, slots: [{class, period, subject}]}
+  Object.keys(schedMap).forEach(function(cls) {
+    Object.keys(schedMap[cls]).forEach(function(p) {
+      var slot = schedMap[cls][p];
+      if (!slot || !slot.teacher_id || !slot.subject) return;
+      var tid = slot.teacher_id;
+      if (!teacherMap[tid]) teacherMap[tid] = { name: slot.teacher_name || tid, slots: [] };
+      teacherMap[tid].slots.push({ cls: cls, period: parseInt(p), subject: slot.subject });
+    });
+  });
+
+  var days = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+  var html = '<html dir="rtl"><head><meta charset="utf-8">';
+  html += '<style>@import url("https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap");';
+  html += 'body{font-family:Tajawal,Arial,sans-serif;font-size:13px;margin:20px;direction:rtl;}';
+  html += 'h1{font-size:18px;color:#6C3DD6;margin-bottom:4px;}h2{font-size:15px;color:#1E293B;margin:16px 0 6px;border-bottom:2px solid #6C3DD6;padding-bottom:4px;}';
+  html += 'table{width:100%;border-collapse:collapse;margin-bottom:20px;page-break-inside:avoid;}';
+  html += 'th{background:#6C3DD6;color:#fff;padding:7px 10px;font-size:12px;}';
+  html += 'td{padding:6px 10px;border:1px solid #e2e8f0;font-size:12px;}';
+  html += 'tr:nth-child(even) td{background:#f8fafc;}';
+  html += '@media print{body{margin:10px;font-size:11px;}h2{page-break-before:auto;}}</style>';
+  html += '<title>جداول المعلمين / Teacher Timetables</title></head><body>';
+  html += '<h1>📋 جداول المعلمين / Teacher Timetables</h1>';
+  html += '<p style="color:#64748B;font-size:12px">تاريخ الطباعة: ' + new Date().toLocaleDateString('ar-AE') + '</p>';
+
+  var sortedTeachers = Object.keys(teacherMap).sort(function(a,b){
+    return (teacherMap[a].name || '').localeCompare(teacherMap[b].name || '');
+  });
+
+  sortedTeachers.forEach(function(tid) {
+    var t = teacherMap[tid];
+    var sorted = t.slots.sort(function(a,b){ return a.period - b.period; });
+    html += '<h2>👤 ' + t.name + '</h2>';
+    html += '<table><thead><tr><th>الصف</th><th>الحصة</th><th>المادة</th></tr></thead><tbody>';
+    sorted.forEach(function(s) {
+      html += '<tr><td>' + s.cls + '</td><td>ح' + s.period + '</td><td>' + s.subject + '</td></tr>';
+    });
+    html += '</tbody></table>';
+  });
+
+  html += '</body></html>';
+  var w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(function(){ w.print(); }, 800);
+}
+
+function printTimetableByClass() {
+  var schedMap = window._fttSchedMap || {};
+  var sortedClasses = Object.keys(schedMap).sort(function(a,b){
+    var ga = parseInt(a)||0, gb = parseInt(b)||0;
+    if (ga !== gb) return ga - gb;
+    return a.localeCompare(b);
+  });
+
+  var html = '<html dir="rtl"><head><meta charset="utf-8">';
+  html += '<style>@import url("https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap");';
+  html += 'body{font-family:Tajawal,Arial,sans-serif;font-size:13px;margin:20px;direction:rtl;}';
+  html += 'h1{font-size:18px;color:#6C3DD6;margin-bottom:4px;}h2{font-size:15px;color:#1E293B;margin:16px 0 6px;border-bottom:2px solid #6C3DD6;padding-bottom:4px;}';
+  html += 'table{width:100%;border-collapse:collapse;margin-bottom:20px;page-break-inside:avoid;}';
+  html += 'th{background:#0ea5e9;color:#fff;padding:7px 10px;font-size:12px;}';
+  html += 'td{padding:6px 10px;border:1px solid #e2e8f0;font-size:12px;}';
+  html += 'tr:nth-child(even) td{background:#f0f9ff;}';
+  html += '@media print{body{margin:10px;font-size:11px;}h2{page-break-before:auto;}}</style>';
+  html += '<title>جداول الصفوف / Class Timetables</title></head><body>';
+  html += '<h1>📚 جداول الصفوف / Class Timetables</h1>';
+  html += '<p style="color:#64748B;font-size:12px">تاريخ الطباعة: ' + new Date().toLocaleDateString("ar-AE") + '</p>';
+
+  sortedClasses.forEach(function(cls) {
+    var slots = schedMap[cls];
+    var periods = Object.keys(slots).map(Number).sort(function(a,b){return a-b;});
+    html += '<h2>🏫 الصف ' + cls + '</h2>';
+    html += '<table><thead><tr><th>الحصة</th><th>المادة</th><th>المعلم/ة</th></tr></thead><tbody>';
+    periods.forEach(function(p) {
+      var slot = slots[p];
+      if (!slot) return;
+      var subj = slot.subject || '—';
+      var tchr = slot.teacher_name || '—';
+      if (subj.includes('شاغر') || subj.includes('Vacancy')) subj = '<span style="color:#EF4444">⚠️ شاغر</span>';
+      html += '<tr><td>ح' + p + '</td><td>' + subj + '</td><td>' + tchr + '</td></tr>';
+    });
+    html += '</tbody></table>';
+  });
+
+  html += '</body></html>';
+  var w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(function(){ w.print(); }, 800);
+}
+// expose schedMap globally from loadFullTimetableGrid
+
 </script>
 </body>
 </html>

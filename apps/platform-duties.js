@@ -226,8 +226,8 @@
       btn.id = 'duty-header-icon';
       btn.title = 'المناوبات';
       btn.setAttribute('aria-label', 'المناوبات');
-      btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span id="duty-badge" style="position:absolute;top:1px;right:1px;background:#EF4444;color:#fff;min-width:14px;height:14px;border-radius:8px;font-size:9px;font-weight:900;display:none;align-items:center;justify-content:center;"></span>';
-      btn.style.cssText = 'position:relative;background:none;border:none;cursor:pointer;padding:7px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#f59e0b;transition:background 0.2s;';
+      btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span style="font-size:11px">المناوبة</span><span id="duty-badge" style="position:absolute;top:-4px;right:-4px;background:#EF4444;color:#fff;min-width:16px;height:16px;border-radius:8px;font-size:9px;font-weight:900;display:none;align-items:center;justify-content:center;padding:0 2px;"></span>';
+      btn.style.cssText = 'position:relative;background:rgba(245,158,11,0.12);border:1.5px solid rgba(245,158,11,0.4);cursor:pointer;padding:7px 11px;border-radius:12px;display:flex;align-items:center;gap:5px;justify-content:center;color:#d97706;transition:all 0.2s;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;';
       btn.addEventListener('click', togglePanel);
       headerTools.appendChild(btn);
     } else {
