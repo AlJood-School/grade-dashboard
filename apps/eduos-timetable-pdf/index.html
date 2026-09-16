@@ -226,13 +226,26 @@ td{padding:8px 6px;border:1px solid var(--border);text-align:center;vertical-ali
   }
 
   // ─── مساعد: حساب وقت الحصة (بدء/نهاية) ─────────────────────────────
-  // الجدول: G1-G8 يبدأ 7:15 | KG يبدأ 7:30 | حصة 45 دقيقة | استراحة 20د بعد ح2
+  // الجدول الرسمي:
+  // G1-G2: 7:15 بداية | استراحتان: بعد ح2 (20دق) + بعد ح5 (20دق)
+  // G3-G4: 7:15 بداية | استراحتان: بعد ح2 (20دق) + بعد ح5 (20دق)
+  // G5-G8: 8:00 بداية | استراحتان: بعد ح2 (20دق) + بعد ح6 (10دق)
+  // KG:    7:30 بداية | استراحة:   بعد ح2 (20دق)
   var _gradeCtx = 5; // يُحدَّث قبل كل بناء جدول
+
+  function getGradeBreaks(g) {
+    if (g === 0) return [{after: 2, mins: 20}];                           // KG
+    if (g <= 4)  return [{after: 2, mins: 20}, {after: 5, mins: 20}];    // G1-G4
+    return       [{after: 2, mins: 20}, {after: 6, mins: 10}];           // G5-G8
+  }
+
   function getPeriodTime(pNum) {
     var g = _gradeCtx;
-    var startMin = (g === 0) ? 7*60+30 : 7*60+15;
+    var startMin = (g === 0) ? 7*60+30 : (g >= 5 ? 8*60 : 7*60+15);
     var elapsed = (pNum - 1) * 45;
-    if (pNum > 2) elapsed += 20; // استراحة بعد ح2
+    getGradeBreaks(g).forEach(function(b) {
+      if (pNum > b.after) elapsed += b.mins;
+    });
     var s = startMin + elapsed, e = s + 45;
     function fmt(m){ var h=Math.floor(m/60),mn=m%60; return h+':'+(mn<10?'0':'')+mn; }
     return fmt(s) + ' – ' + fmt(e);
@@ -254,7 +267,21 @@ td{padding:8px 6px;border:1px solid var(--border);text-align:center;vertical-ali
     if (!rows || rows.length === 0) return '<div class="state-box"><span class="state-icon">📭</span><div class="state-title">لا جدول لـ ' + label + '</div></div>';
 
     // تحديد رقم الصف لحساب الأوقات
-    _gradeCtx = gradeNumFrom(label);
+    if (currentMode === 'class') {
+      _gradeCtx = gradeNumFrom(label);
+    } else {
+      // وضع المعلم: استخدم أكثر الصفوف تكراراً لتحديد المرحلة
+      var gradeCounts = {};
+      rows.forEach(function(r) {
+        var g = gradeNumFrom(r.class_name || r.cls || '');
+        gradeCounts[g] = (gradeCounts[g] || 0) + 1;
+      });
+      var bestG = 5, bestCount = 0;
+      Object.keys(gradeCounts).forEach(function(g) {
+        if (gradeCounts[g] > bestCount) { bestCount = gradeCounts[g]; bestG = parseInt(g); }
+      });
+      _gradeCtx = bestG;
+    }
     var FRIDAY_MAX = 4; // الجمعة: 4 حصص كحد أقصى لجميع المراحل
 
     var matrix = {};
@@ -275,11 +302,17 @@ td{padding:8px 6px;border:1px solid var(--border);text-align:center;vertical-ali
     DAYS.forEach(function(d,i) { html += '<th>' + d + '<br><span style="font-size:.65rem;opacity:.8">' + DAYS_EN[i] + '</span></th>'; });
     html += '</tr></thead><tbody>';
 
+    var _breaks = getGradeBreaks(_gradeCtx);
     for (var p = 1; p <= maxP; p++) {
-      // استراحة بعد الحصة الثانية
-      if (p === 3) {
-        html += '<tr style="background:#FFFBEB"><td colspan="6" style="text-align:center;padding:5px;font-size:.72rem;color:#92400E;font-weight:700">☕ استراحة — 20 دقيقة</td></tr>';
-      }
+      // إضافة صف الاستراحة حسب المرحلة
+      _breaks.forEach(function(b) {
+        if (p === b.after + 1) {
+          var bLabel = b.mins >= 20
+            ? '☕ استراحة — ' + b.mins + ' دقيقة'
+            : '☕ استراحة قصيرة — ' + b.mins + ' دق';
+          html += '<tr style="background:#FFFBEB"><td colspan="6" style="text-align:center;padding:5px;font-size:.72rem;color:#92400E;font-weight:700">' + bLabel + '</td></tr>';
+        }
+      });
 
       var timeStr = getPeriodTime(p);
       html += '<tr><td class="period-cell"><span class="period-num">' + p + '</span><span style="display:block;font-size:.62rem;color:#6B7280;margin-top:2px;direction:ltr">' + timeStr + '</span></td>';
