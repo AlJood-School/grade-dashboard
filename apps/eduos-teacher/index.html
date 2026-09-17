@@ -3489,17 +3489,30 @@ async function loadCoordDashboard() {
   var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
   var subject = window._myCoordSubject || '';
   var staffDbId = window._myStaffDbId || '';
+  var coordScope = window._myCoordScope || '';
+  var coordType = window._myCoordType || '';
   try {
-    // جلب معلمات المادة
-    var r1 = await fetch(sbUrl+'/rest/v1/teacher_assignments?subject=eq.'+encodeURIComponent(subject)+'&academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    // جلب معلمات المادة أو الصف حسب نوع المنسقة
+    var teacherUrl;
+    if (subject) {
+      teacherUrl = sbUrl+'/rest/v1/teacher_assignments?subject=eq.'+encodeURIComponent(subject)+'&academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id';
+    } else if (coordScope) {
+      teacherUrl = sbUrl+'/rest/v1/schedules?class_name=eq.'+encodeURIComponent(coordScope)+'&is_active=eq.true&select=teacher_name,teacher_id';
+    } else {
+      teacherUrl = sbUrl+'/rest/v1/teacher_assignments?academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id&limit=50';
+    }
+    var r1 = await fetch(teacherUrl, {headers: coordHeaders()});
     var teachers = await r1.json();
     var teacherList = Array.isArray(teachers) ? teachers : [];
     var uniqueTeachers = [];
     var seenIds = {};
     teacherList.forEach(function(t){
-      if (t.staff_db_id && !seenIds[t.staff_db_id]) {
-        seenIds[t.staff_db_id] = true;
-        uniqueTeachers.push(t);
+      // دعم teacher_assignments (staff_db_id) وschedules (teacher_id)
+      var id = t.staff_db_id || t.teacher_id || (t.teacher_name_ar||t.teacher_name||'');
+      var name = t.teacher_name_ar || t.teacher_name || '—';
+      if (id && !seenIds[id]) {
+        seenIds[id] = true;
+        uniqueTeachers.push({ staff_db_id: id, teacher_name_ar: name, class_name: t.class_name || coordScope });
       }
     });
 
@@ -3510,13 +3523,13 @@ async function loadCoordDashboard() {
     var ws = weekStart.toISOString().slice(0,10);
     var we = weekEnd.toISOString().slice(0,10);
     var r2 = await fetch(sbUrl+'/rest/v1/planning_records?scope=in.('+uniqueTeachers.map(function(t){return encodeURIComponent(t.staff_db_id||t.teacher_name_ar||'');}).join(',')+')'
-      +'&month_date=gte.'+ws+'&month_date=lte.'+we+'&select=scope',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+      +'&month_date=gte.'+ws+'&month_date=lte.'+we+'&select=scope',{headers: coordHeaders()});
     var planRows = await r2.json();
     var submittedSet = new Set(Array.isArray(planRows)?planRows.map(function(p){return p.scope;}):[]);
 
     // جلب زيارات هذا الشهر
     var monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0,10);
-    var r3 = await fetch(sbUrl+'/rest/v1/classroom_observations?coordinator_staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&observed_at=gte.'+monthStart+'&select=id',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var r3 = await fetch(sbUrl+'/rest/v1/classroom_observations?coordinator_staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&observed_at=gte.'+monthStart+'&select=id',{headers: coordHeaders()});
     var obsRows = await r3.json();
     var obsCount = Array.isArray(obsRows) ? obsRows.length : 0;
 
@@ -3587,30 +3600,45 @@ async function loadCoordTeachers() {
 
   area.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">جارٍ التحميل...</div>';
   try {
-    var r1 = await fetch(sbUrl+'/rest/v1/teacher_assignments?subject=eq.'+encodeURIComponent(subject)+'&academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id&order=teacher_name_ar.asc',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    // جلب قائمة المعلمات حسب نوع المنسقة
+    var obsTeacherUrl;
+    var coordScope2 = window._myCoordScope || '';
+    var coordType2 = window._myCoordType || '';
+    if (subject) {
+      obsTeacherUrl = sbUrl+'/rest/v1/teacher_assignments?subject=eq.'+encodeURIComponent(subject)+'&academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id&order=teacher_name_ar.asc';
+    } else if (coordScope2 && (coordType2==='planning'||coordType2==='track')) {
+      obsTeacherUrl = sbUrl+'/rest/v1/schedules?class_name=eq.'+encodeURIComponent(coordScope2)+'&is_active=eq.true&select=teacher_name,teacher_id,class_name&order=teacher_name.asc';
+    } else if (coordScope2) {
+      obsTeacherUrl = sbUrl+'/rest/v1/schedules?is_active=eq.true&select=teacher_name,teacher_id,class_name&limit=100&order=teacher_name.asc';
+    } else {
+      obsTeacherUrl = sbUrl+'/rest/v1/teacher_assignments?academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id&order=teacher_name_ar.asc&limit=50';
+    }
+    var r1 = await fetch(obsTeacherUrl, {headers: coordHeaders()});
     var rows = await r1.json();
     if (!Array.isArray(rows)||!rows.length) {
       area.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">لا توجد معلمات مُعيَّنات لهذه المادة</div>';
       return;
     }
-    // تجميع حسب المعلمة
+    // تجميع حسب المعلمة (دعم teacher_assignments وschedules)
     var byTeacher = {};
     rows.forEach(function(r){
-      var key = r.staff_db_id || r.teacher_name_ar;
-      if (!byTeacher[key]) byTeacher[key] = { name: r.teacher_name_ar, dbId: r.staff_db_id, classes: [] };
-      if (r.class_name) byTeacher[key].classes.push(r.class_name);
+      var key = r.staff_db_id || r.teacher_id || (r.teacher_name_ar||r.teacher_name||'');
+      var name = r.teacher_name_ar || r.teacher_name || '—';
+      var dbId = r.staff_db_id || r.teacher_id || key;
+      if (!byTeacher[key]) byTeacher[key] = { name: name, dbId: dbId, classes: [] };
+      if (r.class_name && byTeacher[key].classes.indexOf(r.class_name)===-1) byTeacher[key].classes.push(r.class_name);
     });
 
     // جلب آخر زيارة لكل معلمة
     var ids = Object.keys(byTeacher);
-    var r2 = await fetch(sbUrl+'/rest/v1/classroom_observations?coordinator_staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&select=teacher_staff_db_id,observed_at&order=observed_at.desc',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var r2 = await fetch(sbUrl+'/rest/v1/classroom_observations?coordinator_staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&select=teacher_staff_db_id,observed_at&order=observed_at.desc',{headers: coordHeaders()});
     var obsRows = await r2.json();
     var lastObs = {};
     if (Array.isArray(obsRows)) obsRows.forEach(function(o){ if (!lastObs[o.teacher_staff_db_id]) lastObs[o.teacher_staff_db_id]=o.observed_at; });
 
     // جلب سجل التذكيرات (آخر 14 يوم)
     var twoWeeksAgo = new Date(); twoWeeksAgo.setDate(twoWeeksAgo.getDate()-14);
-    var r3 = await fetch(sbUrl+'/rest/v1/coord_reminders?coordinator_staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&sent_at=gte.'+twoWeeksAgo.toISOString()+'&select=teacher_staff_db_id,sent_at,reminder_type',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var r3 = await fetch(sbUrl+'/rest/v1/coord_reminders?coordinator_staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&sent_at=gte.'+twoWeeksAgo.toISOString()+'&select=teacher_staff_db_id,sent_at,reminder_type',{headers: coordHeaders()});
     var remRows = await r3.json();
     var lastRem = {};
     if (Array.isArray(remRows)) remRows.forEach(function(rm){ if (!lastRem[rm.teacher_staff_db_id]) lastRem[rm.teacher_staff_db_id]=rm.sent_at; });
@@ -3679,9 +3707,12 @@ async function sendCoordReminder(teacherDbId, teacherNameAr, reminderType) {
       subject: subject,
       academic_year: '2026-2027'
     };
+    var heads = coordHeaders();
+    heads['Content-Type'] = 'application/json';
+    heads['Prefer'] = 'return=minimal';
     var res = await fetch(sbUrl+'/rest/v1/coord_reminders',{
       method:'POST',
-      headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},
+      headers: heads,
       body: JSON.stringify(body)
     });
     if (res.ok) {
@@ -3724,13 +3755,28 @@ async function renderObservationForm() {
   var teacherOptions = '<option value="">اختاري المعلمة...</option>';
   var teacherClasses = {};
   try {
-    var r1 = await fetch(sbUrl+'/rest/v1/teacher_assignments?subject=eq.'+encodeURIComponent(subject)+'&academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id&order=teacher_name_ar.asc',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    // جلب قائمة المعلمات حسب نوع المنسقة
+    var obsTeacherUrl;
+    var coordScope2 = window._myCoordScope || '';
+    var coordType2 = window._myCoordType || '';
+    if (subject) {
+      obsTeacherUrl = sbUrl+'/rest/v1/teacher_assignments?subject=eq.'+encodeURIComponent(subject)+'&academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id&order=teacher_name_ar.asc';
+    } else if (coordScope2 && (coordType2==='planning'||coordType2==='track')) {
+      obsTeacherUrl = sbUrl+'/rest/v1/schedules?class_name=eq.'+encodeURIComponent(coordScope2)+'&is_active=eq.true&select=teacher_name,teacher_id,class_name&order=teacher_name.asc';
+    } else if (coordScope2) {
+      obsTeacherUrl = sbUrl+'/rest/v1/schedules?is_active=eq.true&select=teacher_name,teacher_id,class_name&limit=100&order=teacher_name.asc';
+    } else {
+      obsTeacherUrl = sbUrl+'/rest/v1/teacher_assignments?academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id&order=teacher_name_ar.asc&limit=50';
+    }
+    var r1 = await fetch(obsTeacherUrl, {headers: coordHeaders()});
     var rows = await r1.json();
     if (Array.isArray(rows)) {
       rows.forEach(function(r){
-        var key = r.staff_db_id||r.teacher_name_ar;
-        if (!teacherClasses[key]) teacherClasses[key] = { name: r.teacher_name_ar, classes: [] };
-        if (r.class_name) teacherClasses[key].classes.push(r.class_name);
+        var key = r.staff_db_id || r.teacher_id || (r.teacher_name_ar||r.teacher_name||'');
+        var name = r.teacher_name_ar || r.teacher_name || '—';
+        if (!teacherClasses[key]) teacherClasses[key] = { name: name, classes: [] };
+        var cls = r.class_name || '';
+        if (cls && !teacherClasses[key].classes.includes(cls)) teacherClasses[key].classes.push(cls);
       });
       Object.entries(teacherClasses).forEach(function(entry){
         var key=entry[0], val=entry[1];
@@ -3982,9 +4028,12 @@ async function saveObservation() {
       notes: notesEl ? notesEl.value.trim() : '',
       observer: window._myNameAr || ''
     };
+    var saveHeads = coordHeaders();
+    saveHeads['Content-Type'] = 'application/json';
+    saveHeads['Prefer'] = 'return=minimal';
     var res = await fetch(sbUrl+'/rest/v1/classroom_observations',{
       method:'POST',
-      headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},
+      headers: saveHeads,
       body: JSON.stringify(body)
     });
     if (res.ok) {
@@ -4020,7 +4069,7 @@ async function loadObservationsHistory() {
   var staffDbId = window._myStaffDbId || '';
   wrap.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3)">جارٍ التحميل...</div>';
   try {
-    var res = await fetch(sbUrl+'/rest/v1/classroom_observations?coordinator_staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&order=observed_at.desc&limit=20&select=id,teacher_staff_db_id,class_name,lesson_topic,observed_at,pct_score,strengths,development_areas,duration_min,observer',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var res = await fetch(sbUrl+'/rest/v1/classroom_observations?coordinator_staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&order=observed_at.desc&limit=20&select=id,teacher_staff_db_id,class_name,lesson_topic,observed_at,pct_score,strengths,development_areas,duration_min,observer',{headers: coordHeaders()});
     var rows = await res.json();
     if (!Array.isArray(rows)||!rows.length) {
       wrap.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3)">لا توجد زيارات مسجَّلة بعد</div>';
@@ -4112,9 +4161,12 @@ async function saveMeeting() {
       notes: minutesEl ? minutesEl.value.trim() : '',
       status: (minutesEl && minutesEl.value.trim()) ? 'completed' : 'scheduled'
     };
+    var mtgHeads = coordHeaders();
+    mtgHeads['Content-Type'] = 'application/json';
+    mtgHeads['Prefer'] = 'return=minimal';
     var res = await fetch(sbUrl+'/rest/v1/coordinator_meetings',{
       method:'POST',
-      headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},
+      headers: mtgHeads,
       body: JSON.stringify(body)
     });
     if (res.ok) {
@@ -4138,7 +4190,7 @@ async function loadMeetingsList() {
   var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
   var staffDbId = window._myStaffDbId || '';
   try {
-    var res = await fetch(sbUrl+'/rest/v1/coordinator_meetings?coordinator_staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&order=meeting_date.desc&limit=30&select=id,meeting_date,start_time,agenda,notes,status,subject',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var res = await fetch(sbUrl+'/rest/v1/coordinator_meetings?coordinator_staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&order=meeting_date.desc&limit=30&select=id,meeting_date,start_time,agenda,notes,status,subject',{headers: coordHeaders()});
     var rows = await res.json();
     if (!Array.isArray(rows)||!rows.length) {
       wrap.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">لا توجد اجتماعات مسجَّلة — ابدئي بتسجيل أول اجتماع</div>';
@@ -4175,7 +4227,13 @@ async function loadCoordAnalytics() {
   var subject = window._myCoordSubject || '';
   try {
     // جلب الدرجات حسب المادة والصف
-    var res = await fetch(sbUrl+'/rest/v1/student_grades?subject=eq.'+encodeURIComponent(subject)+'&select=class_name,score,student_db_id&order=class_name.asc',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    // إذا لا يوجد subject، عرض رسالة
+    if (!subject) {
+      area.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">تحليل الأداء متاح لمنسقات المادة فقط — ' +
+        '<br><span style="font-size:12px;margin-top:8px;display:block">يمكنك استخدام قسم لوحة التنسيق لمتابعة فريقك</span></div>';
+      return;
+    }
+    var res = await fetch(sbUrl+'/rest/v1/student_grades?subject=eq.'+encodeURIComponent(subject)+'&select=class_name,score,student_db_id&order=class_name.asc',{headers: coordHeaders()});
     var rows = await res.json();
     if (!Array.isArray(rows)||!rows.length) {
       area.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">لا توجد درجات مسجَّلة لهذه المادة بعد</div>';
@@ -4239,16 +4297,28 @@ async function loadCoordAnalytics() {
 async function checkCoordinatorStatus() {
   try {
     var s = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
-    var staffDbId = s.id || s.staff_db_id || '';
-    if (!staffDbId) return;
+    var username = s.username || '';
+    var token = s.token || '';
+    if (!username) return;
     var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
     var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
-    var res = await fetch(sbUrl+'/rest/v1/staff_profiles?staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&select=is_coordinator,coordinator_subject,coord_type,coord_scope,name_ar',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var authHeader = 'Bearer ' + (token || sb);
+    window._myToken = token || '';  // حفظ JWT للاستخدام في دوال الـ coord
+
+// دالة مساعدة — تبني headers مع JWT للاستعلامات
+function coordHeaders() {
+  var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+  var tok = window._myToken || sb;
+  return { 'apikey': sb, 'Authorization': 'Bearer ' + tok };
+}
+    var res = await fetch(sbUrl+'/rest/v1/staff_profiles?username=eq.'+encodeURIComponent(username)+'&select=staff_db_id,is_coordinator,coordinator_subject,coord_type,coord_scope,name_ar',{headers:{'apikey':sb,'Authorization':authHeader}});
     var rows = await res.json();
     if (!Array.isArray(rows)||!rows.length) return;
     var row = rows[0];
     window._myNameAr = row.name_ar;
-    window._myStaffDbId = staffDbId;
+    window._myStaffDbId = row.staff_db_id || '';  // القيمة الحقيقية من DB
+    window._myCoordScope = row.coord_scope || '';
+    window._myCoordType = row.coord_type || '';
 
     if (row.is_coordinator) {
       window._myCoordSubject = row.coordinator_subject || '';
