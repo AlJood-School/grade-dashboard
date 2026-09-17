@@ -490,33 +490,13 @@ tr:hover td{background:var(--surface2)}
         <span class="snav-sub">Meetings</span>
       </span>
     </button>
-    <button class="snav" id="coord-nav-btn" data-panel="coord-meetings" onclick="showPanel('coord-meetings',this);loadMySubjectMeetings()" style="display:none">
-      <span class="snav-icon">&#x1F4CB;</span>
+    <button class="snav" id="coord-nav-btn" onclick="openCoordTab(this)" style="display:none">
+      <span class="snav-icon">🎯</span>
       <span class="snav-text">
-        <span class="snav-label">اجتماعات مادتي</span>
-        <span class="snav-sub">Subject Meetings</span>
+        <span class="snav-label">التنسيق</span>
+        <span class="snav-sub">Coordination</span>
       </span>
-    </button>
-    <button class="snav" id="coord-section-btn" data-panel="coord-section" onclick="showPanel('coord-section',this);loadCoordSection()" style="display:none">
-      <span class="snav-icon">🏫</span>
-      <span class="snav-text">
-        <span class="snav-label">إدارة القسم</span>
-        <span class="snav-sub">Section Coord</span>
-      </span>
-    </button>
-    <button class="snav" id="coord-planning-btn" data-panel="coord-planning" onclick="showPanel('coord-planning',this);loadCoordPlanning()" style="display:none">
-      <span class="snav-icon">📋</span>
-      <span class="snav-text">
-        <span class="snav-label">التخطيط المشترك</span>
-        <span class="snav-sub">Shared Planning</span>
-      </span>
-    </button>
-    <button class="snav" id="coord-track-btn" data-panel="coord-track" onclick="showPanel('coord-track',this);loadCoordTrack()" style="display:none">
-      <span class="snav-icon">📰</span>
-      <span class="snav-text">
-        <span class="snav-label">المسار الأسبوعي</span>
-        <span class="snav-sub">Weekly Track</span>
-      </span>
+      <span class="snav-badge" id="coordBadge" style="display:none">!</span>
     </button>
     <button id="nav-behavior" class="snav" onclick="switchPanel('behavior');loadMyIncidents()">
       <span class="snav-icon">⚠️</span>
@@ -3407,12 +3387,895 @@ function loadMyPDP() {
 
 <script>
 // ===================== COORDINATOR MODULE — TEACHER PORTAL =====================
-// Shows "اجتماعات مادتي" tab only if logged-in teacher is a coordinator
+// ═══════════════════════════════════════════════════════════════════
+// نظام التنسيق — v3 — مبني على معايير MOE الإماراتية
+// ═══════════════════════════════════════════════════════════════════
 
-// Generic panel switcher for coordinator panels (also handles main tab-panels)
+// معايير MOE الرسمية (14 معياراً في 5 محاور)
+var MOE_CRITERIA = [
+  { axis: 'التخطيط للدرس',             id:'c1',  text:'وضوح الأهداف التعليمية وارتباطها بالمنهج' },
+  { axis: 'التخطيط للدرس',             id:'c2',  text:'توزيع الوقت بين مراحل الدرس' },
+  { axis: 'التخطيط للدرس',             id:'c3',  text:'التوافق مع خطة المادة وتسلسلها المنطقي' },
+  { axis: 'التدريس والتعلم',           id:'c4',  text:'تنويع أساليب وطرق التدريس' },
+  { axis: 'التدريس والتعلم',           id:'c5',  text:'إشراك الطالبات وتفعيل مشاركتهن الفعلية' },
+  { axis: 'التدريس والتعلم',           id:'c6',  text:'مراعاة الفروق الفردية بين الطالبات' },
+  { axis: 'التدريس والتعلم',           id:'c7',  text:'توظيف التقنية والأدوات الرقمية بفاعلية' },
+  { axis: 'إدارة البيئة الصفية',       id:'c8',  text:'ضبط الصف وإدارة السلوك بإيجابية' },
+  { axis: 'إدارة البيئة الصفية',       id:'c9',  text:'تهيئة بيئة تعليمية آمنة ومحفزة' },
+  { axis: 'إدارة البيئة الصفية',       id:'c10', text:'الاستثمار الأمثل لوقت الحصة' },
+  { axis: 'التقويم والتغذية الراجعة', id:'c11', text:'تقويم مستمر ومتنوع خلال الحصة' },
+  { axis: 'التقويم والتغذية الراجعة', id:'c12', text:'تغذية راجعة فورية وبنّاءة للطالبات' },
+  { axis: 'أثر التعلم',                id:'c13', text:'تحقق الأهداف التعليمية في نهاية الحصة' },
+  { axis: 'أثر التعلم',                id:'c14', text:'درجة استيعاب الطالبات وفهمهن للمحتوى' }
+];
+
+// فتح تبويب التنسيق
+function openCoordTab(btnEl) {
+  document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
+  document.querySelectorAll('.panel[id^="panel-coord"]').forEach(function(p){ p.style.display='none'; });
+  document.querySelectorAll('.snav').forEach(function(b){ b.classList.remove('active'); });
+  if (btnEl) btnEl.classList.add('active');
+  if (!document.getElementById('panel-coord-main')) {
+    injectCoordMainPanel();
+  } else {
+    document.getElementById('panel-coord-main').style.display = 'block';
+  }
+  switchCoordSection('dashboard');
+}
+
+// حقن الـ Panel الرئيسي
+function injectCoordMainPanel() {
+  var container = document.querySelector('.panels-area') || document.querySelector('.main-area') || document.body;
+  var div = document.createElement('div');
+  div.className = 'panel';
+  div.id = 'panel-coord-main';
+  div.style.cssText = 'padding:0;overflow-y:auto;height:100%;display:block;background:var(--bg)';
+  div.innerHTML =
+    '<div style="background:linear-gradient(135deg,#6C3DD6,#22D3EE);padding:20px 24px;color:#fff">' +
+      '<div style="font-size:20px;font-weight:900;margin-bottom:2px" id="coord-header-title">التنسيق</div>' +
+      '<div style="font-size:13px;opacity:.85" id="coord-header-sub"></div>' +
+    '</div>' +
+    // شريط التبويبات الداخلية
+    '<div style="display:flex;gap:0;background:var(--surface);border-bottom:2px solid var(--border);overflow-x:auto;direction:rtl">' +
+      makeCoordSubTab('dashboard','🏠','لوحة التنسيق') +
+      makeCoordSubTab('teachers','👩‍🏫','معلمات مادتي') +
+      makeCoordSubTab('observation','👁','زيارة صفية') +
+      makeCoordSubTab('meetings','📋','الاجتماعات') +
+      makeCoordSubTab('analytics','📊','تحليل الأداء') +
+    '</div>' +
+    // أقسام المحتوى
+    '<div style="padding:20px" id="coord-content-area">' +
+      '<div style="text-align:center;padding:40px;color:var(--text3)">جارٍ التحميل...</div>' +
+    '</div>';
+  container.appendChild(div);
+}
+
+function makeCoordSubTab(key, icon, label) {
+  return '<button id="coord-stab-' + key + '" onclick="switchCoordSection(\'' + key + '\')"' +
+    ' style="padding:12px 18px;border:none;border-bottom:3px solid transparent;background:transparent;' +
+    'cursor:pointer;font-family:Tajawal,Arial,sans-serif;font-size:13px;font-weight:700;color:var(--text2);' +
+    'white-space:nowrap;transition:.15s;flex-shrink:0">' +
+    icon + ' ' + label + '</button>';
+}
+
+var _coordCurrentSection = '';
+
+function switchCoordSection(key) {
+  document.querySelectorAll('[id^="coord-stab-"]').forEach(function(b){
+    b.style.borderBottomColor = 'transparent';
+    b.style.color = 'var(--text2)';
+  });
+  var activeBtn = document.getElementById('coord-stab-' + key);
+  if (activeBtn) {
+    activeBtn.style.borderBottomColor = '#6C3DD6';
+    activeBtn.style.color = '#6C3DD6';
+  }
+  _coordCurrentSection = key;
+  var area = document.getElementById('coord-content-area');
+  if (!area) return;
+  area.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">جارٍ التحميل...</div>';
+  if (key === 'dashboard')   loadCoordDashboard();
+  if (key === 'teachers')    loadCoordTeachers();
+  if (key === 'observation') renderObservationForm();
+  if (key === 'meetings')    loadCoordMeetings();
+  if (key === 'analytics')   loadCoordAnalytics();
+}
+
+// ══════════ 1. لوحة التنسيق ══════════
+async function loadCoordDashboard() {
+  var area = document.getElementById('coord-content-area');
+  if (!area) return;
+  var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+  var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+  var subject = window._myCoordSubject || '';
+  var staffDbId = window._myStaffDbId || '';
+  try {
+    // جلب معلمات المادة
+    var r1 = await fetch(sbUrl+'/rest/v1/teacher_assignments?subject=eq.'+encodeURIComponent(subject)+'&academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var teachers = await r1.json();
+    var teacherList = Array.isArray(teachers) ? teachers : [];
+    var uniqueTeachers = [];
+    var seenIds = {};
+    teacherList.forEach(function(t){
+      if (t.staff_db_id && !seenIds[t.staff_db_id]) {
+        seenIds[t.staff_db_id] = true;
+        uniqueTeachers.push(t);
+      }
+    });
+
+    // جلب الخطط المسلمة هذا الأسبوع
+    var today = new Date();
+    var weekStart = new Date(today); weekStart.setDate(today.getDate() - today.getDay());
+    var weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
+    var ws = weekStart.toISOString().slice(0,10);
+    var we = weekEnd.toISOString().slice(0,10);
+    var r2 = await fetch(sbUrl+'/rest/v1/planning_records?scope=in.('+uniqueTeachers.map(function(t){return encodeURIComponent(t.staff_db_id||t.teacher_name_ar||'');}).join(',')+')'
+      +'&month_date=gte.'+ws+'&month_date=lte.'+we+'&select=scope',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var planRows = await r2.json();
+    var submittedSet = new Set(Array.isArray(planRows)?planRows.map(function(p){return p.scope;}):[]);
+
+    // جلب زيارات هذا الشهر
+    var monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0,10);
+    var r3 = await fetch(sbUrl+'/rest/v1/classroom_observations?coordinator_staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&observed_at=gte.'+monthStart+'&select=id',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var obsRows = await r3.json();
+    var obsCount = Array.isArray(obsRows) ? obsRows.length : 0;
+
+    // المتأخرات عن التسليم
+    var lateTeachers = uniqueTeachers.filter(function(t){ return !submittedSet.has(t.staff_db_id||t.teacher_name_ar||''); });
+
+    var badgeEl = document.getElementById('coordBadge');
+    if (badgeEl) {
+      if (lateTeachers.length > 0) { badgeEl.textContent = lateTeachers.length; badgeEl.style.display='inline-block'; }
+      else badgeEl.style.display = 'none';
+    }
+
+    area.innerHTML =
+      // KPI cards
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:20px">' +
+        kpiCard('👩‍🏫', 'معلمات المادة', uniqueTeachers.length, '#6C3DD6') +
+        kpiCard('📝', 'خطط هذا الأسبوع', submittedSet.size + ' / ' + uniqueTeachers.length, submittedSet.size===uniqueTeachers.length?'#059669':'#D97706') +
+        kpiCard('👁', 'زيارات هذا الشهر', obsCount, '#0EA5E9') +
+      '</div>' +
+      // تنبيهات المتأخرات
+      (lateTeachers.length > 0 ?
+        '<div style="background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:12px;padding:16px;margin-bottom:20px">' +
+          '<div style="font-weight:800;color:#C2410C;font-size:14px;margin-bottom:10px">⚠️ لم تُسلِّم الخطة هذا الأسبوع</div>' +
+          lateTeachers.map(function(t){
+            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #FED7AA;font-size:13px">' +
+              '<span style="color:#1E293B;font-weight:700">' + (t.teacher_name_ar||'—') + '</span>' +
+              '<button onclick="sendCoordReminder(\'' + (t.staff_db_id||'') + '\',\'' + (t.teacher_name_ar||'').replace(/'/g,"\\'") + '\',\'plan\')" ' +
+              'style="padding:5px 14px;background:#FFF;border:1.5px solid #6C3DD6;border-radius:8px;color:#6C3DD6;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">تذكير 💬</button>' +
+            '</div>';
+          }).join('') +
+        '</div>' : '') +
+      // نشاط أخير
+      '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px">' +
+        '<div style="font-weight:800;font-size:14px;color:var(--text);margin-bottom:12px">نظرة سريعة على فريقي</div>' +
+        '<div style="display:flex;flex-direction:column;gap:8px">' +
+          uniqueTeachers.slice(0,8).map(function(t){
+            var submitted = submittedSet.has(t.staff_db_id||t.teacher_name_ar||'');
+            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg);border-radius:10px;font-size:13px">' +
+              '<span style="color:var(--text);font-weight:700">' + (t.teacher_name_ar||'—') + '</span>' +
+              '<span style="padding:3px 10px;border-radius:8px;font-size:12px;font-weight:700;' +
+                (submitted?'background:#ECFDF5;color:#059669':'background:#FFF7ED;color:#D97706') + '">' +
+                (submitted?'✅ مُسلَّمة':'⏳ معلقة') + '</span>' +
+            '</div>';
+          }).join('') +
+        '</div>' +
+      '</div>';
+  } catch(e) {
+    area.innerHTML = '<div style="text-align:center;padding:40px;color:#EF4444">❌ خطأ في التحميل</div>';
+  }
+}
+
+function kpiCard(icon, label, value, color) {
+  return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;text-align:center">' +
+    '<div style="font-size:28px;margin-bottom:6px">' + icon + '</div>' +
+    '<div style="font-size:22px;font-weight:900;color:' + color + ';margin-bottom:4px">' + value + '</div>' +
+    '<div style="font-size:12px;color:var(--text3);font-weight:600">' + label + '</div>' +
+  '</div>';
+}
+
+// ══════════ 2. معلمات مادتي ══════════
+async function loadCoordTeachers() {
+  var area = document.getElementById('coord-content-area');
+  if (!area) return;
+  var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+  var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+  var subject = window._myCoordSubject || '';
+  var staffDbId = window._myStaffDbId || '';
+
+  area.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">جارٍ التحميل...</div>';
+  try {
+    var r1 = await fetch(sbUrl+'/rest/v1/teacher_assignments?subject=eq.'+encodeURIComponent(subject)+'&academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id&order=teacher_name_ar.asc',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var rows = await r1.json();
+    if (!Array.isArray(rows)||!rows.length) {
+      area.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">لا توجد معلمات مُعيَّنات لهذه المادة</div>';
+      return;
+    }
+    // تجميع حسب المعلمة
+    var byTeacher = {};
+    rows.forEach(function(r){
+      var key = r.staff_db_id || r.teacher_name_ar;
+      if (!byTeacher[key]) byTeacher[key] = { name: r.teacher_name_ar, dbId: r.staff_db_id, classes: [] };
+      if (r.class_name) byTeacher[key].classes.push(r.class_name);
+    });
+
+    // جلب آخر زيارة لكل معلمة
+    var ids = Object.keys(byTeacher);
+    var r2 = await fetch(sbUrl+'/rest/v1/classroom_observations?coordinator_staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&select=teacher_staff_db_id,observed_at&order=observed_at.desc',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var obsRows = await r2.json();
+    var lastObs = {};
+    if (Array.isArray(obsRows)) obsRows.forEach(function(o){ if (!lastObs[o.teacher_staff_db_id]) lastObs[o.teacher_staff_db_id]=o.observed_at; });
+
+    // جلب سجل التذكيرات (آخر 14 يوم)
+    var twoWeeksAgo = new Date(); twoWeeksAgo.setDate(twoWeeksAgo.getDate()-14);
+    var r3 = await fetch(sbUrl+'/rest/v1/coord_reminders?coordinator_staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&sent_at=gte.'+twoWeeksAgo.toISOString()+'&select=teacher_staff_db_id,sent_at,reminder_type',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var remRows = await r3.json();
+    var lastRem = {};
+    if (Array.isArray(remRows)) remRows.forEach(function(rm){ if (!lastRem[rm.teacher_staff_db_id]) lastRem[rm.teacher_staff_db_id]=rm.sent_at; });
+
+    var html = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">' +
+      '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+      '<thead><tr style="background:var(--surface2)">' +
+        '<th style="padding:12px 14px;text-align:right;font-weight:800;color:var(--text)">المعلمة</th>' +
+        '<th style="padding:12px 14px;text-align:right;font-weight:800;color:var(--text)">الصفوف</th>' +
+        '<th style="padding:12px 14px;text-align:right;font-weight:800;color:var(--text)">آخر زيارة</th>' +
+        '<th style="padding:12px 14px;text-align:right;font-weight:800;color:var(--text)">آخر تذكير</th>' +
+        '<th style="padding:12px 14px;text-align:center;font-weight:800;color:var(--text)">إجراء</th>' +
+      '</tr></thead><tbody>';
+
+    Object.values(byTeacher).forEach(function(t, i){
+      var obs = lastObs[t.dbId] ? lastObs[t.dbId].slice(0,10) : '—';
+      var rem = lastRem[t.dbId] ? lastRem[t.dbId].slice(0,10) : '—';
+      var bg = i%2===0 ? 'var(--bg)' : 'var(--surface)';
+      html += '<tr style="border-bottom:1px solid var(--border);background:'+bg+'">' +
+        '<td style="padding:12px 14px;font-weight:700;color:var(--text)">' + (t.name||'—') + '</td>' +
+        '<td style="padding:12px 14px;color:var(--text2)">' + (t.classes.join('، ')||'—') + '</td>' +
+        '<td style="padding:12px 14px;color:' + (obs==='—'?'#EF4444':'var(--text2)') + '">' + obs + '</td>' +
+        '<td style="padding:12px 14px;color:var(--text3)">' + rem + '</td>' +
+        '<td style="padding:12px 14px;text-align:center">' +
+          '<button onclick="sendCoordReminder(\'' + (t.dbId||'') + '\',\'' + (t.name||'').replace(/'/g,"\\'") + '\',\'general\')" ' +
+          'title="إرسال تذكير لطيف" ' +
+          'style="padding:5px 12px;background:#EDE9FE;border:1px solid #C4B5FD;border-radius:8px;color:#6C3DD6;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px">💬 تذكير</button>' +
+          '<button onclick="startObservation(\'' + (t.dbId||'') + '\',\'' + (t.name||'').replace(/'/g,"\\'") + '\')" ' +
+          'title="تسجيل زيارة صفية" ' +
+          'style="padding:5px 12px;background:#F0FDF4;border:1px solid #A7F3D0;border-radius:8px;color:#059669;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">👁 زيارة</button>' +
+        '</td>' +
+      '</tr>';
+    });
+    html += '</tbody></table></div>';
+    area.innerHTML = html;
+  } catch(e) {
+    area.innerHTML = '<div style="text-align:center;padding:40px;color:#EF4444">❌ خطأ في التحميل</div>';
+    console.error(e);
+  }
+}
+
+// ══════════ إرسال تذكير ══════════
+async function sendCoordReminder(teacherDbId, teacherNameAr, reminderType) {
+  if (!teacherDbId && !teacherNameAr) return;
+  var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+  var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+  var subject = window._myCoordSubject || '';
+  var staffDbId = window._myStaffDbId || '';
+  var coordNameAr = window._myNameAr || '';
+
+  var reasonMap = {
+    plan: 'لم تُسلَّم خطة الأسبوع الدراسي الحالي بعد — يُرجى الرفع في أقرب وقت 🙏',
+    general: 'تذكير عام من منسقة المادة',
+    observation: 'موعد الزيارة الصفية القادمة'
+  };
+  var reason = reasonMap[reminderType] || reasonMap.general;
+
+  try {
+    var body = {
+      coordinator_staff_db_id: staffDbId,
+      coordinator_name_ar: coordNameAr,
+      teacher_staff_db_id: teacherDbId,
+      teacher_name_ar: teacherNameAr,
+      reminder_type: reminderType,
+      reason: reason,
+      subject: subject,
+      academic_year: '2026-2027'
+    };
+    var res = await fetch(sbUrl+'/rest/v1/coord_reminders',{
+      method:'POST',
+      headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body: JSON.stringify(body)
+    });
+    if (res.ok) {
+      // إشعار بصري بسيط
+      var toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;background:#059669;color:#fff;padding:12px 20px;border-radius:12px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.2)';
+      toast.textContent = '✅ تم توثيق التذكير بنجاح';
+      document.body.appendChild(toast);
+      setTimeout(function(){ document.body.removeChild(toast); }, 3000);
+      // تحديث العرض الحالي
+      if (_coordCurrentSection === 'dashboard') loadCoordDashboard();
+      if (_coordCurrentSection === 'teachers')  loadCoordTeachers();
+    }
+  } catch(e) {
+    alert('خطأ في إرسال التذكير');
+  }
+}
+
+// ══════════ 3. الزيارة الصفية ══════════
+var _obsTeacherDbId = '';
+var _obsTeacherName = '';
+
+function startObservation(teacherDbId, teacherNameAr) {
+  _obsTeacherDbId = teacherDbId;
+  _obsTeacherName = teacherNameAr;
+  switchCoordSection('observation');
+}
+
+async function renderObservationForm() {
+  var area = document.getElementById('coord-content-area');
+  if (!area) return;
+  var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+  var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+  var subject = window._myCoordSubject || '';
+  var staffDbId = window._myStaffDbId || '';
+
+  area.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">جارٍ تحميل البيانات...</div>';
+
+  // جلب قائمة المعلمات
+  var teacherOptions = '<option value="">اختاري المعلمة...</option>';
+  var teacherClasses = {};
+  try {
+    var r1 = await fetch(sbUrl+'/rest/v1/teacher_assignments?subject=eq.'+encodeURIComponent(subject)+'&academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id&order=teacher_name_ar.asc',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var rows = await r1.json();
+    if (Array.isArray(rows)) {
+      rows.forEach(function(r){
+        var key = r.staff_db_id||r.teacher_name_ar;
+        if (!teacherClasses[key]) teacherClasses[key] = { name: r.teacher_name_ar, classes: [] };
+        if (r.class_name) teacherClasses[key].classes.push(r.class_name);
+      });
+      Object.entries(teacherClasses).forEach(function(entry){
+        var key=entry[0], val=entry[1];
+        teacherOptions += '<option value="'+key+'" data-name="'+val.name+'" data-classes="'+val.classes.join(',')+'">' + val.name + '</option>';
+      });
+    }
+  } catch(e) {}
+
+  // بناء معايير التقييم (5 محاور)
+  var axes = {};
+  MOE_CRITERIA.forEach(function(c){ if(!axes[c.axis]) axes[c.axis]=[]; axes[c.axis].push(c); });
+  var criteriaHtml = '';
+  Object.entries(axes).forEach(function(entry){
+    var axisName=entry[0], crits=entry[1];
+    criteriaHtml += '<div style="margin-bottom:16px">' +
+      '<div style="font-size:13px;font-weight:800;color:#6C3DD6;margin-bottom:10px;padding:6px 12px;background:#EDE9FE;border-radius:8px">' + axisName + '</div>';
+    crits.forEach(function(c){
+      criteriaHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);gap:12px">' +
+        '<div style="font-size:13px;color:var(--text);flex:1">' + c.text + '</div>' +
+        '<div style="display:flex;gap:6px;flex-shrink:0">' +
+          ratingBtn(c.id, 3, '⭐ ممتاز', '#059669', '#ECFDF5') +
+          ratingBtn(c.id, 2, '👍 جيد',   '#D97706', '#FEF3C7') +
+          ratingBtn(c.id, 1, '📈 للتحسين','#EF4444','#FFF1F2') +
+        '</div>' +
+      '</div>';
+    });
+    criteriaHtml += '</div>';
+  });
+
+  area.innerHTML =
+    // نموذج الزيارة
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:20px">' +
+      '<div style="font-size:16px;font-weight:900;color:var(--text);margin-bottom:16px">📋 تسجيل زيارة صفية جديدة</div>' +
+      // صف 1: المعلمة + الصف
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">' +
+        '<div>' +
+          label_s('المعلمة') +
+          '<select id="obs-teacher-sel" onchange="onObsTeacherChange(this)" style="' + selStyle() + '">' + teacherOptions + '</select>' +
+        '</div>' +
+        '<div>' +
+          label_s('الصف / الشعبة') +
+          '<select id="obs-class-sel" style="' + selStyle() + '"><option value="">اختاري الصف...</option></select>' +
+        '</div>' +
+      '</div>' +
+      // صف 2: مدة الزيارة + التاريخ
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">' +
+        '<div>' +
+          label_s('تاريخ الزيارة') +
+          '<input type="date" id="obs-date" value="'+new Date().toISOString().slice(0,10)+'" style="' + selStyle() + '">' +
+        '</div>' +
+        '<div>' +
+          label_s('مدة الزيارة') +
+          '<select id="obs-duration-sel" style="' + selStyle() + '">' +
+            '<option value="15">15 دقيقة</option><option value="20">20 دقيقة</option>' +
+            '<option value="30" selected>30 دقيقة</option><option value="45">45 دقيقة — حصة كاملة</option>' +
+          '</select>' +
+        '</div>' +
+      '</div>' +
+      // موضوع الدرس
+      '<div style="margin-bottom:16px">' +
+        label_s('موضوع الدرس / وحدة الدراسة') +
+        '<input type="text" id="obs-topic" placeholder="أدخلي موضوع الدرس..." style="' + selStyle() + '">' +
+      '</div>' +
+      // معايير التقييم
+      '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">' +
+        '<div style="font-size:14px;font-weight:900;color:var(--text);margin-bottom:14px">معايير التقييم — وفق أُطر MOE الإماراتية</div>' +
+        '<div style="font-size:12px;color:var(--text3);margin-bottom:12px;padding:8px;background:var(--surface);border-radius:8px">' +
+          'اختاري لكل معيار التقييم المناسب ← النتائج تتولّد تلقائياً' +
+        '</div>' +
+        criteriaHtml +
+      '</div>' +
+      // النتائج التلقائية
+      '<div id="obs-auto-results" style="display:none;background:#F8FAFF;border:1.5px solid #C4B5FD;border-radius:12px;padding:16px;margin-bottom:16px">' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+          '<div>' +
+            '<div style="font-size:13px;font-weight:800;color:#059669;margin-bottom:8px">✅ نقاط القوة</div>' +
+            '<div id="obs-strengths-list" style="font-size:12px;color:var(--text);line-height:1.8"></div>' +
+          '</div>' +
+          '<div>' +
+            '<div style="font-size:13px;font-weight:800;color:#D97706;margin-bottom:8px">📈 نقاط التطوير</div>' +
+            '<div id="obs-development-list" style="font-size:12px;color:var(--text);line-height:1.8"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:12px">' +
+          '<div style="font-size:13px;font-weight:800;color:var(--text)">التقييم الإجمالي:</div>' +
+          '<div id="obs-total-score" style="font-size:18px;font-weight:900;color:#6C3DD6"></div>' +
+        '</div>' +
+      '</div>' +
+      // ملاحظة إضافية
+      '<div style="margin-bottom:16px">' +
+        label_s('ملاحظة إضافية (اختياري)') +
+        '<textarea id="obs-notes" rows="3" placeholder="أي ملاحظة تودّين إضافتها..." style="' + selStyle() + 'resize:vertical"></textarea>' +
+      '</div>' +
+      '<button onclick="saveObservation()" style="width:100%;padding:12px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:12px;font-family:Tajawal,Arial,sans-serif;font-size:15px;font-weight:800;cursor:pointer">حفظ الزيارة وتوثيقها</button>' +
+    '</div>' +
+    // سجل الزيارات
+    '<div id="obs-history-wrap">' +
+      '<div style="font-size:15px;font-weight:900;color:var(--text);margin-bottom:12px">سجل الزيارات السابقة</div>' +
+      '<div id="obs-history-list"><div style="text-align:center;padding:20px;color:var(--text3)">جارٍ التحميل...</div></div>' +
+    '</div>';
+
+  // تعبئة بيانات معلمة مُختارة مسبقاً
+  if (_obsTeacherDbId) {
+    var sel = document.getElementById('obs-teacher-sel');
+    if (sel) {
+      for (var i=0; i<sel.options.length; i++) {
+        if (sel.options[i].value === _obsTeacherDbId) {
+          sel.selectedIndex = i;
+          onObsTeacherChange(sel);
+          break;
+        }
+      }
+    }
+  }
+  loadObservationsHistory();
+}
+
+function ratingBtn(cid, val, label, color, bg) {
+  return '<button onclick="rateObs(\'' + cid + '\',' + val + ',this)" data-cid="' + cid + '" data-val="' + val + '" ' +
+    'style="padding:4px 10px;border:1.5px solid ' + color + ';border-radius:8px;background:'+bg+';color:'+color+';' +
+    'font-family:Tajawal,Arial,sans-serif;font-size:11px;font-weight:700;cursor:pointer;transition:.1s;opacity:0.4" ' +
+    'title="' + label + '">' + label + '</button>';
+}
+
+function label_s(text) {
+  return '<label style="font-size:12px;font-weight:700;color:var(--text2);display:block;margin-bottom:5px">' + text + '</label>';
+}
+function selStyle() {
+  return 'width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;background:var(--surface);color:var(--text);';
+}
+
+function onObsTeacherChange(sel) {
+  var opt = sel.options[sel.selectedIndex];
+  var classes = opt.dataset.classes ? opt.dataset.classes.split(',') : [];
+  var classSel = document.getElementById('obs-class-sel');
+  if (!classSel) return;
+  classSel.innerHTML = '<option value="">اختاري الصف...</option>' +
+    classes.map(function(c){ return '<option value="'+c+'">'+c+'</option>'; }).join('');
+}
+
+var _obsRatings = {};
+
+function rateObs(cid, val, btnEl) {
+  _obsRatings[cid] = val;
+  // إعادة تعيين جميع أزرار هذا المعيار
+  document.querySelectorAll('[data-cid="' + cid + '"]').forEach(function(b){
+    b.style.opacity = '0.4';
+    b.style.fontWeight = '700';
+  });
+  // تمييز الزر المختار
+  btnEl.style.opacity = '1';
+  btnEl.style.fontWeight = '900';
+  btnEl.style.transform = 'scale(1.05)';
+  setTimeout(function(){ btnEl.style.transform = ''; }, 150);
+
+  // حساب النتائج التلقائية
+  updateObsAutoResults();
+}
+
+function updateObsAutoResults() {
+  var total = 0;
+  var max = MOE_CRITERIA.length * 3;
+  var strengths = [];
+  var development = [];
+
+  MOE_CRITERIA.forEach(function(c){
+    var val = _obsRatings[c.id] || 0;
+    total += val;
+    if (val === 3) strengths.push(c.text);
+    if (val === 1) development.push(c.text);
+  });
+
+  var filled = Object.keys(_obsRatings).length;
+  var resultsDiv = document.getElementById('obs-auto-results');
+  if (filled === 0) { if (resultsDiv) resultsDiv.style.display='none'; return; }
+  if (resultsDiv) resultsDiv.style.display='block';
+
+  var pct = Math.round((total / (filled * 3)) * 100);
+  var pctColor = pct>=80?'#059669':pct>=60?'#D97706':'#EF4444';
+
+  var sList = document.getElementById('obs-strengths-list');
+  var dList = document.getElementById('obs-development-list');
+  var scoreEl = document.getElementById('obs-total-score');
+
+  if (sList) sList.innerHTML = strengths.length ? strengths.map(function(s){ return '• '+s; }).join('<br>') : '<span style="color:var(--text3)">—</span>';
+  if (dList) dList.innerHTML = development.length ? development.map(function(s){ return '• '+s; }).join('<br>') : '<span style="color:var(--text3)">—</span>';
+  if (scoreEl) scoreEl.innerHTML = '<span style="color:'+pctColor+'">' + pct + '%</span> <span style="font-size:12px;color:var(--text3)">(' + total + ' / ' + (filled*3) + ')</span>';
+}
+
+async function saveObservation() {
+  var teacherSel = document.getElementById('obs-teacher-sel');
+  var classSel = document.getElementById('obs-class-sel');
+  var dateEl = document.getElementById('obs-date');
+  var durationEl = document.getElementById('obs-duration-sel');
+  var topicEl = document.getElementById('obs-topic');
+  var notesEl = document.getElementById('obs-notes');
+
+  var teacherDbId = teacherSel ? teacherSel.value : '';
+  var teacherOpt = teacherSel ? teacherSel.options[teacherSel.selectedIndex] : null;
+  var className = classSel ? classSel.value : '';
+  var obsDate = dateEl ? dateEl.value : '';
+  var duration = durationEl ? parseInt(durationEl.value) : 30;
+  var topic = topicEl ? topicEl.value.trim() : '';
+
+  if (!teacherDbId) { alert('يرجى اختيار المعلمة'); return; }
+  if (!className)   { alert('يرجى اختيار الصف / الشعبة'); return; }
+  if (!topic)       { alert('يرجى كتابة موضوع الدرس'); return; }
+
+  var filled = Object.keys(_obsRatings).length;
+  if (filled < MOE_CRITERIA.length) {
+    if (!confirm('لم تُكتمَل جميع معايير التقييم (' + filled + '/' + MOE_CRITERIA.length + '). هل تريدين الحفظ بالمعايير الحالية؟')) return;
+  }
+
+  // بناء النتائج
+  var strengths = [];
+  var development = [];
+  var total = 0;
+  MOE_CRITERIA.forEach(function(c){
+    var val = _obsRatings[c.id] || 0;
+    total += val;
+    if (val === 3) strengths.push(c.text);
+    if (val === 1) development.push(c.text);
+  });
+  var pct = filled > 0 ? Math.round((total / (filled * 3)) * 100) : 0;
+
+  var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+  var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+
+  try {
+    var body = {
+      coordinator_staff_db_id: window._myStaffDbId || '',
+      teacher_staff_db_id: teacherDbId,
+      subject: window._myCoordSubject || '',
+      class_name: className,
+      lesson_topic: topic,
+      observed_at: obsDate ? obsDate + 'T00:00:00Z' : new Date().toISOString(),
+      duration_min: duration,
+      criterion_1:  _obsRatings['c1']||0,  criterion_2:  _obsRatings['c2']||0,
+      criterion_3:  _obsRatings['c3']||0,  criterion_4:  _obsRatings['c4']||0,
+      criterion_5:  _obsRatings['c5']||0,  criterion_6:  _obsRatings['c6']||0,
+      criterion_7:  _obsRatings['c7']||0,  criterion_8:  _obsRatings['c8']||0,
+      criterion_9:  _obsRatings['c9']||0,  criterion_10: _obsRatings['c10']||0,
+      criterion_11: _obsRatings['c11']||0, criterion_12: _obsRatings['c12']||0,
+      criterion_13: _obsRatings['c13']||0, criterion_14: _obsRatings['c14']||0,
+      total_score: total,
+      pct_score: pct,
+      strengths: strengths.join(' | '),
+      development_areas: development.join(' | '),
+      notes: notesEl ? notesEl.value.trim() : '',
+      observer: window._myNameAr || ''
+    };
+    var res = await fetch(sbUrl+'/rest/v1/classroom_observations',{
+      method:'POST',
+      headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body: JSON.stringify(body)
+    });
+    if (res.ok) {
+      // إعادة تعيين النموذج
+      _obsRatings = {};
+      _obsTeacherDbId = '';
+      _obsTeacherName = '';
+      document.querySelectorAll('[data-cid]').forEach(function(b){ b.style.opacity='0.4'; b.style.fontWeight='700'; });
+      var resultsDiv = document.getElementById('obs-auto-results');
+      if (resultsDiv) resultsDiv.style.display='none';
+      if (topicEl) topicEl.value = '';
+      if (notesEl) notesEl.value = '';
+      // إشعار
+      var toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;background:#059669;color:#fff;padding:12px 20px;border-radius:12px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.2)';
+      toast.textContent = '✅ تم حفظ الزيارة الصفية بنجاح';
+      document.body.appendChild(toast);
+      setTimeout(function(){ document.body.removeChild(toast); }, 3000);
+      loadObservationsHistory();
+    } else {
+      throw new Error('HTTP ' + res.status);
+    }
+  } catch(e) {
+    alert('خطأ في حفظ الزيارة: ' + (e.message||''));
+  }
+}
+
+async function loadObservationsHistory() {
+  var wrap = document.getElementById('obs-history-list');
+  if (!wrap) return;
+  var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+  var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+  var staffDbId = window._myStaffDbId || '';
+  wrap.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3)">جارٍ التحميل...</div>';
+  try {
+    var res = await fetch(sbUrl+'/rest/v1/classroom_observations?coordinator_staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&order=observed_at.desc&limit=20&select=id,teacher_staff_db_id,class_name,lesson_topic,observed_at,pct_score,strengths,development_areas,duration_min,observer',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var rows = await res.json();
+    if (!Array.isArray(rows)||!rows.length) {
+      wrap.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3)">لا توجد زيارات مسجَّلة بعد</div>';
+      return;
+    }
+    wrap.innerHTML = rows.map(function(r){
+      var pct = r.pct_score || 0;
+      var pctColor = pct>=80?'#059669':pct>=60?'#D97706':'#EF4444';
+      var pctBg = pct>=80?'#ECFDF5':pct>=60?'#FEF3C7':'#FFF1F2';
+      return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px">' +
+          '<div>' +
+            '<div style="font-size:14px;font-weight:800;color:var(--text)">' + (r.class_name||'—') + ' — ' + (r.lesson_topic||'—') + '</div>' +
+            '<div style="font-size:12px;color:var(--text3);margin-top:2px">' + (r.observed_at||'').slice(0,10) + ' · ' + (r.duration_min||30) + ' دقيقة</div>' +
+          '</div>' +
+          '<div style="background:'+pctBg+';color:'+pctColor+';border-radius:8px;padding:5px 14px;font-size:14px;font-weight:900">' + pct + '%</div>' +
+        '</div>' +
+        (r.strengths ? '<div style="font-size:12px;margin-bottom:4px"><span style="font-weight:700;color:#059669">✅ قوة: </span>'+r.strengths+'</div>' : '') +
+        (r.development_areas ? '<div style="font-size:12px"><span style="font-weight:700;color:#D97706">📈 تطوير: </span>'+r.development_areas+'</div>' : '') +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#EF4444">خطأ في التحميل</div>';
+  }
+}
+
+// ══════════ 4. اجتماعات المادة ══════════
+async function loadCoordMeetings() {
+  var area = document.getElementById('coord-content-area');
+  if (!area) return;
+  var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+  var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+  var staffDbId = window._myStaffDbId || '';
+  var subject = window._myCoordSubject || '';
+
+  area.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px">' +
+      '<div style="font-size:16px;font-weight:900;color:var(--text)">📋 اجتماعات ' + subject + '</div>' +
+      '<button onclick="showNewMeetingForm()" style="padding:10px 18px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:13px;font-weight:800;cursor:pointer">+ اجتماع جديد</button>' +
+    '</div>' +
+    '<div id="new-meeting-form" style="display:none;background:var(--surface);border:1.5px solid #C4B5FD;border-radius:14px;padding:20px;margin-bottom:16px"></div>' +
+    '<div id="meetings-list"><div style="text-align:center;padding:40px;color:var(--text3)">جارٍ التحميل...</div></div>';
+
+  await loadMeetingsList();
+}
+
+function showNewMeetingForm() {
+  var form = document.getElementById('new-meeting-form');
+  if (!form) return;
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  if (form.style.display === 'none') return;
+
+  form.innerHTML =
+    '<div style="font-size:15px;font-weight:900;color:var(--text);margin-bottom:16px">اجتماع مادة جديد</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">' +
+      '<div>' + label_s('تاريخ الاجتماع') + '<input type="date" id="meet-date" value="'+new Date().toISOString().slice(0,10)+'" style="'+selStyle()+'"></div>' +
+      '<div>' + label_s('وقت الاجتماع') + '<input type="time" id="meet-time" style="'+selStyle()+'"></div>' +
+    '</div>' +
+    '<div style="margin-bottom:12px">' + label_s('بنود الأجندة') +
+      '<textarea id="meet-agenda" rows="3" placeholder="البند الأول...&#10;البند الثاني...&#10;البند الثالث..." style="'+selStyle()+'resize:vertical"></textarea>' +
+    '</div>' +
+    '<div style="margin-bottom:16px">' + label_s('محضر الاجتماع (يمكن إضافته لاحقاً)') +
+      '<textarea id="meet-minutes" rows="3" placeholder="ما تم مناقشته وقراراته..." style="'+selStyle()+'resize:vertical"></textarea>' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;justify-content:flex-end">' +
+      '<button onclick="document.getElementById(\'new-meeting-form\').style.display=\'none\'" style="padding:10px 18px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:13px;font-weight:700;cursor:pointer;color:var(--text2)">إلغاء</button>' +
+      '<button onclick="saveMeeting()" style="padding:10px 18px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:13px;font-weight:800;cursor:pointer">حفظ</button>' +
+    '</div>';
+}
+
+async function saveMeeting() {
+  var dateEl = document.getElementById('meet-date');
+  var timeEl = document.getElementById('meet-time');
+  var agendaEl = document.getElementById('meet-agenda');
+  var minutesEl = document.getElementById('meet-minutes');
+  var meetDate = dateEl ? dateEl.value : '';
+  if (!meetDate) { alert('يرجى تحديد تاريخ الاجتماع'); return; }
+  var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+  var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+  try {
+    var agenda = agendaEl ? agendaEl.value.trim().split('\n').filter(Boolean) : [];
+    var body = {
+      coordinator_staff_db_id: window._myStaffDbId || '',
+      subject: window._myCoordSubject || '',
+      academic_year: '2026-2027',
+      meeting_date: meetDate,
+      start_time: timeEl ? timeEl.value : null,
+      agenda: agenda,
+      notes: minutesEl ? minutesEl.value.trim() : '',
+      status: (minutesEl && minutesEl.value.trim()) ? 'completed' : 'scheduled'
+    };
+    var res = await fetch(sbUrl+'/rest/v1/coordinator_meetings',{
+      method:'POST',
+      headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body: JSON.stringify(body)
+    });
+    if (res.ok) {
+      var form = document.getElementById('new-meeting-form');
+      if (form) form.style.display='none';
+      var toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;background:#059669;color:#fff;padding:12px 20px;border-radius:12px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.2)';
+      toast.textContent = '✅ تم حفظ الاجتماع';
+      document.body.appendChild(toast);
+      setTimeout(function(){ document.body.removeChild(toast); }, 2500);
+      await loadMeetingsList();
+    }
+  } catch(e) { alert('خطأ في الحفظ'); }
+}
+
+async function loadMeetingsList() {
+  var wrap = document.getElementById('meetings-list');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3)">جارٍ التحميل...</div>';
+  var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+  var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+  var staffDbId = window._myStaffDbId || '';
+  try {
+    var res = await fetch(sbUrl+'/rest/v1/coordinator_meetings?coordinator_staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&order=meeting_date.desc&limit=30&select=id,meeting_date,start_time,agenda,notes,status,subject',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var rows = await res.json();
+    if (!Array.isArray(rows)||!rows.length) {
+      wrap.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">لا توجد اجتماعات مسجَّلة — ابدئي بتسجيل أول اجتماع</div>';
+      return;
+    }
+    var sm = { scheduled:{l:'مجدول',c:'#D97706',bg:'#FEF3C7'}, completed:{l:'منتهٍ',c:'#059669',bg:'#ECFDF5'} };
+    wrap.innerHTML = rows.map(function(m){
+      var s = sm[m.status] || sm.scheduled;
+      var agenda = Array.isArray(m.agenda) ? m.agenda : (m.agenda ? [m.agenda] : []);
+      return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">' +
+          '<div>' +
+            '<div style="font-size:14px;font-weight:800;color:var(--text)">' + (m.meeting_date||'') + (m.start_time?' — '+m.start_time.slice(0,5):'') + '</div>' +
+            '<div style="font-size:12px;color:var(--text3)">' + (m.subject||'') + '</div>' +
+          '</div>' +
+          '<span style="background:'+s.bg+';color:'+s.c+';border-radius:8px;padding:4px 12px;font-size:12px;font-weight:700">' + s.l + '</span>' +
+        '</div>' +
+        (agenda.length ? '<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:4px">الأجندة:</div>' + agenda.map(function(a){ return '<div style="font-size:12px;color:var(--text);padding:2px 0">• '+a+'</div>'; }).join('') + '</div>' : '') +
+        (m.notes ? '<div style="font-size:12px;color:var(--text2);background:var(--bg);border-radius:8px;padding:10px;line-height:1.6">' + m.notes.replace(/\n/g,'<br>') + '</div>' : '') +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#EF4444">خطأ في التحميل</div>';
+  }
+}
+
+// ══════════ 5. تحليل الأداء ══════════
+async function loadCoordAnalytics() {
+  var area = document.getElementById('coord-content-area');
+  if (!area) return;
+  area.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">جارٍ تحميل البيانات...</div>';
+  var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+  var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+  var subject = window._myCoordSubject || '';
+  try {
+    // جلب الدرجات حسب المادة والصف
+    var res = await fetch(sbUrl+'/rest/v1/student_grades?subject=eq.'+encodeURIComponent(subject)+'&select=class_name,score,student_db_id&order=class_name.asc',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var rows = await res.json();
+    if (!Array.isArray(rows)||!rows.length) {
+      area.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">لا توجد درجات مسجَّلة لهذه المادة بعد</div>';
+      return;
+    }
+
+    var byClass = {};
+    rows.forEach(function(r){
+      var c = r.class_name || '—';
+      if (!byClass[c]) byClass[c] = { scores:[], danger:0, total:0 };
+      var score = parseFloat(r.score) || 0;
+      byClass[c].scores.push(score);
+      byClass[c].total++;
+      if (score < 60) byClass[c].danger++;
+    });
+
+    var classKeys = Object.keys(byClass).sort();
+    var maxAvg = Math.max.apply(null, classKeys.map(function(c){ var sc=byClass[c].scores; return sc.reduce(function(a,b){return a+b;},0)/sc.length; }));
+
+    var html = '<div style="font-size:16px;font-weight:900;color:var(--text);margin-bottom:16px">📊 تحليل أداء ' + subject + '</div>';
+
+    // أشرطة بيانية بصرية
+    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px">';
+    html += '<div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:14px">متوسط الدرجات حسب الصف</div>';
+    classKeys.forEach(function(c){
+      var sc = byClass[c].scores;
+      var avg = sc.reduce(function(a,b){return a+b;},0)/sc.length;
+      var avgR = Math.round(avg * 10) / 10;
+      var pct = (avg / 100) * 100;
+      var barColor = avg>=80?'#059669':avg>=60?'#D97706':'#EF4444';
+      html += '<div style="margin-bottom:12px">' +
+        '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px">' +
+          '<span>' + c + '</span><span style="color:'+barColor+'">' + avgR + '%</span>' +
+        '</div>' +
+        '<div style="background:var(--border);border-radius:6px;height:8px;overflow:hidden">' +
+          '<div style="height:100%;background:'+barColor+';border-radius:6px;width:'+Math.min(pct,100)+'%;transition:.3s"></div>' +
+        '</div>' +
+        (byClass[c].danger > 0 ? '<div style="font-size:11px;color:#EF4444;margin-top:3px">⚠️ ' + byClass[c].danger + ' طالبة في خطر (أقل من 60%)</div>' : '') +
+      '</div>';
+    });
+    html += '</div>';
+
+    // ملخص إجمالي
+    var totalStudents = rows.length;
+    var totalDanger = rows.filter(function(r){ return (parseFloat(r.score)||0) < 60; }).length;
+    var overallAvg = rows.reduce(function(a,r){ return a+(parseFloat(r.score)||0); },0)/totalStudents;
+
+    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">' +
+      kpiCard('🎓', 'إجمالي الطالبات', totalStudents, '#0EA5E9') +
+      kpiCard('📈', 'المتوسط العام', Math.round(overallAvg) + '%', overallAvg>=70?'#059669':'#D97706') +
+      kpiCard('⚠️', 'في خطر', totalDanger, totalDanger>0?'#EF4444':'#059669') +
+    '</div>';
+
+    area.innerHTML = html;
+  } catch(e) {
+    area.innerHTML = '<div style="text-align:center;padding:40px;color:#EF4444">❌ خطأ في تحميل البيانات</div>';
+  }
+}
+
+// ══════════ checkCoordinatorStatus — موحّدة ══════════
+async function checkCoordinatorStatus() {
+  try {
+    var s = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+    var staffDbId = s.id || s.staff_db_id || '';
+    if (!staffDbId) return;
+    var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+    var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+    var res = await fetch(sbUrl+'/rest/v1/staff_profiles?staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&select=is_coordinator,coordinator_subject,coord_type,coord_scope,name_ar',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
+    var rows = await res.json();
+    if (!Array.isArray(rows)||!rows.length) return;
+    var row = rows[0];
+    window._myNameAr = row.name_ar;
+    window._myStaffDbId = staffDbId;
+
+    if (row.is_coordinator) {
+      window._myCoordSubject = row.coordinator_subject || '';
+      window._myCoordType = row.coord_type || 'subject';
+      var btn = document.getElementById('coord-nav-btn');
+      if (btn) {
+        btn.style.display = 'flex';
+        // تحديث label الهيدر حسب نوع التنسيق
+        var subLbl = btn.querySelector('.snav-sub');
+        if (subLbl) {
+          var typeLabel = { subject:'منسقة مادة', activities:'منسقة أنشطة', grade:'منسقة مرحلة' };
+          subLbl.textContent = (typeLabel[row.coord_type] || 'Coordination') + (row.coordinator_subject ? ' — ' + row.coordinator_subject : '');
+        }
+      }
+      // تحديث عنوان الهيدر عند فتح التبويب
+      var headerSub = document.getElementById('coord-header-sub');
+      if (headerSub) {
+        headerSub.textContent = (row.coordinator_subject || '') + ' · ' + (row.coord_type || '');
+      }
+    }
+  } catch(e) { /* silent */ }
+}
+
+// showPanel القديمة — مبقاة للتوافق
 window.showPanel = window.showPanel || function(name, btnEl) {
   document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
-  document.querySelectorAll('.panel[id^="panel-coord-"]').forEach(function(p){ p.style.display = 'none'; });
+  document.querySelectorAll('.panel[id^="panel-coord"]').forEach(function(p){ p.style.display='none'; });
   document.querySelectorAll('.snav').forEach(function(b){ b.classList.remove('active'); });
   var panel = document.getElementById('panel-' + name);
   if (panel) {
@@ -3423,1295 +4286,6 @@ window.showPanel = window.showPanel || function(name, btnEl) {
   try { window.location.hash = name; } catch(e) {}
 };
 
-async function checkCoordinatorStatus() {
-  try {
-    var s = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
-    var staffDbId = s.id || s.staff_db_id || '';
-    if (!staffDbId) return;
-    var sb = window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
-    var sbUrl = window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
-    var res = await fetch(sbUrl+'/rest/v1/staff_profiles?staff_db_id=eq.'+encodeURIComponent(staffDbId)+'&select=is_coordinator,coordinator_subject,coord_type,coord_scope,name_ar',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
-    var rows = await res.json();
-    if (!Array.isArray(rows) || !rows.length) return;
-    var row = rows[0];
-    window._myNameAr = row.name_ar;
-    window._myStaffDbId = staffDbId;
-
-    if (row.is_coordinator) {
-      window._myCoordSubject = row.coordinator_subject;
-      var btn = document.getElementById('coord-nav-btn');
-      if (btn) btn.style.display = 'flex';
-      // Inject panel if not exists
-      if (!document.getElementById('panel-coord-meetings')) {
-        injectCoordMeetingsPanel();
-      }
-    }
-
-    if (row.coord_type === 'section') {
-      window._coordSectionScope = row.coord_scope || '';
-      var btnSec = document.getElementById('coord-section-btn');
-      if (btnSec) btnSec.style.display = 'flex';
-      if (!document.getElementById('panel-coord-section')) {
-        injectCoordSectionPanel(row.coord_scope || '');
-      }
-    }
-
-    if (row.coord_type === 'planning') {
-      window._coordPlanningScope = row.coord_scope || '';
-      var btnPlan = document.getElementById('coord-planning-btn');
-      if (btnPlan) btnPlan.style.display = 'flex';
-      if (!document.getElementById('panel-coord-planning')) {
-        injectCoordPlanningPanel(row.coord_scope || '');
-      }
-    }
-
-    if (row.coord_type === 'track') {
-      window._coordTrackScope = row.coord_scope || '';
-      var btnTrack = document.getElementById('coord-track-btn');
-      if (btnTrack) btnTrack.style.display = 'flex';
-      if (!document.getElementById('panel-coord-track')) {
-        injectCoordTrackPanel(row.coord_scope || '');
-      }
-    }
-  } catch(e) { /* silent */ }
-}
-
-function injectCoordMeetingsPanel() {
-  var container = document.querySelector('.panels-area');
-  if (!container) return;
-  var div = document.createElement('div');
-  div.className = 'panel';
-  div.id = 'panel-coord-meetings';
-  div.style.cssText = 'padding:24px;overflow-y:auto;height:100%;display:none';
-  div.innerHTML =
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">' +
-      '<div><div style="font-size:20px;font-weight:900;color:#1E293B">اجتماعات مادتي</div>' +
-      '<div id="coord-subject-label" style="font-size:13px;color:#6C3DD6;font-weight:700;margin-top:2px">'+(window._myCoordSubject||'')+'</div></div>' +
-      '<button onclick="showNewMeetingModal()" style="padding:10px 20px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:800;cursor:pointer">+ اجتماع جديد</button>' +
-    '</div>' +
-    '<div id="my-meetings-wrap"><div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div></div>' +
-    '<div id="new-meeting-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.5);align-items:center;justify-content:center">' +
-      '<div style="background:#fff;border-radius:18px;padding:28px;width:500px;max-width:95vw;direction:rtl;max-height:90vh;overflow-y:auto">' +
-        '<div style="font-size:18px;font-weight:900;color:#1E293B;margin-bottom:18px">اجتماع مادة جديد</div>' +
-        '<div style="margin-bottom:12px"><label style="font-size:13px;font-weight:700;color:#475569;display:block;margin-bottom:5px">تاريخ الاجتماع</label><input type="date" id="meet-date-inp" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px"></div>' +
-        '<div style="margin-bottom:12px"><label style="font-size:13px;font-weight:700;color:#475569;display:block;margin-bottom:5px">جدول الأعمال</label><textarea id="meet-agenda-inp" rows="3" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;resize:vertical" placeholder="موضوعات الاجتماع..."></textarea></div>' +
-        '<div style="margin-bottom:20px"><label style="font-size:13px;font-weight:700;color:#475569;display:block;margin-bottom:5px">محضر الاجتماع (اختياري — يمكن إضافته لاحقاً)</label><textarea id="meet-minutes-inp" rows="4" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;resize:vertical" placeholder="ما تم مناقشته وقراراته..."></textarea></div>' +
-        '<div style="display:flex;gap:10px;justify-content:flex-end">' +
-          '<button onclick="closeNewMeetingModal()" style="padding:10px 20px;background:#F1F5F9;border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;cursor:pointer;color:#475569">إلغاء</button>' +
-          '<button onclick="saveNewMeeting()" style="padding:10px 20px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:800;cursor:pointer;color:#fff">حفظ الاجتماع</button>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
-  container.appendChild(div);
-}
-
-// ===================== SECTION COORDINATOR (منسقة القسم) =====================
-
-function injectCoordSectionPanel(scope) {
-  var container = document.querySelector('.panels-area');
-  if (!container) return;
-  var div = document.createElement('div');
-  div.className = 'panel';
-  div.id = 'panel-coord-section';
-  div.style.cssText = 'padding:24px;overflow-y:auto;height:100%;display:none';
-  div.innerHTML =
-    '<div style="margin-bottom:20px">' +
-      '<div style="font-size:20px;font-weight:900;color:#1E293B">إدارة القسم</div>' +
-      '<div id="coord-section-scope-label" style="font-size:13px;color:#6C3DD6;font-weight:700;margin-top:2px">'+(scope||'')+'</div>' +
-    '</div>' +
-    '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:20px;margin-bottom:20px">' +
-      '<div style="font-size:15px;font-weight:800;color:#1E293B;margin-bottom:14px">صفوف القسم</div>' +
-      '<div id="coord-section-classes-wrap"><div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div></div>' +
-    '</div>' +
-    '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:20px;margin-bottom:20px">' +
-      '<div style="font-size:15px;font-weight:800;color:#1E293B;margin-bottom:14px">مهام المنسقة</div>' +
-      '<ul style="line-height:2.2;font-size:14px;color:#475569;padding-inline-start:20px;margin:0">' +
-        '<li>التأكد من تنظيم القسم</li>' +
-        '<li>متابعة البورد</li>' +
-        '<li>الإذاعة يومي الخميس والجمعة</li>' +
-        '<li>متابعة حصص الاحتياط</li>' +
-      '</ul>' +
-    '</div>' +
-    '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:20px">' +
-      '<div style="font-size:15px;font-weight:800;color:#1E293B;margin-bottom:14px">تقرير سريع</div>' +
-      '<textarea id="coord-section-report-inp" rows="4" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;resize:vertical" placeholder="اكتبي ملاحظاتك أو تقريرك عن القسم..."></textarea>' +
-      '<button onclick="sendCoordSectionReport()" style="margin-top:10px;padding:10px 20px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:800;cursor:pointer">إرسال التقرير</button>' +
-      '<div id="coord-section-reports-wrap" style="margin-top:20px"></div>' +
-    '</div>';
-  container.appendChild(div);
-}
-
-async function loadCoordSection() {
-  var scope = window._coordSectionScope || '';
-  var lbl = document.getElementById('coord-section-scope-label');
-  if (lbl) lbl.textContent = scope;
-  var wrap = document.getElementById('coord-section-classes-wrap');
-  if (wrap) {
-    wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div>';
-    try {
-      var classes = scope.split(',').map(function(c){ return c.trim(); }).filter(Boolean);
-      if (!classes.length) {
-        wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#94A3B8">لا يوجد نطاق محدد لهذه المنسقة</div>';
-      } else {
-        var sb = window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
-        var sbUrl = window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
-        var inList = classes.map(function(c){ return encodeURIComponent(c); }).join(',');
-        var res = await fetch(sbUrl+'/rest/v1/schedules?class_name=in.('+inList+')&is_active=eq.true&select=class_name,subject&order=class_name.asc',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
-        var rows = await res.json();
-        if (!Array.isArray(rows) || !rows.length) {
-          wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#94A3B8">لا توجد حصص مسجَّلة لهذه الصفوف</div>';
-        } else {
-          var byClass = {};
-          rows.forEach(function(r){
-            var c = r.class_name || '—';
-            if (!byClass[c]) byClass[c] = new Set();
-            if (r.subject) byClass[c].add(r.subject);
-          });
-          var html = '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
-            '<thead><tr style="background:#F8FAFF"><th style="padding:8px;text-align:right">الصف</th><th style="padding:8px;text-align:right">عدد المواد المسجَّلة</th></tr></thead><tbody>';
-          Object.keys(byClass).forEach(function(c){
-            html += '<tr style="border-bottom:1px solid #F1F5F9"><td style="padding:8px;font-weight:700">'+c+'</td><td style="padding:8px">'+byClass[c].size+'</td></tr>';
-          });
-          html += '</tbody></table>';
-          wrap.innerHTML = html;
-        }
-      }
-    } catch(e) {
-      wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#EF4444">خطأ في التحميل</div>';
-    }
-  }
-  loadCoordSectionReports();
-}
-
-async function sendCoordSectionReport() {
-  var inp = document.getElementById('coord-section-report-inp');
-  var content = inp ? inp.value.trim() : '';
-  if (!content) { alert('يرجى كتابة نص التقرير'); return; }
-  try {
-    var sb = window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
-    var sbUrl = window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
-    var body = { coord_type:'section', scope: window._coordSectionScope||'', content: content, created_by: window._myNameAr||window._myStaffDbId||'' };
-    await fetch(sbUrl+'/rest/v1/coordinator_reports',{method:'POST',headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(body)});
-    if (inp) inp.value = '';
-    loadCoordSectionReports();
-  } catch(e) { alert('خطأ في إرسال التقرير'); }
-}
-
-async function loadCoordSectionReports() {
-  var wrap = document.getElementById('coord-section-reports-wrap');
-  if (!wrap) return;
-  wrap.innerHTML = '<div style="text-align:center;padding:12px;color:#94A3B8">جاري التحميل...</div>';
-  try {
-    var sb = window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
-    var sbUrl = window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
-    var res = await fetch(sbUrl+'/rest/v1/coordinator_reports?coord_type=eq.section&scope=eq.'+encodeURIComponent(window._coordSectionScope||'')+'&order=created_at.desc&limit=20&select=id,content,created_by,created_at',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
-    var rows = await res.json();
-    if (!Array.isArray(rows) || !rows.length) {
-      wrap.innerHTML = '<div style="text-align:center;padding:12px;color:#94A3B8">لا توجد تقارير سابقة</div>';
-      return;
-    }
-    wrap.innerHTML = '<div style="font-size:13px;font-weight:800;color:#1E293B;margin-bottom:10px">التقارير السابقة</div>' +
-      rows.map(function(r){
-        var d = r.created_at ? r.created_at.slice(0,10) : '';
-        return '<div style="background:#F8FAFF;border-radius:10px;padding:12px;margin-bottom:8px;font-size:13px;color:#475569">' +
-          '<div style="font-weight:700;color:#1E293B;margin-bottom:4px">'+(r.created_by||'')+' — '+d+'</div>' +
-          '<div>'+(r.content||'').replace(/\n/g,'<br>')+'</div></div>';
-      }).join('');
-  } catch(e) {
-    wrap.innerHTML = '<div style="text-align:center;padding:12px;color:#EF4444">خطأ في التحميل</div>';
-  }
-}
-
-// ===================== PLANNING COORDINATOR (منسقة التخطيط المشترك) =====================
-
-function injectCoordPlanningPanel(scope) {
-  var container = document.querySelector('.panels-area');
-  if (!container) return;
-  var div = document.createElement('div');
-  div.className = 'panel';
-  div.id = 'panel-coord-planning';
-  div.style.cssText = 'padding:24px;overflow-y:auto;height:100%;display:none';
-  div.innerHTML =
-    '<div style="margin-bottom:20px">' +
-      '<div style="font-size:20px;font-weight:900;color:#1E293B">التخطيط المشترك الشهري</div>' +
-      '<div id="coord-planning-scope-label" style="font-size:13px;color:#6C3DD6;font-weight:700;margin-top:2px">'+(scope||'')+'</div>' +
-    '</div>' +
-    '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:20px;margin-bottom:20px">' +
-      '<div style="font-size:15px;font-weight:800;color:#1E293B;margin-bottom:14px">رفع خطة الشهر</div>' +
-      '<div style="margin-bottom:12px"><label style="font-size:13px;font-weight:700;color:#475569;display:block;margin-bottom:5px">شهر الخطة</label>' +
-      '<input type="date" id="coord-planning-date-inp" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px"></div>' +
-      '<div style="margin-bottom:12px"><label style="font-size:13px;font-weight:700;color:#475569;display:block;margin-bottom:5px">محتوى الخطة</label>' +
-      '<textarea id="coord-planning-content-inp" rows="5" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;resize:vertical" placeholder="تفاصيل خطة الشهر..."></textarea></div>' +
-      '<button onclick="saveCoordPlanning()" style="padding:10px 20px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:800;cursor:pointer">حفظ الخطة</button>' +
-    '</div>' +
-    '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:20px">' +
-      '<div style="font-size:15px;font-weight:800;color:#1E293B;margin-bottom:14px">سجل الخطط السابقة</div>' +
-      '<div id="coord-planning-records-wrap"><div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div></div>' +
-    '</div>';
-  container.appendChild(div);
-}
-
-async function loadCoordPlanning() {
-  var scope = window._coordPlanningScope || '';
-  var lbl = document.getElementById('coord-planning-scope-label');
-  if (lbl) lbl.textContent = scope;
-  await loadCoordPlanningRecords();
-}
-
-async function saveCoordPlanning() {
-  var dateInp = document.getElementById('coord-planning-date-inp');
-  var contentInp = document.getElementById('coord-planning-content-inp');
-  var monthDate = dateInp ? dateInp.value : '';
-  var content = contentInp ? contentInp.value.trim() : '';
-  if (!monthDate) { alert('يرجى تحديد تاريخ الخطة'); return; }
-  if (!content) { alert('يرجى كتابة محتوى الخطة'); return; }
-  try {
-    var sb = window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
-    var sbUrl = window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
-    var body = { scope: window._coordPlanningScope||'', content: content, month_date: monthDate, created_by: window._myNameAr||window._myStaffDbId||'' };
-    await fetch(sbUrl+'/rest/v1/planning_records',{method:'POST',headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(body)});
-    if (dateInp) dateInp.value = '';
-    if (contentInp) contentInp.value = '';
-    loadCoordPlanningRecords();
-  } catch(e) { alert('خطأ في حفظ الخطة'); }
-}
-
-async function loadCoordPlanningRecords() {
-  var wrap = document.getElementById('coord-planning-records-wrap');
-  if (!wrap) return;
-  wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div>';
-  try {
-    var sb = window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
-    var sbUrl = window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
-    var res = await fetch(sbUrl+'/rest/v1/planning_records?scope=eq.'+encodeURIComponent(window._coordPlanningScope||'')+'&order=month_date.desc&limit=24&select=id,content,month_date,created_by,created_at',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
-    var rows = await res.json();
-    if (!Array.isArray(rows) || !rows.length) {
-      wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#94A3B8">لا توجد خطط مسجَّلة بعد</div>';
-      return;
-    }
-    wrap.innerHTML = rows.map(function(r){
-      return '<div style="background:#F8FAFF;border-radius:10px;padding:14px;margin-bottom:10px">' +
-        '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px">' +
-          '<div style="font-weight:800;color:#1E293B;font-size:14px">'+(r.month_date||'')+'</div>' +
-          '<div style="font-size:12px;color:#6C3DD6;font-weight:700">'+(r.created_by||'')+'</div>' +
-        '</div>' +
-        '<div style="font-size:13px;color:#475569;line-height:1.6">'+(r.content||'').replace(/\n/g,'<br>')+'</div>' +
-      '</div>';
-    }).join('');
-  } catch(e) {
-    wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#EF4444">خطأ في التحميل</div>';
-  }
-}
-
-// ===================== WEEKLY TRACK COORDINATOR (منسقة المسار الأسبوعي) =====================
-
-function injectCoordTrackPanel(scope) {
-  var container = document.querySelector('.panels-area');
-  if (!container) return;
-  var div = document.createElement('div');
-  div.className = 'panel';
-  div.id = 'panel-coord-track';
-  div.style.cssText = 'padding:24px;overflow-y:auto;height:100%;display:none';
-  div.innerHTML =
-    '<div style="margin-bottom:20px">' +
-      '<div style="font-size:20px;font-weight:900;color:#1E293B">المسار الأسبوعي</div>' +
-      '<div id="coord-track-scope-label" style="font-size:13px;color:#6C3DD6;font-weight:700;margin-top:2px">'+(scope||'')+'</div>' +
-    '</div>' +
-    '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:20px;margin-bottom:20px">' +
-      '<div style="font-size:15px;font-weight:800;color:#1E293B;margin-bottom:14px">بطاقة التحقق</div>' +
-      '<div id="coord-track-subjects-wrap"><div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div></div>' +
-      '<button id="coord-track-submit-btn" disabled onclick="submitCoordTrack()" style="margin-top:14px;padding:10px 20px;background:#CBD5E1;color:#fff;border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:800;cursor:not-allowed">إرسال المسار</button>' +
-    '</div>' +
-    '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:20px">' +
-      '<div style="font-size:15px;font-weight:800;color:#1E293B;margin-bottom:14px">سجل الإرسالات السابقة</div>' +
-      '<div id="coord-track-log-wrap"><div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div></div>' +
-    '</div>';
-  container.appendChild(div);
-}
-
-async function loadCoordTrack() {
-  var scope = window._coordTrackScope || '';
-  var lbl = document.getElementById('coord-track-scope-label');
-  if (lbl) lbl.textContent = scope;
-  var wrap = document.getElementById('coord-track-subjects-wrap');
-  if (wrap) {
-    wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div>';
-    try {
-      var sb = window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
-      var sbUrl = window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
-      var res = await fetch(sbUrl+'/rest/v1/schedules?class_name=eq.'+encodeURIComponent(scope)+'&is_active=eq.true&select=subject',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
-      var rows = await res.json();
-      var subjects = Array.isArray(rows) ? Array.from(new Set(rows.map(function(r){ return r.subject; }).filter(Boolean))).sort() : [];
-      if (!subjects.length) {
-        wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#94A3B8">لا توجد مواد مسجَّلة لهذا الصف</div>';
-      } else {
-        wrap.innerHTML = subjects.map(function(s){
-          return '<label style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #F1F5F9;font-size:14px;color:#1E293B;cursor:pointer">' +
-            '<input type="checkbox" class="coord-track-chk" data-subject="'+s+'" onchange="updateCoordTrackSubmitState()"> '+s+
-          '</label>';
-        }).join('');
-      }
-    } catch(e) {
-      wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#EF4444">خطأ في التحميل</div>';
-    }
-  }
-  updateCoordTrackSubmitState();
-  loadCoordTrackLog();
-}
-
-function updateCoordTrackSubmitState() {
-  var boxes = document.querySelectorAll('.coord-track-chk');
-  var btn = document.getElementById('coord-track-submit-btn');
-  if (!btn) return;
-  var allChecked = boxes.length > 0 && Array.prototype.every.call(boxes, function(b){ return b.checked; });
-  btn.disabled = !allChecked;
-  btn.style.background = allChecked ? 'linear-gradient(135deg,#6C3DD6,#22D3EE)' : '#CBD5E1';
-  btn.style.cursor = allChecked ? 'pointer' : 'not-allowed';
-}
-
-async function submitCoordTrack() {
-  var boxes = document.querySelectorAll('.coord-track-chk');
-  if (!boxes.length || !Array.prototype.every.call(boxes, function(b){ return b.checked; })) {
-    alert('يجب تأكيد جميع المواد قبل الإرسال');
-    return;
-  }
-  var subjectsConfirmed = {};
-  boxes.forEach(function(b){ subjectsConfirmed[b.getAttribute('data-subject')] = true; });
-  var weekDate = new Date().toISOString().slice(0,10);
-  try {
-    var sb = window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
-    var sbUrl = window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
-    var body = { scope: window._coordTrackScope||'', week_date: weekDate, confirmed_by: window._myNameAr||window._myStaffDbId||'', status:'sent', subjects_confirmed: subjectsConfirmed };
-    await fetch(sbUrl+'/rest/v1/weekly_track_logs',{method:'POST',headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(body)});
-    boxes.forEach(function(b){ b.checked = false; });
-    updateCoordTrackSubmitState();
-    loadCoordTrackLog();
-  } catch(e) { alert('خطأ في إرسال المسار'); }
-}
-
-async function loadCoordTrackLog() {
-  var wrap = document.getElementById('coord-track-log-wrap');
-  if (!wrap) return;
-  wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div>';
-  try {
-    var sb = window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
-    var sbUrl = window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
-    var res = await fetch(sbUrl+'/rest/v1/weekly_track_logs?scope=eq.'+encodeURIComponent(window._coordTrackScope||'')+'&order=week_date.desc&limit=20&select=id,week_date,confirmed_by,status,created_at',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
-    var rows = await res.json();
-    if (!Array.isArray(rows) || !rows.length) {
-      wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#94A3B8">لا توجد إرسالات سابقة</div>';
-      return;
-    }
-    wrap.innerHTML = rows.map(function(r){
-      return '<div style="display:flex;justify-content:space-between;align-items:center;background:#F8FAFF;border-radius:10px;padding:12px 14px;margin-bottom:8px;font-size:13px">' +
-        '<div><span style="font-weight:800;color:#1E293B">'+(r.week_date||'')+'</span> — <span style="color:#6C3DD6">'+(r.confirmed_by||'')+'</span></div>' +
-        '<span style="background:#ECFDF5;color:#059669;border-radius:8px;padding:4px 12px;font-weight:700">مُرسل</span>' +
-      '</div>';
-    }).join('');
-  } catch(e) {
-    wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#EF4444">خطأ في التحميل</div>';
-  }
-}
-
-async function loadMySubjectMeetings() {
-  var wrap = document.getElementById('my-meetings-wrap');
-  if (!wrap) return;
-  wrap.innerHTML = '<div style="text-align:center;padding:20px;color:#94A3B8">جاري التحميل...</div>';
-  try {
-    var subject = window._myCoordSubject || '';
-    var sb = window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
-    var sbUrl = window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
-    var res = await fetch(sbUrl+'/rest/v1/subject_meetings?subject=eq.'+encodeURIComponent(subject)+'&academic_year=eq.2026-2027&order=meeting_date.desc&limit=50&select=id,meeting_date,agenda,minutes,status',{headers:{'apikey':sb,'Authorization':'Bearer '+sb}});
-    var rows = await res.json();
-    if (!Array.isArray(rows)||!rows.length) {
-      wrap.innerHTML = '<div style="text-align:center;padding:40px;color:#94A3B8">لا توجد اجتماعات مسجَّلة<br><span style="font-size:13px">اضغطي + اجتماع جديد لتسجيل أول اجتماع</span></div>';
-      return;
-    }
-    var sm = {scheduled:{l:'مجدول',c:'#D97706',b:'#FEF3C7'},completed:{l:'منتهٍ',c:'#059669',b:'#ECFDF5'},cancelled:{l:'ملغى',c:'#E11D48',b:'#FFF1F2'}};
-    wrap.innerHTML = '<div style="display:flex;flex-direction:column;gap:12px">'+rows.map(function(m){
-      var s=sm[m.status]||sm.scheduled;
-      return '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:18px">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">' +
-          '<div style="font-size:15px;font-weight:800;color:#1E293B">'+(m.meeting_date||'')+'</div>' +
-          '<div style="display:flex;gap:8px;align-items:center">' +
-            '<span style="background:'+s.b+';color:'+s.c+';border-radius:8px;padding:4px 12px;font-size:12px;font-weight:700">'+s.l+'</span>' +
-            (m.status!=='completed'?'<button onclick="completeMeeting(\''+m.id+'\')" style="background:#ECFDF5;border:1px solid #A7F3D0;color:#059669;border-radius:8px;padding:4px 10px;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">إغلاق</button>':'') +
-          '</div>' +
-        '</div>' +
-        (m.agenda?'<div style="font-size:13px;color:#1E293B;font-weight:700;margin-bottom:6px">جدول الأعمال:</div><div style="font-size:13px;color:#475569;margin-bottom:10px;line-height:1.6">'+m.agenda.replace(/\n/g,'<br>')+'</div>':'') +
-        (m.minutes?'<div style="font-size:13px;color:#1E293B;font-weight:700;margin-bottom:6px">المحضر:</div><div style="font-size:13px;color:#475569;background:#F8FAFF;border-radius:8px;padding:12px;line-height:1.6">'+m.minutes.replace(/\n/g,'<br>')+'</div>':
-          '<button onclick="addMinutes(\''+m.id+'\')" style="background:#EDE9FE;border:none;color:#6C3DD6;border-radius:8px;padding:6px 14px;font-family:Tajawal,Arial,sans-serif;font-size:13px;font-weight:700;cursor:pointer">+ إضافة محضر</button>') +
-      '</div>';
-    }).join('')+'</div>';
-  } catch(e) {
-    wrap.innerHTML='<div style="text-align:center;padding:32px;color:#EF4444">خطأ في التحميل</div>';
-  }
-}
-
-function showNewMeetingModal(){var m=document.getElementById('new-meeting-modal');if(m)m.style.display='flex';}
-function closeNewMeetingModal(){var m=document.getElementById('new-meeting-modal');if(m)m.style.display='none';}
-
-async function saveNewMeeting(){
-  var dateInp=document.getElementById('meet-date-inp');
-  var agendaInp=document.getElementById('meet-agenda-inp');
-  var minutesInp=document.getElementById('meet-minutes-inp');
-  var meetDate=dateInp?dateInp.value:'';
-  var agenda=agendaInp?agendaInp.value.trim():'';
-  var minutes=minutesInp?minutesInp.value.trim():'';
-  if(!meetDate){alert('يرجى تحديد تاريخ الاجتماع');return;}
-  try{
-    var sb=window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
-    var sbUrl=window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
-    var body={subject:window._myCoordSubject||'',coordinator_staff_db_id:window._myStaffDbId||'',coordinator_name_ar:window._myNameAr||'',meeting_date:meetDate,academic_year:'2026-2027',agenda:agenda||null,minutes:minutes||null,status:minutes?'completed':'scheduled'};
-    await fetch(sbUrl+'/rest/v1/subject_meetings',{method:'POST',headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(body)});
-    closeNewMeetingModal();
-    if(dateInp)dateInp.value='';
-    if(agendaInp)agendaInp.value='';
-    if(minutesInp)minutesInp.value='';
-    loadMySubjectMeetings();
-  }catch(e){alert('خطأ في الحفظ');}
-}
-
-async function completeMeeting(id){
-  var minutes=prompt('أدخلي محضر الاجتماع:');
-  if(minutes===null)return;
-  try{
-    var sb=window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
-    var sbUrl=window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
-    await fetch(sbUrl+'/rest/v1/subject_meetings?id=eq.'+id,{method:'PATCH',headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({status:'completed',minutes:minutes})});
-    loadMySubjectMeetings();
-  }catch(e){alert('خطأ في الحفظ');}
-}
-
-async function addMinutes(id){
-  var minutes=prompt('أدخلي محضر الاجتماع:');
-  if(minutes===null||!minutes.trim())return;
-  try{
-    var sb=window.EduOS&&window.EduOS.SB_KEY?window.EduOS.SB_KEY:'';
-    var sbUrl=window.EduOS&&window.EduOS.SB_URL?window.EduOS.SB_URL:'';
-    await fetch(sbUrl+'/rest/v1/subject_meetings?id=eq.'+id,{method:'PATCH',headers:{'apikey':sb,'Authorization':'Bearer '+sb,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({minutes:minutes,status:'completed'})});
-    loadMySubjectMeetings();
-  }catch(e){alert('خطأ في الحفظ');}
-}
-
-// Run coordinator check after page load
-document.addEventListener('DOMContentLoaded', function(){
-  setTimeout(checkCoordinatorStatus, 1500);
-});
-// ===================== END COORDINATOR MODULE =====================
-
-// ══════════════════════════════════════════════
-// HOVER CARDS — بطاقات المعلومات اللحظية
-// ══════════════════════════════════════════════
-const HC = document.getElementById('globalHCard');
-let _hcTimer = null;
-
-function hcShow(el, name, sub, body, e) {
-  if (!HC) return;
-  document.getElementById('hc-name').textContent = name || '—';
-  document.getElementById('hc-sub').textContent  = sub  || '';
-  document.getElementById('hc-body').innerHTML   = body || '';
-  HC.classList.add('show');
-  hcPos(e);
-}
-function hcHide() { if(HC) HC.classList.remove('show'); }
-function hcPos(e) {
-  if (!HC || !e) return;
-  const x = e.clientX, y = e.clientY;
-  const w = HC.offsetWidth  || 240;
-  const h = HC.offsetHeight || 160;
-  const vw = window.innerWidth, vh = window.innerHeight;
-  HC.style.left = (x + 12 + w > vw ? x - w - 12 : x + 12) + 'px';
-  HC.style.top  = (y + 12 + h > vh ? y - h - 12 : y + 12) + 'px';
-}
-document.addEventListener('mousemove', e => {
-  if (HC && HC.classList.contains('show')) hcPos(e);
-});
-
-// Cache de VARK por student id
-const _varkCache = {};
-
-async function fetchVARK(studentId) {
-  if (_varkCache[studentId] !== undefined) return _varkCache[studentId];
-  try {
-    const res = await sb.from('vark_results')
-      .select('primary_style,secondary_style,v_score,a_score,r_score,k_score')
-      .eq('student_id', String(studentId)).maybeSingle();
-    _varkCache[studentId] = res.data || null;
-  } catch(e) { _varkCache[studentId] = null; }
-  return _varkCache[studentId];
-}
-
-const VARK_LABELS = {V:'👁️ بصري',A:'👂 سمعي',R:'📖 قرائي',K:'🤸 حركي',M:'🔀 متعدد'};
-const VARK_EN    = {V:'Visual',A:'Auditory',R:'Read/Write',K:'Kinesthetic',M:'Multimodal'};
-
-async function attachStudentHoverCards() {
-  document.querySelectorAll('[data-student-id]').forEach(el => {
-    if (el._hcAttached) return;
-    el._hcAttached = true;
-    el.classList.add('has-hcard');
-    el.addEventListener('mouseenter', async (e) => {
-      const sid = el.dataset.studentId;
-      const name = el.dataset.studentName || el.textContent.trim();
-      const cls  = el.dataset.studentClass || '';
-      const num  = el.dataset.studentNum  || '';
-      // Quick show with loading
-      hcShow(el, name, cls + (num?' · '+num:''),
-        '<div style="color:var(--text3);font-size:12px">جارٍ التحميل…</div>', e);
-      const vark = await fetchVARK(sid);
-      if (!vark) {
-        document.getElementById('hc-body').innerHTML =
-          '<div style="color:var(--text3);font-size:12px">لا بيانات VARK</div>';
-        return;
-      }
-      const p = vark.primary_style || 'M';
-      const s = vark.secondary_style || '';
-      const varkHtml = '<div class="hcard-vark '+p+'">'+VARK_LABELS[p]+'</div>'
-        + (s && s !== p ? '<div class="hcard-vark '+s+'" style="margin-right:6px;font-size:11px">'+VARK_LABELS[s]+' (ثانوي)</div>' : '')
-        + '<div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:4px">'
-        + Object.entries({V:vark.v_score,A:vark.a_score,R:vark.r_score,K:vark.k_score})
-          .filter(([,v])=>v!==null&&v!==undefined)
-          .map(([k,v])=>'<div class="hcard-row"><span>'+VARK_LABELS[k]+'</span><strong>'+v+'</strong></div>').join('')
-        + '</div>';
-      document.getElementById('hc-body').innerHTML = varkHtml;
-    });
-    el.addEventListener('mouseleave', () => setTimeout(hcHide, 200));
-  });
-}
-
-// Patch renderStudentsTable to add data attrs
-const _origRenderStudents = typeof renderStudentsTable !== 'undefined' ? renderStudentsTable : null;
-function renderStudentsTable(students, avgMap, flagSet) {
-  const body = document.getElementById('studentsBody');
-  if (!students.length) { body.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text3)">لا طلاب / No students</td></tr>'; return; }
-  const effort = n => 18 + (parseInt(n,36) % 3);
-  body.innerHTML = students.map((s,i) => {
-    const avg = avgMap[s.id] || null;
-    const att = s.attendance_pct || null;
-    const lvl = avg === null ? '—' : avg >= 90 ? 'A' : avg >= 75 ? 'B' : avg >= 60 ? 'C' : 'D';
-    const e = effort(s.id || i);
-    const stars = s.reinforcement_stars || 0;
-    const sb1 = avg ? Math.min(100, Math.round(avg*0.4 + (att||80)*0.3 + e*3)) : null;
-    const dispName = (window.EduLang?.getLang()==='en'&&s.name_en)?s.name_en:(s.name||'—');
-    return '<tr><td>' + (i+1) + '</td>'
-      + '<td><span class="has-hcard" data-student-id="' + s.id + '" data-student-name="' + (s.name||'').replace(/"/g,'') + '" data-student-class="' + (s.class_name||'') + '" data-student-num="' + (s.student_number||'') + '" style="font-weight:700;cursor:pointer">' + dispName + '</span></td>'
-      + '<td>' + (s.class_name||'—') + '</td>'
-      + '<td>' + (att!==null?att+'%':'—') + '</td>'
-      + '<td>' + (avg!==null?avg+'%':'—') + '</td>'
-      + '<td style="font-size:12px">' + '★'.repeat(Math.min(e,5)) + '</td>'
-      + '<td>' + (sb1!==null?'<div class="sb1-bar"><div class="sb1-fill" style="width:'+sb1+'%"></div></div> '+sb1:'—') + '</td>'
-      + '<td>⭐ ' + stars + '</td>'
-      + '<td>' + (flagSet.has(s.id)?'<span class="flag-chip">⚠️</span>':'<span class="grade-chip grade-'+(lvl||'x').toLowerCase()+'">'+lvl+'</span>') + '</td>'
-      + '<td><button class="btn-sm btn-ghost" onclick="viewStudent(\'' + s.id + '\')" data-student-id="'+s.id+'">عرض</button></td></tr>';
-  }).join('');
-  setTimeout(attachStudentHoverCards, 100);
-}
-
-// Also attach on VARK table
-function patchVARKTable() {
-  document.querySelectorAll('#varkBody [data-sid]').forEach(el => {
-    if (el._hcAttached) return;
-    el._hcAttached = true;
-    el.classList.add('has-hcard');
-    el.addEventListener('mouseenter', async e => {
-      const sid = el.dataset.sid;
-      const name = el.textContent.trim();
-      hcShow(el, name, '', '<div style="color:var(--text3);font-size:12px">جارٍ التحميل…</div>', e);
-      const vark = await fetchVARK(sid);
-      if (vark) {
-        const p = vark.primary_style || 'M';
-        document.getElementById('hc-body').innerHTML =
-          '<div class="hcard-vark '+p+'">'+VARK_LABELS[p]+'</div>'
-          + '<div style="margin-top:8px;font-size:12px;color:var(--text3)">'+VARK_EN[p]+'</div>';
-      }
-    });
-    el.addEventListener('mouseleave', () => setTimeout(hcHide, 200));
-  });
-}
-// Watch for VARK table changes
-const _vObserver = new MutationObserver(() => patchVARKTable());
-const _vBody = document.getElementById('varkBody');
-if (_vBody) _vObserver.observe(_vBody, {childList:true});
-
-
-// ===================== LESSON PLANS =====================
-let _lpTeacherAssignments = null;
-
-async function initLessonPlanForm() {
-  if (_lpTeacherAssignments) return;
-  // استخدم teacherNumericId إن وُجد، وإلا تراجع لـ session.id
-  const sess0 = JSON.parse(sessionStorage.getItem('edoos_user')||'{}');
-  const teacherId = teacherNumericId || sess0.id || null;
-  if (!teacherId) return;
-  // استخدام Bearer token لتجاوز RLS
-  const sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
-  const sbKey = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
-  let data = null;
-  try {
-    const res = await fetch(sbUrl + '/rest/v1/teacher_assignments?staff_db_id=eq.' + encodeURIComponent(teacherId) + '&academic_year=eq.2026-2027&select=class_name,subject&order=class_name', {
-      headers: { 'apikey': sbKey }
-    });
-    data = await res.json();
-  } catch(e) { data = []; }
-  _lpTeacherAssignments = Array.isArray(data) ? data : [];
-  const classSet = [...new Set((_lpTeacherAssignments).map(r => r.class_name))].sort();
-  const sel = document.getElementById('lp-class');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">-- اختر الصف --</option>';
-  classSet.forEach(c => { sel.innerHTML += '<option value="'+c+'">'+c+'</option>'; });
-  // اختر الصف الأول تلقائياً وحدّث المادة
-  if (classSet.length > 0) {
-    sel.value = classSet[0];
-    lpClassChanged();
-  }
-  const dp = document.getElementById('lp-date');
-  if (dp) dp.value = new Date().toISOString().slice(0,10);
-}
-
-function lpClassChanged() {
-  const cls = document.getElementById('lp-class').value;
-  const subSel = document.getElementById('lp-subject');
-  subSel.innerHTML = '';
-  if (!cls || !_lpTeacherAssignments) {
-    subSel.innerHTML = '<option value="">-- اختر المادة --</option>';
-    return;
-  }
-  const subjects = [...new Set(_lpTeacherAssignments.filter(r => r.class_name === cls).map(r => r.subject))];
-  if (subjects.length === 0) {
-    subSel.innerHTML = '<option value="">-- لا مواد --</option>';
-    return;
-  }
-  subjects.forEach((s, i) => { subSel.innerHTML += '<option value="'+s+'" '+(i===0?'selected':'')+'>'+s+'</option>'; });
-}
-
-async function saveLessonPlan() {
-  const cls = document.getElementById('lp-class').value;
-  const subject = document.getElementById('lp-subject').value;
-  const date = document.getElementById('lp-date').value;
-  const period = parseInt(document.getElementById('lp-period').value);
-  const title = document.getElementById('lp-title').value.trim();
-  const objectives = document.getElementById('lp-objectives').value.trim();
-  const activities = document.getElementById('lp-activities').value.trim();
-  const resources = document.getElementById('lp-resources').value.trim();
-  const homework = document.getElementById('lp-homework').value.trim();
-  const lang = document.getElementById('lp-lang').value;
-  const vark_visual = document.getElementById('lp-vark-v').checked;
-  const vark_auditory = document.getElementById('lp-vark-a').checked;
-  const vark_reading = document.getElementById('lp-vark-r').checked;
-  const vark_kinesthetic = document.getElementById('lp-vark-k').checked;
-  const msg = document.getElementById('lp-msg');
-  if (!cls || !subject || !date || !title) {
-    msg.style.display = 'block'; msg.style.color = '#E11D48';
-    msg.textContent = '⚠️ يرجى ملء الصف والمادة والتاريخ وعنوان الحصة'; return;
-  }
-  const teacherId = teacherNumericId;
-  const session2 = JSON.parse(sessionStorage.getItem('edoos_user')||'{}'); const teacherName = session2.name_ar || session2.name || '';
-  const grade = cls ? cls.replace(/[A-F]$/, '').replace(/[أ-ي]$/, '').trim() : '';
-  try {
-    const { error } = await sb.from('lesson_plans').insert({
-      teacher_id: teacherId, teacher_name: teacherName, grade, class_name: cls,
-      subject, plan_date: date, period_number: period, lesson_title: title,
-      objectives, activities, resources, homework, language_of_instruction: lang,
-      vark_visual, vark_auditory, vark_reading, vark_kinesthetic
-    });
-    if (error) throw error;
-    msg.style.display = 'block'; msg.style.color = '#059669';
-    msg.textContent = '✅ تم حفظ الخطة بنجاح';
-    ['lp-title','lp-objectives','lp-activities','lp-resources','lp-homework'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-    ['lp-vark-v','lp-vark-a','lp-vark-r','lp-vark-k'].forEach(id => { const el = document.getElementById(id); if (el) el.checked = false; });
-    setTimeout(() => { msg.style.display = 'none'; }, 3000);
-    loadLessonPlans();
-  } catch(e) {
-    msg.style.display = 'block'; msg.style.color = '#E11D48';
-    msg.textContent = '❌ خطأ في الحفظ: ' + (e.message||e);
-  }
-}
-
-async function loadLessonPlans() {
-  const container = document.getElementById('lp-list');
-  if (!container) return;
-  container.innerHTML = '<div class="empty"><div class="icon">⏳</div><p>جارٍ التحميل…</p></div>';
-  const days = parseInt(document.getElementById('lp-filter-week')?.value || '7');
-  const teacherId = teacherNumericId;
-  if (!teacherId) { container.innerHTML = '<div class="empty"><p>لم يُعرف المعلم</p></div>'; return; }
-  const from = new Date(); from.setDate(from.getDate() - days);
-  const fromStr = from.toISOString().slice(0,10);
-  const { data, error } = await sb.from('lesson_plans').select('*').eq('teacher_id', teacherId).gte('plan_date', fromStr).order('plan_date', {ascending: false}).limit(30);
-  if (error || !data || data.length === 0) {
-    container.innerHTML = '<div class="empty"><div class="icon">📖</div><p>لا خطط في هذه الفترة</p></div>'; return;
-  }
-  const varkMap = {vark_visual:'👁',vark_auditory:'👂',vark_reading:'📖',vark_kinesthetic:'🤸'};
-  const dayNames = {'0':'الأحد','1':'الاثنين','2':'الثلاثاء','3':'الأربعاء','4':'الخميس','5':'الجمعة','6':'السبت'};
-  let html = '<div style="display:flex;flex-direction:column;gap:10px">';
-  data.forEach(p => {
-    const varks = Object.entries(varkMap).filter(([k]) => p[k]).map(([,v]) => v).join(' ');
-    const d = new Date(p.plan_date); const dayName = dayNames[d.getDay().toString()]||'';
-    html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">';
-    html += '<div><span style="font-size:15px;font-weight:800;color:var(--text)">'+(p.lesson_title||'—')+'</span>';
-    html += '<span style="font-size:12px;color:var(--brand);font-weight:700;margin-right:8px">'+(p.class_name||'')+' · '+(p.subject||'')+'</span></div>';
-    html += '<div style="font-size:12px;color:var(--text2);white-space:nowrap">'+dayName+' '+p.plan_date+' · ح'+p.period_number+'</div></div>';
-    if (p.objectives) html += '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">🎯 '+p.objectives.slice(0,80)+(p.objectives.length>80?'…':'')+'</div>';
-    if (varks) html += '<div style="font-size:13px;margin-top:4px">'+varks+'</div>';
-    html += '</div>';
-  });
-  html += '</div>';
-  container.innerHTML = html;
-}
-
-</script>
-
-<!-- Hover Card -->
-<div class="hcard" id="globalHCard">
-  <div class="hcard-name" id="hc-name">—</div>
-  <div class="hcard-sub" id="hc-sub">—</div>
-  <div id="hc-body"></div>
-</div>
-
-<script>
-// ══════════ PANEL: المخالفات ══════════
-async function loadMyIncidents() {
-  if (!TEACHER || !sb) return;
-  const teacherId = TEACHER.staff_db_id || TEACHER.id;
-  const filterClass = document.getElementById('behavFilterClass')?.value || '';
-  const filterStatus = document.getElementById('behavFilterStatus')?.value || '';
-  const listEl = document.getElementById('behavIncidentList');
-  if (!listEl) return;
-  listEl.innerHTML = '<div style="text-align:center;color:var(--text3);padding:32px;font-size:14px">⏳ جارٍ التحميل...</div>';
-
-  try {
-    let query = sb.from('behavior_incidents')
-      .select('id,student_id,incident_type,degree,description,created_at,action_taken,students!inner(name,class_name)')
-      .eq('teacher_id', teacherId)
-      .order('created_at', { ascending: false })
-      .limit(100);
-    if (filterClass) query = query.eq('students.class_name', filterClass);
-    if (filterStatus === 'verbal') query = query.eq('degree', 1);
-    else if (filterStatus === 'written') query = query.eq('degree', 2);
-    else if (filterStatus === 'referral') query = query.gte('degree', 3);
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    // إحصاءات
-    const total = data.length;
-    const referrals = data.filter(x => x.degree >= 3).length;
-    const uniqueStudents = new Set(data.map(x => x.student_id)).size;
-    document.getElementById('bStatTotal').textContent = total;
-    document.getElementById('bStatReferral').textContent = referrals;
-    document.getElementById('bStatStudents').textContent = uniqueStudents;
-
-    // تحديث badge في sidebar
-    const badge = document.getElementById('behaviorBadge');
-    if (badge) { if (referrals > 0) { badge.textContent = referrals; badge.style.display = ''; } else badge.style.display = 'none'; }
-
-    // ملء فلتر الصفوف — من teacherClasses المعيّنة أولاً (ثم من المخالفات احتياطاً)
-    const classSelect = document.getElementById('behavFilterClass');
-    if (classSelect && classSelect.options.length <= 1) {
-      const classSet = teacherClasses.length > 0
-        ? teacherClasses
-        : [...new Set(data.map(x => x.students?.class_name).filter(Boolean))].sort();
-      classSet.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; classSelect.appendChild(o); });
-    }
-
-    if (!data.length) { listEl.innerHTML = '<div style="text-align:center;color:var(--text3);padding:40px;font-size:15px">✅ لا توجد مخالفات مسجّلة</div>'; return; }
-
-    const degreeLabel = { 1:'شفهي', 2:'كتابي', 3:'إحالة للأخصائية' };
-    const degreeColor = { 1:'#16A34A', 2:'#D97706', 3:'#DC2626' };
-    const typeAr = { uniform:'زي مدرسي', book:'عدم إحضار الكتاب', equipment:'عدم إحضار الأدوات', behavior:'سلوك مخالف', other:'أخرى' };
-
-    listEl.innerHTML = data.map(r => {
-      const d = r.degree || 1;
-      const clr = degreeColor[d] || '#64748B';
-      const lbl = degreeLabel[d] || 'شفهي';
-      const dt = new Date(r.created_at).toLocaleDateString('ar-AE', {day:'numeric',month:'short',year:'numeric'});
-      const stName = r.students?.name || '—';
-      const stClass = r.students?.class_name || '—';
-      const cat = typeAr[r.incident_type] || r.incident_type || '—';
-      return `<div style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
-        <div style="flex:1;min-width:160px">
-          <div style="font-weight:700;color:var(--text);font-size:14px">${stName}</div>
-          <div style="font-size:12px;color:var(--text3)">${stClass} · ${cat}</div>
-        </div>
-        <div style="font-size:12px;color:var(--text3)">${dt}</div>
-        <div style="background:${clr}22;color:${clr};border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700;white-space:nowrap">${lbl}</div>
-      </div>`;
-    }).join('');
-  } catch(e) {
-    listEl.innerHTML = `<div style="text-align:center;color:#DC2626;padding:32px;font-size:14px">خطأ في التحميل: ${e.message}</div>`;
-  }
-}
-
-// ─── نظام الاستئذان ───────────────────────────────
-function _leaveSB() {
-  try { if (typeof sb !== 'undefined' && sb) return sb; } catch(e) {}
-  return window.sb || window._supabase || null;
-}
-
-let _leaveType = 'personal';
-let _selectedHours = 0;
-
-function setLeaveType(type) {
-  _leaveType = type;
-  _selectedHours = 0;
-  document.querySelectorAll('.hour-btn').forEach(b => {
-    b.style.border = '2px solid var(--border)';
-    b.style.background = '#fff';
-    b.style.color = 'var(--text)';
-  });
-  if (type === 'personal') {
-    document.getElementById('leaveTypePersonal').style.border = '2px solid var(--brand)';
-    document.getElementById('leaveTypePersonal').style.background = 'var(--brand-lt)';
-    document.getElementById('leaveTypePersonal').style.color = 'var(--brand)';
-    document.getElementById('leaveTypeOfficial').style.border = '2px solid var(--border)';
-    document.getElementById('leaveTypeOfficial').style.background = '#fff';
-    document.getElementById('leaveTypeOfficial').style.color = 'var(--text2)';
-    document.getElementById('personalHoursSection').style.display = 'block';
-    document.getElementById('officialSection').style.display = 'none';
-    document.getElementById('reasonRequired').style.display = 'none';
-  } else {
-    document.getElementById('leaveTypeOfficial').style.border = '2px solid var(--brand)';
-    document.getElementById('leaveTypeOfficial').style.background = 'var(--brand-lt)';
-    document.getElementById('leaveTypeOfficial').style.color = 'var(--brand)';
-    document.getElementById('leaveTypePersonal').style.border = '2px solid var(--border)';
-    document.getElementById('leaveTypePersonal').style.background = '#fff';
-    document.getElementById('leaveTypePersonal').style.color = 'var(--text2)';
-    document.getElementById('personalHoursSection').style.display = 'none';
-    document.getElementById('officialSection').style.display = 'block';
-    document.getElementById('reasonRequired').style.display = 'inline';
-  }
-}
-
-function selectHours(h) {
-  _selectedHours = h;
-  document.querySelectorAll('.hour-btn').forEach(b => {
-    b.style.border = '2px solid var(--border)';
-    b.style.background = '#fff';
-    b.style.color = 'var(--text)';
-  });
-  const btns = document.querySelectorAll('.hour-btn');
-  const idx = [1,2,3].indexOf(h);
-  if (idx >= 0) {
-    btns[idx].style.border = '2px solid var(--brand)';
-    btns[idx].style.background = 'var(--brand-lt)';
-    btns[idx].style.color = 'var(--brand)';
-  }
-}
-
-function checkLeaveDate() {
-  const d = new Date(document.getElementById('leaveDate').value);
-  const day = d.getDay();
-  const warn = document.getElementById('leaveDateWarn');
-  if (day === 5) { // الجمعة = 5
-    warn.style.display = 'block';
-  } else {
-    warn.style.display = 'none';
-  }
-}
-
-async function loadLeaveStats() {
-  const user = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
-  if (!user.id) return;
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth()+1).padStart(2,'0');
-  const monthStart = `${y}-${m}-01`;
-  const monthEnd = `${y}-${m}-31`;
-  try {
-    const sb = _leaveSB();
-    if (!sb) return;
-    const {data} = await sb.from('leave_requests')
-      .select('hours,status,leave_type')
-      .eq('staff_db_id', String(user.id))
-      .eq('leave_type','personal')
-      .gte('request_date', monthStart)
-      .lte('request_date', monthEnd);
-    const used = (data||[]).filter(r=>r.status==='approved').reduce((s,r)=>s+(r.hours||0),0);
-    const pending = (data||[]).filter(r=>r.status==='pending').length;
-    const rem = 6 - used;
-    document.getElementById('leaveUsedHours').textContent = used + ' ساعة';
-    document.getElementById('leaveRemainingHours').textContent = Math.max(0,rem) + ' ساعة';
-    document.getElementById('leavePending').textContent = pending;
-    if (pending > 0) {
-      const badge = document.getElementById('leaveStatusBadge');
-      if (badge) { badge.style.display='inline'; badge.textContent=pending; }
-    }
-  } catch(e) { console.warn('leave stats', e); }
-}
-
-async function loadLeaveHistory() {
-  const user = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
-  if (!user.id) return;
-  const container = document.getElementById('leaveHistory');
-  try {
-    const sb = _leaveSB();
-    if (!sb) { container.innerHTML = '<div style="color:var(--text3);text-align:center;padding:20px">—</div>'; return; }
-    const {data} = await sb.from('leave_requests')
-      .select('*').eq('staff_db_id', String(user.id))
-      .order('created_at',{ascending:false}).limit(20);
-    if (!data||!data.length) { container.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)">لا توجد طلبات سابقة</div>'; return; }
-    const statusMap = {pending:'⏳ معلق', approved:'✅ مُعتمَد', rejected:'❌ مرفوض'};
-    const typeMap = {personal:'شخصي', official:'رسمي'};
-    container.innerHTML = data.map(r => {
-      const locked = r.locked ? '<span style="font-size:10px;color:var(--text3)"> 🔒</span>' : '';
-      const st = r.status === 'approved' ? '#F0FDF4' : r.status === 'rejected' ? '#FFF1F2' : '#FEFCE8';
-      const stc = r.status === 'approved' ? '#166534' : r.status === 'rejected' ? '#BE123C' : '#92400E';
-      return `<div style="background:${st};border-radius:10px;padding:12px 16px;margin-bottom:8px;border-right:4px solid ${stc}">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <span style="font-size:13px;font-weight:700;color:var(--text)">${typeMap[r.leave_type]||r.leave_type}</span>
-            ${r.hours?`<span style="font-size:12px;color:var(--text3);margin-right:8px">${r.hours} ساعة</span>`:''}
-            <span style="font-size:12px;color:var(--text3)">${r.request_date}</span>
-            ${locked}
-          </div>
-          <span style="font-size:12px;font-weight:700;color:${stc}">${statusMap[r.status]||r.status}</span>
-        </div>
-        ${r.reason_short?`<div style="font-size:12px;color:var(--text2);margin-top:4px">${r.reason_short}</div>`:''}
-      </div>`;
-    }).join('');
-  } catch(e) { container.innerHTML = '<div style="color:var(--rose);text-align:center;padding:20px">خطأ في التحميل</div>'; }
-}
-
-async function submitLeaveRequest() {
-  const user = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
-  if (!user.id) return;
-
-  const dateVal = document.getElementById('leaveDate').value;
-  if (!dateVal) { alert('يرجى اختيار التاريخ'); return; }
-
-  const d = new Date(dateVal);
-  if (d.getDay() === 5) { alert('لا يُسمح بالاستئذان يوم الجمعة'); return; }
-
-  if (_leaveType === 'personal') {
-    if (!_selectedHours) { alert('يرجى اختيار عدد الساعات (1 أو 2 أو 3)'); return; }
-    // فحص الحد الشهري
-    const now = new Date();
-    const y = now.getFullYear(); const m = String(now.getMonth()+1).padStart(2,'0');
-    const sb = _leaveSB();
-    if (sb) {
-      const {data} = await sb.from('leave_requests')
-        .select('hours').eq('staff_db_id',String(user.id)).eq('leave_type','personal')
-        .eq('status','approved').gte('request_date',`${y}-${m}-01`).lte('request_date',`${y}-${m}-31`);
-      const used = (data||[]).reduce((s,r)=>s+(r.hours||0),0);
-      if (used + _selectedHours > 6) { alert(`تجاوزت الحد الشهري. الساعات المتبقية: ${6-used}`); return; }
-      const {error} = await sb.from('leave_requests').insert({
-        staff_db_id: String(user.id),
-        staff_name: user.name || '',
-        leave_type: 'personal',
-        request_date: dateVal,
-        hours: _selectedHours,
-        reason_short: document.getElementById('leaveReason').value,
-        status: 'pending'
-      });
-      if (error) { alert('خطأ: ' + error.message); return; }
-      alert('✅ تم إرسال طلب الاستئذان الشخصي — بانتظار اعتماد النائبة');
-      loadLeaveStats(); loadLeaveHistory();
-    }
-  } else {
-    // رسمي
-    const reason = document.getElementById('leaveReason').value;
-    if (!reason) { alert('يرجى اختيار السبب للاستئذان الرسمي'); return; }
-    const docInput = document.getElementById('officialDoc');
-    if (!docInput.files||!docInput.files.length) { alert('الوثيقة الرسمية إلزامية للاستئذان الرسمي'); return; }
-    const dateFrom = document.getElementById('officialDateFrom').value || dateVal;
-    const dateTo = document.getElementById('officialDateTo').value || dateVal;
-    const sb = _leaveSB();
-    if (sb) {
-      // رفع الوثيقة إلى storage
-      const file = docInput.files[0];
-      const fileName = `leave_docs/${user.id}_${Date.now()}_${file.name}`;
-      let docUrl = null;
-      try {
-        const {data:upData} = await sb.storage.from('documents').upload(fileName, file, {upsert:true});
-        if (upData) docUrl = sb.storage.from('documents').getPublicUrl(fileName).data.publicUrl;
-      } catch(e) { console.warn('doc upload', e); }
-
-      const {error} = await sb.from('leave_requests').insert({
-        staff_db_id: String(user.id),
-        staff_name: user.name || '',
-        leave_type: 'official',
-        request_date: dateFrom,
-        date_from: dateFrom,
-        date_to: dateTo,
-        reason_short: reason,
-        document_url: docUrl,
-        status: 'pending'
-      });
-      if (error) { alert('خطأ: ' + error.message); return; }
-      alert('✅ تم إرسال طلب الاستئذان الرسمي — بانتظار اعتماد المديرة');
-      loadLeaveStats(); loadLeaveHistory();
-    }
-  }
-}
-
-// تحميل تلقائي عند فتح تبويب الاستئذان
-const _origSP3 = switchPanel;
-switchPanel = function(name) {
-  _origSP3(name);
-  if (name === 'leave') { loadLeaveStats(); loadLeaveHistory(); }
-};
-// ─────────────────────────────────────────────────
-</script>
-
-<!-- ══════════ VIOLATION MODAL ══════════ -->
-<div id="violationModal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.55);align-items:center;justify-content:center;direction:rtl;">
-  <div style="background:#fff;border-radius:18px;padding:28px 24px;max-width:480px;width:95%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);font-family:'Tajawal',Arial,sans-serif;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-      <h3 style="margin:0;font-size:20px;color:#991B1B;">⚠️ تسجيل مخالفة</h3>
-      <button onclick="closeViolationModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748B;">✕</button>
-    </div>
-
-    <!-- الصف -->
-    <div style="margin-bottom:14px;">
-      <label style="font-size:14px;font-weight:700;color:#475569;display:block;margin-bottom:6px;">الصف / Classroom</label>
-      <select id="viol_class" onchange="violLoadStudents()" style="width:100%;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 14px;font-family:'Tajawal',Arial;font-size:15px;">
-        <option value="">— اختر الصف —</option>
-      </select>
-    </div>
-
-    <!-- الطالبة -->
-    <div style="margin-bottom:14px;">
-      <label style="font-size:14px;font-weight:700;color:#475569;display:block;margin-bottom:6px;">الطالبة / Student</label>
-      <select id="viol_student" onchange="onViolStudentChange()" style="width:100%;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 14px;font-family:'Tajawal',Arial;font-size:15px;">
-        <option value="">— اختر الطالبة —</option>
-      </select>
-    </div>
-
-    <!-- الإجراء التلقائي (يُحسب من عدد مخالفات هذه المعلمة مع هذه الطالبة) -->
-    <div style="margin-bottom:14px;">
-      <label style="font-size:14px;font-weight:700;color:#475569;display:block;margin-bottom:8px;">الإجراء التلقائي / Auto Action</label>
-      <div id="violAutoActionBox" style="border:1.5px solid #CBD5E1;border-radius:10px;padding:12px 14px;background:#F8FAFC;font-size:14px;font-weight:700;color:#475569;">
-        اختاري الصف ثم الطالبة لحساب الإجراء تلقائياً
-      </div>
-      <input type="hidden" id="viol_auto_action" value="">
-    </div>
-
-    <!-- سبب المخالفة -->
-    <div style="margin-bottom:14px;">
-      <label style="font-size:14px;font-weight:700;color:#475569;display:block;margin-bottom:6px;">سبب المخالفة / Category</label>
-      <select id="viol_category" style="width:100%;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 14px;font-family:'Tajawal',Arial;font-size:15px;">
-        <option value="uniform">👗 الزي المدرسي</option>
-        <option value="book">📚 عدم إحضار الكتاب</option>
-        <option value="equipment">✏️ عدم إحضار الأدوات</option>
-        <option value="behavior">😤 سلوك مخالف</option>
-        <option value="other">📋 أخرى</option>
-      </select>
-    </div>
-
-    <!-- الدرجة -->
-    <div style="margin-bottom:14px;">
-      <label style="font-size:14px;font-weight:700;color:#475569;display:block;margin-bottom:8px;">درجة الشدة / Severity</label>
-      <div style="display:flex;gap:8px;">
-        <label style="flex:1;cursor:pointer;text-align:center;border:2px solid #D1FAE5;border-radius:10px;padding:8px;background:#F0FDF4;">
-          <input type="radio" name="viol_degree" value="1" checked style="display:none;">
-          <div style="font-size:18px;">🟡</div>
-          <div style="font-size:13px;font-weight:700;color:#065F46;">خفيف</div>
-        </label>
-        <label style="flex:1;cursor:pointer;text-align:center;border:2px solid #FEF3C7;border-radius:10px;padding:8px;background:#FFFBEB;">
-          <input type="radio" name="viol_degree" value="2" style="display:none;">
-          <div style="font-size:18px;">🟠</div>
-          <div style="font-size:13px;font-weight:700;color:#92400E;">متوسط</div>
-        </label>
-        <label style="flex:1;cursor:pointer;text-align:center;border:2px solid #FEE2E2;border-radius:10px;padding:8px;background:#FFF5F5;">
-          <input type="radio" name="viol_degree" value="3" style="display:none;">
-          <div style="font-size:18px;">🔴</div>
-          <div style="font-size:13px;font-weight:700;color:#991B1B;">شديد</div>
-        </label>
-      </div>
-    </div>
-
-    <!-- وصف اختياري -->
-    <div style="margin-bottom:20px;">
-      <label style="font-size:14px;font-weight:700;color:#475569;display:block;margin-bottom:6px;">ملاحظات إضافية (اختياري)</label>
-      <textarea id="viol_desc" rows="3" style="width:100%;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 14px;font-family:'Tajawal',Arial;font-size:15px;resize:vertical;box-sizing:border-box;" placeholder="أضف أي تفاصيل إضافية..."></textarea>
-    </div>
-
-    <div id="violMsg" style="display:none;padding:10px 14px;border-radius:10px;margin-bottom:14px;font-weight:700;font-size:14px;"></div>
-
-    <div style="display:flex;gap:10px;">
-      <button onclick="saveViolation()" style="flex:2;background:#DC2626;color:#fff;border:none;border-radius:10px;padding:13px;font-family:'Tajawal',Arial;font-size:16px;font-weight:700;cursor:pointer;">⚠️ تسجيل المخالفة</button>
-      <button onclick="closeViolationModal()" style="flex:1;background:#F1F5F9;color:#475569;border:none;border-radius:10px;padding:13px;font-family:'Tajawal',Arial;font-size:16px;font-weight:700;cursor:pointer;">إلغاء</button>
-    </div>
-  </div>
-</div>
-
-<!-- Degree radio visual toggle -->
-<style>
-input[name="viol_degree"]:checked + div { transform:scale(1.05); }
-</style>
-
-<script>
-// ══════════ VIOLATION LOGIC ══════════
-
-function openViolationModal(preStudentId) {
-  const modal = document.getElementById('violationModal');
-  modal.style.display = 'flex';
-  // ملء قائمة الصفوف من صفوف المعلمة
-  const clsSel = document.getElementById('viol_class');
-  clsSel.innerHTML = '<option value="">— اختر الصف —</option>';
-  (teacherClasses || []).forEach(c => {
-    const o = document.createElement('option');
-    o.value = c; o.textContent = c;
-    clsSel.appendChild(o);
-  });
-  document.getElementById('viol_student').innerHTML = '<option value="">— اختر الطالبة —</option>';
-  document.getElementById('viol_desc').value = '';
-  document.getElementById('violMsg').style.display = 'none';
-  resetViolAutoAction();
-  // إذا تم تمرير طالبة مباشرة
-  if (preStudentId && allStudents) {
-    const s = allStudents.find(x => String(x.id) === String(preStudentId));
-    if (s) {
-      clsSel.value = s.class_name;
-      violLoadStudents(preStudentId);
-    }
-  }
-}
-
-function closeViolationModal() {
-  document.getElementById('violationModal').style.display = 'none';
-}
-
-async function violLoadStudents(preSelectId) {
-  const cls = document.getElementById('viol_class').value;
-  const sSel = document.getElementById('viol_student');
-  sSel.innerHTML = '<option value="">جاري التحميل...</option>';
-  resetViolAutoAction();
-  if (!cls) { sSel.innerHTML = '<option value="">— اختر الطالبة —</option>'; return; }
-  try {
-    const { data } = await sb.from('students').select('id,name,student_number').eq('class_name', cls).order('name');
-    sSel.innerHTML = '<option value="">— اختر الطالبة —</option>';
-    (data || []).forEach(s => {
-      const o = document.createElement('option');
-      o.value = JSON.stringify({ id: s.id, name: s.name, student_number: s.student_number });
-      o.textContent = s.name;
-      sSel.appendChild(o);
-    });
-    if (preSelectId) {
-      const found = (data || []).find(x => String(x.id) === String(preSelectId));
-      if (found) {
-        sSel.value = JSON.stringify({ id: found.id, name: found.name, student_number: found.student_number });
-        onViolStudentChange();
-      }
-    }
-  } catch(e) { sSel.innerHTML = '<option value="">خطأ في التحميل</option>'; }
-}
-
-// ══════════ الإجراء التلقائي: يُحسب من عدد مخالفات هذه المعلمة مع هذه الطالبة ══════════
-// 0 مخالفات سابقة → شفهي | 1 مخالفة سابقة → كتابي | مخالفتان فأكثر → إحالة للأخصائية
-let violAutoActionCount = null;
-
-function resetViolAutoAction() {
-  violAutoActionCount = null;
-  document.getElementById('viol_auto_action').value = '';
-  const box = document.getElementById('violAutoActionBox');
-  box.style.background = '#F8FAFC'; box.style.color = '#475569';
-  box.textContent = 'اختاري الصف ثم الطالبة لحساب الإجراء تلقائياً';
-}
-
-function violAutoActionInfo(count) {
-  if (count === 0) return { label: 'شفهي', color: '#065F46', bg: '#D1FAE5' };
-  if (count === 1) return { label: 'كتابي', color: '#92400E', bg: '#FEF3C7' };
-  return { label: 'إحالة للأخصائية', color: '#991B1B', bg: '#FEE2E2' };
-}
-
-async function onViolStudentChange() {
-  const stuRaw = document.getElementById('viol_student').value;
-  const box = document.getElementById('violAutoActionBox');
-  if (!stuRaw) { resetViolAutoAction(); return; }
-  const stu = JSON.parse(stuRaw);
-  box.style.background = '#F8FAFC'; box.style.color = '#475569';
-  box.textContent = '⏳ جاري حساب المخالفات السابقة...';
-  try {
-    const { count, error } = await sb.from('behavior_incidents')
-      .select('id', { count: 'exact', head: true })
-      .eq('teacher_id', String(teacherId))
-      .eq('student_id', String(stu.id));
-    if (error) throw error;
-    violAutoActionCount = count || 0;
-    const info = violAutoActionInfo(violAutoActionCount);
-    document.getElementById('viol_auto_action').value = info.label;
-    box.style.background = info.bg; box.style.color = info.color;
-    box.textContent = 'مخالفاتك مع هذه الطالبة: ' + violAutoActionCount + ' — الإجراء التلقائي: ' + info.label;
-  } catch(e) {
-    violAutoActionCount = 0;
-    document.getElementById('viol_auto_action').value = 'شفهي';
-    box.style.background = '#FEE2E2'; box.style.color = '#991B1B';
-    box.textContent = 'تعذّر حساب الإجراء تلقائياً — سيُسجَّل كـ "شفهي" افتراضياً';
-  }
-}
-
-const VIOL_TOPIC_MAP = { uniform: 'زي وأدوات', book: 'زي وأدوات', equipment: 'زي وأدوات', behavior: 'مخالفة سلوكية', other: 'أخرى' };
-
-async function saveViolation() {
-  const stuRaw = document.getElementById('viol_student').value;
-  const cls    = document.getElementById('viol_class').value;
-  const cat    = document.getElementById('viol_category').value;
-  const deg    = parseInt(document.querySelector('input[name="viol_degree"]:checked')?.value || '1');
-  const desc   = document.getElementById('viol_desc').value.trim();
-  const msgEl  = document.getElementById('violMsg');
-
-  if (!stuRaw || !cls || !cat) {
-    msgEl.style.display = 'block';
-    msgEl.style.background = '#FEE2E2'; msgEl.style.color = '#991B1B';
-    msgEl.textContent = '⚠️ يرجى تعبئة جميع الحقول الإلزامية';
-    return;
-  }
-
-  const stu = JSON.parse(stuRaw);
-  const catAr = { uniform:'الزي المدرسي', book:'عدم إحضار الكتاب', equipment:'عدم إحضار الأدوات', behavior:'سلوك مخالف', other:'أخرى' }[cat] || cat;
-
-  // إعادة حساب الإجراء التلقائي فور الحفظ لضمان الدقة (تحسّباً لأي مخالفة سُجّلت أثناء فتح النافذة)
-  await onViolStudentChange();
-  const actionAr = document.getElementById('viol_auto_action').value || 'شفهي';
-  const isReferral = actionAr === 'إحالة للأخصائية';
-  const teacherNameVal = session?.name_ar || session?.name || session?.full_name || '';
-
-  try {
-    const { data: incRows, error } = await sb.from('behavior_incidents').insert({
-      student_id: String(stu.id),
-      student_name: stu.name,
-      grade: cls.replace(/[A-Z]/g,'').trim(),
-      class_name: cls,
-      degree: deg,
-      violation_type: catAr,
-      description: desc || (actionAr + ' بسبب: ' + catAr),
-      action_taken: actionAr,
-      teacher_id: teacherId,
-      teacher_name: teacherNameVal,
-      specialist_notified: isReferral,
-      parent_notified: false,
-      status: isReferral ? 'مفتوحة' : 'open'
-    }).select();
-    if (error) throw error;
-
-    if (isReferral) {
-      const newIncident = (incRows && incRows[0]) || null;
-      const { error: refErr } = await sb.from('counselor_referrals').insert({
-        student_db_id: String(stu.id),
-        student_name: stu.name,
-        class_name: cls,
-        incident_id: newIncident ? newIncident.id : null,
-        referred_by: String(teacherId),
-        referred_by_name: teacherNameVal,
-        subject: catAr,
-        topic: VIOL_TOPIC_MAP[cat] || 'أخرى',
-        notes: desc || ('تكرار المخالفة (' + (violAutoActionCount + 1) + ' مرات) مع هذه المعلمة — بسبب: ' + catAr),
-        status: 'pending'
-      });
-      if (refErr) console.warn('counselor_referrals insert error:', refErr);
-    }
-
-    msgEl.style.display = 'block';
-    msgEl.style.background = '#D1FAE5'; msgEl.style.color = '#065F46';
-    msgEl.textContent = isReferral ? '✅ تم التسجيل — تمت الإحالة للأخصائية' : '✅ تم تسجيل المخالفة بنجاح';
-    setTimeout(() => closeViolationModal(), 1500);
-  } catch(e) {
-    msgEl.style.display = 'block';
-    msgEl.style.background = '#FEE2E2'; msgEl.style.color = '#991B1B';
-    msgEl.textContent = '❌ ' + (e.message || 'خطأ في الحفظ');
-  }
-}
 
 // إضافة زر مخالفة في جدول الطلاب
 // يُضاف data-student-id لكل اسم طالبة للـ Tooltip
