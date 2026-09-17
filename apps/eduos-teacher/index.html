@@ -4293,6 +4293,13 @@ async function loadCoordAnalytics() {
   }
 }
 
+// دالة مساعدة GLOBAL — تبني headers مع JWT للاستعلامات
+function coordHeaders() {
+  var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+  var tok = window._myToken || sb;
+  return { 'apikey': sb, 'Authorization': 'Bearer ' + tok };
+}
+
 // ══════════ checkCoordinatorStatus — موحّدة ══════════
 async function checkCoordinatorStatus() {
   try {
@@ -4302,44 +4309,31 @@ async function checkCoordinatorStatus() {
     if (!username) return;
     var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
     var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+    window._myToken = token || '';  // حفظ JWT في global للاستخدام في coordHeaders()
     var authHeader = 'Bearer ' + (token || sb);
-    window._myToken = token || '';  // حفظ JWT للاستخدام في دوال الـ coord
-
-// دالة مساعدة — تبني headers مع JWT للاستعلامات
-function coordHeaders() {
-  var sb = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
-  var tok = window._myToken || sb;
-  return { 'apikey': sb, 'Authorization': 'Bearer ' + tok };
-}
     var res = await fetch(sbUrl+'/rest/v1/staff_profiles?username=eq.'+encodeURIComponent(username)+'&select=staff_db_id,is_coordinator,coordinator_subject,coord_type,coord_scope,name_ar',{headers:{'apikey':sb,'Authorization':authHeader}});
     var rows = await res.json();
     if (!Array.isArray(rows)||!rows.length) return;
     var row = rows[0];
     window._myNameAr = row.name_ar;
-    window._myStaffDbId = row.staff_db_id || '';  // القيمة الحقيقية من DB
+    window._myStaffDbId = row.staff_db_id || '';
     window._myCoordScope = row.coord_scope || '';
     window._myCoordType = row.coord_type || '';
+    window._myCoordSubject = row.coordinator_subject || '';
 
     if (row.is_coordinator) {
-      window._myCoordSubject = row.coordinator_subject || '';
-      window._myCoordType = row.coord_type || 'subject';
       var btn = document.getElementById('coord-nav-btn');
       if (btn) {
         btn.style.display = 'flex';
-        // تحديث label الهيدر حسب نوع التنسيق
         var subLbl = btn.querySelector('.snav-sub');
         if (subLbl) {
-          var typeLabel = { subject:'منسقة مادة', activities:'منسقة أنشطة', grade:'منسقة مرحلة' };
-          subLbl.textContent = (typeLabel[row.coord_type] || 'Coordination') + (row.coordinator_subject ? ' — ' + row.coordinator_subject : '');
+          var typeLabel = { subject:'منسقة مادة', planning:'منسقة تخطيط', section:'منسقة قسم', track:'منسقة مسار', activities:'منسقة أنشطة', grade:'منسقة مرحلة' };
+          var scopeTxt = row.coord_scope ? ' · ' + row.coord_scope : (row.coordinator_subject ? ' · ' + row.coordinator_subject : '');
+          subLbl.textContent = (typeLabel[row.coord_type] || 'التنسيق') + scopeTxt;
         }
       }
-      // تحديث عنوان الهيدر عند فتح التبويب
-      var headerSub = document.getElementById('coord-header-sub');
-      if (headerSub) {
-        headerSub.textContent = (row.coordinator_subject || '') + ' · ' + (row.coord_type || '');
-      }
     }
-  } catch(e) { /* silent */ }
+  } catch(e) { console.warn('checkCoordinatorStatus error:', e); }
 }
 
 // showPanel القديمة — مبقاة للتوافق
