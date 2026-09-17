@@ -3592,12 +3592,12 @@ async function loadCoordDashboard() {
     // جلب معلمات المادة أو الصف حسب نوع المنسقة
     var teacherUrl;
     if (subject) {
-      teacherUrl = sbUrl+'/rest/v1/teacher_assignments?subject=eq.'+encodeURIComponent(subject)+'&academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id';
+      teacherUrl = sbUrl+'/rest/v1/teacher_assignments?subject=eq.'+encodeURIComponent(subject)+'&academic_year=eq.2026-2027&staff_db_id=not.is.null&select=teacher_name_ar,class_name,staff_db_id';
     } else if (window._myCoordClasses && window._myCoordClasses.length > 0) {
       var clsListD = window._myCoordClasses.join(',');
       teacherUrl = sbUrl+'/rest/v1/schedules?is_active=eq.true&class_name=in.('+clsListD+')&select=teacher_name,teacher_id,class_name';
     } else {
-      teacherUrl = sbUrl+'/rest/v1/teacher_assignments?academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id&limit=50';
+      teacherUrl = sbUrl+'/rest/v1/teacher_assignments?academic_year=eq.2026-2027&staff_db_id=not.is.null&select=teacher_name_ar,class_name,staff_db_id&limit=50';
     }
     var r1 = await fetch(teacherUrl, {headers: coordHeaders()});
     var teachers = await r1.json();
@@ -3606,9 +3606,11 @@ async function loadCoordDashboard() {
     var seenIds = {};
     teacherList.forEach(function(t){
       // دعم teacher_assignments (staff_db_id) وschedules (teacher_id)
-      var id = t.staff_db_id || t.teacher_id || (t.teacher_name_ar||t.teacher_name||'');
-      var name = t.teacher_name_ar || t.teacher_name || '—';
-      if (id && !seenIds[id]) {
+      var id = t.staff_db_id || t.teacher_id;
+      var name = t.teacher_name_ar || t.teacher_name || '';
+      // تجاهل الشواغر والصفوف بدون معرّف أو اسم
+      if (!id || !name || name === 'شاغر' || name.trim() === '') return;
+      if (!seenIds[id]) {
         seenIds[id] = true;
         if (id !== staffDbId && id !== window._myStaffDbId) {
           uniqueTeachers.push({ staff_db_id: id, teacher_name_ar: name, class_name: t.class_name || coordScope });
