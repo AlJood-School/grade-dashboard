@@ -4541,7 +4541,7 @@ function editWeeklyPlan(id, evt) {
     lpSetChecks('lp-strategy', r.teaching_strategies || []);
     lpSetChecks('lp-assess', r.formative_assessment || []);
     var cls = document.getElementById('lp-f-class');
-    if (r.class_name && cls) { cls.value = r.class_name; lpFillSubjects(r.subject); }
+    if (r.class_name && cls) { cls.value = r.class_name; lpFillSubjects(r.subject); lpFetchSENStudents(r.class_name); }
   });
   document.getElementById('lp-modal-overlay').style.display = 'block';
   document.body.style.overflow = 'hidden';
@@ -4603,6 +4603,51 @@ function lpFillSubjects(preselect) {
   uniq.sort();
   selSub.innerHTML = '<option value="">— اختر المادة —</option>' + uniq.map(function(s){ return '<option value="' + s + '">' + s + '</option>'; }).join('');
   if (preselect) selSub.value = preselect;
+  lpFetchSENStudents(chosen);
+}
+
+function lpFetchSENStudents(className) {
+  var senPanel = document.getElementById('lp-sen-panel');
+  var senNone = document.getElementById('lp-sen-none');
+  var senList = document.getElementById('lp-sen-list');
+  var senInput = document.getElementById('lp-f-sen');
+  if (senPanel) senPanel.style.display = 'none';
+  if (senNone) senNone.style.display = 'none';
+  if (senList) senList.innerHTML = '';
+  if (senInput) senInput.value = 0;
+  if (!className) return;
+  // الخطوة 1: جلب أرقام الطلاب الحاليين في الصف
+  fetch(lpSbUrl() + '/rest/v1/students?class_name=eq.' + encodeURIComponent(className) + '&select=student_number', {
+    headers: { apikey: lpSbKey(), Authorization: 'Bearer ' + lpToken() }
+  }).then(function(r){ return r.json(); }).then(function(studs) {
+    var nums = (studs||[]).map(function(s){ return s.student_number; }).filter(Boolean);
+    if (!nums.length) {
+      if (senNone) senNone.style.display = 'block';
+      return;
+    }
+    // الخطوة 2: جلب أصحاب الهمم من بين هؤلاء الطلاب فقط
+    fetch(lpSbUrl() + '/rest/v1/special_ed_students?is_active=eq.true&student_id=in.(' + nums.join(',') + ')&select=name_ar,disability_type,support_level&order=disability_type.asc', {
+      headers: { apikey: lpSbKey(), Authorization: 'Bearer ' + lpToken() }
+    }).then(function(r){ return r.json(); }).then(function(sens) {
+      sens = sens || [];
+      if (senInput) senInput.value = sens.length;
+      if (!sens.length) {
+        if (senNone) senNone.style.display = 'block';
+        return;
+      }
+      var supportColor = { 'مكيفة':'#DC2626','معدلة':'#D97706','موائمة':'#059669' };
+      var html = sens.map(function(s) {
+        var sc = supportColor[s.support_level] || '#64748B';
+        return '<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #FDE68A">' +
+          '<span style="font-weight:700;color:#1E293B;flex:1;font-size:12px">' + (s.name_ar||'—') + '</span>' +
+          '<span style="background:#FEF3C7;color:#92400E;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:700">' + (s.disability_type||'—') + '</span>' +
+          (s.support_level ? '<span style="background:' + sc + ';color:#fff;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:700">' + s.support_level + '</span>' : '') +
+        '</div>';
+      }).join('');
+      if (senList) senList.innerHTML = html;
+      if (senPanel) senPanel.style.display = 'block';
+    }).catch(function(e){ console.warn('SEN students fetch:', e); });
+  }).catch(function(e){ console.warn('students fetch for SEN:', e); });
 }
 
 function lpDetectLang() {}
@@ -4616,6 +4661,9 @@ function resetLpForm() {
   });
   document.querySelectorAll('input[name="lp-skill"],input[name="lp-strategy"],input[name="lp-assess"]').forEach(function(cb){ cb.checked=false; });
   var msg=document.getElementById('lp-modal-msg'); if(msg){msg.style.display='none';msg.textContent='';}
+  var sp=document.getElementById('lp-sen-panel'); if(sp) sp.style.display='none';
+  var sn=document.getElementById('lp-sen-none'); if(sn) sn.style.display='none';
+  var sl=document.getElementById('lp-sen-list'); if(sl) sl.innerHTML='';
 }
 
 function lpCollectData(status) {
@@ -4776,9 +4824,15 @@ function printWeeklyPlan() {
         <div><label style="font-size:11px;font-weight:700;color:#7C3AED;display:block;margin-bottom:3px">إجمالي الصف</label><input type="number" id="lp-f-total" min="0" value="0" style="width:100%;padding:7px 10px;border:1.5px solid #DDD6FE;border-radius:6px;font-size:14px;font-weight:700;text-align:center;box-sizing:border-box"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
-        <div><label style="font-size:11px;font-weight:700;color:#92400E;display:block;margin-bottom:3px">SEN</label><input type="number" id="lp-f-sen" min="0" value="0" style="width:100%;padding:7px 10px;border:1.5px solid #FDE68A;border-radius:6px;font-size:14px;font-weight:700;text-align:center;box-sizing:border-box"></div>
+        <div><label style="font-size:11px;font-weight:700;color:#92400E;display:block;margin-bottom:3px">SEN <span style="font-size:9px;color:#B45309;font-weight:600">(تلقائي)</span></label><input type="number" id="lp-f-sen" min="0" value="0" readonly style="width:100%;padding:7px 10px;border:1.5px solid #FDE68A;border-radius:6px;font-size:14px;font-weight:700;text-align:center;box-sizing:border-box;background:#FEF9C3;cursor:default"></div>
         <div><label style="font-size:11px;font-weight:700;color:#0F766E;display:block;margin-bottom:3px">G&amp;T</label><input type="number" id="lp-f-gt" min="0" value="0" style="width:100%;padding:7px 10px;border:1.5px solid #99F6E4;border-radius:6px;font-size:14px;font-weight:700;text-align:center;box-sizing:border-box"></div>
       </div>
+      <!-- لوحة أصحاب الهمم — تلقائية من DB -->
+      <div id="lp-sen-panel" style="display:none;margin-top:12px;background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:10px;padding:12px">
+        <div style="font-weight:800;color:#92400E;margin-bottom:8px;font-size:12px">⚠️ أصحاب الهمم في هذا الصف — يُراعى تمييزهم في الخطة</div>
+        <div id="lp-sen-list" style="font-size:12px"></div>
+      </div>
+      <div id="lp-sen-none" style="display:none;margin-top:10px;background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:8px;padding:8px;font-size:11px;color:#94A3B8;text-align:center">لا يوجد أصحاب همم مسجّلون لهذا الصف حالياً — تأكدي مع أخصائية التربية الخاصة</div>
     </div>
 
     <!-- ③ عنوان + أهداف -->
