@@ -4605,12 +4605,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 <script>
 // ══════════════════════════════════════════════
-// نظام الخطة الدرسية الأسبوعية — MOE Weekly Template v2
+// نظام الخطة الدرسية الأسبوعية — MOE Weekly Template v3
 // ══════════════════════════════════════════════
 
-var _lpCurrentId = null; // id الخطة الحالية (null = جديدة)
-
-// المواد العربية (تحديد لغة النموذج)
+var _lpCurrentId = null;
 var LP_AR_SUBJECTS = ['عربي','العربية','اللغة العربية','تربية إسلامية','إسلامية','دراسات اجتماعية','اجتماعيات','تربية أخلاقية','أخلاق','الوطنية'];
 
 function lpIsArabicSubject(subj) {
@@ -4618,64 +4616,73 @@ function lpIsArabicSubject(subj) {
   return LP_AR_SUBJECTS.some(function(s){ return subj.indexOf(s) !== -1; });
 }
 
-// تهيئة تبويب الخطة عند فتحه
+function lpGetUser() {
+  try { return JSON.parse(sessionStorage.getItem('edoos_user') || '{}'); } catch(e) { return {}; }
+}
+function lpSbUrl() { return (window.EduOS && window.EduOS.SB_URL) || ''; }
+function lpSbKey() { return (window.EduOS && window.EduOS.SB_KEY) || ''; }
+function lpToken() { return lpGetUser().token || lpSbKey(); }
+
+function lpGetWeekData() {
+  if (window.getPlatformWeek) {
+    var w = window.getPlatformWeek();
+    return { weekNumber: w.week, term: w.term, academicYear: w.academicYear || '2026-2027', weekStart: w.weekStart || null };
+  }
+  return { weekNumber: null, term: 1, academicYear: '2026-2027', weekStart: null };
+}
+
 function initLessonPlanForm() {
   loadWeeklyPlansHistory();
   lpRefreshStats();
 }
 function loadLessonPlans() { initLessonPlanForm(); }
 
-// تحميل سجل الخطط السابقة
 function loadWeeklyPlansHistory() {
-  var u = getUser();
-  if (!u) return;
-  var SUPABASE_URL = window._cfg ? window._cfg.url : '';
-  var SUPABASE_KEY = window._cfg ? window._cfg.anon : '';
-  fetch(SUPABASE_URL + '/rest/v1/planning_records?staff_db_id=eq.' + encodeURIComponent(u.id) + '&order=created_at.desc&limit=20', {
-    headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY }
+  var u = lpGetUser();
+  if (!u || !u.id) return;
+  fetch(lpSbUrl() + '/rest/v1/planning_records?staff_db_id=eq.' + encodeURIComponent(u.id) + '&order=created_at.desc&limit=20', {
+    headers: { apikey: lpSbKey(), Authorization: 'Bearer ' + lpToken() }
   }).then(function(r){ return r.json(); }).then(function(rows) {
     var el = document.getElementById('lp-history-list');
     if (!el) return;
     if (!rows || !rows.length) {
-      el.innerHTML = '<div style="text-align:center;color:#94A3B8;padding:24px;font-size:13px">لا توجد خطط مسجّلة بعد — ابدأي بالضغط على ✏️ خطة هذا الأسبوع</div>';
+      el.innerHTML = '<div style="text-align:center;color:#94A3B8;padding:24px;font-size:13px">لا توجد خطط مسجّلة بعد</div>';
       return;
     }
-    el.innerHTML = rows.map(function(r){
+    var html = '';
+    rows.forEach(function(r) {
       var statusCl = r.status === 'submitted' ? '#16A34A' : '#F59E0B';
       var statusLbl = r.status === 'submitted' ? '✅ مسلَّمة' : '📝 مسودة';
       var wk = r.week_number ? 'أسبوع ' + r.week_number : '—';
       var dt = r.week_start_date ? new Date(r.week_start_date).toLocaleDateString('ar-AE',{day:'2-digit',month:'short'}) : '—';
-      return '<div class="lp-hist-row">'+        '<div style="flex:1">'+
-          '<div style="font-size:13px;font-weight:700;color:#1E293B">'+(r.lesson_title||'بدون عنوان')+'</div>'+
-          '<div style="font-size:11px;color:#94A3B8;margin-top:2px">'+(r.subject||'')+'  ·  '+(r.class_name||'')+'  ·  '+wk+'  ·  '+dt+'</div>'+
-        '</div>'+
-        '<div style="font-size:11px;font-weight:700;color:'+statusCl+'">'+statusLbl+'</div>'+
-        '<button onclick="editWeeklyPlan('+r.id+',event)" style="background:#F1F5F9;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;color:#475569">تعديل</button>'+
+      html += '<div class="lp-hist-row">' +
+        '<div style="flex:1">' +
+          '<div style="font-size:13px;font-weight:700;color:#1E293B">' + (r.lesson_title || 'بدون عنوان') + '</div>' +
+          '<div style="font-size:11px;color:#94A3B8;margin-top:2px">' + (r.subject||'') + '  ·  ' + (r.class_name||'') + '  ·  ' + wk + '  ·  ' + dt + '</div>' +
+        '</div>' +
+        '<div style="font-size:11px;font-weight:700;color:' + statusCl + '">' + statusLbl + '</div>' +
+        '<button onclick="editWeeklyPlan(' + r.id + ',event)" style="background:#F1F5F9;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;color:#475569">تعديل</button>' +
       '</div>';
-    }).join('');
+    });
+    el.innerHTML = html;
   }).catch(function(e){ console.warn('loadWeeklyPlansHistory:', e); });
 }
 
-// إحصاء الخطط هذا الأسبوع
 function lpRefreshStats() {
-  var u = getUser();
-  if (!u || !window._weekData) return;
-  var wk = window._weekData.weekNumber || 0;
-  var yr = window._weekData.academicYear || '';
-  var ws = window._weekData.weekStart || '';
-  // تحديث الهيدر
+  var u = lpGetUser();
+  if (!u || !u.id) return;
+  var wkData = lpGetWeekData();
   var wlbl = document.getElementById('lp-week-label');
   var wdt = document.getElementById('lp-week-dates');
-  if (wlbl) wlbl.textContent = 'الأسبوع ' + wk;
-  if (wdt && ws) {
-    var d = new Date(ws);
+  if (wlbl) wlbl.textContent = 'الأسبوع ' + (wkData.weekNumber || '—');
+  if (wdt && wkData.weekStart) {
+    var d = new Date(wkData.weekStart);
     var d2 = new Date(d); d2.setDate(d2.getDate()+4);
     wdt.textContent = d.toLocaleDateString('ar-AE',{day:'2-digit',month:'short'}) + ' — ' + d2.toLocaleDateString('ar-AE',{day:'2-digit',month:'short'});
   }
-  var SUPABASE_URL = window._cfg ? window._cfg.url : '';
-  var SUPABASE_KEY = window._cfg ? window._cfg.anon : '';
-  fetch(SUPABASE_URL + '/rest/v1/planning_records?staff_db_id=eq.' + encodeURIComponent(u.id) + '&week_number=eq.' + wk + '&academic_year=eq.' + encodeURIComponent(yr), {
-    headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY }
+  if (!wkData.weekNumber) return;
+  fetch(lpSbUrl() + '/rest/v1/planning_records?staff_db_id=eq.' + encodeURIComponent(u.id) + '&week_number=eq.' + wkData.weekNumber + '&academic_year=eq.' + encodeURIComponent(wkData.academicYear), {
+    headers: { apikey: lpSbKey(), Authorization: 'Bearer ' + lpToken() }
   }).then(function(r){ return r.json(); }).then(function(rows) {
     var sub = 0, draft = 0;
     rows.forEach(function(r){ if(r.status==='submitted') sub++; else draft++; });
@@ -4684,7 +4691,6 @@ function lpRefreshStats() {
   }).catch(function(){});
 }
 
-// فتح نموذج جديد
 function openNewWeeklyPlan() {
   _lpCurrentId = null;
   resetLpForm();
@@ -4693,16 +4699,13 @@ function openNewWeeklyPlan() {
   document.body.style.overflow = 'hidden';
 }
 
-// فتح نموذج للتعديل
 function editWeeklyPlan(id, evt) {
   if (evt) evt.stopPropagation();
   _lpCurrentId = id;
   resetLpForm();
   lpFillHeader();
-  var SUPABASE_URL = window._cfg ? window._cfg.url : '';
-  var SUPABASE_KEY = window._cfg ? window._cfg.anon : '';
-  fetch(SUPABASE_URL + '/rest/v1/planning_records?id=eq.' + id, {
-    headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY }
+  fetch(lpSbUrl() + '/rest/v1/planning_records?id=eq.' + id, {
+    headers: { apikey: lpSbKey(), Authorization: 'Bearer ' + lpToken() }
   }).then(function(r){ return r.json(); }).then(function(rows) {
     if (!rows || !rows[0]) return;
     var r = rows[0];
@@ -4719,15 +4722,15 @@ function editWeeklyPlan(id, evt) {
     lpSetChecks('lp-skill', r.learning_skills || []);
     lpSetChecks('lp-strategy', r.teaching_strategies || []);
     lpSetChecks('lp-assess', r.formative_assessment || []);
-    // الصف + المادة
-    if (r.class_name) { var sc = document.getElementById('lp-f-class'); if(sc) { sc.value=r.class_name; lpFillSubjects(r.subject); } }
+    var cls = document.getElementById('lp-f-class');
+    if (r.class_name && cls) { cls.value = r.class_name; lpFillSubjects(r.subject); }
   });
   document.getElementById('lp-modal-overlay').style.display = 'block';
   document.body.style.overflow = 'hidden';
 }
 
-function lpSetVal(id, val) { var el=document.getElementById(id); if(el&&val) el.value=val; }
-function lpSetNum(id, val) { var el=document.getElementById(id); if(el&&val!=null) el.value=val; }
+function lpSetVal(id, val) { var el=document.getElementById(id); if(el && val) el.value=val; }
+function lpSetNum(id, val) { var el=document.getElementById(id); if(el && val!=null) el.value=val; }
 function lpSetChecks(name, arr) {
   if (!Array.isArray(arr)) { try { arr = JSON.parse(arr); } catch(e){ arr=[]; } }
   document.querySelectorAll('input[name="'+name+'"]').forEach(function(cb){ cb.checked = arr.indexOf(cb.value) !== -1; });
@@ -4738,48 +4741,53 @@ function closeLpModal() {
   document.body.style.overflow = '';
 }
 
-// تعبئة هيدر النموذج من sessionStorage وplatform-week
 function lpFillHeader() {
-  var u = getUser();
+  var u = lpGetUser();
   var nameEl = document.getElementById('lp-f-teacher');
   if (nameEl && u) nameEl.textContent = u.username || u.id;
-  // الأسبوع والفصل
-  if (window._weekData) {
-    var wk = document.getElementById('lp-f-week');
-    var tr = document.getElementById('lp-f-term');
-    var dt = document.getElementById('lp-f-date');
-    if (wk) wk.textContent = 'الأسبوع ' + (window._weekData.weekNumber||'—');
-    if (tr) tr.textContent = 'الفصل ' + (window._weekData.term||'—');
-    if (dt && window._weekData.weekStart) {
-      var d = new Date(window._weekData.weekStart);
-      dt.textContent = d.toLocaleDateString('ar-AE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-    }
+  var wkData = lpGetWeekData();
+  var wkEl = document.getElementById('lp-f-week');
+  var trEl = document.getElementById('lp-f-term');
+  var dtEl = document.getElementById('lp-f-date');
+  if (wkEl) wkEl.textContent = 'الأسبوع ' + (wkData.weekNumber || '—');
+  if (trEl) trEl.textContent = 'الفصل ' + (wkData.term || '—');
+  if (dtEl && wkData.weekStart) {
+    var d = new Date(wkData.weekStart);
+    dtEl.textContent = d.toLocaleDateString('ar-AE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   }
-  // الصفوف من teacher_assignments
   lpFillClasses();
 }
 
 function lpFillClasses() {
   var sel = document.getElementById('lp-f-class');
-  if (!sel || !window._myAssignments || !window._myAssignments.length) return;
-  var classes = [...new Set(window._myAssignments.map(function(a){ return a.class_name; }).filter(Boolean))].sort();
-  sel.innerHTML = '<option value="">— اختر الصف —</option>' + classes.map(function(c){ return '<option value="'+c+'">'+c+'</option>'; }).join('');
+  if (!sel) return;
+  var u = lpGetUser();
+  if (!u || !u.id) return;
+  fetch(lpSbUrl() + '/rest/v1/teacher_assignments?staff_db_id=eq.' + encodeURIComponent(u.id) + '&academic_year=eq.2026-2027&is_active=eq.true&select=class_name,subject', {
+    headers: { apikey: lpSbKey(), Authorization: 'Bearer ' + lpToken() }
+  }).then(function(r){ return r.json(); }).then(function(rows) {
+    window._lpAssignments = rows || [];
+    var classes = [];
+    (rows||[]).forEach(function(a){ if(a.class_name && classes.indexOf(a.class_name)===-1) classes.push(a.class_name); });
+    classes.sort();
+    sel.innerHTML = '<option value="">— اختر الصف —</option>' + classes.map(function(c){ return '<option value="' + c + '">' + c + '</option>'; }).join('');
+  }).catch(function(e){ console.warn('lpFillClasses:', e); });
 }
 
 function lpFillSubjects(preselect) {
   var cls = document.getElementById('lp-f-class'); if(!cls) return;
   var selSub = document.getElementById('lp-f-subject'); if(!selSub) return;
   var chosen = cls.value;
-  if (!chosen || !window._myAssignments) return;
-  var subs = window._myAssignments.filter(function(a){ return a.class_name===chosen; }).map(function(a){ return a.subject; }).filter(Boolean);
-  subs = [...new Set(subs)].sort();
-  selSub.innerHTML = '<option value="">— اختر المادة —</option>' + subs.map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('');
+  var assignments = window._lpAssignments || [];
+  var subs = assignments.filter(function(a){ return a.class_name===chosen; }).map(function(a){ return a.subject; }).filter(Boolean);
+  var uniq = [];
+  subs.forEach(function(s){ if(uniq.indexOf(s)===-1) uniq.push(s); });
+  uniq.sort();
+  selSub.innerHTML = '<option value="">— اختر المادة —</option>' + uniq.map(function(s){ return '<option value="' + s + '">' + s + '</option>'; }).join('');
   if (preselect) selSub.value = preselect;
 }
 
-function lpDetectLang() {
-  // تُظهر مؤشر اللغة (للمستقبل)
-}
+function lpDetectLang() {}
 
 function resetLpForm() {
   ['lp-f-title','lp-f-objectives','lp-f-eq','lp-f-vocab','lp-f-diff','lp-f-resources','lp-f-digital','lp-f-reflection'].forEach(function(id){
@@ -4792,16 +4800,15 @@ function resetLpForm() {
   var msg=document.getElementById('lp-modal-msg'); if(msg){msg.style.display='none';msg.textContent='';}
 }
 
-// جمع بيانات النموذج
 function lpCollectData(status) {
-  var u = getUser();
-  var wkData = window._weekData || {};
+  var u = lpGetUser();
+  var wkData = lpGetWeekData();
   var cls = document.getElementById('lp-f-class');
   var sub = document.getElementById('lp-f-subject');
   var subj = sub ? sub.value : '';
   return {
-    staff_db_id: u ? u.id : '',
-    academic_year: wkData.academicYear || '',
+    staff_db_id: u.id || '',
+    academic_year: wkData.academicYear || '2026-2027',
     week_number: wkData.weekNumber || null,
     week_start_date: wkData.weekStart || null,
     term: wkData.term || 1,
@@ -4818,9 +4825,9 @@ function lpCollectData(status) {
     students_total: parseInt((document.getElementById('lp-f-total')||{}).value||0),
     students_sen: parseInt((document.getElementById('lp-f-sen')||{}).value||0),
     students_gt: parseInt((document.getElementById('lp-f-gt')||{}).value||0),
-    learning_skills: JSON.stringify([...document.querySelectorAll('input[name="lp-skill"]:checked')].map(function(c){ return c.value; })),
-    teaching_strategies: JSON.stringify([...document.querySelectorAll('input[name="lp-strategy"]:checked')].map(function(c){ return c.value; })),
-    formative_assessment: JSON.stringify([...document.querySelectorAll('input[name="lp-assess"]:checked')].map(function(c){ return c.value; })),
+    learning_skills: JSON.stringify([].map.call(document.querySelectorAll('input[name="lp-skill"]:checked'),function(c){return c.value;})),
+    teaching_strategies: JSON.stringify([].map.call(document.querySelectorAll('input[name="lp-strategy"]:checked'),function(c){return c.value;})),
+    formative_assessment: JSON.stringify([].map.call(document.querySelectorAll('input[name="lp-assess"]:checked'),function(c){return c.value;})),
     differentiation: (document.getElementById('lp-f-diff')||{}).value || '',
     resources: (document.getElementById('lp-f-resources')||{}).value || '',
     digital_tools: (document.getElementById('lp-f-digital')||{}).value || '',
@@ -4830,34 +4837,25 @@ function lpCollectData(status) {
   };
 }
 
-// حفظ (مسودة أو تسليم)
 function lpSave(status) {
   var data = lpCollectData(status);
   if (status === 'submitted' && !data.lesson_title.trim()) {
-    lpShowMsg('⚠️ يرجى إدخال عنوان الدرس أولاً', '#DC2626'); return;
+    lpShowMsg('يرجى إدخال عنوان الدرس أولاً', '#DC2626'); return;
   }
-  var SUPABASE_URL = window._cfg ? window._cfg.url : '';
-  var SUPABASE_KEY = window._cfg ? window._cfg.anon : '';
-  var u = getUser();
-  var token = u ? (u.token || SUPABASE_KEY) : SUPABASE_KEY;
   var method = _lpCurrentId ? 'PATCH' : 'POST';
-  var url = SUPABASE_URL + '/rest/v1/planning_records' + (_lpCurrentId ? '?id=eq.'+_lpCurrentId : '');
-  var headers = { 'Content-Type':'application/json', apikey: SUPABASE_KEY, Authorization: 'Bearer ' + token };
+  var url = lpSbUrl() + '/rest/v1/planning_records' + (_lpCurrentId ? '?id=eq.'+_lpCurrentId : '');
+  var headers = { 'Content-Type':'application/json', apikey: lpSbKey(), Authorization: 'Bearer ' + lpToken() };
   if (!_lpCurrentId) headers['Prefer'] = 'return=representation';
   fetch(url, { method: method, headers: headers, body: JSON.stringify(data) })
-  .then(function(r){
-    if (!r.ok) throw new Error(r.status);
-    return r.json().catch(function(){ return {}; });
-  }).then(function(res) {
+  .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json().catch(function(){ return {}; }); })
+  .then(function(res) {
     if (Array.isArray(res) && res[0] && res[0].id) _lpCurrentId = res[0].id;
-    var lbl = status==='submitted' ? '✅ تم التسليم بنجاح' : '💾 حُفظت المسودة';
+    var lbl = status==='submitted' ? 'تم التسليم بنجاح' : 'حُفظت المسودة';
     lpShowMsg(lbl, status==='submitted' ? '#16A34A' : '#0284C7');
     loadWeeklyPlansHistory();
     lpRefreshStats();
     if (status === 'submitted') { setTimeout(closeLpModal, 1800); }
-  }).catch(function(e){
-    lpShowMsg('❌ خطأ في الحفظ: ' + e.message, '#DC2626');
-  });
+  }).catch(function(e){ lpShowMsg('خطأ في الحفظ: ' + e.message, '#DC2626'); });
 }
 
 function saveDraftWeeklyPlan() { lpSave('draft'); }
@@ -4870,72 +4868,55 @@ function lpShowMsg(txt, color) {
   el.textContent = txt; el.style.color = color; el.style.display = 'block';
 }
 
-// طباعة PDF بتنسيق النموذج الأصلي
 function printWeeklyPlan() {
   var d = lpCollectData('draft');
+  var u = lpGetUser();
+  var wkData = lpGetWeekData();
   var isAr = lpIsArabicSubject(d.subject);
-  var dir = isAr ? 'rtl' : 'ltr';
-  var skills = JSON.parse(d.learning_skills||'[]');
-  var strats = JSON.parse(d.teaching_strategies||'[]');
-  var assess = JSON.parse(d.formative_assessment||'[]');
-  var skillsMap = {critical_thinking:'التفكير الناقد',communication:'التواصل',collaboration:'التعاون',creativity:'الإبداع',research:'البحث والاستقصاء',self_management:'إدارة الذات',digital_literacy:'الثقافة الرقمية',cultural_awareness:'الوعي الثقافي',hots:'HOTS'};
-  var stratsMap = {cooperative:'التعلم التعاوني',inquiry:'الاستقصاء',problem_solving:'حل المشكلات',direct:'التعليم المباشر',flipped:'الفصل المقلوب',project:'التعلم بالمشروع',discussion:'النقاش',demonstration:'العرض التوضيحي',gamification:'التلعيم',other:'أخرى'};
-  var assessMap = {exit_ticket:'بطاقة الخروج',thumbs:'إشارة الإبهام',whiteboard:'اللوح الصغير',think_pair:'فكر-شارك-زاوج',quiz:'اختبار قصير',observation:'الملاحظة',self_assess:'التقييم الذاتي',peer_assess:'تقييم الأقران'};
-  var u = getUser();
-  var wkData = window._weekData || {};
-  var html = '<!DOCTYPE html><html dir="'+dir+'"><head><meta charset="utf-8"><title>خطة درسية أسبوعية</title>'+
-  '<style>body{font-family:Tajawal,Arial,sans-serif;direction:'+dir+';margin:0;padding:0;font-size:13px;color:#1E293B}'+
-  '.page{max-width:820px;margin:0 auto;padding:20px}'+
-  '.hdr{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #6C3DD6;padding-bottom:12px;margin-bottom:16px}'+
-  '.hdr-title{font-size:18px;font-weight:900;color:#6C3DD6}'+
-  '.hdr-sub{font-size:11px;color:#64748B}'+
-  'table{width:100%;border-collapse:collapse;margin-bottom:14px}'+
-  'th,td{border:1px solid #CBD5E1;padding:7px 10px;text-align:right}'+
-  'th{background:#EDE9FE;font-weight:800;color:#4C1D95;font-size:12px}'+
-  'td{font-size:12px}'+
-  '.sec-title{background:#F1F5F9;font-weight:800;font-size:12px;color:#374151;padding:6px 10px;margin-bottom:8px;border-radius:4px}'+
-  '.pill{display:inline-block;background:#EDE9FE;color:#5B21B6;border-radius:12px;padding:2px 10px;margin:2px;font-size:11px}'+
-  '.footer{border-top:1px solid #E2E8F0;margin-top:20px;padding-top:10px;text-align:center;font-size:10px;color:#94A3B8}'+
-  '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'+
-  '</style></head><body><div class="page">'+
-  '<div class="hdr">'+
-    '<div><div class="hdr-title">نموذج الخطة الدرسية الأسبوعية</div>'+
-    '<div class="hdr-sub">Weekly Lesson Planning — Ministry of Education UAE · وزارة التربية والتعليم الإماراتية</div></div>'+
-    '<div style="text-align:center"><div style="font-size:20px">🎓</div><div style="font-size:10px;color:#6C3DD6;font-weight:700">EduOS · بوابة الجود الذكية</div></div>'+
-  '</div>'+
-  // جدول البيانات الأساسية
-  '<table><tr><th>المعلمة / Teacher</th><th>المادة / Subject</th><th>الصف / Class</th><th>الأسبوع / Week</th><th>الفصل / Term</th></tr>'+
-  '<tr><td>'+(u?u.username:'—')+'</td><td>'+(d.subject||'—')+'</td><td>'+(d.class_name||'—')+'</td><td>'+(wkData.weekNumber||'—')+'</td><td>'+(d.term||'—')+'</td></tr></table>'+
-  // مستويات CS
-  '<div class="sec-title">مستويات معيار المنهج — CS Levels</div>'+
-  '<table><tr><th>فوق المعيار / Above CS</th><th>في المستوى / In line</th><th>دون المستوى / Below CS</th><th>إجمالي / Total</th><th>SEN</th><th>G&T</th></tr>'+
-  '<tr><td style="text-align:center;font-weight:700;color:#16A34A">'+d.cs_above+'</td><td style="text-align:center;font-weight:700;color:#2563EB">'+d.cs_inline+'</td>'+
-  '<td style="text-align:center;font-weight:700;color:#DC2626">'+d.cs_below+'</td><td style="text-align:center;font-weight:700">'+d.students_total+'</td>'+
-  '<td style="text-align:center">'+d.students_sen+'</td><td style="text-align:center">'+d.students_gt+'</td></tr></table>'+
-  // الأهداف
-  '<div class="sec-title">عنوان الدرس والأهداف التعلمية</div>'+
-  '<table><tr><td style="font-weight:700;width:30%">عنوان الدرس / Title</td><td>'+d.lesson_title+'</td></tr>'+
-  '<tr><td style="font-weight:700">الأهداف / LOs</td><td style="white-space:pre-wrap">'+d.learning_objectives+'</td></tr>'+
-  '<tr><td style="font-weight:700">السؤال الجوهري</td><td>'+d.essential_question+'</td></tr>'+
-  '<tr><td style="font-weight:700">المفردات الجديدة</td><td>'+d.new_vocabulary+'</td></tr></table>'+
-  // المهارات والأساليب
-  '<div class="sec-title">مهارات التعلم وأساليب التدريس والتقويم</div>'+
-  '<table><tr><th>مهارات التعلم</th><th>أساليب التدريس</th><th>التقويم التكويني</th></tr><tr>'+
-  '<td>'+skills.map(function(s){return '<span class="pill">'+(skillsMap[s]||s)+'</span>';}).join('')+'</td>'+
-  '<td>'+strats.map(function(s){return '<span class="pill">'+(stratsMap[s]||s)+'</span>';}).join('')+'</td>'+
-  '<td>'+assess.map(function(s){return '<span class="pill">'+(assessMap[s]||s)+'</span>';}).join('')+'</td></tr></table>'+
-  // التمييز والموارد
-  '<table><tr><th>التمييز / Differentiation</th><th>الموارد / Resources</th><th>الأدوات الرقمية</th></tr>'+
-  '<tr><td>'+d.differentiation+'</td><td>'+d.resources+'</td><td>'+d.digital_tools+'</td></tr></table>'+
-  // التأمل
-  (d.self_reflection ? '<div class="sec-title">التأمل الذاتي — Self-Reflection</div><table><tr><td style="white-space:pre-wrap">'+d.self_reflection+'</td></tr></table>' : '')+
-  // توقيع
-  '<table><tr><th>توقيع المعلمة / Teacher Signature</th><th>توقيع المنسقة / Coordinator Signature</th><th>توقيع الإدارة / Admin Signature</th></tr>'+
-  '<tr><td style="height:50px"></td><td></td><td></td></tr></table>'+
-  '<div class="footer">NAFAS FOR ARTIFICIAL INTELLIGENCE · CN-6573712 · EduOS Platform · بوابة الجود الذكية · '+new Date().toLocaleDateString('ar-AE')+'</div>'+
-  '</div></body></html>';
-  var w = window.open('','_blank','width=900,height=700');
-  if (w) { w.document.write(html); w.document.close(); setTimeout(function(){ w.print(); }, 800); }
+  var skills, strats, assess;
+  try { skills = JSON.parse(d.learning_skills); } catch(e){ skills=[]; }
+  try { strats = JSON.parse(d.teaching_strategies); } catch(e){ strats=[]; }
+  try { assess = JSON.parse(d.formative_assessment); } catch(e){ assess=[]; }
+  var skillsMap = {critical_thinking:'التفكير الناقد',communication:'التواصل',collaboration:'التعاون',creativity:'الإبداع',research:'البحث',self_management:'إدارة الذات',digital_literacy:'الثقافة الرقمية',cultural_awareness:'الوعي الثقافي',hots:'HOTS'};
+  var stratsMap = {cooperative:'التعاوني',inquiry:'الاستقصاء',problem_solving:'حل مشكلات',direct:'مباشر',flipped:'فصل مقلوب',project:'مشروع',discussion:'نقاش',demonstration:'عرض',gamification:'تلعيم',other:'أخرى'};
+  var assessMap = {exit_ticket:'بطاقة خروج',thumbs:'إبهام',whiteboard:'لوح صغير',think_pair:'فكر-شارك',quiz:'اختبار',observation:'ملاحظة',self_assess:'ذاتي',peer_assess:'أقران'};
+  function makePills(arr, map) {
+    return arr.map(function(s){ return '<span class="pill">' + (map[s]||s) + '</span>'; }).join('');
+  }
+  var html = '<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>خطة درسية</title>' +
+  '<style>body{font-family:Tajawal,Arial,sans-serif;margin:0;padding:20px;font-size:12px;color:#1E293B;direction:rtl}' +
+  '.hdr{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #6C3DD6;padding-bottom:10px;margin-bottom:14px}' +
+  '.htitle{font-size:17px;font-weight:900;color:#6C3DD6}.hsub{font-size:10px;color:#64748B}' +
+  'table{width:100%;border-collapse:collapse;margin-bottom:12px}th,td{border:1px solid #CBD5E1;padding:6px 8px;text-align:right}' +
+  'th{background:#EDE9FE;font-weight:800;color:#4C1D95;font-size:11px}td{font-size:11px}' +
+  '.sec{background:#F1F5F9;font-weight:800;font-size:11px;color:#374151;padding:5px 8px;margin-bottom:6px;border-radius:3px}' +
+  '.pill{display:inline-block;background:#EDE9FE;color:#5B21B6;border-radius:10px;padding:2px 8px;margin:2px;font-size:10px}' +
+  '.footer{border-top:1px solid #E2E8F0;margin-top:16px;padding-top:8px;text-align:center;font-size:9px;color:#94A3B8}' +
+  '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>' +
+  '<div class="hdr"><div><div class="htitle">نموذج الخطة الدرسية الأسبوعية</div>' +
+  '<div class="hsub">Weekly Lesson Planning — Ministry of Education UAE</div></div>' +
+  '<div style="text-align:center"><div style="font-size:18px">🎓</div><div style="font-size:9px;color:#6C3DD6;font-weight:700">EduOS</div></div></div>' +
+  '<table><tr><th>المعلمة</th><th>المادة</th><th>الصف</th><th>الأسبوع</th><th>الفصل</th></tr>' +
+  '<tr><td>' + (u.username||'—') + '</td><td>' + (d.subject||'—') + '</td><td>' + (d.class_name||'—') + '</td><td>' + (wkData.weekNumber||'—') + '</td><td>' + (d.term||'—') + '</td></tr></table>' +
+  '<div class="sec">مستويات معيار المنهج</div>' +
+  '<table><tr><th>فوق المعيار</th><th>في المستوى</th><th>دون المستوى</th><th>إجمالي</th><th>SEN</th><th>G&amp;T</th></tr>' +
+  '<tr><td>' + d.cs_above + '</td><td>' + d.cs_inline + '</td><td>' + d.cs_below + '</td><td>' + d.students_total + '</td><td>' + d.students_sen + '</td><td>' + d.students_gt + '</td></tr></table>' +
+  '<div class="sec">التخطيط التربوي</div>' +
+  '<table><tr><td style="font-weight:700;width:25%">عنوان الدرس</td><td>' + d.lesson_title + '</td></tr>' +
+  '<tr><td style="font-weight:700">الأهداف</td><td style="white-space:pre-wrap">' + d.learning_objectives + '</td></tr>' +
+  '<tr><td style="font-weight:700">السؤال الجوهري</td><td>' + d.essential_question + '</td></tr>' +
+  '<tr><td style="font-weight:700">مفردات جديدة</td><td>' + d.new_vocabulary + '</td></tr></table>' +
+  '<div class="sec">المهارات والأساليب والتقويم</div>' +
+  '<table><tr><th>مهارات التعلم</th><th>أساليب التدريس</th><th>التقويم التكويني</th></tr>' +
+  '<tr><td>' + makePills(skills,skillsMap) + '</td><td>' + makePills(strats,stratsMap) + '</td><td>' + makePills(assess,assessMap) + '</td></tr></table>' +
+  '<table><tr><th>التمييز</th><th>الموارد</th><th>الأدوات الرقمية</th></tr>' +
+  '<tr><td>' + d.differentiation + '</td><td>' + d.resources + '</td><td>' + d.digital_tools + '</td></tr></table>' +
+  (d.self_reflection ? '<div class="sec">التأمل الذاتي</div><table><tr><td style="white-space:pre-wrap">' + d.self_reflection + '</td></tr></table>' : '') +
+  '<table><tr><th>توقيع المعلمة</th><th>توقيع المنسقة</th><th>توقيع الإدارة</th></tr><tr><td style="height:40px"></td><td></td><td></td></tr></table>' +
+  '<div class="footer">NAFAS FOR ARTIFICIAL INTELLIGENCE · CN-6573712 · EduOS · ' + new Date().toLocaleDateString('ar-AE') + '</div>' +
+  '</body></html>';
+  var w = window.open('', '_blank', 'width=900,height=700');
+  if (w) { w.document.write(html); w.document.close(); setTimeout(function(){ w.print(); }, 600); }
 }
 </script>
 
