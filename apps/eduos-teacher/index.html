@@ -3497,8 +3497,9 @@ async function loadCoordDashboard() {
     var teacherUrl;
     if (subject) {
       teacherUrl = sbUrl+'/rest/v1/teacher_assignments?subject=eq.'+encodeURIComponent(subject)+'&academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id';
-    } else if (coordScope) {
-      teacherUrl = sbUrl+'/rest/v1/schedules?class_name=eq.'+encodeURIComponent(coordScope)+'&is_active=eq.true&select=teacher_name,teacher_id';
+    } else if (window._myCoordClasses && window._myCoordClasses.length > 0) {
+      var clsListD = window._myCoordClasses.join(',');
+      teacherUrl = sbUrl+'/rest/v1/schedules?is_active=eq.true&class_name=in.('+clsListD+')&select=teacher_name,teacher_id,class_name';
     } else {
       teacherUrl = sbUrl+'/rest/v1/teacher_assignments?academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id&limit=50';
     }
@@ -3607,10 +3608,12 @@ async function loadCoordTeachers() {
     var coordType2 = window._myCoordType || '';
     if (subject) {
       obsTeacherUrl = sbUrl+'/rest/v1/teacher_assignments?subject=eq.'+encodeURIComponent(subject)+'&academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id&order=teacher_name_ar.asc';
-    } else if (coordScope2 && (coordType2==='planning'||coordType2==='track')) {
-      obsTeacherUrl = sbUrl+'/rest/v1/schedules?class_name=eq.'+encodeURIComponent(coordScope2)+'&is_active=eq.true&select=teacher_name,teacher_id,class_name&order=teacher_name.asc';
+    } else if (window._myCoordClasses && window._myCoordClasses.length > 0) {
+      // استعلام بقائمة الشعب الفعلية من coord_classes
+      var clsList = window._myCoordClasses.join(',');
+      obsTeacherUrl = sbUrl+'/rest/v1/schedules?is_active=eq.true&class_name=in.('+clsList+')&select=teacher_name,teacher_id,class_name&order=teacher_name.asc';
     } else if (coordScope2) {
-      obsTeacherUrl = sbUrl+'/rest/v1/schedules?is_active=eq.true&select=teacher_name,teacher_id,class_name&limit=100&order=teacher_name.asc';
+      obsTeacherUrl = sbUrl+'/rest/v1/schedules?is_active=eq.true&class_name=in.('+encodeURIComponent(coordScope2)+')&select=teacher_name,teacher_id,class_name&limit=100&order=teacher_name.asc';
     } else {
       obsTeacherUrl = sbUrl+'/rest/v1/teacher_assignments?academic_year=eq.2026-2027&select=teacher_name_ar,class_name,staff_db_id&order=teacher_name_ar.asc&limit=50';
     }
@@ -4312,7 +4315,7 @@ async function checkCoordinatorStatus() {
     var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
     window._myToken = token || '';  // حفظ JWT في global للاستخدام في coordHeaders()
     var authHeader = 'Bearer ' + (token || sb);
-    var res = await fetch(sbUrl+'/rest/v1/staff_profiles?username=eq.'+encodeURIComponent(username)+'&select=staff_db_id,is_coordinator,coordinator_subject,coord_type,coord_scope,name_ar',{headers:{'apikey':sb,'Authorization':authHeader}});
+    var res = await fetch(sbUrl+'/rest/v1/staff_profiles?username=eq.'+encodeURIComponent(username)+'&select=staff_db_id,is_coordinator,coordinator_subject,coord_type,coord_scope,coord_classes,name_ar',{headers:{'apikey':sb,'Authorization':authHeader}});
     var rows = await res.json();
     if (!Array.isArray(rows)||!rows.length) return;
     var row = rows[0];
@@ -4321,6 +4324,7 @@ async function checkCoordinatorStatus() {
     window._myCoordScope = row.coord_scope || '';
     window._myCoordType = row.coord_type || '';
     window._myCoordSubject = row.coordinator_subject || '';
+    window._myCoordClasses = Array.isArray(row.coord_classes) ? row.coord_classes : [];
 
     if (row.is_coordinator) {
       var btn = document.getElementById('coord-nav-btn');
