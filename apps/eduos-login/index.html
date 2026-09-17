@@ -817,11 +817,25 @@ async function loginStaff() {
   }
   var { data: profile, error: profileError } = await supabase
     .from('staff_profiles')
-    .select('id, role_key, name_ar')
+    .select('id, role_key, name_ar, must_change_password')
     .eq('username', username)
     .single();
   if (profileError || !profile) {
     showGeneralError('تعذّر العثور على بيانات الكادر الأكاديمي');
+    return;
+  }
+  // فحص إجبار تغيير كلمة المرور
+  if (profile.must_change_password === true) {
+    sessionStorage.setItem('edoos_pending_change', JSON.stringify({
+      role_key:      profile.role_key,
+      id:            profile.id,
+      name:          profile.name_ar,
+      username:      username,
+      token:         authData.session.access_token,
+      refresh_token: authData.session.refresh_token || '',
+    }));
+    showVerifyOverlay();
+    setTimeout(function() { window.location.replace('../eduos-set-password/?force=1'); }, 800);
     return;
   }
   sessionStorage.setItem('edoos_user', JSON.stringify({
