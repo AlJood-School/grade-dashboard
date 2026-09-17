@@ -2658,7 +2658,7 @@ async function sendApprovedReports() {
 const PANEL_ORDER = ['today','classes','grades','session','planning','comms'];
 
 function switchPanel(name) {
-  // Hide all main panels
+  // Hide all main panels (including coord panel which is now .tab-panel)
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   // Update sidebar
   document.querySelectorAll('.snav').forEach(b => b.classList.remove('active'));
@@ -3413,24 +3413,25 @@ var MOE_CRITERIA = [
 // فتح تبويب التنسيق
 function openCoordTab(btnEl) {
   document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
-  document.querySelectorAll('.panel[id^="panel-coord"]').forEach(function(p){ p.style.display='none'; });
   document.querySelectorAll('.snav').forEach(function(b){ b.classList.remove('active'); });
   if (btnEl) btnEl.classList.add('active');
-  if (!document.getElementById('panel-coord-main')) {
+  var coordMain = document.getElementById('panel-coord-main');
+  if (!coordMain) {
     injectCoordMainPanel();
-  } else {
-    document.getElementById('panel-coord-main').style.display = 'block';
+    coordMain = document.getElementById('panel-coord-main');
   }
+  if (coordMain) coordMain.classList.add('active');
   switchCoordSection('dashboard');
+  window.location.hash = 'coord';
 }
 
 // حقن الـ Panel الرئيسي
 function injectCoordMainPanel() {
   var container = document.querySelector('.panels-area') || document.querySelector('.main-area') || document.body;
   var div = document.createElement('div');
-  div.className = 'panel';
+  div.className = 'panel tab-panel';
   div.id = 'panel-coord-main';
-  div.style.cssText = 'padding:0;overflow-y:auto;height:100%;display:block;background:var(--bg)';
+  div.style.cssText = 'padding:0;overflow-y:auto;height:100%;background:var(--bg)';
   div.innerHTML =
     '<div style="background:linear-gradient(135deg,#6C3DD6,#22D3EE);padding:20px 24px;color:#fff">' +
       '<div style="font-size:20px;font-weight:900;margin-bottom:2px" id="coord-header-title">التنسيق</div>' +
@@ -3442,7 +3443,7 @@ function injectCoordMainPanel() {
       makeCoordSubTab('teachers','👩‍🏫','معلمات مادتي') +
       makeCoordSubTab('observation','👁','زيارة صفية') +
       makeCoordSubTab('meetings','📋','الاجتماعات') +
-      makeCoordSubTab('analytics','📊','تحليل الأداء') +
+      (window._myCoordType === 'subject' && window._myCoordSubject ? makeCoordSubTab('analytics','📊','تحليل الأداء') : '') +
     '</div>' +
     // أقسام المحتوى
     '<div style="padding:20px" id="coord-content-area">' +
@@ -3482,6 +3483,94 @@ function switchCoordSection(key) {
   if (key === 'analytics')   loadCoordAnalytics();
 }
 
+
+// ══════════ Pulse Grid — شبكة النبض الأسبوعي ══════════
+function buildPulseGrid(teachers, thisWeekSubmitted, lateTeachers, pulseData, coordId) {
+  if (!teachers || !teachers.length) return '';
+
+  // استثناء المنسقة نفسها
+  var selfId = window._myStaffDbId || '';
+  var selfName = window._myNameAr || '';
+  teachers = teachers.filter(function(t){ return t.staff_db_id!==selfId && (t.teacher_name_ar||t.teacher_name||'')!==selfName; });
+  if (!teachers.length) return '';
+
+  // بناء آخر 4 أسابيع
+  var weeks = [];
+  var today = new Date();
+  for (var w=3; w>=0; w--) {
+    var d = new Date(today);
+    d.setDate(d.getDate() - (w*7));
+    // الاثنين من الأسبوع
+    var day = d.getDay();
+    var diff = (day === 0) ? -6 : (1 - day);
+    var mon = new Date(d); mon.setDate(d.getDate()+diff);
+    var monStr = mon.toISOString().slice(0,10);
+    weeks.push({ label: 'أ' + (4-w), start: monStr, isCurrent: w===0 });
+  }
+
+  // بناء خريطة التسليمات من pulseData
+  var pulseMap = {};  // teacher_id → Set of week_start_dates
+  if (Array.isArray(pulseData)) {
+    pulseData.forEach(function(p){
+      if (!pulseMap[p.staff_db_id]) pulseMap[p.staff_db_id] = new Set();
+      if (p.week_start_date) pulseMap[p.staff_db_id].add(p.week_start_date.slice(0,10));
+    });
+  }
+
+  var html = '<div style="margin-top:20px">' +
+    '<div style="font-size:14px;font-weight:800;color:var(--text);margin-bottom:12px">📊 شبكة النبض الأسبوعي</div>' +
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">' +
+    '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+    '<thead><tr style="background:var(--surface2)">' +
+    '<th style="padding:10px 14px;text-align:right;font-weight:800;color:var(--text)">المعلمة</th>';
+  weeks.forEach(function(wk){
+    html += '<th style="padding:10px 8px;text-align:center;font-weight:700;color:'+(wk.isCurrent?'#6C3DD6':'var(--text2)')+';min-width:60px">' +
+      (wk.isCurrent?'<span style="background:#6C3DD6;color:#fff;padding:2px 8px;border-radius:20px;font-size:11px">هذا الأسبوع</span>': wk.label) + '</th>';
+  });
+  html += '<th style="padding:10px 8px;text-align:center;font-weight:700;color:var(--text2)">إجراء</th></tr></thead><tbody>';
+
+  teachers.forEach(function(t, i){
+    var tid = t.staff_db_id || t.teacher_id || '';
+    var name = t.teacher_name_ar || t.teacher_name || '—';
+    var bg = i%2===0 ? 'var(--bg)' : 'var(--surface)';
+    var isLate = lateTeachers.some(function(l){ return (l.staff_db_id||l.teacher_id||'')===tid; });
+    html += '<tr style="border-bottom:1px solid var(--border);background:'+bg+'">' +
+      '<td style="padding:10px 14px;font-weight:700;color:var(--text)">' + name + '</td>';
+
+    weeks.forEach(function(wk){
+      var submitted;
+      if (wk.isCurrent) {
+        submitted = thisWeekSubmitted && thisWeekSubmitted.has(tid);
+      } else {
+        submitted = pulseMap[tid] && pulseMap[tid].has(wk.start);
+      }
+      var cell;
+      if (submitted) {
+        cell = '<span title="سلّمت" style="display:inline-block;width:28px;height:28px;background:#ECFDF5;border:2px solid #6EE7B7;border-radius:8px;text-align:center;line-height:26px;font-size:14px">✅</span>';
+      } else if (wk.isCurrent) {
+        cell = '<span title="لم تسلّم بعد" style="display:inline-block;width:28px;height:28px;background:#FEF2F2;border:2px solid #FCA5A5;border-radius:8px;text-align:center;line-height:26px;font-size:14px">🔴</span>';
+      } else {
+        cell = '<span title="لم تسلّم" style="display:inline-block;width:28px;height:28px;background:#F3F4F6;border:2px solid #E5E7EB;border-radius:8px;text-align:center;line-height:26px;font-size:12px;color:#9CA3AF">—</span>';
+      }
+      html += '<td style="padding:10px 8px;text-align:center">' + cell + '</td>';
+    });
+
+    // زر الإجراء
+    if (isLate) {
+      html += '<td style="padding:10px 8px;text-align:center">' +
+        '<button onclick="sendCoordReminder(\'' + tid + '\',\'' + name.replace(/'/g,"\'") + '\',\'plan\')" ' +
+        'style="padding:4px 10px;background:#EDE9FE;border:1px solid #C4B5FD;border-radius:8px;color:#6C3DD6;font-size:11px;font-weight:700;cursor:pointer">💬 تذكير</button>' +
+        '</td>';
+    } else {
+      html += '<td style="padding:10px 8px;text-align:center;color:#6EE7B7;font-size:18px">✓</td>';
+    }
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div></div>';
+  return html;
+}
+
 // ══════════ 1. لوحة التنسيق ══════════
 async function loadCoordDashboard() {
   var area = document.getElementById('coord-content-area');
@@ -3514,7 +3603,9 @@ async function loadCoordDashboard() {
       var name = t.teacher_name_ar || t.teacher_name || '—';
       if (id && !seenIds[id]) {
         seenIds[id] = true;
-        uniqueTeachers.push({ staff_db_id: id, teacher_name_ar: name, class_name: t.class_name || coordScope });
+        if (id !== staffDbId && id !== window._myStaffDbId) {
+          uniqueTeachers.push({ staff_db_id: id, teacher_name_ar: name, class_name: t.class_name || coordScope });
+        }
       }
     });
 
@@ -3538,6 +3629,16 @@ async function loadCoordDashboard() {
     // المتأخرات عن التسليم
     var lateTeachers = uniqueTeachers.filter(function(t){ return !submittedSet.has(t.staff_db_id||t.teacher_name_ar||''); });
 
+    // ── شبكة النبض: جلب آخر 4 أسابيع من planning_records ──
+    var weeksData = [];
+    try {
+      var fourWeeksAgo = new Date(); fourWeeksAgo.setDate(fourWeeksAgo.getDate()-28);
+      var pulseRes = await fetch(sbUrl+'/rest/v1/planning_records?academic_year=eq.2026-2027&submitted_at=gte.'+fourWeeksAgo.toISOString()+'&select=staff_db_id,week_start_date,status&order=week_start_date.desc&limit=500',{headers: coordHeaders()});
+      weeksData = await pulseRes.json();
+      if (!Array.isArray(weeksData)) weeksData = [];
+    } catch(e) { weeksData = []; }
+    window._coordPulseData = weeksData;
+
     var badgeEl = document.getElementById('coordBadge');
     if (badgeEl) {
       if (lateTeachers.length > 0) { badgeEl.textContent = lateTeachers.length; badgeEl.style.display='inline-block'; }
@@ -3551,33 +3652,8 @@ async function loadCoordDashboard() {
         kpiCard('📝', 'خطط هذا الأسبوع', submittedSet.size + ' / ' + uniqueTeachers.length, submittedSet.size===uniqueTeachers.length?'#059669':'#D97706') +
         kpiCard('👁', 'زيارات هذا الشهر', obsCount, '#0EA5E9') +
       '</div>' +
-      // تنبيهات المتأخرات
-      (lateTeachers.length > 0 ?
-        '<div style="background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:12px;padding:16px;margin-bottom:20px">' +
-          '<div style="font-weight:800;color:#C2410C;font-size:14px;margin-bottom:10px">⚠️ لم تُسلِّم الخطة هذا الأسبوع</div>' +
-          lateTeachers.map(function(t){
-            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #FED7AA;font-size:13px">' +
-              '<span style="color:#1E293B;font-weight:700">' + (t.teacher_name_ar||'—') + '</span>' +
-              '<button onclick="sendCoordReminder(\'' + (t.staff_db_id||'') + '\',\'' + (t.teacher_name_ar||'').replace(/'/g,"\\'") + '\',\'plan\')" ' +
-              'style="padding:5px 14px;background:#FFF;border:1.5px solid #6C3DD6;border-radius:8px;color:#6C3DD6;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">تذكير 💬</button>' +
-            '</div>';
-          }).join('') +
-        '</div>' : '') +
-      // نشاط أخير
-      '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px">' +
-        '<div style="font-weight:800;font-size:14px;color:var(--text);margin-bottom:12px">نظرة سريعة على فريقي</div>' +
-        '<div style="display:flex;flex-direction:column;gap:8px">' +
-          uniqueTeachers.slice(0,8).map(function(t){
-            var submitted = submittedSet.has(t.staff_db_id||t.teacher_name_ar||'');
-            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg);border-radius:10px;font-size:13px">' +
-              '<span style="color:var(--text);font-weight:700">' + (t.teacher_name_ar||'—') + '</span>' +
-              '<span style="padding:3px 10px;border-radius:8px;font-size:12px;font-weight:700;' +
-                (submitted?'background:#ECFDF5;color:#059669':'background:#FFF7ED;color:#D97706') + '">' +
-                (submitted?'✅ مُسلَّمة':'⏳ معلقة') + '</span>' +
-            '</div>';
-          }).join('') +
-        '</div>' +
-      '</div>';
+      // شبكة النبض الأسبوعي (تحل محل المتأخرات + نظرة سريعة)
+      buildPulseGrid(uniqueTeachers, submittedSet, lateTeachers, window._coordPulseData || [], staffDbId);
   } catch(e) {
     area.innerHTML = '<div style="text-align:center;padding:40px;color:#EF4444">❌ خطأ في التحميل</div>';
   }
@@ -3632,6 +3708,13 @@ async function loadCoordTeachers() {
       if (!byTeacher[key]) byTeacher[key] = { name: name, dbId: dbId, classes: [] };
       if (r.class_name && byTeacher[key].classes.indexOf(r.class_name)===-1) byTeacher[key].classes.push(r.class_name);
     });
+
+    // استثناء المنسقة من قائمة معلماتها
+    var selfId = window._myStaffDbId || '';
+    if (selfId && byTeacher[selfId]) delete byTeacher[selfId];
+    // أيضاً استثناء بالاسم إذا لم يُطابَق بالـ ID
+    var selfName = window._myNameAr || '';
+    Object.keys(byTeacher).forEach(function(k){ if (byTeacher[k].name === selfName) delete byTeacher[k]; });
 
     // جلب آخر زيارة لكل معلمة
     var ids = Object.keys(byTeacher);
@@ -4315,7 +4398,7 @@ async function checkCoordinatorStatus() {
     var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
     window._myToken = token || '';  // حفظ JWT في global للاستخدام في coordHeaders()
     var authHeader = 'Bearer ' + (token || sb);
-    var res = await fetch(sbUrl+'/rest/v1/staff_profiles?username=eq.'+encodeURIComponent(username)+'&select=staff_db_id,is_coordinator,coordinator_subject,coord_type,coord_scope,coord_classes,name_ar',{headers:{'apikey':sb,'Authorization':authHeader}});
+    var res = await fetch(sbUrl+'/rest/v1/staff_profiles?username=eq.'+encodeURIComponent(username)+'&select=staff_db_id,is_coordinator,coordinator_subject,coord_type,coord_scope,coord_classes,name_ar,coord_cycle,vp_cycle,role_key',{headers:{'apikey':sb,'Authorization':authHeader}});
     var rows = await res.json();
     if (!Array.isArray(rows)||!rows.length) return;
     var row = rows[0];
@@ -4325,6 +4408,9 @@ async function checkCoordinatorStatus() {
     window._myCoordType = row.coord_type || '';
     window._myCoordSubject = row.coordinator_subject || '';
     window._myCoordClasses = Array.isArray(row.coord_classes) ? row.coord_classes : [];
+    window._myCoordCycle = row.coord_cycle || '';
+    window._myVpCycle = row.vp_cycle || '';
+    window._myRoleKey = row.role_key || '';
 
     if (row.is_coordinator) {
       var btn = document.getElementById('coord-nav-btn');
