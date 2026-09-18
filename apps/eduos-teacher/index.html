@@ -4752,10 +4752,82 @@ function lpSave(status) {
 }
 
 function saveDraftWeeklyPlan() { lpSave('draft'); }
-function submitWeeklyPlan() { lpSave('submitted'); }
+function submitWeeklyPlan() {
+  // فحص ١: الأهداف قابلة للقياس
+  var check = lpValidateObjectives();
+  if (!check.ok) {
+    lpShowMsg('⚠️ ' + check.msg, '#F59E0B');
+    var ta = document.getElementById('lp-f-objectives');
+    if (ta) { ta.style.border='2px solid #F59E0B'; ta.focus(); setTimeout(function(){ta.style.border='1.5px solid #CBD5E1';},3000); }
+    return;
+  }
+  // فحص ٢: ليست نسخة مطابقة 100٪ من الأسبوع السابق
+  var copyCheck = lpCheckNotIdenticalToPrev();
+  if (!copyCheck.ok) {
+    lpShowMsg('🚫 ' + copyCheck.msg, '#DC2626');
+    // تمييز الحقول بإطار أحمر للتنبيه
+    ['lp-f-objectives','lp-f-title'].forEach(function(id){
+      var el = document.getElementById(id);
+      if (el) { el.style.border='2px solid #DC2626'; setTimeout(function(){el.style.border='1.5px solid #CBD5E1';},4000); }
+    });
+    // إظهار لوحة بلوم تلقائياً كمساعدة
+    var panel = document.getElementById('lp-bloom-panel');
+    if (panel && panel.style.display==='none') { lpBloomToggle(); }
+    return;
+  }
+  // إزالة بادج التحذير عند التسليم الناجح
+  var copyWarn = document.getElementById('lp-copy-warn');
+  if (copyWarn) copyWarn.remove();
+  _lpPrevWeekFingerprint = null;
+  lpSave('submitted');
+}
 function saveLessonPlan() { submitWeeklyPlan(); }
 
 // ── نسخ من الأسبوع السابق ──
+
+// إزالة بادج "منسوخة" تلقائياً عند تغيير المحتوى
+function lpAutoRemoveCopyWarn() {
+  if (!_lpPrevWeekFingerprint) return;
+  setTimeout(function(){
+    var current = lpGetPlanFingerprint();
+    if (current !== _lpPrevWeekFingerprint) {
+      var warn = document.getElementById('lp-copy-warn');
+      if (warn) {
+        warn.style.background = '#DCFCE7';
+        warn.style.borderColor = '#22C55E';
+        warn.style.color = '#16A34A';
+        warn.innerHTML = '✅ تم التعديل — الخطة جاهزة للتسليم';
+        setTimeout(function(){ if(warn.parentNode) warn.remove(); }, 3000);
+        _lpPrevWeekFingerprint = null;
+      }
+    }
+  }, 200);
+}
+
+// ── قاعدة رفض النسخ الكامل ──
+var _lpPrevWeekFingerprint = null; // بصمة الخطة المنسوخة
+
+function lpGetPlanFingerprint() {
+  var fields = ['lp-f-title','lp-f-objectives','lp-f-eq','lp-f-vocab','lp-f-diff','lp-f-resources','lp-f-digital'];
+  var methods = Array.from(document.querySelectorAll('input[name="lp-methods"]:checked')).map(function(c){return c.value;}).sort().join(',');
+  var assess  = Array.from(document.querySelectorAll('input[name="lp-assess"]:checked')).map(function(c){return c.value;}).sort().join(',');
+  var skills  = Array.from(document.querySelectorAll('input[name="lp-skills"]:checked')).map(function(c){return c.value;}).sort().join(',');
+  var text = fields.map(function(id){ return (document.getElementById(id)||{}).value || ''; }).join('||') + '||' + methods + '||' + assess + '||' + skills;
+  return text.trim().toLowerCase().replace(/\s+/g,' ');
+}
+
+function lpCheckNotIdenticalToPrev() {
+  if (!_lpPrevWeekFingerprint) return { ok: true }; // لم تُنسخ من الأسبوع السابق
+  var current = lpGetPlanFingerprint();
+  if (current === _lpPrevWeekFingerprint) {
+    return {
+      ok: false,
+      msg: 'الخطة مطابقة 100٪ للأسبوع السابق — يرجى تعديل عنصر واحد على الأقل (الأهداف، الأساليب، التقويم...) ليعكس تقدم الطلاب الفعلي'
+    };
+  }
+  return { ok: true };
+}
+
 function lpCopyFromPrevWeek() {
   var u = lpGetUser(); if (!u || !u.id) return;
   var cls = (document.getElementById('lp-f-class')||{}).value;
@@ -4780,7 +4852,19 @@ function lpCopyFromPrevWeek() {
       if (r.teaching_methods) { try { var tm=JSON.parse(r.teaching_methods); tm.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-methods"]');if(cb)cb.checked=true;}); } catch(e){} }
       if (r.assessment_tools) { try { var at=JSON.parse(r.assessment_tools); at.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-assess"]');if(cb)cb.checked=true;}); } catch(e){} }
       if (r.learning_skills) { try { var ls=JSON.parse(r.learning_skills); ls.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-skills"]');if(cb)cb.checked=true;}); } catch(e){} }
-      lpShowMsg('✅ تم نسخ خطة الأسبوع ' + prevWk + ' — راجعي التفاصيل وعدّليها', '#0284C7');
+      // حفظ بصمة الخطة المنسوخة للمقارنة عند التسليم
+      setTimeout(function(){ _lpPrevWeekFingerprint = lpGetPlanFingerprint(); }, 300);
+      // إظهار بادج التحذير
+      var copyWarn = document.getElementById('lp-copy-warn');
+      if (!copyWarn) {
+        copyWarn = document.createElement('div');
+        copyWarn.id = 'lp-copy-warn';
+        copyWarn.style.cssText = 'background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;padding:8px 14px;margin-top:8px;font-size:12px;color:#92400E;display:flex;align-items:center;gap:8px';
+        copyWarn.innerHTML = '⚠️ <b>منسوخة من الأسبوع السابق</b> — يجب تعديل عنصر واحد على الأقل قبل التسليم <span style="margin-right:auto;font-size:10px;color:#B45309">تغيير الأهداف أو الأساليب أو التقويم يرفع البادج تلقائياً</span>';
+        var toolsBar = document.querySelector('[id="lp-template-list"]');
+        if (toolsBar && toolsBar.parentNode) toolsBar.parentNode.insertBefore(copyWarn, toolsBar.nextSibling);
+      }
+      lpShowMsg('✅ تم نسخ خطة الأسبوع ' + prevWk + ' — عدّلي ما يلزم قبل التسليم', '#0284C7');
     }).catch(function(){ lpShowMsg('خطأ في جلب الخطة السابقة', '#DC2626'); });
 }
 
@@ -4856,6 +4940,173 @@ function lpApplySubjectDefaults(sub) {
   // تطبيق الافتراضيات
   if (def.methods) def.methods.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-methods"]');if(cb)cb.checked=true;});
   if (def.assess) def.assess.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-assess"]');if(cb)cb.checked=true;});
+}
+
+// ══════════════════════════════════════════════════════
+// نظام بلوم الثلاثي المستويات — Bloom Objectives System
+// ══════════════════════════════════════════════════════
+
+var _lpBloomData = [
+  { level:'تذكّر (Remember)', color:'#EF4444', bg:'#FEE2E2',
+    verbs:['يذكر','يُعدّد','يُعرّف','يسرد','يُسمّي','يختار','يُحدّد','يسترجع','يُكرّر'] },
+  { level:'فهم (Understand)', color:'#F97316', bg:'#FFEDD5',
+    verbs:['يشرح','يُلخّص','يُفسّر','يُمثّل','يُصنّف','يُعيد صياغة','يُقارن','يُترجم','يستنتج'] },
+  { level:'تطبيق (Apply)', color:'#EAB308', bg:'#FEF9C3',
+    verbs:['يحل','يُنفّذ','يستخدم','يُطبّق','يُجري','يحسب','يُنشئ','يُظهر','يختبر'] },
+  { level:'تحليل (Analyze)', color:'#22C55E', bg:'#DCFCE7',
+    verbs:['يُحلّل','يُقارن','يُفرّق','يُصنّف','يكتشف','يُفكّك','يستنتج','يُقيّم الأسباب','يفحص'] },
+  { level:'تقييم (Evaluate)', color:'#0EA5E9', bg:'#E0F2FE',
+    verbs:['يحكم','يُقيّم','يُبرّر','يُدافع','يُناقش','ينتقد','يختار مع تعليل','يُرجّح','يوصي'] },
+  { level:'إبداع (Create)', color:'#8B5CF6', bg:'#EDE9FE',
+    verbs:['يُصمّم','يبني','يُنتج','يُركّب','يبتكر','يُخطّط','يُكوّن','يُؤلّف','يُطوّر'] }
+];
+
+// أفعال ضعيفة غير قابلة للقياس
+var _lpWeakVerbs = ['يفهم','يعرف','يدرك','يتعرف','يلاحظ','يستوعب','يُدرك','يستفيد','يُقدّر','يُحب','يُحسن'];
+
+function lpBloomToggle() {
+  var panel = document.getElementById('lp-bloom-panel');
+  if (!panel) return;
+  if (panel.style.display === 'none') {
+    panel.style.display = 'block';
+    lpRenderBloomPanel();
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+function lpRenderBloomPanel() {
+  var container = document.getElementById('lp-bloom-rows');
+  if (!container) return;
+  container.innerHTML = _lpBloomData.map(function(lvl) {
+    return '<div style="margin-bottom:8px">' +
+      '<div style="font-size:11px;font-weight:700;color:' + lvl.color + ';margin-bottom:4px">' + lvl.level + '</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:4px">' +
+      lvl.verbs.map(function(v) {
+        return '<button type="button" onclick="lpInsertVerb('' + v + '')" style="background:' + lvl.bg + ';color:' + lvl.color + ';border:1px solid ' + lvl.color + '40;border-radius:20px;padding:3px 10px;font-family:Tajawal,Arial,sans-serif;font-size:12px;cursor:pointer;font-weight:600">' + v + '</button>';
+      }).join('') +
+      '</div></div>';
+  }).join('');
+}
+
+function lpInsertVerb(verb) {
+  var ta = document.getElementById('lp-f-objectives');
+  if (!ta) return;
+  var current = ta.value;
+  // ابحث عن آخر سطر رقمي منتهٍ أو أضف سطراً جديداً
+  var lines = current.split('\n');
+  var lastNum = 0;
+  lines.forEach(function(l){ var m=l.match(/^(\d+)\./); if(m) lastNum=parseInt(m[1]); });
+  var prefix = (lastNum+1) + '. سيكون الطالب قادراً على ' + verb + ' ';
+  if (current && !current.endsWith('\n')) ta.value = current + '\n' + prefix;
+  else ta.value = current + prefix;
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+  lpCheckObjQuality(ta.value);
+}
+
+function lpCheckObjQuality(text) {
+  var fb = document.getElementById('lp-obj-feedback');
+  if (!fb) return;
+  if (!text || text.trim().length < 10) { fb.style.display='none'; return; }
+  
+  var lines = text.split('\n').filter(function(l){ return l.trim().length > 5; });
+  var weakFound = [];
+  var goodCount = 0;
+  
+  lines.forEach(function(line) {
+    var hasWeak = _lpWeakVerbs.some(function(w){ return line.includes(w); });
+    var hasGood = ['يحل','يشرح','يُلخّص','يُصمّم','يبني','يُنتج','يُحلّل','يُقارن','يُقيّم','يُفسّر',
+      'يذكر','يُعدّد','يُعرّف','يسرد','يُسمّي','يُحدّد','يختار','يُنفّذ','يستخدم','يُطبّق',
+      'يحسب','يُجري','يختبر','يُفرّق','يُصنّف','يكتشف','يستنتج','يحكم','يُبرّر','يُناقش',
+      'يبتكر','يُخطّط','يُكوّن','يُطوّر','يُركّب','يُؤلّف'].some(function(g){ return line.includes(g); });
+    if (hasWeak) weakFound.push(line.trim().substring(0,40));
+    if (hasGood && !hasWeak) goodCount++;
+  });
+  
+  if (weakFound.length > 0) {
+    fb.style.display = 'block';
+    fb.innerHTML = '<div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;padding:8px 12px;font-size:12px;color:#92400E">' +
+      '⚠️ <b>أفعال صعبة القياس:</b> يُنصح باستبدالها بأفعال بلوم<br>' +
+      '<span style="color:#B45309">' + weakFound.join(' · ') + '</span>' +
+      ' <button type="button" onclick="lpAIImproveObj()" style="background:#F59E0B;color:#fff;border:none;border-radius:6px;padding:2px 10px;font-family:Tajawal,Arial,sans-serif;font-size:11px;cursor:pointer;margin-right:8px">✨ AI يحسّن تلقائياً</button>' +
+      '</div>';
+  } else if (goodCount >= lines.length && lines.length > 0) {
+    fb.style.display = 'block';
+    fb.innerHTML = '<div style="background:#DCFCE7;border:1px solid #22C55E;border-radius:8px;padding:6px 12px;font-size:12px;color:#16A34A">✅ أهداف قابلة للقياس — ممتاز!</div>';
+  } else {
+    fb.style.display = 'none';
+  }
+}
+
+// ── المستوى ٢: AI يحسّن الأهداف الضعيفة ──
+function lpAIImproveObj() {
+  var ta = document.getElementById('lp-f-objectives');
+  var sub = (document.getElementById('lp-f-subject')||{}).value || 'المادة';
+  var title = (document.getElementById('lp-f-title')||{}).value || '';
+  var btn = document.getElementById('lp-improve-btn');
+  if (!ta || !ta.value.trim()) { lpShowMsg('اكتبي هدفاً أولاً ثم اضغطي تحسين', '#F59E0B'); return; }
+  if (btn) { btn.disabled=true; btn.textContent='⏳...'; }
+  var currentObj = ta.value;
+  var prompt = 'أنت مقيّم تربوي متخصص. حوّل هذه الأهداف إلى أهداف قابلة للقياس باستخدام أفعال بلوم السلوكية (يحل، يشرح، يصمم، يحلل... الخ). المادة: ' + sub + '. عنوان الدرس: ' + title + '. الأهداف الحالية:\n' + currentObj + '\n\nاكتب فقط الأهداف المحسّنة مرقّمة بدون مقدمة.';
+  if (window.askAI) {
+    window.askAI(prompt, function(resp) {
+      if (btn) { btn.disabled=false; btn.textContent='✨ AI يحسّن'; }
+      if (!resp) { lpShowMsg('لم يستجب الذكاء الاصطناعي', '#DC2626'); return; }
+      // عرض نافذة مقارنة
+      lpShowObjComparison(currentObj, resp.trim());
+    });
+  } else {
+    if (btn) { btn.disabled=false; btn.textContent='✨ AI يحسّن'; }
+    lpShowMsg('AI غير متاح حالياً', '#94A3B8');
+  }
+}
+
+function lpShowObjComparison(original, improved) {
+  var existing = document.getElementById('lp-obj-comparison');
+  if (existing) existing.remove();
+  var div = document.createElement('div');
+  div.id = 'lp-obj-comparison';
+  div.style.cssText = 'background:#fff;border:2px solid #6C3DD6;border-radius:12px;padding:16px;margin-top:8px';
+  div.innerHTML = '<div style="font-size:12px;font-weight:800;color:#6C3DD6;margin-bottom:10px">✨ مقترح الذكاء الاصطناعي:</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">' +
+    '<div><div style="font-size:11px;color:#EF4444;font-weight:700;margin-bottom:4px">⚠️ الأصلي</div><div style="background:#FEF2F2;padding:8px;border-radius:6px;font-size:12px;white-space:pre-wrap;color:#64748B">' + original + '</div></div>' +
+    '<div><div style="font-size:11px;color:#16A34A;font-weight:700;margin-bottom:4px">✅ المحسّن (قابل للقياس)</div><div style="background:#DCFCE7;padding:8px;border-radius:6px;font-size:12px;white-space:pre-wrap;color:#1e293b">' + improved + '</div></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px">' +
+    '<button type="button" onclick="lpApplyImprovedObj(this)" data-improved="' + improved.replace(/"/g,'&quot;') + '" style="background:#6C3DD6;color:#fff;border:none;border-radius:8px;padding:6px 16px;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">✅ تطبيق المحسّن</button>' +
+    '<button type="button" onclick="this.closest('#lp-obj-comparison').remove()" style="background:#F1F5F9;color:#64748B;border:none;border-radius:8px;padding:6px 16px;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">إبقاء الأصلي</button>' +
+    '</div>';
+  var ta = document.getElementById('lp-f-objectives');
+  ta.parentNode.insertBefore(div, ta.nextSibling);
+}
+
+function lpApplyImprovedObj(btn) {
+  var improved = btn.getAttribute('data-improved');
+  var ta = document.getElementById('lp-f-objectives');
+  if (ta && improved) {
+    ta.value = improved;
+    lpCheckObjQuality(improved);
+  }
+  var panel = document.getElementById('lp-obj-comparison');
+  if (panel) panel.remove();
+  lpShowMsg('✅ تم تطبيق الأهداف المحسّنة', '#16A34A');
+}
+
+// ── المستوى ٣: فحص تلقائي قبل التسليم ──
+function lpValidateObjectives() {
+  var ta = document.getElementById('lp-f-objectives');
+  if (!ta || !ta.value.trim()) return { ok: false, msg: 'يرجى كتابة الأهداف التعلمية' };
+  var text = ta.value;
+  var lines = text.split('\n').filter(function(l){ return l.trim().length > 5; });
+  if (lines.length < 1) return { ok: false, msg: 'يرجى كتابة هدف واحد على الأقل' };
+  var weakFound = lines.filter(function(line){
+    return _lpWeakVerbs.some(function(w){ return line.includes(w); });
+  });
+  if (weakFound.length === lines.length) {
+    return { ok: false, msg: 'جميع الأهداف تحتوي على أفعال صعبة القياس ("يفهم"، "يعرف"...) — يرجى تحسينها أو استخدام AI يحسّن' };
+  }
+  return { ok: true };
 }
 
 // ── AI يكمل الأهداف ──
@@ -5072,8 +5323,31 @@ function printWeeklyPlan() {
         <div id="lp-template-list" style="display:none;width:100%;margin-top:4px"></div>
       </div>
 
-      <div style="margin-bottom:10px"><label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">عنوان الدرس <span style="color:#DC2626">*</span></label><input type="text" id="lp-f-title"  placeholder="عنوان الوحدة / Lesson Title" style="width:100%;padding:9px 12px;border:1.5px solid #CBD5E1;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:14px;box-sizing:border-box"></div>
-      <div style="margin-bottom:10px"><label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">الأهداف التعلمية <span style="color:#DC2626">*</span></label><textarea id="lp-f-objectives" rows="3" placeholder="بعد نهاية الأسبوع سيكون الطالب قادراً على:&#10;1. ..." style="width:100%;padding:9px 12px;border:1.5px solid #CBD5E1;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:13px;resize:vertical;box-sizing:border-box"></textarea></div>
+      <div style="margin-bottom:10px"><label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">عنوان الدرس <span style="color:#DC2626">*</span></label><input type="text" id="lp-f-title" oninput="lpAutoRemoveCopyWarn()" placeholder="عنوان الوحدة / Lesson Title" style="width:100%;padding:9px 12px;border:1.5px solid #CBD5E1;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:14px;box-sizing:border-box"></div>
+      <div style="margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label style="font-size:12px;font-weight:700;color:#374151">الأهداف التعلمية <span style="color:#DC2626">*</span></label>
+          <div style="display:flex;gap:6px">
+            <button type="button" onclick="lpBloomToggle()" style="background:#EDE9FE;color:#6C3DD6;border:none;border-radius:6px;padding:3px 10px;font-family:Tajawal,Arial,sans-serif;font-size:11px;font-weight:700;cursor:pointer">🧠 أفعال بلوم</button>
+            <button type="button" onclick="lpAIImproveObj()" id="lp-improve-btn" style="background:#FEF3C7;color:#92400E;border:none;border-radius:6px;padding:3px 10px;font-family:Tajawal,Arial,sans-serif;font-size:11px;font-weight:700;cursor:pointer">✨ AI يحسّن</button>
+          </div>
+        </div>
+        <!-- لوحة بلوم المنبثقة -->
+        <div id="lp-bloom-panel" style="display:none;background:#fff;border:1.5px solid #6C3DD6;border-radius:10px;padding:12px;margin-bottom:8px">
+          <div style="font-size:11px;font-weight:800;color:#6C3DD6;margin-bottom:10px">🧠 بنك أفعال بلوم — اضغطي فعلاً لإدراجه في الهدف</div>
+          <div id="lp-bloom-rows"></div>
+          <div style="margin-top:10px;padding-top:10px;border-top:1px solid #E2E8F0">
+            <div style="font-size:11px;color:#64748B;margin-bottom:6px">📝 صيغة الهدف المقترحة:</div>
+            <div style="font-size:12px;color:#374151;background:#F8FAFC;padding:8px;border-radius:6px;direction:rtl">
+              في نهاية الدرس، سيكون الطالب قادراً على: <span style="color:#6C3DD6;font-weight:700">[فعل بلوم]</span> + <span style="color:#0284C7;font-weight:700">[المحتوى]</span> + <span style="color:#16A34A;font-weight:700">[المعيار/الشرط]</span>
+            </div>
+            <div style="font-size:11px;color:#94A3B8;margin-top:4px">مثال: سيكون الطالب قادراً على <b>حل</b> 5 مسائل جمع كسور بدقة 80٪ على الأقل</div>
+          </div>
+        </div>
+        <!-- فحص جودة الأهداف -->
+        <div id="lp-obj-feedback" style="display:none;margin-bottom:6px"></div>
+        <textarea id="lp-f-objectives" rows="4" oninput="lpCheckObjQuality(this.value)" placeholder="بعد نهاية الأسبوع سيكون الطالب قادراً على:&#10;1. يحل... / يشرح... / يصمم...&#10;2. &#10;3. ..." style="width:100%;padding:9px 12px;border:1.5px solid #CBD5E1;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:13px;resize:vertical;box-sizing:border-box"></textarea>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div><label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">السؤال الجوهري</label><textarea id="lp-f-eq" rows="2" placeholder="سؤال يثير التفكير..." style="width:100%;padding:9px 12px;border:1.5px solid #CBD5E1;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:13px;resize:vertical;box-sizing:border-box"></textarea></div>
         <div><label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">مفردات جديدة</label><textarea id="lp-f-vocab" rows="2" placeholder="كلمة 1، كلمة 2..." style="width:100%;padding:9px 12px;border:1.5px solid #CBD5E1;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:13px;resize:vertical;box-sizing:border-box"></textarea></div>
