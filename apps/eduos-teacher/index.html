@@ -4558,6 +4558,12 @@ function editWeeklyPlan(id, evt) {
     lpSetChecks('lp-skill', r.learning_skills || []);
     lpSetChecks('lp-strategy', r.teaching_strategies || []);
     lpSetChecks('lp-assess', r.formative_assessment || []);
+    // استعادة سلم التقدير
+    _lpRubricData = [];
+    if (r.rubric_data) { try { _lpRubricData = JSON.parse(r.rubric_data); } catch(e){} }
+    lpRenderRubric();
+    if (r.rubric_task) { lpSetVal('lp-rubric-task', r.rubric_task); }
+    if (r.rubric_type) { var rtChk=document.querySelector('input[name="lp-rubric-type"][value="'+r.rubric_type+'"]'); if(rtChk) rtChk.checked=true; }
     var cls = document.getElementById('lp-f-class');
     if (r.class_name && cls) { cls.value = r.class_name; lpFillSubjects(r.subject); lpFetchSENStudents(r.class_name); }
   });
@@ -4687,6 +4693,12 @@ function resetLpForm() {
   var sp=document.getElementById('lp-sen-panel'); if(sp) sp.style.display='none';
   var sn=document.getElementById('lp-sen-none'); if(sn) sn.style.display='none';
   var sl=document.getElementById('lp-sen-list'); if(sl) sl.innerHTML='';
+  // تصفير سلم التقدير
+  _lpRubricData = [];
+  lpRenderRubric();
+  var rtEl = document.querySelector('input[name="lp-rubric-type"][value="formative"]');
+  if (rtEl) rtEl.checked = true;
+  var rtask = document.getElementById('lp-rubric-task'); if (rtask) rtask.value = '';
 }
 
 function lpCollectData(status) {
@@ -4726,7 +4738,10 @@ function lpCollectData(status) {
     submitted_at: status === 'submitted' ? new Date().toISOString() : null,
     self_reflection_at: ((document.getElementById('lp-f-reflection')||{}).value||'').trim() ? new Date().toISOString() : undefined,
     revised_at: (_lpCurrentId && status === 'submitted') ? new Date().toISOString() : undefined,
-    revision_count: _lpCurrentId ? (_lpRevCount + 1) : 0
+    revision_count: _lpCurrentId ? (_lpRevCount + 1) : 0,
+    rubric_data: _lpRubricData.length > 0 ? JSON.stringify(_lpRubricData) : null,
+    rubric_type: (document.querySelector('input[name="lp-rubric-type"]:checked') || {}).value || 'formative',
+    rubric_task: (document.getElementById('lp-rubric-task') || {}).value || null
   };
 }
 
@@ -4922,6 +4937,9 @@ function lpApplyTemplate(id, btn) {
       if (r.teaching_methods) { try { var tm=JSON.parse(r.teaching_methods); tm.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-methods"]');if(cb)cb.checked=true;}); } catch(e){} }
       if (r.assessment_tools) { try { var at=JSON.parse(r.assessment_tools); at.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-assess"]');if(cb)cb.checked=true;}); } catch(e){} }
       if (r.learning_skills) { try { var ls=JSON.parse(r.learning_skills); ls.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-skills"]:checked');if(cb)cb.checked=true;}); } catch(e){} }
+      // نسخ سلم التقدير من الأسبوع السابق
+      if (r.rubric_data) { try { _lpRubricData = JSON.parse(r.rubric_data); lpRenderRubric(); } catch(e){} }
+      if (r.rubric_task) { lpSetVal('lp-rubric-task', r.rubric_task); }
       if (r.timebox) lpRestoreTimebox(r.timebox);
       var tp = document.getElementById('lp-template-list'); if(tp) tp.style.display='none';
       lpShowMsg('✅ تم تطبيق القالب — عدّلي ما يلزم', '#16A34A');
@@ -4940,6 +4958,162 @@ function lpApplySubjectDefaults(sub) {
   // تطبيق الافتراضيات
   if (def.methods) def.methods.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-methods"]');if(cb)cb.checked=true;});
   if (def.assess) def.assess.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-assess"]');if(cb)cb.checked=true;});
+}
+
+// ══════════════════════════════════════════════════════
+// نظام سلم التقدير — Assessment Rubric System v1.0
+// ══════════════════════════════════════════════════════
+var _lpRubricData = [];
+
+var _LP_RUBRIC_LEVELS = [
+  { key:'advanced',   label:'متقدم',       color:'#16A34A', bg:'#DCFCE7', border:'#86EFAC', emoji:'🟢', score:4 },
+  { key:'proficient', label:'متقن',        color:'#2563EB', bg:'#DBEAFE', border:'#93C5FD', emoji:'🔵', score:3 },
+  { key:'developing', label:'قيد التطور',  color:'#D97706', bg:'#FEF3C7', border:'#FCD34D', emoji:'🟡', score:2 },
+  { key:'emerging',   label:'ناشئ',        color:'#DC2626', bg:'#FEE2E2', border:'#FCA5A5', emoji:'🔴', score:1 }
+];
+
+function lpRenderRubric() {
+  var container = document.getElementById('lp-rubric-container');
+  if (!container) return;
+  if (_lpRubricData.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:16px;color:#64748B;font-size:12px;background:#fff;border-radius:8px;border:1px dashed #86EFAC">اضغطي <b>🤖 AI ينشئ السلم</b> لإنشاء سلم تقدير مرتبط تلقائياً بأهدافك التعلمية</div>';
+    var qDiv = document.getElementById('lp-rubric-quality');
+    if (qDiv) qDiv.style.display = 'none';
+    return;
+  }
+  var html = '<div style="overflow-x:auto;border-radius:8px;border:1px solid #86EFAC">';
+  html += '<table style="width:100%;border-collapse:collapse;font-family:Tajawal,Arial,sans-serif;font-size:11px;min-width:600px">';
+  // رأس الجدول
+  html += '<thead><tr>';
+  html += '<th style="background:#1E293B;color:#fff;padding:8px 10px;text-align:right;width:22%;font-size:11px">معيار التقييم<br><span style="font-weight:400;opacity:.7;font-size:10px">مرتبط بهدف تعلمي</span></th>';
+  _LP_RUBRIC_LEVELS.forEach(function(lvl) {
+    html += '<th style="background:' + lvl.color + ';color:#fff;padding:8px;text-align:center;font-size:11px">' + lvl.emoji + ' ' + lvl.label + '<br><span style="font-weight:400;opacity:.85;font-size:10px">(' + lvl.score + ' نقاط)</span></th>';
+  });
+  html += '<th style="background:#374151;color:#fff;padding:6px;text-align:center;width:36px;font-size:10px">حذف</th>';
+  html += '</tr></thead><tbody>';
+  _lpRubricData.forEach(function(row, idx) {
+    html += '<tr>';
+    html += '<td style="background:#F8FAFC;border:1px solid #E2E8F0;padding:6px;vertical-align:top"><textarea oninput="_lpRubricData[' + idx + '].criterion=this.value;lpRubricQualityCheck()" rows="3" style="width:100%;border:none;background:transparent;font-family:Tajawal,Arial,sans-serif;font-size:11px;font-weight:700;color:#1E293B;resize:vertical;min-height:60px" placeholder="المعيار (مرتبط بهدف تعلمي)...">' + (row.criterion||'') + '</textarea></td>';
+    _LP_RUBRIC_LEVELS.forEach(function(lvl) {
+      html += '<td style="background:' + lvl.bg + ';border:1px solid ' + lvl.border + ';padding:6px;vertical-align:top"><textarea oninput="_lpRubricData[' + idx + '].' + lvl.key + '=this.value;lpRubricQualityCheck()" rows="3" style="width:100%;border:none;background:transparent;font-family:Tajawal,Arial,sans-serif;font-size:10px;color:#374151;resize:vertical;min-height:60px" placeholder="وصف الأداء...">' + (row[lvl.key]||'') + '</textarea></td>';
+    });
+    html += '<td style="background:#FEF2F2;border:1px solid #FECACA;padding:4px;text-align:center;vertical-align:middle"><button type="button" onclick="lpDeleteRubricRow(' + idx + ')" style="background:#DC2626;color:#fff;border:none;border-radius:5px;padding:4px 7px;cursor:pointer;font-size:13px;line-height:1">×</button></td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '<button type="button" onclick="lpAddRubricRow()" style="margin-top:7px;background:#F0FDF4;color:#16A34A;border:1px solid #86EFAC;border-radius:7px;padding:5px 14px;font-family:Tajawal,Arial,sans-serif;font-size:11px;font-weight:700;cursor:pointer">+ معيار جديد</button>';
+  container.innerHTML = html;
+  lpRubricQualityCheck();
+}
+
+function lpAddRubricRow(criterion, advanced, proficient, developing, emerging) {
+  _lpRubricData.push({ criterion:criterion||'', advanced:advanced||'', proficient:proficient||'', developing:developing||'', emerging:emerging||'' });
+  lpRenderRubric();
+}
+
+function lpDeleteRubricRow(idx) {
+  _lpRubricData.splice(idx, 1);
+  lpRenderRubric();
+}
+
+function lpAIGenerateRubric() {
+  var objectives = (document.getElementById('lp-f-objectives')||{}).value || '';
+  var subject    = (document.getElementById('lp-f-subject')||{}).value || 'المادة';
+  var title      = (document.getElementById('lp-f-title')||{}).value || '';
+  var task       = (document.getElementById('lp-rubric-task')||{}).value || '';
+  var btn = document.getElementById('lp-rubric-ai-btn');
+  if (!objectives.trim()) { lpShowMsg('اكتبي الأهداف التعلمية أولاً', '#F59E0B'); return; }
+  if (btn) { btn.disabled=true; btn.textContent='⏳ جارٍ الإنشاء...'; }
+  var prompt = 'أنت مقيّم أكاديمي متخصص. أنشئ سلم تقدير تحليلياً (Analytic Rubric) بالعربية لـ"' + (task||'نشاط الدرس') + '".
+المادة: ' + subject + '
+الدرس: ' + title + '
+الأهداف:
+' + objectives + '
+
+قواعد السلم:
+- معيار واحد لكل هدف رئيسي
+- لغة قابلة للملاحظة (لا "يفهم"/"يعرف")
+- مستويات متمايزة بوضوح
+- تجنب الأوصاف الذاتية ("ممتاز"/"جيد")
+
+أرسل JSON فقط بدون شرح:
+[{"criterion":"...","advanced":"...","proficient":"...","developing":"...","emerging":"..."}]';
+  if (window.askAI) {
+    window.askAI(prompt, function(resp) {
+      if (btn) { btn.disabled=false; btn.textContent='🤖 AI ينشئ السلم'; }
+      if (!resp) { lpShowMsg('لم يستجب AI', '#DC2626'); return; }
+      try {
+        var match = resp.match(/\[[\s\S]*\]/);
+        if (!match) throw new Error('no json');
+        _lpRubricData = JSON.parse(match[0]);
+        lpRenderRubric();
+        lpShowMsg('✅ تم إنشاء سلم التقدير — راجعي كل خلية وعدّلي', '#16A34A');
+      } catch(e) {
+        // fallback: أنشئ صفوف فارغة من الأهداف
+        lpRubricFallback(objectives);
+        lpShowMsg('⚠️ AI أنشأ هيكلاً — عبّئي أوصاف كل مستوى', '#F59E0B');
+      }
+    });
+  } else {
+    if (btn) { btn.disabled=false; btn.textContent='🤖 AI ينشئ السلم'; }
+    lpRubricFallback(objectives);
+    lpShowMsg('⚠️ AI غير متاح — أُنشئت معايير فارغة', '#F59E0B');
+  }
+}
+
+function lpRubricFallback(objectives) {
+  var lines = objectives.split('\n').filter(function(l){ return l.trim().length > 5; });
+  _lpRubricData = lines.map(function(line) {
+    return { criterion: line.replace(/^\d+\.\s*/, '').trim(), advanced:'', proficient:'', developing:'', emerging:'' };
+  });
+  if (!_lpRubricData.length) _lpRubricData.push({ criterion:'', advanced:'', proficient:'', developing:'', emerging:'' });
+  lpRenderRubric();
+}
+
+function lpRubricQualityCheck() {
+  var qDiv = document.getElementById('lp-rubric-quality');
+  if (!qDiv || _lpRubricData.length === 0) { if(qDiv) qDiv.style.display='none'; return; }
+  var weakWords = ['ممتاز','جيد','مقبول','ضعيف','يفهم','يعرف','جيداً','بشكل جيد','بشكل ممتاز'];
+  var issues = [];
+  _lpRubricData.forEach(function(row, i) {
+    var n = i + 1;
+    if (!row.criterion || row.criterion.trim().length < 5) issues.push('المعيار ' + n + ': يحتاج وصف معيار');
+    var allText = [row.advanced, row.proficient, row.developing, row.emerging].join(' ');
+    if (weakWords.some(function(w){ return allText.includes(w); })) issues.push('المعيار ' + n + ': أوصاف ذاتية — استبدليها بأفعال قابلة للملاحظة');
+    var empty = [row.advanced, row.proficient, row.developing, row.emerging].filter(function(v){ return !v||!v.trim(); }).length;
+    if (empty > 0) issues.push('المعيار ' + n + ': ' + empty + ' خلية فارغة');
+  });
+  qDiv.style.display = 'block';
+  qDiv.innerHTML = issues.length === 0
+    ? '<div style="background:#DCFCE7;border:1px solid #86EFAC;border-radius:7px;padding:7px 12px;font-size:11px;color:#15803D">✅ سلم التقدير متكامل وجودته عالية!</div>'
+    : '<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:7px;padding:9px 12px;font-size:11px;color:#92400E"><b>⚠️ تحسينات مقترحة:</b><ul style="margin:5px 0 0;padding-right:16px">' + issues.map(function(i){ return '<li>' + i + '</li>'; }).join('') + '</ul></div>';
+}
+
+function lpPrintRubric() {
+  if (_lpRubricData.length === 0) { lpShowMsg('أضيفي معايير السلم أولاً', '#F59E0B'); return; }
+  var subject = (document.getElementById('lp-f-subject')||{}).value || '';
+  var title   = (document.getElementById('lp-f-title')||{}).value || '';
+  var task    = (document.getElementById('lp-rubric-task')||{}).value || '';
+  var typeEl  = document.querySelector('input[name="lp-rubric-type"]:checked');
+  var typeMap = { formative:'تكويني', summative:'ختامي', diagnostic:'تشخيصي' };
+  var typeAr  = typeEl ? (typeMap[typeEl.value] || typeEl.value) : '';
+  var win = window.open('', '_blank');
+  if (!win) return;
+  win.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>سلم التقدير</title>');
+  win.document.write('<style>@import url("https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap");body{font-family:Tajawal,Arial,sans-serif;padding:24px;direction:rtl;font-size:13px}h2{color:#6C3DD6;font-size:18px;margin-bottom:4px}p{margin:2px 0;color:#374151}table{width:100%;border-collapse:collapse;margin-top:14px}th,td{border:1px solid #ddd;padding:10px;text-align:right;vertical-align:top}th{color:#fff;font-size:13px}.cr{background:#f8fafc;font-weight:700}.adv{background:#DCFCE7}.prof{background:#DBEAFE}.dev{background:#FEF3C7}.em{background:#FEE2E2}.footer{margin-top:18px;font-size:10px;color:#94A3B8;border-top:1px solid #eee;padding-top:8px}@media print{button{display:none}}</style>');
+  win.document.write('</head><body>');
+  win.document.write('<h2>سلم التقدير</h2>');
+  win.document.write('<p><b>المادة:</b> ' + subject + ' &nbsp;|&nbsp; <b>الدرس:</b> ' + title + ' &nbsp;|&nbsp; <b>النوع:</b> ' + typeAr + '</p>');
+  if (task) win.document.write('<p><b>المهمة:</b> ' + task + '</p>');
+  win.document.write('<table><tr><th class="cr">معيار التقييم</th><th style="background:#16A34A">🟢 متقدم (4)</th><th style="background:#2563EB">🔵 متقن (3)</th><th style="background:#D97706">🟡 قيد التطور (2)</th><th style="background:#DC2626">🔴 ناشئ (1)</th></tr>');
+  _lpRubricData.forEach(function(r) {
+    win.document.write('<tr><td class="cr">' + (r.criterion||'') + '</td><td class="adv">' + (r.advanced||'') + '</td><td class="prof">' + (r.proficient||'') + '</td><td class="dev">' + (r.developing||'') + '</td><td class="em">' + (r.emerging||'') + '</td></tr>');
+  });
+  win.document.write('</table>');
+  win.document.write('<div class="footer">بوابة الجود الذكية · NAFAS FOR ARTIFICIAL INTELLIGENCE · CN-6573712</div>');
+  win.document.write('</body></html>');
+  win.document.close();
+  setTimeout(function(){ win.print(); }, 500);
 }
 
 // ══════════════════════════════════════════════════════
@@ -5311,7 +5485,7 @@ function printWeeklyPlan() {
 <!-- LP Modal — at body level -->
 <!-- نافذة النموذج الكامل -->
 <div id="lp-modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;overflow-y:auto;padding:20px;box-sizing:border-box">
-  <div id="lp-modal-box" style="background:#fff;border-radius:16px;max-width:820px;margin:0 auto;padding:28px;font-family:Tajawal,Arial,sans-serif;direction:rtl">
+  <div id="lp-modal-box" style="background:#fff;border-radius:16px;max-width:820px;margin:0 auto 40px;padding:28px;font-family:Tajawal,Arial,sans-serif;direction:rtl;box-sizing:border-box">
 
     <!-- هيدر النموذج -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;border-bottom:2px solid #6C3DD6;padding-bottom:12px">
@@ -5445,6 +5619,46 @@ function printWeeklyPlan() {
         <label class="lp-check"><input type="checkbox" name="lp-assess" value="observation"> ملاحظة مباشرة</label>
         <label class="lp-check"><input type="checkbox" name="lp-assess" value="self_assess"> تقييم ذاتي</label>
         <label class="lp-check"><input type="checkbox" name="lp-assess" value="peer_assess"> تقييم الأقران</label>
+      </div>
+    </div>
+
+    <!-- ⑥.٥ سلم التقدير — Assessment Rubric -->
+    <div style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:13px;font-weight:800;color:#15803D">⑥.٥ سلم التقدير — Assessment Rubric</div>
+          <div style="font-size:11px;color:#4ADE80;margin-top:2px">مرتبط تلقائياً بالأهداف التعلمية · 4 مستويات أداء</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" onclick="lpAIGenerateRubric()" id="lp-rubric-ai-btn" style="background:#16A34A;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-family:Tajawal,Arial,sans-serif;font-size:11px;font-weight:700;cursor:pointer">🤖 AI ينشئ السلم</button>
+          <button type="button" onclick="lpAddRubricRow()" style="background:#fff;color:#16A34A;border:1px solid #86EFAC;border-radius:6px;padding:5px 12px;font-family:Tajawal,Arial,sans-serif;font-size:11px;font-weight:700;cursor:pointer">+ معيار يدوي</button>
+          <button type="button" onclick="lpPrintRubric()" style="background:#F1F5F9;color:#374151;border:1px solid #CBD5E1;border-radius:6px;padding:5px 12px;font-family:Tajawal,Arial,sans-serif;font-size:11px;font-weight:700;cursor:pointer">🖨️ طباعة للطلاب</button>
+        </div>
+      </div>
+      <!-- نوع التقييم + المهمة -->
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;background:#fff;border-radius:8px;padding:10px;margin-bottom:12px">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700;color:#374151">نوع التقييم:</span>
+          <label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px"><input type="radio" name="lp-rubric-type" value="formative" checked> تكويني</label>
+          <label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px"><input type="radio" name="lp-rubric-type" value="summative"> ختامي</label>
+          <label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px"><input type="radio" name="lp-rubric-type" value="diagnostic"> تشخيصي</label>
+        </div>
+        <input type="text" id="lp-rubric-task" placeholder="المهمة / النشاط المُقيَّم..." style="padding:7px 10px;border:1.5px solid #86EFAC;border-radius:6px;font-family:Tajawal,Arial,sans-serif;font-size:12px;width:100%;box-sizing:border-box">
+      </div>
+      <!-- جدول سلم التقدير -->
+      <div id="lp-rubric-container">
+        <div style="text-align:center;padding:16px;color:#64748B;font-size:12px;background:#fff;border-radius:8px;border:1px dashed #86EFAC">
+          اضغطي <b>🤖 AI ينشئ السلم</b> لإنشاء سلم تقدير مرتبط تلقائياً بأهدافك التعلمية
+        </div>
+      </div>
+      <!-- فحص الجودة -->
+      <div id="lp-rubric-quality" style="display:none;margin-top:8px"></div>
+      <!-- دليل سريع -->
+      <div style="margin-top:10px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-size:10px;text-align:center">
+        <div style="background:#DCFCE7;border-radius:6px;padding:5px;color:#15803D"><b>🟢 متقدم</b><br>يتجاوز التوقعات</div>
+        <div style="background:#DBEAFE;border-radius:6px;padding:5px;color:#1D4ED8"><b>🔵 متقن</b><br>يحقق التوقعات</div>
+        <div style="background:#FEF3C7;border-radius:6px;padding:5px;color:#92400E"><b>🟡 قيد التطور</b><br>يقترب من التوقعات</div>
+        <div style="background:#FEE2E2;border-radius:6px;padding:5px;color:#DC2626"><b>🔴 ناشئ</b><br>يحتاج دعماً مكثفاً</div>
       </div>
     </div>
 
