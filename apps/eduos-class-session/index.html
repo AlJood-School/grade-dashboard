@@ -159,11 +159,7 @@ body{
       <div class="form-group">
         <label class="form-label">الصف الدراسي</label>
         <select class="form-select" id="classSelect">
-          <option value="">اختر الصف...</option>
-          <option>KG1</option><option>KG2</option>
-          <option>الصف الأول</option><option>الصف الثاني</option>
-          <option>الصف الثالث</option><option>الصف الرابع</option>
-          <option>الصف الخامس</option><option>الصف السادس</option>
+          <option value="">جارٍ التحميل...</option>
         </select>
       </div>
       <div class="form-group">
@@ -318,9 +314,10 @@ async function checkRemoteDay(){
 }
 
 async function startSession(){
-  const cls=document.getElementById('classSelect').value;
-  const subj=document.getElementById('subjectSelect').value;
-  const topic=document.getElementById('topicInput').value;
+  // إذا وُجدت خطة مرتبطة — تُؤخذ البيانات منها أولاً
+  const cls=(_sessionPlan&&_sessionPlan.class_name)?_sessionPlan.class_name:document.getElementById('classSelect').value;
+  const subj=(_sessionPlan&&_sessionPlan.subject)?_sessionPlan.subject:document.getElementById('subjectSelect').value;
+  const topic=document.getElementById('topicInput').value||(_sessionPlan&&_sessionPlan.lesson_title)||null;
   const type=document.getElementById('typeSelect').value;
   if(!cls||!subj){alert('يرجى تحديد الصف والمادة');return;}
 
@@ -330,7 +327,8 @@ async function startSession(){
     teacher_name:user.name||user.name_ar||null,
     started_at:new Date().toISOString(), status:'active',
     is_remote:isRemoteDay,
-    remote_day_id:remoteDayId||null
+    remote_day_id:remoteDayId||null,
+    plan_id:_planId||null
   });
   if(Array.isArray(sess)&&sess.length>0) sessionId=sess[0].id;
   else sessionId='local-'+Date.now();
@@ -560,17 +558,68 @@ let _postLessonScores = {};
 
 async function fetchPlanForSession(pid){
   try{
-    const r=await sqget('planning_records?id=eq.'+pid+'&select=id,lesson_title,learning_objectives,rubric_data,rubric_task,class_name,subject');
+    const r=await sqget('planning_records?id=eq.'+pid+'&select=id,lesson_title,learning_objectives,rubric_data,rubric_task,class_name,subject,week_label');
     if(r&&r[0]){
       _sessionPlan=r[0];
       if(r[0].rubric_data){try{_sessionRubric=JSON.parse(r[0].rubric_data);}catch(e){}}
-      // عرض عنوان الدرس في الهيدر
-      var hi=document.getElementById('headerSub');
-      if(hi&&r[0].lesson_title) hi.textContent=r[0].lesson_title+' — '+(_preClass||r[0].class_name||'');
+      const cn=r[0].class_name||_preClass||'';
+      const subj=r[0].subject||_preSubject||'';
+      const title=r[0].lesson_title||'';
+      // تعبئة classSelect بالقيمة الفعلية من DB وتعطيله
+      const cs=document.getElementById('classSelect');
+      if(cs&&cn){cs.innerHTML='<option value="'+cn+'" selected>'+cn+'</option>';cs.disabled=true;}
+      // تعبئة subjectSelect وتعطيله
+      const ss=document.getElementById('subjectSelect');
+      if(ss&&subj){
+        let found=false;
+        for(let o of ss.options){if(o.value===subj||o.text===subj){o.selected=true;found=true;break;}}
+        if(!found){const op=document.createElement('option');op.value=subj;op.text=subj;op.selected=true;ss.add(op);}
+        ss.disabled=true;
+      }
+      // تعبئة موضوع الحصة من عنوان الدرس
+      const ti=document.getElementById('topicInput');
+      if(ti&&title&&!ti.value)ti.value=title;
+      // اكتشاف المرحلة تلقائياً
+      const st=document.getElementById('stageSelect');
+      if(st&&cn){const num=parseInt(cn.replace(/\D/g,''));if(cn.startsWith('KG'))st.value='kg';else if(num>=1&&num<=4)st.value='lower';else if(num>=5)st.value='upper';}
+      // بادج الخطة في العنوان الفرعي
+      const setupSub=document.getElementById('setupSub');
+      if(setupSub)setupSub.innerHTML='<span style="background:#6C3DD6;color:#fff;padding:3px 12px;border-radius:20px;font-size:13px;display:inline-block;margin-bottom:4px;">📋 مرتبطة بخطة درسية</span>&nbsp;&nbsp;'+cn+' — '+subj;
+      // هيدر
+      const hi=document.getElementById('headerSub');
+      if(hi&&title)hi.textContent=title+' — '+cn;
     }
   }catch(e){}
 }
 
+// جلب صفوف المعلمة من teacher_assignments
+async function loadClassOptions(){
+  if(_planId) return; // إذا قدمنا من خطة — classSelect سيُعبَّأ تلقائياً
+  try{
+    const u=JSON.parse(sessionStorage.getItem('edoos_user')||'{}');
+    const tid=u.id||u.staff_db_id||null;
+    let rows=[];
+    if(tid){
+      rows=await sqget('teacher_assignments?staff_db_id=eq.'+tid+'&select=class_name&order=class_name');
+    }
+    const cs=document.getElementById('classSelect');
+    if(!cs)return;
+    if(rows&&rows.length>0){
+      const unique=[...new Set(rows.map(r=>r.class_name).filter(Boolean))].sort();
+      cs.innerHTML='<option value="">اختر الصف...</option>'+unique.map(c=>'<option value="'+c+'">'+c+'</option>').join('');
+    } else {
+      // fallback: صفوف افتراضية
+      cs.innerHTML='<option value="">اختر الصف...</option>'+
+        ['KG1','KG2','1A','1B','1C','2A','2B','2C','3A','3B','3C','3D','3E','3F','4A','4B','4C','4D','4E','4F','5A','5B','5C','5D','6A','6B','6C','6D','7A','7B','7C','7D','8A','8B','8C','8D']
+        .map(c=>'<option value="'+c+'">'+c+'</option>').join('');
+    }
+  }catch(e){
+    const cs=document.getElementById('classSelect');
+    if(cs) cs.innerHTML='<option value="">اختر الصف...</option>';
+  }
+}
+
+loadClassOptions();
 checkRemoteDay();
 </script>
 </body>
