@@ -352,6 +352,7 @@ tr:hover td{background:#F8FAFC;}
       <div style="display:flex;gap:8px;margin-bottom:20px">
         <button class="btn btn-primary" id="roleTab1" onclick="switchRoleTab(1)">🗺️ خريطة الأدوار</button>
         <button class="btn" id="roleTab2" onclick="switchRoleTab(2)" style="background:var(--bg2)">🔑 الصلاحيات الدقيقة</button>
+        <button class="btn" id="roleTab3" onclick="switchRoleTab(3)" style="background:var(--bg2)">🏫 نائبات الحلقات</button>
       </div>
       <div id="roleTabContent1">
         <div class="card" style="margin-bottom:20px">
@@ -361,6 +362,17 @@ tr:hover td{background:#F8FAFC;}
         <div class="card">
           <div class="card-header"><div class="card-title">⚠️ الكادر بدون role_key محدد</div><span class="badge b-orange" id="noRoleCount">—</span></div>
           <div class="tbl-scroll"><table><thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>role الحالي</th><th>تعيين</th></tr></thead><tbody id="noRoleBody"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">⏳</td></tr></tbody></table></div>
+        </div>
+      </div>
+      <div id="roleTabContent3" style="display:none">
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-header">
+            <div class="card-title">🏫 نائبات الحلقات — تعيين نطاق كل نائبة</div>
+          </div>
+          <div class="card-body">
+            <div style="font-size:13px;color:var(--text3);margin-bottom:16px">المديرة تُعيّن نطاق كل نائبة (الحلقة الأولى / الثانية / كلتاهما). النائبة تُعيّن منسقات حلقتها فقط.</div>
+            <div id="vpCycleList"><div style="text-align:center;padding:24px;color:var(--text3)">⏳ جاري التحميل...</div></div>
+          </div>
         </div>
       </div>
       <div id="roleTabContent2" style="display:none">
@@ -1668,11 +1680,58 @@ var FINE_PERMISSIONS = {
 var permSearchList = [];
 var currentPermStaffId = null;
 function switchRoleTab(n) {
-  document.getElementById('roleTabContent1').style.display = n === 1 ? '' : 'none';
-  document.getElementById('roleTabContent2').style.display = n === 2 ? '' : 'none';
-  document.getElementById('roleTab1').className = 'btn' + (n === 1 ? ' btn-primary' : '');
-  document.getElementById('roleTab2').className = 'btn' + (n === 2 ? ' btn-primary' : '');
+  [1,2,3].forEach(function(i){
+    var c=document.getElementById('roleTabContent'+i);
+    var b=document.getElementById('roleTab'+i);
+    if(c) c.style.display = n===i ? '' : 'none';
+    if(b) b.className = 'btn' + (n===i ? ' btn-primary' : '');
+  });
   if (n === 2) loadPermissions();
+  if (n === 3) loadVpCycleList();
+}
+async function loadVpCycleList() {
+  var wrap = document.getElementById('vpCycleList'); if(!wrap) return;
+  wrap.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)">⏳</div>';
+  var res = await dbGet('staff_profiles','select=name_ar,staff_db_id,vp_cycle,role_key&role_key=eq.vice_principal&is_active=eq.true&order=name_ar.asc');
+  var vps = res.data || [];
+  if (!vps.length) { wrap.innerHTML='<div style="text-align:center;padding:32px;color:var(--text3)">لا توجد نائبات مسجّلات برمز vice_principal</div>'; return; }
+  var cycleLabels = {'cycle1':'الحلقة الأولى (1-4)','cycle2':'الحلقة الثانية (5-8)','both':'كلتا الحلقتين'};
+  var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">';
+  vps.forEach(function(vp){
+    var cur = vp.vp_cycle || '';
+    html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:18px">'
+      + '<div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:10px">' + (vp.name_ar||'—') + '</div>'
+      + '<div style="font-size:12px;color:var(--text3);margin-bottom:10px">الحلقة الحالية: <strong>' + (cycleLabels[cur]||'غير محدد') + '</strong></div>'
+      + '<select onchange="saveVpCycle(\''+vp.staff_db_id+'\',this.value)" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-family:Tajawal,Arial,sans-serif;font-size:13px">'
+      + '<option value="">-- اختري الحلقة --</option>'
+      + ['cycle1','cycle2','both'].map(function(v){ return '<option value="'+v+'"'+(cur===v?' selected':'')+'>'+cycleLabels[v]+'</option>'; }).join('')
+      + '</select>'
+      + '</div>';
+  });
+  html += '</div>';
+  wrap.innerHTML = html;
+}
+async function saveVpCycle(staffDbId, cycle) {
+  if (!cycle) return;
+  var sbUrl = window.EduOS && window.EduOS.SB_URL ? window.EduOS.SB_URL : '';
+  var sb    = window.EduOS && window.EduOS.SB_KEY ? window.EduOS.SB_KEY : '';
+  var u = JSON.parse(sessionStorage.getItem('edoos_user')||'{}');
+  var jwt = u.access_token || u.token || sb;
+  try {
+    var r = await fetch(sbUrl+'/rest/v1/staff_profiles?staff_db_id=eq.'+encodeURIComponent(staffDbId), {
+      method: 'PATCH',
+      headers: {'apikey':sb,'Authorization':'Bearer '+jwt,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body: JSON.stringify({vp_cycle: cycle})
+    });
+    if (!r.ok) throw new Error(r.status);
+    // تأكيد بصري
+    var cycleLabels = {'cycle1':'الحلقة الأولى','cycle2':'الحلقة الثانية','both':'كلتاهما'};
+    var toast = document.createElement('div');
+    toast.textContent = '✅ تم تعيين ' + cycleLabels[cycle];
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#059669;color:#fff;padding:12px 24px;border-radius:12px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;z-index:9999';
+    document.body.appendChild(toast);
+    setTimeout(function(){ toast.remove(); }, 2500);
+  } catch(e) { alert('خطأ في الحفظ: ' + e.message); }
 }
 function filterPermTable(q) { q=(q||'').trim(); renderPermTable(permSearchList.filter(function(s){return !q || (s.name_ar||'').includes(q) || (s.username||'').includes(q);})); }
 async function loadPermissions() {
