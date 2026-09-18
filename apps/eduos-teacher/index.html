@@ -4423,6 +4423,17 @@ document.addEventListener('DOMContentLoaded', () => {
 // ══════════════════════════════════════════════
 
 var _lpCurrentId = null;
+var _lpRevCount = 0;
+var _lpSubjectDefaults = {
+  'رياضيات': {methods:['collaborative','problem_solving','inquiry'], assess:['exit_ticket','whiteboard']},
+  'علوم': {methods:['inquiry','project','collaborative'], assess:['exit_ticket','observation']},
+  'عربي': {methods:['discussion','direct','reading'], assess:['oral_q','think_pair']},
+  'العربية': {methods:['discussion','direct','reading'], assess:['oral_q','think_pair']},
+  'إنجليزي': {methods:['collaborative','discussion','reading'], assess:['exit_ticket','oral_q']},
+  'تربية إسلامية': {methods:['direct','discussion','memorization'], assess:['oral_q','reflection']},
+  'اجتماعيات': {methods:['discussion','project','research'], assess:['oral_q','exit_ticket']},
+  'أخلاق': {methods:['discussion','storytelling','reflection'], assess:['reflection','oral_q']}
+};
 var LP_AR_SUBJECTS = ['عربي','العربية','اللغة العربية','تربية إسلامية','إسلامية','دراسات اجتماعية','اجتماعيات','تربية أخلاقية','أخلاق','الوطنية'];
 
 function lpIsArabicSubject(subj) {
@@ -4469,10 +4480,13 @@ function loadWeeklyPlansHistory() {
       var statusLbl = r.status === 'submitted' ? '✅ مسلَّمة' : '📝 مسودة';
       var wk = r.week_number ? 'أسبوع ' + r.week_number : '—';
       var dt = r.week_start_date ? new Date(r.week_start_date).toLocaleDateString('ar-AE',{day:'2-digit',month:'short'}) : '—';
+      var revisedBadge = r.revised_at ? '<span style="display:inline-block;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-right:3px">✏️ عُدِّلت ' + new Date(r.revised_at).toLocaleString('ar-AE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) + '</span>' : '';
+      var reflectBadge = r.self_reflection_at ? '<span style="display:inline-block;background:#F0FDF4;color:#166534;border:1px solid #BBF7D0;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-right:3px">💭 تأمل ' + new Date(r.self_reflection_at).toLocaleDateString('ar-AE',{day:'2-digit',month:'2-digit'}) + '</span>' : '';
       html += '<div class="lp-hist-row">' +
         '<div style="flex:1">' +
           '<div style="font-size:13px;font-weight:700;color:#1E293B">' + (r.lesson_title || 'بدون عنوان') + '</div>' +
           '<div style="font-size:11px;color:#94A3B8;margin-top:2px">' + (r.subject||'') + '  ·  ' + (r.class_name||'') + '  ·  ' + wk + '  ·  ' + dt + '</div>' +
+          '<div style="margin-top:4px">' + revisedBadge + reflectBadge + '</div>' +
         '</div>' +
         '<div style="font-size:11px;font-weight:700;color:' + statusCl + '">' + statusLbl + '</div>' +
         '<button onclick="editWeeklyPlan(' + r.id + ',event)" style="background:#F1F5F9;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;color:#475569">تعديل</button>' +
@@ -4514,7 +4528,8 @@ function openNewWeeklyPlan() {
   setTimeout(function() {
     document.getElementById('lp-modal-overlay').style.display = 'block';
     document.body.style.overflow = 'hidden';
-  }, 50);
+    lpRenderTimebox();
+  }, 80);
 }
 
 function editWeeklyPlan(id, evt) {
@@ -4527,6 +4542,9 @@ function editWeeklyPlan(id, evt) {
   }).then(function(r){ return r.json(); }).then(function(rows) {
     if (!rows || !rows[0]) return;
     var r = rows[0];
+    _lpRevCount = r.revision_count || 0;
+    // استعادة timebox
+    if (r.timebox && Array.isArray(r.timebox) && r.timebox.length) { lpRestoreTimebox(r.timebox); }
     lpSetVal('lp-f-title', r.lesson_title);
     lpSetVal('lp-f-objectives', r.learning_objectives);
     lpSetVal('lp-f-eq', r.essential_question);
@@ -4612,6 +4630,8 @@ function lpFetchSENStudents(className) {
   var senPanel = document.getElementById('lp-sen-panel');
   var senNone = document.getElementById('lp-sen-none');
   var senList = document.getElementById('lp-sen-list');
+  // تطبيق افتراضيات المادة إذا كانت خطة جديدة
+  if (!_lpCurrentId) { lpApplySubjectDefaults(chosen); }
   var senInput = document.getElementById('lp-f-sen');
   if (senPanel) senPanel.style.display = 'none';
   if (senNone) senNone.style.display = 'none';
@@ -4655,6 +4675,7 @@ function lpFetchSENStudents(className) {
 function lpDetectLang() {}
 
 function resetLpForm() {
+  _lpRevCount = 0; lpResetTimebox();
   ['lp-f-title','lp-f-objectives','lp-f-eq','lp-f-vocab','lp-f-diff','lp-f-resources','lp-f-digital','lp-f-reflection'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.value='';
   });
@@ -4699,9 +4720,13 @@ function lpCollectData(status) {
     differentiation: (document.getElementById('lp-f-diff')||{}).value || '',
     resources: (document.getElementById('lp-f-resources')||{}).value || '',
     digital_tools: (document.getElementById('lp-f-digital')||{}).value || '',
+    timebox: lpGetTimeboxData(),
     self_reflection: (document.getElementById('lp-f-reflection')||{}).value || '',
     status: status,
-    submitted_at: status === 'submitted' ? new Date().toISOString() : null
+    submitted_at: status === 'submitted' ? new Date().toISOString() : null,
+    self_reflection_at: ((document.getElementById('lp-f-reflection')||{}).value||'').trim() ? new Date().toISOString() : undefined,
+    revised_at: (_lpCurrentId && status === 'submitted') ? new Date().toISOString() : undefined,
+    revision_count: _lpCurrentId ? (_lpRevCount + 1) : 0
   };
 }
 
@@ -4729,6 +4754,206 @@ function lpSave(status) {
 function saveDraftWeeklyPlan() { lpSave('draft'); }
 function submitWeeklyPlan() { lpSave('submitted'); }
 function saveLessonPlan() { submitWeeklyPlan(); }
+
+// ── نسخ من الأسبوع السابق ──
+function lpCopyFromPrevWeek() {
+  var u = lpGetUser(); if (!u || !u.id) return;
+  var cls = (document.getElementById('lp-f-class')||{}).value;
+  var sub = (document.getElementById('lp-f-subject')||{}).value;
+  if (!cls || !sub) { lpShowMsg('اختاري الصف والمادة أولاً', '#DC2626'); return; }
+  var wkData = lpGetWeekData();
+  var prevWk = (wkData.weekNumber || 1) - 1;
+  if (prevWk < 1) { lpShowMsg('لا يوجد أسبوع سابق', '#94A3B8'); return; }
+  var url = lpSbUrl() + '/rest/v1/planning_records?staff_db_id=eq.' + encodeURIComponent(u.id) + '&class_name=eq.' + encodeURIComponent(cls) + '&subject=eq.' + encodeURIComponent(sub) + '&week_number=eq.' + prevWk + '&academic_year=eq.' + encodeURIComponent(wkData.academicYear) + '&order=created_at.desc&limit=1';
+  fetch(url, { headers: { apikey: lpSbKey(), Authorization: 'Bearer ' + lpToken() } })
+    .then(function(r){ return r.json(); }).then(function(rows) {
+      if (!rows || !rows[0]) { lpShowMsg('لا توجد خطة للأسبوع السابق لهذا الصف والمادة', '#94A3B8'); return; }
+      var r = rows[0];
+      lpSetVal('lp-f-title', r.lesson_title);
+      lpSetVal('lp-f-objectives', r.learning_objectives);
+      lpSetVal('lp-f-eq', r.essential_question);
+      lpSetVal('lp-f-vocab', r.new_vocabulary);
+      lpSetVal('lp-f-diff', r.differentiation);
+      lpSetVal('lp-f-resources', r.resources);
+      lpSetVal('lp-f-digital', r.digital_tools);
+      // استعادة checkboxes
+      if (r.teaching_methods) { try { var tm=JSON.parse(r.teaching_methods); tm.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-methods"]');if(cb)cb.checked=true;}); } catch(e){} }
+      if (r.assessment_tools) { try { var at=JSON.parse(r.assessment_tools); at.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-assess"]');if(cb)cb.checked=true;}); } catch(e){} }
+      if (r.learning_skills) { try { var ls=JSON.parse(r.learning_skills); ls.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-skills"]');if(cb)cb.checked=true;}); } catch(e){} }
+      lpShowMsg('✅ تم نسخ خطة الأسبوع ' + prevWk + ' — راجعي التفاصيل وعدّليها', '#0284C7');
+    }).catch(function(){ lpShowMsg('خطأ في جلب الخطة السابقة', '#DC2626'); });
+}
+
+// ── حفظ قالب شخصي ──
+function lpSaveTemplate() {
+  var name = prompt('اسم القالب (مثال: خطتي المعتادة لرياضيات):');
+  if (!name) return;
+  var u = lpGetUser(); if (!u || !u.id) return;
+  var cls = (document.getElementById('lp-f-class')||{}).value;
+  var sub = (document.getElementById('lp-f-subject')||{}).value;
+  var data = {
+    template_name: name, staff_db_id: u.id, class_name: cls, subject: sub,
+    lesson_title: (document.getElementById('lp-f-title')||{}).value,
+    learning_objectives: (document.getElementById('lp-f-objectives')||{}).value,
+    essential_question: (document.getElementById('lp-f-eq')||{}).value,
+    new_vocabulary: (document.getElementById('lp-f-vocab')||{}).value,
+    differentiation: (document.getElementById('lp-f-diff')||{}).value,
+    resources: (document.getElementById('lp-f-resources')||{}).value,
+    digital_tools: (document.getElementById('lp-f-digital')||{}).value,
+    teaching_methods: JSON.stringify(Array.from(document.querySelectorAll('input[name="lp-methods"]:checked')).map(function(c){return c.value;})),
+    assessment_tools: JSON.stringify(Array.from(document.querySelectorAll('input[name="lp-assess"]:checked')).map(function(c){return c.value;})),
+    learning_skills: JSON.stringify(Array.from(document.querySelectorAll('input[name="lp-skills"]:checked')).map(function(c){return c.value;})),
+    status: 'template', academic_year: lpGetWeekData().academicYear, week_number: 0, timebox: lpGetTimeboxData()
+  };
+  fetch(lpSbUrl() + '/rest/v1/planning_records', {
+    method: 'POST', headers: { apikey: lpSbKey(), Authorization: 'Bearer ' + lpToken(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify(data)
+  }).then(function(r){ if(r.ok || r.status===201) lpShowMsg('✅ حُفظ القالب: ' + name, '#16A34A'); else lpShowMsg('خطأ في حفظ القالب', '#DC2626'); });
+}
+
+function lpLoadTemplate() {
+  var u = lpGetUser(); if (!u || !u.id) return;
+  var cls = (document.getElementById('lp-f-class')||{}).value;
+  var sub = (document.getElementById('lp-f-subject')||{}).value;
+  var q = lpSbUrl() + '/rest/v1/planning_records?staff_db_id=eq.' + encodeURIComponent(u.id) + '&status=eq.template' + (sub?'&subject=eq.'+encodeURIComponent(sub):'') + '&order=created_at.desc&limit=10';
+  fetch(q, { headers: { apikey: lpSbKey(), Authorization: 'Bearer ' + lpToken() } })
+    .then(function(r){ return r.json(); }).then(function(rows) {
+      if (!rows || !rows.length) { lpShowMsg('لا توجد قوالب محفوظة لهذه المادة', '#94A3B8'); return; }
+      var tplPanel = document.getElementById('lp-template-list');
+      if (!tplPanel) return;
+      tplPanel.innerHTML = rows.map(function(r){ return '<button onclick="lpApplyTemplate('+r.id+',this)" style="display:block;width:100%;text-align:right;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:8px 12px;margin-bottom:6px;cursor:pointer;font-family:Tajawal,Arial,sans-serif;font-size:13px">📋 ' + (r.template_name||'قالب') + '</button>'; }).join('');
+      tplPanel.style.display = 'block';
+    });
+}
+
+function lpApplyTemplate(id, btn) {
+  fetch(lpSbUrl() + '/rest/v1/planning_records?id=eq.' + id, { headers: { apikey: lpSbKey(), Authorization: 'Bearer ' + lpToken() } })
+    .then(function(r){ return r.json(); }).then(function(rows) {
+      if (!rows||!rows[0]) return;
+      var r = rows[0];
+      lpSetVal('lp-f-title', r.lesson_title); lpSetVal('lp-f-objectives', r.learning_objectives);
+      lpSetVal('lp-f-eq', r.essential_question); lpSetVal('lp-f-vocab', r.new_vocabulary);
+      lpSetVal('lp-f-diff', r.differentiation); lpSetVal('lp-f-resources', r.resources);
+      lpSetVal('lp-f-digital', r.digital_tools);
+      if (r.teaching_methods) { try { var tm=JSON.parse(r.teaching_methods); tm.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-methods"]');if(cb)cb.checked=true;}); } catch(e){} }
+      if (r.assessment_tools) { try { var at=JSON.parse(r.assessment_tools); at.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-assess"]');if(cb)cb.checked=true;}); } catch(e){} }
+      if (r.learning_skills) { try { var ls=JSON.parse(r.learning_skills); ls.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-skills"]:checked');if(cb)cb.checked=true;}); } catch(e){} }
+      if (r.timebox) lpRestoreTimebox(r.timebox);
+      var tp = document.getElementById('lp-template-list'); if(tp) tp.style.display='none';
+      lpShowMsg('✅ تم تطبيق القالب — عدّلي ما يلزم', '#16A34A');
+    });
+}
+
+// ── افتراضيات المادة ──
+function lpApplySubjectDefaults(sub) {
+  if (!sub) return;
+  var key = Object.keys(_lpSubjectDefaults).find(function(k){ return sub.indexOf(k) !== -1; });
+  if (!key) return;
+  var def = _lpSubjectDefaults[key];
+  // إلغاء تحديد السابق
+  document.querySelectorAll('input[name="lp-methods"]').forEach(function(cb){cb.checked=false;});
+  document.querySelectorAll('input[name="lp-assess"]').forEach(function(cb){cb.checked=false;});
+  // تطبيق الافتراضيات
+  if (def.methods) def.methods.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-methods"]');if(cb)cb.checked=true;});
+  if (def.assess) def.assess.forEach(function(v){var cb=document.querySelector('input[value="'+v+'"][name="lp-assess"]');if(cb)cb.checked=true;});
+}
+
+// ── AI يكمل الأهداف ──
+function lpAISuggest() {
+  var title = (document.getElementById('lp-f-title')||{}).value;
+  var sub = (document.getElementById('lp-f-subject')||{}).value;
+  if (!title) { lpShowMsg('أدخلي عنوان الدرس أولاً', '#F59E0B'); return; }
+  var btn = document.getElementById('lp-ai-btn');
+  if (btn) { btn.disabled=true; btn.textContent='⏳ يفكر...'; }
+  var prompt = 'المادة: ' + sub + ' — عنوان الدرس: ' + title + '. اكتب بالعربية:
+1. 3 أهداف تعلمية قابلة للقياس (ابدأ كل هدف بـ: بعد نهاية الحصة سيكون الطالب قادراً على...)
+2. سؤال جوهري محفِّز للتفكير
+3. 3-5 مفردات جديدة مناسبة للمرحلة';
+  if (window.askAI) {
+    window.askAI(prompt, function(resp) {
+      if (btn) { btn.disabled=false; btn.textContent='🤖 AI يكمل'; }
+      if (!resp) { lpShowMsg('لم يستجب الذكاء الاصطناعي', '#DC2626'); return; }
+      // تحليل الرد وملء الحقول
+      var lines = resp.split('\n').filter(function(l){return l.trim();});
+      var objectives = [], eq = '', vocab = [];
+      var section = '';
+      lines.forEach(function(l){
+        if (l.includes('أهداف') || l.match(/^1\./)) section='obj';
+        else if (l.includes('جوهري') || l.match(/^2\./)) section='eq';
+        else if (l.includes('مفردات') || l.match(/^3\./)) section='vocab';
+        else if (section==='obj' && (l.match(/^[-•*]/) || l.match(/^\d+\./))) objectives.push(l.replace(/^[-•*\d.]+\s*/,''));
+        else if (section==='eq' && l.trim().length>10) { if(!eq) eq=l.trim(); }
+        else if (section==='vocab' && l.trim()) { var v=l.replace(/^[-•*\d.،,]+\s*/,'').trim(); if(v && v.length<50) vocab.push(v); }
+      });
+      if (objectives.length) {
+        var objEl = document.getElementById('lp-f-objectives');
+        if (objEl && !objEl.value) objEl.value = objectives.map(function(o,i){return (i+1)+'. '+o;}).join('\n');
+      }
+      if (eq) { var eqEl=document.getElementById('lp-f-eq'); if(eqEl&&!eqEl.value) eqEl.value=eq; }
+      if (vocab.length) { var vcEl=document.getElementById('lp-f-vocab'); if(vcEl&&!vcEl.value) vcEl.value=vocab.join('، '); }
+      lpShowMsg('✅ اقتراحات الذكاء الاصطناعي جاهزة — راجعي وعدّلي', '#16A34A');
+    });
+  } else {
+    if (btn) { btn.disabled=false; btn.textContent='🤖 AI يكمل'; }
+    lpShowMsg('AI غير متاح حالياً', '#94A3B8');
+  }
+}
+
+// ── Time-boxing ──
+var _lpTimeboxData = [
+  {label:'التهيئة والمراجعة', mins:10, color:'#6C3DD6'},
+  {label:'شرح المحتوى الجديد', mins:15, color:'#0EA5E9'},
+  {label:'نشاط تعاوني / تطبيق', mins:15, color:'#10B981'},
+  {label:'تقييم تكويني / خروج', mins:5, color:'#F59E0B'}
+];
+var _lpTotalMins = 45;
+
+function lpRenderTimebox() {
+  var cont = document.getElementById('lp-timebox-bars'); if(!cont) return;
+  var total = _lpTimeboxData.reduce(function(s,i){return s+i.mins;},0);
+  var totalEl = document.getElementById('lp-timebox-total');
+  if (totalEl) {
+    totalEl.textContent = total + ' / ' + _lpTotalMins + ' دقيقة';
+    totalEl.style.color = total === _lpTotalMins ? '#16A34A' : total > _lpTotalMins ? '#DC2626' : '#F59E0B';
+  }
+  cont.innerHTML = _lpTimeboxData.map(function(item,i){
+    var pct = Math.round((item.mins / _lpTotalMins) * 100);
+    return '<div style="margin-bottom:10px">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">' +
+        '<div style="width:12px;height:12px;border-radius:3px;background:'+item.color+';flex-shrink:0"></div>' +
+        '<input type="text" value="'+item.label+'" onchange="_lpTimeboxData['+i+'].label=this.value" style="flex:1;border:1px solid #E2E8F0;border-radius:6px;padding:3px 8px;font-family:Tajawal,Arial,sans-serif;font-size:12px"/>' +
+        '<input type="number" value="'+item.mins+'" min="0" max="'+_lpTotalMins+'" oninput="_lpTimeboxData['+i+'].mins=parseInt(this.value)||0;lpRenderTimebox()" style="width:52px;border:1px solid #E2E8F0;border-radius:6px;padding:3px 6px;font-size:13px;font-weight:700;text-align:center">' +
+        '<span style="font-size:11px;color:#94A3B8;width:28px">د</span>' +
+        '<button onclick="lpRemoveTimebox('+i+')" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:14px;padding:0 2px">✕</button>' +
+      '</div>' +
+      '<div style="height:8px;background:#F1F5F9;border-radius:4px;overflow:hidden">' +
+        '<div style="width:'+pct+'%;height:100%;background:'+item.color+';border-radius:4px;transition:width 0.3s"></div>' +
+      '</div>' +
+    '</div>';
+  }).join('') +
+  '<button onclick="lpAddTimebox()" style="background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:8px;padding:6px 14px;font-family:Tajawal,Arial,sans-serif;font-size:12px;color:#64748B;cursor:pointer;margin-top:4px">+ إضافة مرحلة</button>';
+}
+
+function lpAddTimebox() {
+  _lpTimeboxData.push({label:'مرحلة جديدة', mins:5, color:'#8B5CF6'});
+  lpRenderTimebox();
+}
+function lpRemoveTimebox(i) {
+  _lpTimeboxData.splice(i,1); lpRenderTimebox();
+}
+function lpGetTimeboxData() { return _lpTimeboxData; }
+function lpRestoreTimebox(data) {
+  if (!data || !Array.isArray(data) || !data.length) return;
+  _lpTimeboxData = data; lpRenderTimebox();
+}
+function lpResetTimebox() {
+  _lpTimeboxData = [
+    {label:'التهيئة والمراجعة', mins:10, color:'#6C3DD6'},
+    {label:'شرح المحتوى الجديد', mins:15, color:'#0EA5E9'},
+    {label:'نشاط تعاوني / تطبيق', mins:15, color:'#10B981'},
+    {label:'تقييم تكويني / خروج', mins:5, color:'#F59E0B'}
+  ]; lpRenderTimebox();
+}
 
 function lpShowMsg(txt, color) {
   var el = document.getElementById('lp-modal-msg');
@@ -4840,7 +5065,17 @@ function printWeeklyPlan() {
     <!-- ③ عنوان + أهداف -->
     <div style="background:#F8FAFC;border-radius:10px;padding:14px;margin-bottom:16px">
       <div style="font-size:13px;font-weight:800;color:#475569;margin-bottom:10px">③ التخطيط التربوي — Planning</div>
-      <div style="margin-bottom:10px"><label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">عنوان الدرس <span style="color:#DC2626">*</span></label><input type="text" id="lp-f-title" placeholder="عنوان الوحدة / Lesson Title" style="width:100%;padding:9px 12px;border:1.5px solid #CBD5E1;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:14px;box-sizing:border-box"></div>
+      <!-- شريط الأدوات السريعة -->
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;padding:12px;background:#F8FAFC;border-radius:10px;border:1px solid #E2E8F0">
+        <span style="font-size:11px;font-weight:700;color:#64748B;align-self:center;margin-left:auto">⚡ أدوات سريعة</span>
+        <button type="button" onclick="lpCopyFromPrevWeek()" style="background:#EDE9FE;color:#6C3DD6;border:none;border-radius:8px;padding:6px 12px;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">📋 نسخ من الأسبوع السابق</button>
+        <button type="button" id="lp-ai-btn" onclick="lpAISuggest()" style="background:#DCFCE7;color:#16A34A;border:none;border-radius:8px;padding:6px 12px;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">🤖 AI يكمل</button>
+        <button type="button" onclick="lpLoadTemplate()" style="background:#FEF3C7;color:#92400E;border:none;border-radius:8px;padding:6px 12px;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">📂 قوالبي</button>
+        <button type="button" onclick="lpSaveTemplate()" style="background:#F1F5F9;color:#475569;border:none;border-radius:8px;padding:6px 12px;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">💾 حفظ كقالب</button>
+        <div id="lp-template-list" style="display:none;width:100%;margin-top:4px"></div>
+      </div>
+
+      <div style="margin-bottom:10px"><label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">عنوان الدرس <span style="color:#DC2626">*</span></label><input type="text" id="lp-f-title"  placeholder="عنوان الوحدة / Lesson Title" style="width:100%;padding:9px 12px;border:1.5px solid #CBD5E1;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:14px;box-sizing:border-box"></div>
       <div style="margin-bottom:10px"><label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">الأهداف التعلمية <span style="color:#DC2626">*</span></label><textarea id="lp-f-objectives" rows="3" placeholder="بعد نهاية الأسبوع سيكون الطالب قادراً على:&#10;1. ..." style="width:100%;padding:9px 12px;border:1.5px solid #CBD5E1;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:13px;resize:vertical;box-sizing:border-box"></textarea></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div><label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">السؤال الجوهري</label><textarea id="lp-f-eq" rows="2" placeholder="سؤال يثير التفكير..." style="width:100%;padding:9px 12px;border:1.5px solid #CBD5E1;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:13px;resize:vertical;box-sizing:border-box"></textarea></div>
@@ -4905,6 +5140,18 @@ function printWeeklyPlan() {
       </div>
       <div><label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">الأدوات الرقمية</label><input type="text" id="lp-f-digital" placeholder="Nearpod، Padlet، لا يوجد" style="width:100%;padding:9px 12px;border:1.5px solid #CBD5E1;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:13px;box-sizing:border-box"></div>
     </div>
+
+    <!-- ⑦.٥ توقيت المهام — Time-boxing -->
+      <div style="background:#F8FAFC;border:1.5px solid #E2E8F0;border-radius:12px;padding:14px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:13px;font-weight:800;color:#1E293B">⏱️ توقيت مراحل الحصة</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span id="lp-timebox-total" style="font-size:12px;font-weight:700;color:#16A34A">45 / 45 دقيقة</span>
+            <button type="button" onclick="lpResetTimebox()" style="background:#F1F5F9;border:none;border-radius:6px;padding:3px 8px;font-size:11px;color:#64748B;cursor:pointer">إعادة تعيين</button>
+          </div>
+        </div>
+        <div id="lp-timebox-bars"></div>
+      </div>
 
     <!-- ⑧ التأمل الذاتي -->
     <div style="background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:10px;padding:14px;margin-bottom:20px">
