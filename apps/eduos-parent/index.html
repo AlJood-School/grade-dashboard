@@ -318,6 +318,9 @@ tr:hover td { background: #FAFBFC; }
     <div class="sb-item" data-tab="grades" onclick="switchTab('grades', this)">
       <span class="sb-icon">📊</span> الدرجات | Grades
     </div>
+    <div class="sb-item" data-tab="skills" onclick="switchTab('skills', this)">
+      <span class="sb-icon">🎯</span> المهارات | Skills
+    </div>
     <div class="sb-item" data-tab="attendance" onclick="switchTab('attendance', this)">
       <span class="sb-icon">📅</span> الحضور | Attendance
     </div>
@@ -391,6 +394,15 @@ tr:hover td { background: #FAFBFC; }
     </div>
 
     <!-- TAB: ATTENDANCE -->
+    <div id="tab-skills" class="tab-content">
+      <div class="page-title">🎯 مستوى الصف في المهارات | Skills Report</div>
+      <div class="child-tabs" id="skillsChildTabs"></div>
+      <div class="card" style="padding:16px">
+        <div class="card-title">📊 تقرير المهارات من الحصص الفعلية</div>
+        <div id="skillsContent"><div style="text-align:center;padding:32px;color:#94A3B8">جارٍ التحميل...</div></div>
+      </div>
+    </div>
+
     <div id="tab-attendance" class="tab-content">
       <div class="page-title">📅 الحضور | Attendance</div>
       <div class="child-tabs" id="attChildTabs"></div>
@@ -1533,6 +1545,62 @@ async function init() {
 }
 
 init();
+// ============= مهارات الصف من الحصص الفعلية =============
+async function loadSkillsTab(childIdx){
+  const el=document.getElementById('skillsContent');
+  if(!el)return;
+  const children=window._parentChildren||[];
+  const child=children[childIdx||0];
+  if(!child||!child.class_name){
+    el.innerHTML='<div style="text-align:center;padding:24px;color:#94A3B8">لا توجد بيانات متاحة لهذه الطالبة</div>';
+    return;
+  }
+  el.innerHTML='<div style="text-align:center;padding:32px;color:#94A3B8">جارٍ التحليل...</div>';
+  try{
+    const SB_URL=window.EduOS?window.EduOS.SB_URL:'';
+    const SB_KEY=window.EduOS?window.EduOS.SB_KEY:'';
+    const r=await fetch(SB_URL+'/rest/v1/lesson_sessions?class_name=eq.'+encodeURIComponent(child.class_name)+'&not.post_lesson_data.is.null&order=created_at.desc&limit=30&select=subject,post_lesson_data,created_at',
+      {headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}});
+    const sessions=await r.json().catch(()=>[]);
+    if(!Array.isArray(sessions)||!sessions.length){
+      el.innerHTML='<div style="text-align:center;padding:32px"><div style="font-size:2rem;margin-bottom:12px">📚</div>'+
+        '<div style="font-size:14px;color:#64748B">لا توجد بيانات مهارات مسجلة بعد<br><span style="font-size:12px;color:#94A3B8">ستظهر بعد تسجيل أولى الحصص من قِبل المعلمة</span></div></div>';
+      return;
+    }
+    const bySubject={};
+    sessions.forEach(function(s){if(!bySubject[s.subject])bySubject[s.subject]=s;});
+    const LEVELS=['—','🔴 ناشئ','🟡 قيد التطور','🔵 متقن','🟢 متقدم'];
+    const COLORS=['','#DC2626','#D97706','#0284C7','#059669'];
+    let html='<div style="margin-top:8px">';
+    Object.entries(bySubject).forEach(function(entry){
+      const subject=entry[0],session=entry[1];
+      const scores=(session.post_lesson_data&&session.post_lesson_data.rubric_scores)||[];
+      if(!scores.length)return;
+      const date=new Date(session.created_at).toLocaleDateString('ar-AE',{month:'long',day:'numeric'});
+      html+='<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:16px;margin-bottom:12px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
+        '<div style="font-size:15px;font-weight:800;color:#1E293B">'+subject+'</div>'+
+        '<div style="font-size:11px;color:#94A3B8">آخر تسجيل: '+date+'</div></div>';
+      scores.forEach(function(s){
+        const lvl=s.level||0;
+        const bar=Math.round((lvl/4)*100);
+        html+='<div style="margin-bottom:10px">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'+
+          '<div style="font-size:13px;color:#374151">'+s.criterion+'</div>'+
+          '<div style="font-size:12px;font-weight:700;color:'+(COLORS[lvl]||'#94A3B8')+'">'+(LEVELS[lvl]||'—')+'</div></div>'+
+          '<div style="background:#E2E8F0;border-radius:4px;height:6px">'+
+          '<div style="background:'+(COLORS[lvl]||'#E2E8F0')+';height:6px;border-radius:4px;width:'+bar+'%;transition:width .4s"></div></div></div>';
+      });
+      html+='</div>';
+    });
+    html+='</div>';
+    el.innerHTML=html;
+  }catch(e){
+    el.innerHTML='<div style="text-align:center;padding:24px;color:#94A3B8">تعذّر تحميل بيانات المهارات</div>';
+  }
+}
+
+
 </script>
 </body>
 </html>
