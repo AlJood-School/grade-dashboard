@@ -842,6 +842,16 @@ tr:hover td{background:var(--surface2)}
       <a href="../eduos-analytics/" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:12px;background:var(--brand-lt);border:1px solid rgba(108,61,214,0.2);color:var(--brand);font-family:'Tajawal',Arial,sans-serif;font-weight:800;font-size:13px;text-decoration:none">
         &#x1F4CA; &#x644;&#x648;&#x62D;&#x629; &#x627;&#x644;&#x62A;&#x62D;&#x644;&#x64A;&#x644;&#x627;&#x62A; &#x627;&#x644;&#x643;&#x627;&#x645;&#x644;&#x629; / Full Analytics Dashboard &#x2192;
       </a>
+      <!-- مؤشر أضعف المهارات مدرسياً -->
+      <div style="margin-top:24px">
+        <div style="font-size:14px;font-weight:800;color:#1E293B;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+          <span>🎯</span>
+          <span>أضعف المهارات هذا الشهر</span>
+          <span style="font-size:11px;color:#94A3B8;font-weight:400">(من بيانات الحصص الفعلية)</span>
+        </div>
+        <div id="skillsIndicator"><div style="color:#94A3B8;font-size:13px;text-align:center;padding:16px">جارٍ التحليل...</div></div>
+        <button onclick="loadSkillsIndicator()" style="margin-top:10px;padding:6px 16px;background:#EDE9FF;color:#6C3DD6;border:none;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:13px;font-weight:700;cursor:pointer">🔄 تحديث</button>
+      </div>
     </div>
 
     <!-- PANEL: PLATFORM STATE -->
@@ -1946,6 +1956,45 @@ async function loadAttendance() {
       </tr>`;
     }).join('') || '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text3)">لا بيانات حضور في هذه الفترة / No attendance data for this period</td></tr>';
   } catch(e) { console.warn('attendance:', e); }
+}
+
+async function loadSkillsIndicator(){
+  var el=document.getElementById('skillsIndicator');
+  if(!el)return;
+  try{
+    var res=await dbGet('planning_records','select=last_execution_data,class_name,subject&not.last_execution_data.is.null&limit=300');
+    var records=res&&res.data?res.data:(Array.isArray(res)?res:[]);
+    if(!records.length){el.innerHTML='<div style="color:#94A3B8;font-size:13px;text-align:center;padding:20px">لا توجد بيانات حصص مسجلة بعد</div>';return;}
+    var map={};
+    records.forEach(function(r){
+      var d=r.last_execution_data;
+      if(!d||!d.rubric_scores)return;
+      d.rubric_scores.forEach(function(s){
+        if(!s.criterion||!s.level)return;
+        if(!map[s.criterion])map[s.criterion]={total:0,weak:0,classes:[]};
+        map[s.criterion].total++;
+        if(s.level<=2)map[s.criterion].weak++;
+        if(r.class_name&&map[s.criterion].classes.indexOf(r.class_name)<0)map[s.criterion].classes.push(r.class_name);
+      });
+    });
+    var sorted=Object.entries(map)
+      .filter(function(e){return e[1].total>=1;})
+      .map(function(e){return {criterion:e[0],pct:Math.round((e[1].weak/e[1].total)*100),classes:e[1].classes.length,total:e[1].total};})
+      .sort(function(a,b){return b.pct-a.pct;})
+      .slice(0,5);
+    if(!sorted.length){el.innerHTML='<div style="color:#059669;font-size:13px;text-align:center;padding:16px">✅ لا معايير ضعيفة — أداء ممتاز!</div>';return;}
+    el.innerHTML=sorted.map(function(s){
+      var color=s.pct>=60?'#DC2626':s.pct>=40?'#D97706':'#0284C7';
+      var bg=s.pct>=60?'#FEF2F2':s.pct>=40?'#FFFBEB':'#F0F9FF';
+      var icon=s.pct>=60?'🔴':s.pct>=40?'🟡':'🔵';
+      return '<div style="background:'+bg+';border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px">'+
+        '<div style="font-size:1.2rem">'+icon+'</div>'+
+        '<div style="flex:1"><div style="font-size:13px;font-weight:700;color:#1E293B">'+s.criterion+'</div>'+
+        '<div style="font-size:11px;color:#64748B;margin-top:2px">'+s.classes+' صف · '+s.total+' سجل</div></div>'+
+        '<div style="text-align:center"><div style="font-size:20px;font-weight:900;color:'+color+'">'+s.pct+'%</div>'+
+        '<div style="font-size:10px;color:#94A3B8">مستوى ١-٢</div></div></div>';
+    }).join('');
+  }catch(e){el.innerHTML='<div style="color:#94A3B8;font-size:13px">خطأ في التحميل</div>';}
 }
 
 async function loadAnalytics() {
