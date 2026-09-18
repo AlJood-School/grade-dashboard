@@ -16,7 +16,9 @@
   --text:#1E293B;--text2:#475569;--text3:#94A3B8;--radius:16px;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Tajawal',Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;direction:rtl;}
+body{
+    margin: 0;
+    padding: 0;font-family:'Tajawal',Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;direction:rtl;}
 
 /* ── HEADER ── */
 .header{background:linear-gradient(135deg,#6C3DD6,#4F46E5);padding:0 24px;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(108,61,214,0.25);}
@@ -360,7 +362,7 @@ function updateTimer(){
 
 async function loadStudents(cls){
   const grid=document.getElementById('studentGrid');
-  const data=await sq(`students?select=id,full_name,student_number&class_name=eq.${encodeURIComponent(cls)}&order=full_name`);
+  const data=await sq(`students?select=id,name,student_number&class_name=eq.${encodeURIComponent(cls)}&order=name`);
   students=Array.isArray(data)?data:[];
   if(students.length===0){
     grid.innerHTML='<div style="color:var(--text3);font-size:14px;grid-column:1/-1;text-align:center;padding:20px;">لا يوجد طلاب/ات مسجلون في هذا الصف</div>';
@@ -459,13 +461,116 @@ async function endSession(){
   clearInterval(timerInterval);
   saveNotes();
   if(sessionId&&!sessionId.startsWith('local')){
-    await sqpatch(`lesson_sessions?id=eq.${sessionId}`,{status:'completed',ended_at:new Date().toISOString()});
+    sqpatch('lesson_sessions?id=eq.'+sessionId,{
+      status:'completed',
+      ended_at:new Date().toISOString(),
+      plan_id: _planId || null
+    }).catch(()=>{});
   }
   addLog('انتهت الجلسة','#EF4444');
-  setTimeout(()=>window.location.href='/apps/eduos-hub/',1500);
+  if(_sessionRubric && _sessionRubric.length > 0){
+    setTimeout(showPostLessonScreen, 800);
+  } else {
+    setTimeout(()=>window.location.href='/apps/eduos-hub/',1500);
+  }
 }
 
-// Init
+function showPostLessonScreen(){
+  const ov=document.createElement('div');
+  ov.id='post-lesson-ov';
+  ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.88);z-index:9999;overflow-y:auto;padding:20px;box-sizing:border-box;display:flex;align-items:flex-start;justify-content:center';
+  const rows=_sessionRubric.map(function(cr,i){
+    const nm=cr.criterion||cr.name||cr.label||('المعيار '+(i+1));
+    return '<div style="background:#F8FAFC;border-radius:10px;padding:14px;margin-bottom:12px">'+
+      '<div style="font-size:14px;font-weight:700;color:#1E293B;margin-bottom:10px">'+nm+'</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+      '<button type="button" onclick="plScore('+i+',1,this)" style="flex:1;min-width:80px;padding:8px 4px;border-radius:8px;border:2px solid #FCA5A5;background:#FEF2F2;color:#DC2626;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:600;cursor:pointer">🔴 ناشئ</button>'+
+      '<button type="button" onclick="plScore('+i+',2,this)" style="flex:1;min-width:80px;padding:8px 4px;border-radius:8px;border:2px solid #FDE68A;background:#FFFBEB;color:#D97706;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:600;cursor:pointer">🟡 قيد التطور</button>'+
+      '<button type="button" onclick="plScore('+i+',3,this)" style="flex:1;min-width:80px;padding:8px 4px;border-radius:8px;border:2px solid #BAE6FD;background:#F0F9FF;color:#0284C7;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:600;cursor:pointer">🔵 متقن</button>'+
+      '<button type="button" onclick="plScore('+i+',4,this)" style="flex:1;min-width:80px;padding:8px 4px;border-radius:8px;border:2px solid #BBF7D0;background:#F0FDF4;color:#16A34A;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:600;cursor:pointer">🟢 متقدم</button>'+
+      '</div></div>';
+  }).join('');
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:640px;width:100%;padding:28px;font-family:Tajawal,Arial,sans-serif;direction:rtl;margin:20px auto">'+
+    '<div style="text-align:center;margin-bottom:20px"><div style="font-size:36px">📊</div>'+
+    '<h2 style="font-size:20px;font-weight:700;color:#1E293B;margin:8px 0 4px">كيف سارت الحصة؟</h2>'+
+    '<p style="font-size:13px;color:#64748B;margin:0">نقرة واحدة لكل معيار — ثلاث دقائق كحد أقصى</p></div>'+
+    rows+
+    '<div style="background:#F8FAFC;border-radius:10px;padding:14px;margin-bottom:16px">'+
+    '<label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:8px">هل هناك طالبة تحتاج متابعة؟</label>'+
+    '<select id="pl-followup" style="width:100%;padding:8px 10px;border:1.5px solid #E2E8F0;border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:13px;background:#fff">'+
+    '<option value="">لا — الجميع ضمن المتوقع</option></select></div>'+
+    '<div style="display:flex;gap:10px">'+
+    '<button type="button" onclick="savePostLesson()" style="flex:1;padding:12px;border-radius:10px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);border:none;color:#fff;font-family:Tajawal,Arial,sans-serif;font-size:15px;font-weight:700;cursor:pointer">حفظ وإنهاء ✅</button>'+
+    '<button type="button" onclick="window.location.href='/apps/eduos-hub/'" style="padding:12px 20px;border-radius:10px;border:1.5px solid #E2E8F0;background:#fff;color:#64748B;font-family:Tajawal,Arial,sans-serif;font-size:14px;cursor:pointer">تخطي</button>'+
+    '</div></div>';
+  document.body.appendChild(ov);
+  loadFollowUpStudents();
+}
+
+function plScore(idx,level,btn){
+  _postLessonScores[idx]=level;
+  const siblings=btn.parentElement.querySelectorAll('button');
+  siblings.forEach(function(b){b.style.opacity='0.45';b.style.transform='scale(0.94)';});
+  btn.style.opacity='1';btn.style.transform='scale(1.06)';btn.style.boxShadow='0 2px 10px rgba(0,0,0,0.18)';
+}
+
+async function loadFollowUpStudents(){
+  if(!_sessionPlan||!_sessionPlan.class_name)return;
+  try{
+    const rows=await sqget('students?class_name=eq.'+encodeURIComponent(_sessionPlan.class_name)+'&select=name&order=name');
+    const sel=document.getElementById('pl-followup');
+    if(sel&&rows){rows.forEach(function(s){const o=document.createElement('option');o.value=s.name;o.textContent=s.name;sel.appendChild(o);});}
+  }catch(e){}
+}
+
+async function savePostLesson(){
+  const rubric=_sessionRubric||[];
+  const scores=rubric.map(function(cr,i){
+    return {criterion:cr.criterion||cr.name||cr.label||('المعيار '+(i+1)),level:_postLessonScores[i]||null};
+  });
+  const followup=(document.getElementById('pl-followup')||{}).value||null;
+  const payload={rubric_scores:scores,follow_up_student:followup||null,recorded_at:new Date().toISOString()};
+  const proms=[];
+  if(sessionId&&!sessionId.startsWith('local')){
+    proms.push(sqpatch('lesson_sessions?id=eq.'+sessionId,{post_lesson_data:payload}).catch(()=>{}));
+  }
+  if(_sessionPlan&&_sessionPlan.id){
+    proms.push(sqpatch('planning_records?id=eq.'+_sessionPlan.id,{last_execution_data:payload}).catch(()=>{}));
+  }
+  await Promise.all(proms);
+  window.location.href='/apps/eduos-hub/';
+}
+
+// Init — استقبال URL params
+const _urlP = new URLSearchParams(window.location.search);
+const _planId = _urlP.get('plan_id') ? parseInt(_urlP.get('plan_id')) : null;
+const _preClass = _urlP.get('cls') || '';
+const _preSubject = _urlP.get('subject') || '';
+const _preWeek = _urlP.get('week') || '';
+let _sessionRubric = [];
+let _sessionPlan = null;
+let _postLessonScores = {};
+
+// تعبئة الصف والمادة تلقائياً من URL
+(function(){
+  if(_preClass){var cs=document.getElementById('classSelect');if(cs)cs.value=_preClass;}
+  if(_preSubject){var ss=document.getElementById('subjectSelect');if(ss)ss.value=_preSubject;}
+  if(_planId) fetchPlanForSession(_planId);
+})();
+
+async function fetchPlanForSession(pid){
+  try{
+    const r=await sqget('planning_records?id=eq.'+pid+'&select=id,lesson_title,learning_objectives,rubric_data,rubric_task,class_name,subject');
+    if(r&&r[0]){
+      _sessionPlan=r[0];
+      if(r[0].rubric_data){try{_sessionRubric=JSON.parse(r[0].rubric_data);}catch(e){}}
+      // عرض عنوان الدرس في الهيدر
+      var hi=document.getElementById('headerSub');
+      if(hi&&r[0].lesson_title) hi.textContent=r[0].lesson_title+' — '+(_preClass||r[0].class_name||'');
+    }
+  }catch(e){}
+}
+
 checkRemoteDay();
 </script>
 </body>

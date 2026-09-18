@@ -652,7 +652,7 @@ tr:hover td{background:var(--surface2)}
           <div class="period-now-timer" id="periodNowTimer">—</div>
           <div class="period-now-timer-lbl">دقيقة متبقية / mins remaining</div>
         </div>
-        <button class="btn-start-session" onclick="window.location.href='../eduos-class-session/'" style="display:none">ابدأ الحصة الآن ← / Start Now</button>
+        <button class="btn-start-session" onclick="lpStartSession()" style="display:none">ابدأ الحصة الآن ← / Start Now</button>
       </div>
 
       <!-- شريط التبويبات الثابت -->
@@ -700,7 +700,7 @@ tr:hover td{background:var(--surface2)}
           <div class="period-now-timer" id="periodNowTimer">—</div>
           <div class="period-now-timer-lbl">دقيقة متبقية / mins remaining</div>
         </div>
-        <button class="btn-start-session" onclick="window.location.href='../eduos-class-session/'">ابدأ الحصة الآن ← / Start Now</button>
+        <button class="btn-start-session" onclick="lpStartSession()">ابدأ الحصة الآن ← / Start Now</button>
       </div>
 
     </div>
@@ -772,7 +772,7 @@ tr:hover td{background:var(--surface2)}
         <div class="session-card">
           <div class="session-card-title">🚀 ابدأ حصة / Start Session</div>
           <p style="font-size:15px;color:var(--text2);margin-bottom:20px;line-height:1.7">ابدأ حصة رقمية تفاعلية مع طلابك — يُشغَّل النظام عبر الشاشة الذكية مباشرةً.</p>
-          <button class="btn-brand" style="width:100%" onclick="window.location.href='../eduos-class-session/'">ابدأ الحصة الآن ← / Start Now</button>
+          <button class="btn-brand" style="width:100%" onclick="lpStartSession()">ابدأ الحصة الآن ← / Start Now</button>
         </div>
         <div class="session-card">
           <div class="session-card-title">🎟️ بطاقات الخروج / Exit Tickets</div>
@@ -4423,6 +4423,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ══════════════════════════════════════════════
 
 var _lpCurrentId = null;
+var _lpSelectedWeekOffset = 0; // 0=حالي, 1=قادم, 2=بعد أسبوعين
 var _lpRevCount = 0;
 var _lpSubjectDefaults = {
   'رياضيات': {methods:['collaborative','problem_solving','inquiry'], assess:['exit_ticket','whiteboard']},
@@ -4454,6 +4455,46 @@ function lpGetWeekData() {
     return { weekNumber: w.week, term: w.term, academicYear: w.academicYear || '2026-2027', weekStart: w.weekStart || null };
   }
   return { weekNumber: null, term: 1, academicYear: '2026-2027', weekStart: null };
+}
+
+function lpGetSelectedWeekData() {
+  var base = lpGetWeekData();
+  if (_lpSelectedWeekOffset === 0) return base;
+  var offsetWeek = (base.weekNumber || 1) + _lpSelectedWeekOffset;
+  var start = base.weekStart ? new Date(base.weekStart) : new Date();
+  start.setDate(start.getDate() + _lpSelectedWeekOffset * 7);
+  return {
+    weekNumber: offsetWeek,
+    term: base.term,
+    academicYear: base.academicYear,
+    weekStart: start.toISOString().split('T')[0]
+  };
+}
+
+function lpSelectWeek(offset) {
+  _lpSelectedWeekOffset = offset;
+  ['lp-week-btn-0','lp-week-btn-1','lp-week-btn-2'].forEach(function(id, i) {
+    var b = document.getElementById(id);
+    if (!b) return;
+    b.style.background = i === offset ? 'linear-gradient(135deg,#6C3DD6,#22D3EE)' : '#F1F5F9';
+    b.style.color = i === offset ? '#fff' : '#475569';
+    b.style.borderColor = i === offset ? '#6C3DD6' : '#E2E8F0';
+  });
+  lpFillHeader();
+}
+
+function lpStartSession() {
+  var url = '/apps/eduos-class-session/';
+  var params = [];
+  if (_lpCurrentId) params.push('plan_id=' + _lpCurrentId);
+  var cls = document.getElementById('lp-f-class');
+  if (cls && cls.value) params.push('cls=' + encodeURIComponent(cls.value));
+  var sub = document.getElementById('lp-f-subject');
+  if (sub && sub.value) params.push('subject=' + encodeURIComponent(sub.value));
+  var wk = lpGetSelectedWeekData();
+  if (wk.weekNumber) params.push('week=' + wk.weekNumber);
+  if (params.length) url += '?' + params.join('&');
+  window.location.href = url;
 }
 
 function initLessonPlanForm() {
@@ -4520,6 +4561,8 @@ function lpRefreshStats() {
 }
 
 function openNewWeeklyPlan() {
+  _lpSelectedWeekOffset = 0; // إعادة للأسبوع الحالي عند فتح خطة جديدة
+  lpSelectWeek(0);
   // تأكد أن plan-panel-lessons نشطة أولاً
   switchPlanTab('lessons');
   _lpCurrentId = null;
@@ -4587,7 +4630,7 @@ function lpFillHeader() {
   var u = lpGetUser();
   var nameEl = document.getElementById('lp-f-teacher');
   if (nameEl && u) nameEl.textContent = u.username || u.id;
-  var wkData = lpGetWeekData();
+  var wkData = lpGetSelectedWeekData();
   var wkEl = document.getElementById('lp-f-week');
   var trEl = document.getElementById('lp-f-term');
   var dtEl = document.getElementById('lp-f-date');
@@ -4703,7 +4746,7 @@ function resetLpForm() {
 
 function lpCollectData(status) {
   var u = lpGetUser();
-  var wkData = lpGetWeekData();
+  var wkData = lpGetSelectedWeekData();
   var cls = document.getElementById('lp-f-class');
   var sub = document.getElementById('lp-f-subject');
   var subj = sub ? sub.value : '';
@@ -4758,6 +4801,11 @@ function lpSave(status) {
   .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json().catch(function(){ return {}; }); })
   .then(function(res) {
     if (Array.isArray(res) && res[0] && res[0].id) _lpCurrentId = res[0].id;
+    if (status === 'submitted') {
+      ['lp-week-btn-0','lp-week-btn-1','lp-week-btn-2'].forEach(function(id){
+        var b = document.getElementById(id); if(b) b.disabled = true;
+      });
+    }
     var lbl = status==='submitted' ? 'تم التسليم بنجاح' : 'حُفظت المسودة';
     lpShowMsg(lbl, status==='submitted' ? '#16A34A' : '#0284C7');
     loadWeeklyPlansHistory();
@@ -5505,7 +5553,14 @@ function printWeeklyPlan() {
         <div><label style="font-size:11px;font-weight:700;color:#94A3B8;display:block;margin-bottom:3px">المعلمة / Teacher</label><div id="lp-f-teacher" style="font-size:13px;font-weight:700;color:#1E293B;background:#fff;border:1px solid #E2E8F0;border-radius:6px;padding:7px 10px">—</div></div>
         <div><label style="font-size:11px;font-weight:700;color:#94A3B8;display:block;margin-bottom:3px">الصف / Class</label><select id="lp-f-class" style="width:100%;padding:7px 10px;border:1.5px solid #CBD5E1;border-radius:6px;font-family:Tajawal,Arial,sans-serif;font-size:13px;background:#fff" onchange="lpFillSubjects()"><option value="">— اختر —</option></select></div>
         <div><label style="font-size:11px;font-weight:700;color:#94A3B8;display:block;margin-bottom:3px">المادة / Subject</label><select id="lp-f-subject" style="width:100%;padding:7px 10px;border:1.5px solid #CBD5E1;border-radius:6px;font-family:Tajawal,Arial,sans-serif;font-size:13px;background:#fff"><option value="">— اختر —</option></select></div>
-        <div><label style="font-size:11px;font-weight:700;color:#94A3B8;display:block;margin-bottom:3px">الأسبوع / Week</label><div id="lp-f-week" style="font-size:13px;font-weight:700;color:#1E293B;background:#fff;border:1px solid #E2E8F0;border-radius:6px;padding:7px 10px">—</div></div>
+        <div><label style="font-size:11px;font-weight:700;color:#94A3B8;display:block;margin-bottom:3px">الأسبوع / Week</label><div style="display:flex;flex-direction:column;gap:6px">
+  <div style="display:flex;gap:5px;flex-wrap:wrap">
+    <button type="button" id="lp-week-btn-0" onclick="lpSelectWeek(0)" style="flex:1;min-width:90px;padding:6px 8px;border-radius:7px;border:1.5px solid #6C3DD6;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">الأسبوع الحالي</button>
+    <button type="button" id="lp-week-btn-1" onclick="lpSelectWeek(1)" style="flex:1;min-width:90px;padding:6px 8px;border-radius:7px;border:1.5px solid #E2E8F0;background:#F1F5F9;color:#475569;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">الأسبوع القادم</button>
+    <button type="button" id="lp-week-btn-2" onclick="lpSelectWeek(2)" style="flex:1;min-width:90px;padding:6px 8px;border-radius:7px;border:1.5px solid #E2E8F0;background:#F1F5F9;color:#475569;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">بعد أسبوعين</button>
+  </div>
+  <div id="lp-f-week" style="font-size:12px;color:#64748B;padding:2px 4px">—</div>
+</div></div>
         <div><label style="font-size:11px;font-weight:700;color:#94A3B8;display:block;margin-bottom:3px">الفصل / Term</label><div id="lp-f-term" style="font-size:13px;font-weight:700;color:#1E293B;background:#fff;border:1px solid #E2E8F0;border-radius:6px;padding:7px 10px">—</div></div>
         <div><label style="font-size:11px;font-weight:700;color:#94A3B8;display:block;margin-bottom:3px">التاريخ / Date</label><div id="lp-f-date" style="font-size:13px;font-weight:700;color:#1E293B;background:#fff;border:1px solid #E2E8F0;border-radius:6px;padding:7px 10px">—</div></div>
       </div>
