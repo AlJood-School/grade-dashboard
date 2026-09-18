@@ -3485,7 +3485,8 @@ function buildPulseGrid(teachers, thisWeekSubmitted, lateTeachers, pulseData, co
     html += '<th style="padding:10px 8px;text-align:center;font-weight:700;color:'+(wk.isCurrent?'#6C3DD6':'var(--text2)')+';min-width:60px">' +
       (wk.isCurrent?'<span style="background:#6C3DD6;color:#fff;padding:2px 8px;border-radius:20px;font-size:11px">هذا الأسبوع</span>': wk.label) + '</th>';
   });
-  html += '<th style="padding:10px 8px;text-align:center;font-weight:700;color:var(--text2)">إجراء</th></tr></thead><tbody>';
+  html += '<th style="padding:10px 8px;text-align:center;font-weight:700;color:var(--text2)">آخر حصة 📚</th>' +
+    '<th style="padding:10px 8px;text-align:center;font-weight:700;color:var(--text2)">إجراء</th></tr></thead><tbody>';
 
   teachers.forEach(function(t, i){
     var tid = t.staff_db_id || t.teacher_id || '';
@@ -3512,6 +3513,18 @@ function buildPulseGrid(teachers, thisWeekSubmitted, lateTeachers, pulseData, co
       }
       html += '<td style="padding:10px 8px;text-align:center">' + cell + '</td>';
     });
+
+    // عمود آخر حصة — أضعف معيار
+    var sessInfo = window._coordSessionMap && window._coordSessionMap[String(tid)];
+    var sessCell;
+    if (sessInfo && sessInfo.weakCrit) {
+      sessCell = '<span title="' + sessInfo.weakCrit + '" style="display:inline-block;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#FFF7ED;border:1px solid #FED7AA;border-radius:6px;padding:3px 7px;font-size:10px;font-weight:700;color:#92400E">⚠️ ' + sessInfo.weakCrit + '</span>';
+    } else if (sessInfo) {
+      sessCell = '<span style="font-size:11px;color:#059669">✅ جيد</span>';
+    } else {
+      sessCell = '<span style="color:#94A3B8;font-size:11px">—</span>';
+    }
+    html += '<td style="padding:10px 8px;text-align:center">' + sessCell + '</td>';
 
     // زر الإجراء
     if (isLate) {
@@ -3598,6 +3611,24 @@ async function loadCoordDashboard() {
       if (!Array.isArray(weeksData)) weeksData = [];
     } catch(e) { weeksData = []; }
     window._coordPulseData = weeksData;
+
+    // ── جلب آخر حصة لكل معلمة في المادة (للمرحلة الثالثة) ──
+    window._coordSessionMap = {};
+    try {
+      if (subject) {
+        var fourWAgo2 = new Date(); fourWAgo2.setDate(fourWAgo2.getDate()-28);
+        var ssRes = await fetch(sbUrl+'/rest/v1/lesson_sessions?status=eq.completed&subject=eq.'+encodeURIComponent(subject)+'&post_lesson_data=not.is.null&ended_at=gte.'+fourWAgo2.toISOString()+'&select=teacher_id,post_lesson_data,ended_at&order=ended_at.desc&limit=300',{headers:coordHeaders()});
+        var ssRows = await ssRes.json();
+        if (Array.isArray(ssRows)) {
+          ssRows.forEach(function(s) {
+            var key = String(s.teacher_id||''); if(!key || window._coordSessionMap[key]) return;
+            var pld = s.post_lesson_data||{}; var scores = Array.isArray(pld.rubric_scores)?pld.rubric_scores:[];
+            var weak = scores.filter(function(sc){ return sc.level!=null && sc.level<=2; });
+            window._coordSessionMap[key] = { weakCrit: weak.length?weak[0].criterion:null, weakCount:weak.length, date:s.ended_at };
+          });
+        }
+      }
+    } catch(e) {}
 
     var badgeEl = document.getElementById('coordBadge');
     if (badgeEl) {
@@ -4671,7 +4702,8 @@ function lpFillSubjects(preselect) {
   subs.forEach(function(s){ if(uniq.indexOf(s)===-1) uniq.push(s); });
   uniq.sort();
   selSub.innerHTML = '<option value="">— اختر المادة —</option>' + uniq.map(function(s){ return '<option value="' + s + '">' + s + '</option>'; }).join('');
-  if (preselect) selSub.value = preselect;
+  if (preselect) { selSub.value = preselect; lpLoadPreviousInsights(chosen, preselect); }
+  else { var panel=document.getElementById('lp-prev-insights'); if(panel) panel.style.display='none'; }
   lpFetchSENStudents(chosen);
 }
 
@@ -4995,6 +5027,76 @@ function lpApplyTemplate(id, btn) {
 }
 
 // ── افتراضيات المادة ──
+// ══════════ تحليل الحصة الماضية — المرحلة الثالثة ══════════
+
+function lpOnSubjectChange() {
+  var cls = (document.getElementById('lp-f-class')||{}).value;
+  var sub = (document.getElementById('lp-f-subject')||{}).value;
+  lpLoadPreviousInsights(cls, sub);
+}
+
+async function lpLoadPreviousInsights(cls, sub) {
+  var panel = document.getElementById('lp-prev-insights');
+  if (!panel) return;
+  if (!cls || !sub) { panel.style.display='none'; return; }
+  panel.style.display='none';
+  try {
+    var res = await fetch(
+      lpSbUrl() + '/rest/v1/lesson_sessions' +
+      '?class_name=eq.' + encodeURIComponent(cls) +
+      '&subject=eq.' + encodeURIComponent(sub) +
+      '&status=eq.completed' +
+      '&post_lesson_data=not.is.null' +
+      '&order=ended_at.desc&limit=1',
+      { headers: { apikey: lpSbKey(), Authorization: 'Bearer ' + lpToken() } }
+    );
+    var rows = await res.json();
+    if (!rows || !rows.length || !rows[0].post_lesson_data) return;
+    var pld = rows[0].post_lesson_data;
+    var scores = Array.isArray(pld.rubric_scores) ? pld.rubric_scores : [];
+    var weak = scores.filter(function(s){ return s.level != null && s.level <= 2; });
+    if (!weak.length) return;
+    lpRenderPrevInsights(weak, rows[0].ended_at);
+  } catch(e) { console.warn('lpLoadPreviousInsights:', e); }
+}
+
+function lpRenderPrevInsights(weak, date) {
+  var panel = document.getElementById('lp-prev-insights');
+  var body  = document.getElementById('lp-prev-insights-body');
+  if (!panel || !body) return;
+  var dateStr = date ? new Date(date).toLocaleDateString('ar-AE',{day:'2-digit',month:'short'}) : '—';
+  var html = '<div style="font-size:12px;color:#B45309;margin-bottom:10px">آخر حصة: ' + dateStr + ' — المعايير التالية تحتاج تعزيزاً في هذا الأسبوع:</div>';
+  weak.forEach(function(cr) {
+    var lvlColor = cr.level===1 ? '#EF4444' : '#F59E0B';
+    var lvlLabel = cr.level===1 ? '🔴 ناشئ (1)' : '🟡 قيد التطور (2)';
+    var crit = (cr.criterion||'—').replace(/'/g,'&#39;');
+    html +=
+      '<div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #FED7AA;border-radius:8px;padding:8px 12px;margin-bottom:8px">' +
+        '<span style="font-size:13px;font-weight:700;color:#1E293B;flex:1">' + (cr.criterion||'—') + '</span>' +
+        '<span style="font-size:11px;font-weight:700;color:' + lvlColor + ';min-width:90px;text-align:center">' + lvlLabel + '</span>' +
+        '<button onclick="lpAddGoalFromInsight(\'' + crit + '\')" ' +
+          'style="padding:4px 10px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:7px;color:#92400E;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">⬆ اجعله هدفاً</button>' +
+      '</div>';
+  });
+  body.innerHTML = html;
+  panel.style.display = 'block';
+}
+
+function lpAddGoalFromInsight(criterion) {
+  var el = document.getElementById('lp-f-objectives');
+  if (!el) return;
+  var existing = el.value.trim();
+  var newGoal  = 'تعزيز مهارة: ' + criterion;
+  if (existing.indexOf(newGoal) !== -1) return; // لا تكرار
+  el.value = existing ? existing + '\n' + newGoal : newGoal;
+  el.scrollIntoView({ behavior:'smooth', block:'center' });
+  el.focus();
+  el.style.borderColor = '#6C3DD6';
+  setTimeout(function(){ el.style.borderColor = ''; }, 1500);
+}
+
+// ══════════════════════════════════════════════════════════
+
 function lpApplySubjectDefaults(sub) {
   if (!sub) return;
   var key = Object.keys(_lpSubjectDefaults).find(function(k){ return sub.indexOf(k) !== -1; });
@@ -5552,7 +5654,7 @@ function printWeeklyPlan() {
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
         <div><label style="font-size:11px;font-weight:700;color:#94A3B8;display:block;margin-bottom:3px">المعلمة / Teacher</label><div id="lp-f-teacher" style="font-size:13px;font-weight:700;color:#1E293B;background:#fff;border:1px solid #E2E8F0;border-radius:6px;padding:7px 10px">—</div></div>
         <div><label style="font-size:11px;font-weight:700;color:#94A3B8;display:block;margin-bottom:3px">الصف / Class</label><select id="lp-f-class" style="width:100%;padding:7px 10px;border:1.5px solid #CBD5E1;border-radius:6px;font-family:Tajawal,Arial,sans-serif;font-size:13px;background:#fff" onchange="lpFillSubjects()"><option value="">— اختر —</option></select></div>
-        <div><label style="font-size:11px;font-weight:700;color:#94A3B8;display:block;margin-bottom:3px">المادة / Subject</label><select id="lp-f-subject" style="width:100%;padding:7px 10px;border:1.5px solid #CBD5E1;border-radius:6px;font-family:Tajawal,Arial,sans-serif;font-size:13px;background:#fff"><option value="">— اختر —</option></select></div>
+        <div><label style="font-size:11px;font-weight:700;color:#94A3B8;display:block;margin-bottom:3px">المادة / Subject</label><select id="lp-f-subject" style="width:100%;padding:7px 10px;border:1.5px solid #CBD5E1;border-radius:6px;font-family:Tajawal,Arial,sans-serif;font-size:13px;background:#fff" onchange="lpOnSubjectChange()"><option value="">— اختر —</option></select></div>
         <div><label style="font-size:11px;font-weight:700;color:#94A3B8;display:block;margin-bottom:3px">الأسبوع / Week</label><div style="display:flex;flex-direction:column;gap:6px">
   <div style="display:flex;gap:5px;flex-wrap:wrap">
     <button type="button" id="lp-week-btn-0" onclick="lpSelectWeek(0)" style="flex:1;min-width:90px;padding:6px 8px;border-radius:7px;border:1.5px solid #6C3DD6;background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;font-family:Tajawal,Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">الأسبوع الحالي</button>
@@ -5564,6 +5666,12 @@ function printWeeklyPlan() {
         <div><label style="font-size:11px;font-weight:700;color:#94A3B8;display:block;margin-bottom:3px">الفصل / Term</label><div id="lp-f-term" style="font-size:13px;font-weight:700;color:#1E293B;background:#fff;border:1px solid #E2E8F0;border-radius:6px;padding:7px 10px">—</div></div>
         <div><label style="font-size:11px;font-weight:700;color:#94A3B8;display:block;margin-bottom:3px">التاريخ / Date</label><div id="lp-f-date" style="font-size:13px;font-weight:700;color:#1E293B;background:#fff;border:1px solid #E2E8F0;border-radius:6px;padding:7px 10px">—</div></div>
       </div>
+    </div>
+
+    <!-- ⓪ تنبيه من الحصة الماضية -->
+    <div id="lp-prev-insights" style="display:none;background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:800;color:#92400E;margin-bottom:8px">💡 من الحصة الماضية — اقتراح للأسبوع الجديد</div>
+      <div id="lp-prev-insights-body"></div>
     </div>
 
     <!-- ② مستويات CS -->
