@@ -325,7 +325,7 @@
         var canRequest = STATE.total >= req && c.is_active !== false && !c.blackout_active;
         var note = c.blackout_active ? '<div class="eos-r-card-sub" style="color:#E11D48">⛔ الفترة الحرجة مفعّلة — لا يمكن الطلب حالياً</div>' : '';
         return '<div class="eos-r-card">' +
-          '<div class="eos-r-card-title">' + escH(c.title || c.name || 'مكافأة') + ' — تحتاجين ' + req + ' نقطة</div>' +
+          '<div class="eos-r-card-title">' + escH(c.label || c.title || c.name || 'مكافأة') + ' — تحتاجين ' + req + ' نقطة</div>' +
           '<div class="eos-r-card-sub">رصيدك: ' + STATE.total + ' نقطة | يتبقى: ' + remaining + ' نقطة' +
             (c.monthly_limit_hours ? ' | الحد الشهري: ' + c.monthly_limit_hours + ' ساعة' : '') + '</div>' +
           '<div class="eos-r-bar"><div class="eos-r-bar-fill" style="width:' + pct + '%"></div></div>' +
@@ -358,7 +358,7 @@
   function requestReward(cfgId, req) {
     var cfg = STATE.config.find(function (c) { return String(c.id) === String(cfgId); });
     if (!cfg) return;
-    if (!confirm('تأكيد طلب مكافأة: ' + (cfg.title || cfg.name) + '؟')) return;
+    if (!confirm('تأكيد طلب مكافأة: ' + (cfg.label || cfg.title || cfg.name) + '؟')) return;
     window.EduOS_SB.from('staff_rewards_log').insert({
       staff_db_id: STAFF_ID, reward_id: cfg.id, status: 'pending',
       points_spent: parseInt(req, 10) || 0, requested_at: new Date().toISOString()
@@ -374,7 +374,7 @@
     return STATE.pendingRequests.map(function (r) {
       var cfg = STATE.config.find(function (c) { return c.id === r.reward_id; });
       return '<div class="eos-r-card">' +
-        '<div class="eos-r-card-title">' + escH(cfg ? (cfg.title || cfg.name) : ('مكافأة #' + r.reward_id)) + '</div>' +
+        '<div class="eos-r-card-title">' + escH(cfg ? (cfg.label || cfg.title || cfg.name) : ('مكافأة #' + r.reward_id)) + '</div>' +
         '<div class="eos-r-card-sub">موظفة #' + escH(r.staff_db_id) + ' — ' + (r.points_spent || 0) + ' نقطة — ' + fmtDate(r.requested_at) + '</div>' +
         '<button class="eos-btn eos-btn-green eos-appr-req" data-id="' + r.id + '" data-staff="' + escH(r.staff_db_id) + '" data-pts="' + (r.points_spent || 0) + '">✅ اعتماد</button> ' +
         '<button class="eos-btn eos-btn-red eos-rej-req" data-id="' + r.id + '">❌ رفض</button>' +
