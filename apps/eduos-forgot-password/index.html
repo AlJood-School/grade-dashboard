@@ -222,27 +222,27 @@ async function sendReset() {
     const SB_URL = cfg.SB_URL;
     const SB_KEY = cfg.SB_KEY;
 
-    const res = await fetch(SB_URL + '/functions/v1/reset-password-request', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SB_KEY
-      },
-      body: JSON.stringify({ username })
-    });
+    // استخدام RPC مباشرة عبر DB (أكثر موثوقية من EF)
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+    const supabase = createClient(SB_URL, SB_KEY);
+    const { data, error } = await supabase.rpc('request_password_reset', { p_username: username });
 
-    const data = await res.json();
-
-    if (res.ok && data.success) {
+    if (!error && data && data.success) {
       msg.className = 'msg success';
       msg.textContent = '✅ تم الإرسال! تفقدي بريدك الوزاري خلال دقائق.';
       document.getElementById('usernameInput').value = '';
-    } else if (data.error === 'not_found') {
-      msg.className = 'msg error';
-      msg.textContent = 'اسم المستخدم غير موجود — تواصلي مع مدير النظام';
-    } else {
-      msg.className = 'msg error';
-      msg.textContent = data.message || 'حدث خطأ، حاولي مجدداً';
+    } else if (error || (data && data.error)) {
+      const errCode = data && data.error;
+      if (errCode === 'not_found') {
+        msg.className = 'msg error';
+        msg.textContent = 'اسم المستخدم غير موجود — تواصلي مع مدير النظام';
+      } else if (errCode === 'no_email') {
+        msg.className = 'msg error';
+        msg.textContent = 'لا يوجد بريد إلكتروني — تواصلي مع مدير النظام';
+      } else {
+        msg.className = 'msg error';
+        msg.textContent = (error && error.message) || 'حدث خطأ، حاولي مجدداً';
+      }
     }
   } catch (e) {
     msg.className = 'msg error';
