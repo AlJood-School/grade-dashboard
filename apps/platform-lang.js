@@ -619,13 +619,14 @@ window.EduLang = (function () {
     if (skip.some(function(s){return path.includes(s);})) return;
     var hdr = document.querySelector('header, .hdr');
     if (!hdr) return;
+
     // 1. عرض badge المستخدم
     if (!hdr.querySelector('[data-user-display]')) {
       try {
         var u = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
         var name = u.username || u.name || '';
         var rk = u.role_key || u.role || '';
-        var roleMap = {teacher:'معلم/ة',principal:'مدير/ة',vice_principal:'نائب/ة مدير/ة',admin:'مسؤول/ة',coach:'مدرب/ة',counselor:'مرشد/ة',specialist:'أخصائي/ة',nurse:'ممرض/ة',security:'أمن',secretary:'سكرتير/ة',technician:'تقني/ة',registrar:'مسجّلة',financial_coordinator:'منسق/ة مالية',coordinator:'منسق/ة',registrar:'تسجيل'};
+        var roleMap = {teacher:'معلم/ة',principal:'مدير/ة',vice_principal:'نائب/ة مدير/ة',admin:'مسؤول/ة',coach:'مدرب/ة',counselor:'مرشد/ة',specialist:'أخصائي/ة',nurse:'ممرض/ة',security:'أمن',secretary:'سكرتير/ة',technician:'تقني/ة',registrar:'مسجّلة',financial_coordinator:'منسق/ة مالية',coordinator:'منسق/ة'};
         var roleLabel = roleMap[rk] || rk;
         if (name) {
           var badge = document.createElement('div');
@@ -637,6 +638,7 @@ window.EduLang = (function () {
         }
       } catch(e) {}
     }
+
     // 2. إنشاء header-tools
     if (!document.getElementById('header-tools')) {
       var tools = document.createElement('div');
@@ -649,6 +651,87 @@ window.EduLang = (function () {
       if (insertBefore) hdr.insertBefore(tools, insertBefore);
       else hdr.appendChild(tools);
     }
+
+    // 3. فقاعة الأسبوع + الوقت الحي في المنتصف
+    if (!hdr.querySelector('[data-center-info]')) {
+      // CSS animation للنبضة
+      if (!document.getElementById('_eduos_hdr_anim')) {
+        var s = document.createElement('style');
+        s.id = '_eduos_hdr_anim';
+        s.textContent = '@keyframes _eduosPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.82)}}';
+        document.head.appendChild(s);
+      }
+      // الهيدر يحتاج position:relative
+      if (getComputedStyle(hdr).position === 'static') hdr.style.position = 'relative';
+
+      var center = document.createElement('div');
+      center.setAttribute('data-center-info','1');
+      center.style.cssText = 'display:flex;align-items:center;gap:8px;position:absolute;left:50%;transform:translateX(-50%);top:50%;margin-top:-16px;pointer-events:none;z-index:2;';
+
+      // فقاعة الأسبوع
+      var wb = document.createElement('div');
+      wb.setAttribute('data-week-badge','1');
+      wb.style.cssText = 'background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.35);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:20px;padding:5px 14px;display:flex;align-items:center;gap:6px;pointer-events:auto;';
+      var dot = document.createElement('div');
+      dot.style.cssText = 'width:8px;height:8px;background:#4ade80;border-radius:50%;box-shadow:0 0 6px #4ade80;flex-shrink:0;animation:_eduosPulse 2s infinite;';
+      var wl = document.createElement('span');
+      wl.setAttribute('data-week-label','1');
+      wl.style.cssText = 'color:#fff;font-size:13px;font-weight:600;font-family:Tajawal,Arial,sans-serif;white-space:nowrap;';
+      wl.textContent = '...';
+      wb.appendChild(dot); wb.appendChild(wl);
+
+      // الوقت الحي
+      var tb = document.createElement('div');
+      tb.style.cssText = 'background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);border-radius:10px;padding:4px 10px;display:flex;align-items:center;gap:5px;pointer-events:auto;';
+      var tspan = document.createElement('span');
+      tspan.setAttribute('data-live-time','1');
+      tspan.style.cssText = 'color:#fff;font-size:13px;font-weight:700;font-family:Tajawal,Arial,sans-serif;font-variant-numeric:tabular-nums;';
+      tspan.textContent = '--:--';
+      tb.innerHTML = '<span style="font-size:13px;">&#128336;</span>';
+      tb.appendChild(tspan);
+
+      center.appendChild(wb); center.appendChild(tb);
+      hdr.appendChild(center);
+
+      // تحديث الوقت كل ثانية
+      (function tickTime() {
+        var el = hdr.querySelector('[data-live-time]');
+        if (!el) return;
+        var n = new Date();
+        el.textContent = String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');
+        setTimeout(tickTime, 1000);
+      })();
+
+      // تحديث الأسبوع من platform-week.js
+      (function updateWeek() {
+        var lbl = hdr.querySelector('[data-week-label]');
+        if (!lbl) return;
+        if (window.EduWeek && window.EduWeek.current) {
+          var w = window.EduWeek.current;
+          lbl.textContent = 'الأسبوع '+(w.week_number||w.weekNumber||'')+' · الفصل '+(w.term||'1');
+          return;
+        }
+        var existing = document.querySelector('[data-week-display],[data-week-num],#weekInfo,#weekDisplay,.week-badge-text');
+        if (existing && existing.textContent.trim()) { lbl.textContent = existing.textContent.trim(); return; }
+        setTimeout(updateWeek, 2000);
+      })();
+    }
+
+    // 4. أزرار الرجوع — دائرية حمراء
+    hdr.querySelectorAll('a,button').forEach(function(btn) {
+      if (btn.getAttribute('data-back-styled')) return;
+      var txt = (btn.textContent||'').trim();
+      var oc  = btn.getAttribute('onclick') || '';
+      var hr  = btn.getAttribute('href') || '';
+      var isBack = txt==='رجوع'||txt==='Back'||txt==='←'||txt==='→'||txt==='‹'||
+                   oc.includes('history.back')||hr==='#back'||
+                   (btn.getAttribute('title')||'').includes('رجوع');
+      if (!isBack) return;
+      btn.setAttribute('data-back-styled','1');
+      btn.style.cssText = 'width:34px!important;height:34px!important;min-width:34px!important;background:rgba(239,68,68,0.85)!important;border:1px solid rgba(255,255,255,0.3)!important;border-radius:50%!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;cursor:pointer!important;font-size:16px!important;color:#fff!important;text-decoration:none!important;flex-shrink:0!important;padding:0!important;transition:background .2s,transform .15s!important;';
+      btn.addEventListener('mouseover', function(){this.style.background='rgba(239,68,68,1)';this.style.transform='scale(1.08)';});
+      btn.addEventListener('mouseout',  function(){this.style.background='rgba(239,68,68,0.85)';this.style.transform='scale(1)';});
+    });
   }
 
   function init() {
