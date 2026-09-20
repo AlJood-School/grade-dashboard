@@ -17,7 +17,7 @@
   var DAY_NAMES = ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
 
   var STATE = {
-    offset: 0, // 0 = الأسبوع الحالي، أرقام موجبة = أسابيع سابقة
+    offset: (function(){ var d = new Date().getDay(); return (d === 0 || d === 6) ? -1 : 0; }()), // 0=الأسبوع الحالي، موجب=سابق، -1=قادم
     classes: [], // [{className, subject, label}]
     sessions: [],
     plan: null,
@@ -286,7 +286,7 @@
     var html = '<div class="wm-nav">' +
       '<button class="wm-nav-btn" id="wm-prev">◀ السابق</button>' +
       '<div class="wm-nav-title">الأسبوع ' + (wi.weekNum || '—') + ' (' + rangeLabel + ')</div>' +
-      '<button class="wm-nav-btn" id="wm-next"' + (STATE.offset === 0 ? ' disabled' : '') + '>التالي ▶</button>' +
+      '<button class="wm-nav-btn" id="wm-next"' + (STATE.offset <= -1 ? ' disabled' : '') + '>التالي ▶</button>' +
     '</div>';
 
     html += '<div class="wm-health"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;color:#334155">' +
@@ -320,7 +320,7 @@
     var prev = document.getElementById('wm-prev');
     var next = document.getElementById('wm-next');
     if (prev) prev.addEventListener('click', function () { STATE.offset += 1; loadEverything(); });
-    if (next) next.addEventListener('click', function () { if (STATE.offset > 0) { STATE.offset -= 1; loadEverything(); } });
+    if (next) next.addEventListener('click', function () { if (STATE.offset > -1) { STATE.offset -= 1; loadEverything(); } });
     var openPlan = document.getElementById('wm-open-plan');
     if (openPlan) openPlan.addEventListener('click', function () {
       var lessonsBtn = document.getElementById('plan-btn-lessons');

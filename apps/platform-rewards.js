@@ -327,7 +327,7 @@
         return '<div class="eos-r-card">' +
           '<div class="eos-r-card-title">' + escH(c.label || c.title || c.name || 'مكافأة') + ' — تحتاجين ' + req + ' نقطة</div>' +
           '<div class="eos-r-card-sub">رصيدك: ' + STATE.total + ' نقطة | يتبقى: ' + remaining + ' نقطة' +
-            (c.monthly_limit_hours ? ' | الحد الشهري: ' + c.monthly_limit_hours + ' ساعة' : '') + '</div>' +
+            (c.monthly_limit_hours ? ' | الحد الشهري: ' + c.monthly_limit_hours + (c.reward_type && c.reward_type.indexOf('happiness') !== -1 ? ' ساعة' : ' مرة') : '') + '</div>' +
           '<div class="eos-r-bar"><div class="eos-r-bar-fill" style="width:' + pct + '%"></div></div>' +
           note +
           (canRequest ? '<button class="eos-btn eos-btn-amber eos-req-btn" data-id="' + c.id + '" data-req="' + req + '">🏆 طلب مكافأة</button>' : '') +
