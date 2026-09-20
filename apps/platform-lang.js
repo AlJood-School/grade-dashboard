@@ -608,7 +608,51 @@ window.EduLang = (function () {
     tipObserver.observe(document.body, { childList: true, subtree: true });
   }
 
+
+  /* ─────────────────────────────────────────────────────────────
+   * injectHeaderTools — يضيف اسم المستخدم و header-tools تلقائياً
+   * يعمل على كل صفحة تحمّل platform-lang.js بدون تعديل الصفحة
+   * ──────────────────────────────────────────────────────────── */
+  function injectHeaderTools() {
+    var path = window.location.pathname;
+    var skip = ['login','set-password','forgot','landing','pitch','welcome','demo','offline','showcase','change-password'];
+    if (skip.some(function(s){return path.includes(s);})) return;
+    var hdr = document.querySelector('header, .hdr');
+    if (!hdr) return;
+    // 1. عرض badge المستخدم
+    if (!hdr.querySelector('[data-user-display]')) {
+      try {
+        var u = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+        var name = u.username || u.name || '';
+        var rk = u.role_key || u.role || '';
+        var roleMap = {teacher:'معلم/ة',principal:'مدير/ة',vice_principal:'نائب/ة مدير/ة',admin:'مسؤول/ة',coach:'مدرب/ة',counselor:'مرشد/ة',specialist:'أخصائي/ة',nurse:'ممرض/ة',security:'أمن',secretary:'سكرتير/ة',technician:'تقني/ة',registrar:'مسجّلة',financial_coordinator:'منسق/ة مالية',coordinator:'منسق/ة',registrar:'تسجيل'};
+        var roleLabel = roleMap[rk] || rk;
+        if (name) {
+          var badge = document.createElement('div');
+          badge.setAttribute('data-user-display','1');
+          badge.style.cssText = 'display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.15);border-radius:20px;padding:4px 10px 4px 6px;margin:0 4px;flex-shrink:0;cursor:default;';
+          var initial = (name[0]||'م').toUpperCase();
+          badge.innerHTML = '<div style="width:28px;height:28px;background:rgba(255,255,255,0.25);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:0.82rem;flex-shrink:0;">'+initial+'</div><div style="line-height:1.2;"><div style="color:#fff;font-size:0.78rem;font-weight:700;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+name+'</div><div style="color:rgba(255,255,255,0.75);font-size:0.63rem;">'+roleLabel+'</div></div>';
+          hdr.insertBefore(badge, hdr.firstChild);
+        }
+      } catch(e) {}
+    }
+    // 2. إنشاء header-tools
+    if (!document.getElementById('header-tools')) {
+      var tools = document.createElement('div');
+      tools.id = 'header-tools';
+      tools.style.cssText = 'display:flex;align-items:center;gap:6px;';
+      var langBtn = hdr.querySelector('[data-lang-toggle]');
+      var btns = Array.from(hdr.querySelectorAll('button'));
+      var logoutBtn = btns.find(function(b){return b.textContent.includes('خروج')||b.textContent.includes('Logout')||(b.getAttribute('onclick')||'').includes('ogout');});
+      var insertBefore = langBtn || logoutBtn || null;
+      if (insertBefore) hdr.insertBefore(tools, insertBefore);
+      else hdr.appendChild(tools);
+    }
+  }
+
   function init() {
+    injectHeaderTools();
     injectLangBtn();
     injectTooltipSystem();
     observer.observe(document.body, { childList: true, subtree: true });
