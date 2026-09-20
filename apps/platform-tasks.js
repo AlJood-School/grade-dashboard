@@ -452,7 +452,7 @@
       }
       return '<div class="eos-task-card">' +
         '<div class="eos-task-top"><div class="eos-task-title">' + escH(title) + '</div>' +
-        '<span class="eos-chip">موظفة #' + escH(s.staff_db_id) + '</span></div>' +
+        '<span class="eos-chip">' + escH(s.staff_name || ('موظفة #' + s.staff_db_id)) + '</span></div>' +
         (dataStr ? '<div class="eos-task-desc">📝 ' + escH(dataStr) + '</div>' : '') +
         '<div style="margin-top:8px">' + actions + '</div>' +
       '</div>';
