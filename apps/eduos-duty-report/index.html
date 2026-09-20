@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>تقرير المناوبة الشهري — EduOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet"/>
+<script src="../platform-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../platform-auth-guard.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Tajawal',Arial,sans-serif;background:#F1F5F9;direction:rtl;min-height:100vh}
+.page-header{background:linear-gradient(135deg,#6C3DD6,#22D3EE);padding:20px 28px;color:#fff;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.page-title{font-size:1.3rem;font-weight:900}
+.page-sub{font-size:.85rem;opacity:.85;margin-top:2px}
+.controls{background:#fff;border-bottom:1px solid #E2E8F0;padding:14px 28px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.sel{padding:9px 14px;border:1.5px solid #E2E8F0;border-radius:10px;font-family:inherit;font-size:.9rem;color:#1e293b;outline:none}
+.sel:focus{border-color:#6C3DD6}
+.btn{padding:9px 18px;border-radius:10px;border:none;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;transition:.2s}
+.btn-primary{background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff}
+.btn-print{background:#10B981;color:#fff}
+.btn-back{background:#F1F5F9;color:#475569;border:1.5px solid #E2E8F0}
+.main{padding:24px 28px;max-width:1100px;margin:0 auto}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px}
+.kpi{background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:16px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.kpi-num{font-size:2rem;font-weight:900}
+.kpi-label{font-size:.78rem;color:#6B7280;margin-top:4px}
+.section-title{font-size:1rem;font-weight:800;color:#1e293b;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #E2E8F0}
+.staff-table{width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04);margin-bottom:24px}
+.staff-table th{background:#F8FAFF;color:#475569;font-size:.8rem;font-weight:800;padding:11px 14px;text-align:right;border-bottom:2px solid #E2E8F0}
+.staff-table td{padding:11px 14px;border-bottom:1px solid #F1F5F9;font-size:.88rem;color:#1e293b}
+.staff-table tr:last-child td{border-bottom:none}
+.staff-table tr:hover td{background:#F8FAFF}
+.badge{display:inline-block;padding:2px 10px;border-radius:8px;font-size:.75rem;font-weight:700}
+.badge-ok{background:#DCFCE7;color:#16A34A}
+.badge-flag{background:#FEF2F2;color:#DC2626}
+.bar-wrap{background:#F1F5F9;border-radius:4px;height:8px;width:100px;display:inline-block;vertical-align:middle}
+.bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#6C3DD6,#22D3EE)}
+.empty{text-align:center;color:#94A3B8;padding:48px;font-size:.9rem}
+.loading{text-align:center;color:#94A3B8;padding:48px;font-size:.9rem}
+@media print{
+  .controls,.btn-print,.btn-back{display:none!important}
+  body{background:#fff}
+  .page-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .kpi,.staff-table{box-shadow:none}
+}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <div>
+    <div class="page-title">📊 تقرير المناوبة الشهري</div>
+    <div class="page-sub" id="reportSubtitle">جارٍ التحميل…</div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-print" onclick="window.print()">🖨️ طباعة / PDF</button>
+    <button class="btn btn-back" onclick="history.back()">← رجوع</button>
+  </div>
+</div>
+
+<div class="controls">
+  <select id="monthSel" class="sel" onchange="loadReport()">
+  </select>
+  <select id="yearSel" class="sel" onchange="loadReport()">
+  </select>
+  <button class="btn btn-primary" onclick="loadReport()">🔄 تحديث</button>
+</div>
+
+<div class="main">
+  <div id="reportContent" class="loading">⏳ جارٍ تحميل التقرير…</div>
+</div>
+
+<script>
+var SB;
+var MONTHS_AR = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+
+window.addEventListener('DOMContentLoaded', function() {
+  // بناء القوائم
+  var mSel = document.getElementById('monthSel');
+  var ySel = document.getElementById('yearSel');
+  var now = new Date();
+  for (var m=0; m<12; m++) {
+    var opt = document.createElement('option');
+    opt.value = m+1;
+    opt.textContent = MONTHS_AR[m];
+    if (m === now.getMonth()) opt.selected = true;
+    mSel.appendChild(opt);
+  }
+  for (var y = now.getFullYear(); y >= now.getFullYear()-1; y--) {
+    var opt2 = document.createElement('option');
+    opt2.value = y; opt2.textContent = y;
+    ySel.appendChild(opt2);
+  }
+
+  // انتظار Supabase
+  var iv = setInterval(function() {
+    if (window.EduOS_SB) { clearInterval(iv); SB = window.EduOS_SB; loadReport(); }
+  }, 300);
+});
+
+async function loadReport() {
+  if (!SB) return;
+  var month = parseInt(document.getElementById('monthSel').value);
+  var year  = parseInt(document.getElementById('yearSel').value);
+  var firstDay = year + '-' + String(month).padStart(2,'0') + '-01';
+  var lastDay  = new Date(year, month, 0).toISOString().split('T')[0];
+  document.getElementById('reportSubtitle').textContent = MONTHS_AR[month-1] + ' ' + year;
+  document.getElementById('reportContent').innerHTML = '<div class="loading">⏳ جارٍ جلب البيانات…</div>';
+
+  try {
+    // جلب سجلات الحضور
+    var r1 = await SB.from('staff_checkin_log')
+      .select('staff_id,staff_name,date,status,within_geofence,scanned_at')
+      .gte('date', firstDay).lte('date', lastDay)
+      .order('date', {ascending:true});
+
+    var logs = r1.data || [];
+
+    // جلب نقاط المناوبة
+    var r2 = await SB.from('staff_points_log')
+      .select('staff_db_id,points')
+      .eq('source','duty')
+      .gte('created_at', firstDay + 'T00:00:00Z')
+      .lte('created_at', lastDay + 'T23:59:59Z');
+
+    var pts = {};
+    (r2.data||[]).forEach(function(p){ pts[p.staff_db_id] = (pts[p.staff_db_id]||0) + (p.points||0); });
+
+    // تجميع بالموظفة
+    var staffMap = {};
+    logs.forEach(function(l) {
+      var key = l.staff_id;
+      if (!staffMap[key]) staffMap[key] = {name: l.staff_name||l.staff_id, days:[], flagged:0, ok:0};
+      staffMap[key].days.push(l.date);
+      if (l.status === 'present') staffMap[key].ok++;
+      else staffMap[key].flagged++;
+    });
+
+    // أيام العمل في الشهر
+    var workDays = 0;
+    var d = new Date(firstDay);
+    var last = new Date(lastDay);
+    while (d <= last) {
+      var dow = d.getDay();
+      if (dow >= 1 && dow <= 5) workDays++;
+      d.setDate(d.getDate()+1);
+    }
+
+    var staffList = Object.keys(staffMap).map(function(k){
+      return {id:k, name:staffMap[k].name, count:staffMap[k].days.length, ok:staffMap[k].ok, flagged:staffMap[k].flagged, points:pts[k]||0};
+    }).sort(function(a,b){ return b.count - a.count; });
+
+    var totalCheckins = logs.length;
+    var totalOk = logs.filter(function(l){return l.status==='present';}).length;
+    var totalStaff = staffList.length;
+    var avgPts = totalStaff ? Math.round(staffList.reduce(function(a,b){return a+b.points;},0)/totalStaff) : 0;
+
+    var html = '';
+    // KPIs
+    html += '<div class="kpi-row">';
+    html += kpi(totalCheckins,'#6C3DD6','إجمالي التسجيلات');
+    html += kpi(totalOk,'#16A34A','✅ حضور طبيعي');
+    html += kpi(totalCheckins-totalOk,'#DC2626','⚠️ مُبلَّغ عنه');
+    html += kpi(totalStaff,'#F59E0B','موظفات مناوِبات');
+    html += kpi(avgPts,'#8B5CF6','متوسط النقاط');
+    html += '</div>';
+
+    // جدول الموظفات
+    html += '<div class="section-title">تفاصيل الحضور لكل موظفة</div>';
+    if (!staffList.length) {
+      html += '<div class="empty">لا توجد بيانات لهذا الشهر</div>';
+    } else {
+      html += '<table class="staff-table"><thead><tr><th>#</th><th>الموظفة</th><th>أيام الحضور</th><th>النسبة</th><th>طبيعي</th><th>مُبلَّغ</th><th>⭐ النقاط</th><th>الحالة</th></tr></thead><tbody>';
+      staffList.forEach(function(s,i) {
+        var pct = workDays ? Math.round(s.count/workDays*100) : 0;
+        html += '<tr><td style="color:#94A3B8;font-weight:700">'+(i+1)+'</td>' +
+          '<td style="font-weight:700">'+esc(s.name)+'</td>' +
+          '<td style="font-weight:800;color:#6C3DD6">'+s.count+' / '+workDays+'</td>' +
+          '<td><div class="bar-wrap"><div class="bar-fill" style="width:'+Math.min(100,pct)+'%"></div></div> <span style="font-size:.8rem;color:#475569;margin-right:6px">'+pct+'%</span></td>' +
+          '<td><span class="badge badge-ok">'+s.ok+'</span></td>' +
+          '<td><span class="badge badge-flag">'+s.flagged+'</span></td>' +
+          '<td style="font-weight:900;color:#8B5CF6">'+s.points+'</td>' +
+          '<td><span class="badge '+(pct>=80?'badge-ok':'badge-flag')+'">'+(pct>=80?'ممتازة':'تحتاج متابعة')+'</span></td>' +
+        '</tr>';
+      });
+      html += '</tbody></table>';
+    }
+
+    document.getElementById('reportContent').innerHTML = html;
+  } catch(e) {
+    document.getElementById('reportContent').innerHTML = '<div class="empty">❌ خطأ في تحميل البيانات: '+esc(e.message||'')+'</div>';
+  }
+}
+
+function kpi(num, color, label) {
+  return '<div class="kpi"><div class="kpi-num" style="color:'+color+'">'+num+'</div><div class="kpi-label">'+label+'</div></div>';
+}
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+</body>
+</html>
