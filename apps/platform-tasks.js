@@ -394,7 +394,7 @@
     }
     var sb = window.EduOS_SB;
     var existing = STATE.mySubs.find(function (s) { return s.task_id === task.id; });
-    var row = { task_id: task.id, staff_db_id: STAFF_ID, status: 'pending', submission_data: payload, submitted_at: new Date().toISOString() };
+    var uName = (window.__eduUser && (window.__eduUser.name_ar || window.__eduUser.username)) || (typeof user !== 'undefined' && (user.name_ar || user.username)) || ''; var row = { task_id: task.id, staff_db_id: STAFF_ID, staff_name: uName, status: 'pending', submission_data: payload, submitted_at: new Date().toISOString() };
     var q = existing ? sb.from('staff_task_submissions').update(row).eq('id', existing.id) : sb.from('staff_task_submissions').insert(row);
     q.then(function (r) {
       if (r.error) { toast('تعذّر التسليم: ' + r.error.message, true); return; }
@@ -476,7 +476,8 @@
     var sub = STATE.adminSubs.concat(STATE.reviewExtra).find(function (s) { return String(s.id) === String(subId); });
     if (!sub) return;
     var task = STATE.adminTasks.find(function (t) { return t.id === sub.task_id; });
-    sb.from('staff_task_submissions').update({ status: newStatus, reviewed_by: STAFF_ID, reviewed_at: new Date().toISOString() }).eq('id', sub.id)
+    var doApprove = function(resolvedTask) {
+      sb.from('staff_task_submissions').update({ status: newStatus, reviewed_by: STAFF_ID, reviewed_at: new Date().toISOString() }).eq('id', sub.id)
       .then(function (r) {
         if (r.error) {
           // إن فشل بسبب أعمدة غير موجودة، حاول بالحد الأدنى
@@ -485,16 +486,22 @@
         return r;
       }).then(function (r2) {
         if (r2 && r2.error) { toast('تعذّر تنفيذ الإجراء: ' + r2.error.message, true); return; }
-        if ((newStatus === 'approved' || newStatus === 'override_approved') && task) {
+        if ((newStatus === 'approved' || newStatus === 'override_approved') && resolvedTask) {
           sb.from('staff_points_log').insert({
-            staff_db_id: sub.staff_db_id, points: task.points || 0, source: 'task',
-            source_id: task.id, note: task.title, created_at: new Date().toISOString()
+            staff_db_id: sub.staff_db_id, points: resolvedTask.points || 0, source: 'task',
+            source_id: resolvedTask.id, note: resolvedTask.title, created_at: new Date().toISOString()
           }).catch(function () {});
-          sb.from('staff_task_submissions').update({ points_awarded: task.points || 0 }).eq('id', sub.id).catch(function () {});
+          sb.from('staff_task_submissions').update({ points_awarded: resolvedTask.points || 0 }).eq('id', sub.id).catch(function () {});
         }
         toast('تم تحديث حالة التسليم');
         loadAdminData();
       }).catch(function () { toast('تعذّر تنفيذ الإجراء', true); });
+    };
+    if (!task && sub.task_id) {
+      sb.from('staff_tasks').select('*').eq('id', sub.task_id).single().then(function(r) {
+        doApprove(r.data || null);
+      }).catch(function() { doApprove(null); });
+    } else { doApprove(task); }
   }
 
   /* ─────────────────────── إنشاء مهمة جديدة ─────────────────────── */
