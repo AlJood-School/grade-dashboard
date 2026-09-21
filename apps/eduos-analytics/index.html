@@ -359,9 +359,19 @@ body{font-family:'Tajawal',Arial,sans-serif;background:var(--bg);color:var(--tex
 const SB = 'https://zuyizaiugpmhmeycqton.supabase.co';
 // KEY يُحسب في كل استعلام لتجنب التجمد على undefined عند التحميل المبكر
 function getKey() {
-  // أولوية: JWT من الجلسة (يُجدَّد تلقائياً) ← anon key من EduOS ← fallback
-  if (typeof window.eduosGetJWT === 'function') return window.eduosGetJWT();
-  return (window.EduOS && window.EduOS.SB_KEY) ? window.EduOS.SB_KEY : '';
+  const anonKey = (window.EduOS && window.EduOS.SB_KEY) ? window.EduOS.SB_KEY : '';
+  // نتحقق من JWT: إذا صالح نستخدمه، وإلا anon key
+  try {
+    var s = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+    var jwt = s.access_token || s.token;
+    if (jwt && jwt.split('.').length === 3) {
+      var payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+      if (payload.exp && payload.exp > Date.now() / 1000 + 30) {
+        return jwt; // JWT صالح وغير منتهٍ
+      }
+    }
+  } catch(e) {}
+  return anonKey; // JWT منتهٍ أو غير موجود → anon key (يعمل مع SECURITY DEFINER)
 }
 
 // ── استعلام REST ──
