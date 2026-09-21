@@ -358,29 +358,27 @@ body{font-family:'Tajawal',Arial,sans-serif;background:var(--bg);color:var(--tex
 <script>
 const SB = 'https://zuyizaiugpmhmeycqton.supabase.co';
 // KEY يُحسب في كل استعلام لتجنب التجمد على undefined عند التحميل المبكر
-function getKey() {
+// apikey = anon key دائماً | Authorization = JWT إذا صالح وإلا anon key
+function getHeaders(extra) {
   const anonKey = (window.EduOS && window.EduOS.SB_KEY) ? window.EduOS.SB_KEY : '';
-  // نتحقق من JWT: إذا صالح نستخدمه، وإلا anon key
+  let bearer = anonKey;
   try {
     var s = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
     var jwt = s.access_token || s.token;
     if (jwt && jwt.split('.').length === 3) {
-      var payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
-      if (payload.exp && payload.exp > Date.now() / 1000 + 30) {
-        return jwt; // JWT صالح وغير منتهٍ
-      }
+      var p = JSON.parse(atob(jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+      if (p.exp && p.exp > Date.now() / 1000 + 30) bearer = jwt;
     }
   } catch(e) {}
-  return anonKey; // JWT منتهٍ أو غير موجود → anon key (يعمل مع SECURITY DEFINER)
+  return Object.assign({'apikey': anonKey, 'Authorization': 'Bearer ' + bearer}, extra || {});
 }
+// للتوافق مع أي كود قديم يستخدم getKey
+function getKey() { return (window.EduOS && window.EduOS.SB_KEY) ? window.EduOS.SB_KEY : ''; }
 
 // ── استعلام REST ──
 async function sq(q) {
   try {
-    const k = getKey();
-    const r = await fetch(SB+'/rest/v1/'+q, {
-      headers: {'apikey': k, 'Authorization':'Bearer '+k}
-    });
+    const r = await fetch(SB+'/rest/v1/'+q, { headers: getHeaders() });
     return await r.json();
   } catch(e) { return []; }
 }
@@ -388,11 +386,8 @@ async function sq(q) {
 // ── استعلام عدد (Prefer: count=exact) ──
 async function sqCount(table, filter) {
   try {
-    const k = getKey();
     const url = SB+'/rest/v1/'+table+'?select=*'+(filter?'&'+filter:'')+'&limit=1';
-    const r = await fetch(url, {
-      headers: {'apikey':k,'Authorization':'Bearer '+k,'Prefer':'count=exact','Range-Unit':'items','Range':'0-0'}
-    });
+    const r = await fetch(url, { headers: getHeaders({'Prefer':'count=exact','Range-Unit':'items','Range':'0-0'}) });
     const range = r.headers.get('content-range');
     if (range && range.includes('/')) return parseInt(range.split('/')[1]) || 0;
     return 0;
@@ -402,10 +397,9 @@ async function sqCount(table, filter) {
 // ── RPC ──
 async function sqrpc(fn, body) {
   try {
-    const k = getKey();
     const r = await fetch(SB+'/rest/v1/rpc/'+fn, {
       method:'POST',
-      headers:{'apikey':k,'Authorization':'Bearer '+k,'Content-Type':'application/json'},
+      headers: getHeaders({'Content-Type':'application/json'}),
       body: JSON.stringify(body)
     });
     return await r.json();
@@ -799,7 +793,7 @@ async function askAI(q) {
   try {
     const r = await fetch(SB+'/functions/v1/agent-brain', {
       method:'POST',
-      headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},
+      headers: getHeaders({'Content-Type':'application/json'}),
       body: JSON.stringify({action:'analytics_query',query:q,context:'analytics'})
     });
     const d = await r.json();
