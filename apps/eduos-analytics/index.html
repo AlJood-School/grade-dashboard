@@ -357,13 +357,19 @@ body{font-family:'Tajawal',Arial,sans-serif;background:var(--bg);color:var(--tex
 
 <script>
 const SB = 'https://zuyizaiugpmhmeycqton.supabase.co';
-const KEY = window.EduOS?.SB_KEY;
+// KEY يُحسب في كل استعلام لتجنب التجمد على undefined عند التحميل المبكر
+function getKey() {
+  // أولوية: JWT من الجلسة (يُجدَّد تلقائياً) ← anon key من EduOS ← fallback
+  if (typeof window.eduosGetJWT === 'function') return window.eduosGetJWT();
+  return (window.EduOS && window.EduOS.SB_KEY) ? window.EduOS.SB_KEY : '';
+}
 
 // ── استعلام REST ──
 async function sq(q) {
   try {
+    const k = getKey();
     const r = await fetch(SB+'/rest/v1/'+q, {
-      headers: {'apikey':KEY,'Authorization':'Bearer '+KEY}
+      headers: {'apikey': k, 'Authorization':'Bearer '+k}
     });
     return await r.json();
   } catch(e) { return []; }
@@ -372,9 +378,10 @@ async function sq(q) {
 // ── استعلام عدد (Prefer: count=exact) ──
 async function sqCount(table, filter) {
   try {
+    const k = getKey();
     const url = SB+'/rest/v1/'+table+'?select=*'+(filter?'&'+filter:'')+'&limit=1';
     const r = await fetch(url, {
-      headers: {'apikey':KEY,'Authorization':'Bearer '+KEY,'Prefer':'count=exact','Range-Unit':'items','Range':'0-0'}
+      headers: {'apikey':k,'Authorization':'Bearer '+k,'Prefer':'count=exact','Range-Unit':'items','Range':'0-0'}
     });
     const range = r.headers.get('content-range');
     if (range && range.includes('/')) return parseInt(range.split('/')[1]) || 0;
@@ -385,9 +392,10 @@ async function sqCount(table, filter) {
 // ── RPC ──
 async function sqrpc(fn, body) {
   try {
+    const k = getKey();
     const r = await fetch(SB+'/rest/v1/rpc/'+fn, {
       method:'POST',
-      headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},
+      headers:{'apikey':k,'Authorization':'Bearer '+k,'Content-Type':'application/json'},
       body: JSON.stringify(body)
     });
     return await r.json();
@@ -836,12 +844,25 @@ setInterval(loadAll, 60000);
     const wb=document.getElementById('weekLabel');
     if(wb && e.detail && e.detail.label) wb.textContent=e.detail.label;
   });
-  document.addEventListener('DOMContentLoaded', function(){
-    if(window.EduWeek && window.EduWeek.label){
-      const wb=document.getElementById('weekLabel');
-      if(wb) wb.textContent=window.EduWeek.label;
-    }
-  });
+  // fallback: إذا لم يصل الحدث خلال 3 ثوان → استعلم مباشرة
+  setTimeout(function(){
+    const wb=document.getElementById('weekLabel');
+    if(!wb) return;
+    if(wb.textContent && wb.textContent !== '...' && wb.textContent !== '') return;
+    // حاول من EduWeek أولاً
+    if(window.EduWeek && window.EduWeek.label){ wb.textContent=window.EduWeek.label; return; }
+    // استعلام مباشر من academic_calendar
+    var k=getKey();
+    if(!k) return;
+    var today=new Date().toISOString().split('T')[0];
+    fetch('https://zuyizaiugpmhmeycqton.supabase.co/rest/v1/academic_calendar?start_date=lte.'+today+'&end_date=gte.'+today+'&select=week_number,label&limit=1',{
+      headers:{'apikey':k,'Authorization':'Bearer '+k}
+    }).then(r=>r.json()).then(rows=>{
+      if(rows && rows[0]){
+        wb.textContent = rows[0].label || ('الأسبوع '+(rows[0].week_number||''));
+      }
+    }).catch(()=>{});
+  }, 3000);
 })();
 
 </body>
