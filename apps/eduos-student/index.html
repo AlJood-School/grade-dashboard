@@ -690,12 +690,15 @@ async function loadSchedule() {
   if (!data || data.length === 0) { empty('fullSchedule', 'لا جدول مسجّل | No timetable'); return; }
 
   var map = {};
-  var maxPeriod = 0;
+  var maxPeriodWeekday = 0;
   data.forEach(function(s) {
     if (!map[s.day]) map[s.day] = {};
     map[s.day][s.period] = s;
-    if (s.period > maxPeriod) maxPeriod = s.period;
+    if (s.day !== 'الجمعة' && s.period > maxPeriodWeekday) maxPeriodWeekday = s.period;
   });
+  // الجمعة = 4 حصص فقط في كل الحلقات
+  var FRI_MAX = 4;
+  var maxPeriod = maxPeriodWeekday || 8;
 
   var periods = [];
   for (var i = 1; i <= maxPeriod; i++) periods.push(i);
@@ -707,8 +710,13 @@ async function loadSchedule() {
   periods.forEach(function(p) {
     html += '<tr><td class="period-col">ح' + p + '</td>';
     DAYS.forEach(function(d) {
-      var s = map[d] && map[d][p];
-      html += '<td>' + (s ? '<div class="subj-cell">' + (s.subject || '—') + '</div>' : '<span style="color:var(--text3)">—</span>') + '</td>';
+      var isFriday = (d === 'الجمعة');
+      if (isFriday && p > FRI_MAX) {
+        html += '<td style="background:var(--surface2);color:var(--text3);font-size:12px;text-align:center;font-style:italic">نهاية الدوام</td>';
+      } else {
+        var s = map[d] && map[d][p];
+        html += '<td>' + (s ? '<div class="subj-cell">' + (s.subject || '—') + '</div>' : '<span style="color:var(--text3)">—</span>') + '</td>';
+      }
     });
     html += '</tr>';
   });
