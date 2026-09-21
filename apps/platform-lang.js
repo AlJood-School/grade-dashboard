@@ -845,3 +845,67 @@ window.eduosLogout = function() {
     setTimeout(startIfLoggedIn, 500);
   }
 })();
+
+/* ═══════════════════════════════════════════════════════════════
+ * eduosGetJWT + eduosRefreshToken
+ * دوال موحَّدة للحصول على JWT صالح في جميع البوابات
+ * إذا انتهت صلاحية الـ JWT → يُجدَّد تلقائياً بـ refresh_token
+ * إذا فشل التجديد → يُعاد anon key (للقراءة فقط)
+ * ══════════════════════════════════════════════════════════════ */
+window.eduosRefreshToken = async function() {
+  try {
+    var s = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+    var rt = s.refresh_token;
+    if (!rt || !window.EduOS) return false;
+    var r = await fetch(window.EduOS.SB_URL + '/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST',
+      headers: { 'apikey': window.EduOS.SB_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: rt })
+    });
+    if (r.ok) {
+      var data = await r.json();
+      s.token = data.access_token;
+      s.access_token = data.access_token;
+      if (data.refresh_token) s.refresh_token = data.refresh_token;
+      sessionStorage.setItem('edoos_user', JSON.stringify(s));
+      return true;
+    }
+  } catch(e) {}
+  return false;
+};
+
+window.eduosGetJWT = function() {
+  var s = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+  var tk = s.access_token || s.token;
+  if (tk) {
+    try {
+      var parts = tk.split('.');
+      if (parts.length === 3) {
+        var payload = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
+        if (payload.exp && payload.exp > Date.now() / 1000 + 30) {
+          return tk; // صالح (هامش 30 ثانية)
+        }
+      }
+    } catch(e) {}
+  }
+  // انتهى أو غير موجود → anon key للقراءة
+  return window.EduOS ? window.EduOS.SB_KEY : '';
+};
+
+// عند تحميل أي صفحة → تحقق من الـ token وجدده إذا سينتهي خلال 5 دق
+(function() {
+  setTimeout(async function() {
+    var s = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+    var tk = s.access_token || s.token;
+    if (!tk) return;
+    try {
+      var parts = tk.split('.');
+      if (parts.length !== 3) return;
+      var payload = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
+      if (payload.exp && payload.exp < Date.now() / 1000 + 300) {
+        // ينتهي خلال 5 دقائق → جدّد
+        await window.eduosRefreshToken();
+      }
+    } catch(e) {}
+  }, 1500);
+})();
