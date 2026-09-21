@@ -198,19 +198,35 @@
       }
       async function init() {
         try {
-          var results = await Promise.all([
-            fetchJson('/rest/v1/parent_credentials?select=national_id,activated,phone&order=national_id.asc&limit=5000'),
-            fetchJson('/rest/v1/students?select=name,class_name,student_number,grade,national_id&order=national_id.asc&limit=5000')
-          ]);
-          parents = Array.isArray(results[0]) ? results[0] : [];
-          (Array.isArray(results[1]) ? results[1] : []).forEach(function (student) {
-            studentsByNationalId[String(student.national_id)] = student;
+          // استخدام RPC SECURITY DEFINER — يعمل مع anon key
+          var SB = window.EduOS.SB_URL || 'https://zuyizaiugpmhmeycqton.supabase.co';
+          var r = await fetch(SB + '/rest/v1/rpc/get_parents_admin', {
+            method: 'POST',
+            headers: getHeaders({'Content-Type': 'application/json'}),
+            body: JSON.stringify({p_limit: 200, p_offset: 0})
+          });
+          var data = await r.json();
+          if (!r.ok || data.message) throw new Error(data.message || 'RPC error');
+          // ملء الـ KPIs من الـ RPC
+          var totEl = document.getElementById('kpi-total'), actEl = document.getElementById('kpi-activated'),
+              nactEl = document.getElementById('kpi-not-activated'), phEl = document.getElementById('kpi-with-phone');
+          if (totEl) totEl.textContent = (data.total||0).toLocaleString('ar-EG');
+          if (actEl) actEl.textContent = (data.activated||0).toLocaleString('ar-EG');
+          if (nactEl) nactEl.textContent = (data.not_activated||0).toLocaleString('ar-EG');
+          if (phEl) phEl.textContent = (data.with_phone||0).toLocaleString('ar-EG');
+          // بناء parents array من rows
+          var rows = data.rows || [];
+          parents = rows.map(function(row) {
+            if (row.student_name) {
+              studentsByNationalId[String(row.national_id)] = {name: row.student_name, class_name: row.class_name, grade: row.grade};
+            }
+            return {national_id: row.national_id, activated: row.activated, phone: row.phone_masked};
           });
           loading.style.display = 'none';
           updateKpis();
           render();
         } catch (error) {
-          showError('تعذر تحميل بيانات أولياء الأمور. الرجاء المحاولة لاحقاً أو المراجعة مع المسجِّلة.');
+          showError('تعذر تحميل بيانات أولياء الأمور: ' + error.message);
           console.error(error);
         }
       }
