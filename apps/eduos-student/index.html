@@ -605,14 +605,24 @@ async function loadTodaySchedule() {
   if (!todayAr) { empty('todaySchedule', 'لا حصص — عطلة | No school today'); return; }
   var cls = encodeURIComponent(user.class_name || '');
   if (!cls) { empty('todaySchedule', 'لا فصل محدد | No class'); return; }
-  var data = await dbGet('schedules', 'is_active=eq.true&class_name=eq.' + cls + '&day=eq.' + encodeURIComponent(todayAr) + '&select=period,subject,teacher_name&order=period&limit=10');
-  if (!data || data.length === 0) { empty('todaySchedule', 'لا حصص مسجّلة لليوم | No classes today'); return; }
+  var raw = await dbGet('schedules', 'is_active=eq.true&class_name=eq.' + cls + '&day=eq.' + encodeURIComponent(todayAr) + '&select=period,subject,teacher_name,vacancy_reason&order=period&limit=30');
+  if (!raw || raw.length === 0) { empty('todaySchedule', 'لا حصص مسجّلة لليوم | No classes today'); return; }
+  // تجميع بأولوية: المعلمة الحقيقية > الشاغر
+  var todayMap = {};
+  raw.forEach(function(s) {
+    var existing = todayMap[s.period];
+    var isVacancy = (s.teacher_name === 'شاغر' || !!s.vacancy_reason);
+    var existingIsVacancy = existing && (existing.teacher_name === 'شاغر' || !!existing.vacancy_reason);
+    if (!existing || (existingIsVacancy && !isVacancy)) todayMap[s.period] = s;
+  });
+  var data = Object.keys(todayMap).sort(function(a,b){return +a - +b;}).map(function(k){ return todayMap[k]; });
   el.innerHTML = data.map(function(s) {
+    var isVacancy = (s.teacher_name === 'شاغر' || !!s.vacancy_reason);
     return '<div class="period-row">' +
       '<div class="period-badge">' + (s.period || '—') + '</div>' +
       '<div class="period-info">' +
         '<div class="period-subj">' + (s.subject || '—') + '</div>' +
-        '<div class="period-meta">' + (s.teacher_name || '') + '</div>' +
+        '<div class="period-meta" style="' + (isVacancy ? 'color:var(--danger)' : '') + '">' + (isVacancy ? '⚠️ شاغر' : (s.teacher_name || '')) + '</div>' +
       '</div>' +
     '</div>';
   }).join('');
