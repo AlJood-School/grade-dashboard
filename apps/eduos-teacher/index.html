@@ -719,6 +719,15 @@ tr:hover td{background:var(--surface2)}
           <select class="filter-select" id="classFilter" onchange="loadStudents()">
             <option value="">كل الفصول / All Classes</option>
           </select>
+          <select class="filter-select" id="varkFilter" onchange="filterStudents()" title="فلتر حسب نمط التعلم VARK">
+            <option value="">كل الأنماط / All VARK</option>
+            <option value="V">👁 بصري</option>
+            <option value="A">👂 سمعي</option>
+            <option value="R">📖 قرائي</option>
+            <option value="K">✋ حسّي</option>
+            <option value="MULTI">🧠 متعدد</option>
+            <option value="NONE">⬜ لم تؤدِ الاختبار</option>
+          </select>
           <button class="btn-sm btn-primary" onclick="window.location.href='../eduos-attendance/'">📋 سجّل حضور / Attendance</button>
         </div>
         <div style="overflow-x:auto">
@@ -1997,6 +2006,18 @@ async function loadStudents() {
       grades.forEach(g => { if(!grouped[g.student_id]) grouped[g.student_id]=[]; if(g.max_score) grouped[g.student_id].push(g.score/g.max_score*100); });
       Object.entries(grouped).forEach(([id,scores]) => { avgMap[id] = Math.round(scores.reduce((a,b)=>a+b,0)/scores.length); });
     }
+    // ── تحميل VARK بالجملة ──
+    const studentNames = allStudents.map(s => s.name).filter(Boolean);
+    if (studentNames.length) {
+      try {
+        const { data: varkData } = await sb.from('vark_results')
+          .select('student_name,dominant_style')
+          .eq('is_latest', true)
+          .in('student_name', studentNames);
+        window._varkMap = {};
+        if (varkData) varkData.forEach(v => { if(v.dominant_style) window._varkMap[v.student_name] = v.dominant_style; });
+      } catch(ve) { window._varkMap = {}; }
+    } else { window._varkMap = {}; }
     renderStudentsTable(allStudents, avgMap, new Set());
     if (window.ParentBadge) window.ParentBadge.inject('#studentsBody');
     const classes = [...new Set(allStudents.map(s=>s.class_name).filter(Boolean))].sort();
@@ -2019,7 +2040,19 @@ function renderStudentsTable(students, avgMap, flagSet) {
     const stars = s.reinforcement_stars || 0;
     const sb1 = avg ? Math.min(100, Math.round(avg*0.4 + (att||80)*0.3 + e*3)) : null;
     return '<tr><td>' + (i+1) + '</td>'
-      + '<td style="font-weight:700" data-student-id="' + s.id + '" data-student-name="' + (s.name||'') + '" data-class-name="' + (s.class_name||'') + '" data-parent-phone="' + (s.parent_phone||'') + '">' + ((window.EduLang?.getLang()==='en'&&s.name_en)?s.name_en:(s.name||'—')) + (window.ParentBadge ? window.ParentBadge.badgeHTML(s.parent_phone||'') : '') + '</td>'
+      + '<td style="font-weight:700" data-student-id="' + s.id + '" data-student-name="' + (s.name||'') + '" data-class-name="' + (s.class_name||'') + '" data-parent-phone="' + (s.parent_phone||'') + '">'
+      + ((window.EduLang?.getLang()==='en'&&s.name_en)?s.name_en:(s.name||'—'))
+      + (window.ParentBadge ? window.ParentBadge.badgeHTML(s.parent_phone||'') : '')
+      + (function(nm) {
+          var vm = window._varkMap || {};
+          var v = vm[nm];
+          var icons = {V:'👁',A:'👂',R:'📖',K:'✋',MULTI:'🧠'};
+          var labels = {V:'بصري',A:'سمعي',R:'قرائي',K:'حسّي',MULTI:'متعدد'};
+          var bgs = {V:'#DBEAFE;color:#1D4ED8',A:'#EDE9FE;color:#5B21B6',R:'#D1FAE5;color:#065F46',K:'#FEF3C7;color:#92400E',MULTI:'#F3E8FF;color:#6D28D9'};
+          if (v && icons[v]) return '<br><span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:'+bgs[v]+';white-space:nowrap">'+icons[v]+' '+labels[v]+'</span>';
+          return '<br><span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:#F1F5F9;color:#94A3B8;white-space:nowrap">⬜ لم تؤدِ الاختبار</span>';
+        })(s.name||'')
+      + '</td>'
       + '<td>' + (s.class_name||'—') + '</td>'
       + '<td>' + (att!==null?att+'%':'—') + '</td>'
       + '<td>' + (avg!==null?avg+'%':'—') + '</td>'
@@ -2036,7 +2069,21 @@ function renderStudentsTable(students, avgMap, flagSet) {
 
 function filterStudents() {
   const q = (document.getElementById('studentSearch')?.value||'').toLowerCase();
-  document.querySelectorAll('#studentsBody tr').forEach(r => { r.style.display = r.textContent.toLowerCase().includes(q)?'':'none'; });
+  const vf = document.getElementById('varkFilter')?.value || '';
+  document.querySelectorAll('#studentsBody tr').forEach(r => {
+    const matchText = !q || r.textContent.toLowerCase().includes(q);
+    let matchVark = true;
+    if (vf) {
+      const nameCell = r.querySelector('td[data-student-name]');
+      if (nameCell) {
+        const sName = nameCell.dataset.studentName || '';
+        const sv = (window._varkMap || {})[sName];
+        if (vf === 'NONE') matchVark = !sv;
+        else matchVark = sv === vf;
+      }
+    }
+    r.style.display = (matchText && matchVark) ? '' : 'none';
+  });
 }
 
 // ── GRADES ──

@@ -19,8 +19,8 @@ window.ParentBadge = (function () {
 
   /* ── نصوص ── */
   var LABELS = {
-    activated:   { ar: 'مُفعَّل',              en: 'Activated',    color: '#16A34A', bg: '#DCFCE7' },
-    pending:     { ar: 'في انتظار التفعيل',    en: 'Pending',      color: '#D97706', bg: '#FEF3C7' },
+    activated:   { ar: 'مُفعَّل',                   en: 'Activated',      color: '#16A34A', bg: '#DCFCE7' },
+    pending:     { ar: 'لم يفتح البوابة بعد',       en: 'Not Opened Yet', color: '#D97706', bg: '#FEF3C7' },
     unlinked:    { ar: 'غير مرتبط',            en: 'Not Linked',   color: '#94A3B8', bg: '#F1F5F9' }
   };
 
