@@ -126,6 +126,7 @@
       'use strict';
       var parents = [];
       var studentsByNationalId = Object.create(null);
+      var realKpis = {total: 0, activated: 0, not_activated: 0, with_phone: 0};
       var searchInput = document.getElementById('search');
       var statusFilter = document.getElementById('status-filter');
       var table = document.getElementById('parents-table');
@@ -166,12 +167,10 @@
         });
       }
       function updateKpis() {
-        var active = parents.filter(function (row) { return row.activated === true; }).length;
-        var withPhone = parents.filter(function (row) { return String(row.phone == null ? '' : row.phone).trim() !== ''; }).length;
-        document.getElementById('total-count').textContent = parents.length.toLocaleString('ar-EG');
-        document.getElementById('active-count').textContent = active.toLocaleString('ar-EG');
-        document.getElementById('pending-count').textContent = (parents.length - active).toLocaleString('ar-EG');
-        document.getElementById('phone-count').textContent = withPhone.toLocaleString('ar-EG');
+        document.getElementById('total-count').textContent = (realKpis.total || parents.length).toLocaleString('ar-EG');
+        document.getElementById('active-count').textContent = (realKpis.activated || 0).toLocaleString('ar-EG');
+        document.getElementById('pending-count').textContent = (realKpis.not_activated || 0).toLocaleString('ar-EG');
+        document.getElementById('phone-count').textContent = (realKpis.with_phone || 0).toLocaleString('ar-EG');
       }
       function render() {
         var query = normalize(searchInput.value.trim());
@@ -185,7 +184,8 @@
         body.innerHTML = rows.map(function (row) {
           var student = studentsByNationalId[String(row.national_id)] || {};
           var active = row.activated === true;
-          return '<tr><td>' + esc(row.national_id || 'غير متوفر') + '</td><td class="student-name">' + esc(student.name || 'غير مرتبط') + '</td><td class="class-name">' + esc(student.class_name || student.grade || 'غير متوفر') + '</td><td class="phone" dir="ltr">' + esc(maskPhone(row.phone)) + '</td><td><span class="status ' + (active ? 'active' : 'pending') + '">' + (active ? '● مُفعَّل' : '● في انتظار التفعيل') + '</span></td></tr>';
+          var maskedNid = row.national_id ? '****' + String(row.national_id).slice(-4) : 'غير متوفر';
+          return '<tr><td>' + esc(maskedNid) + '</td><td class="student-name">' + esc(student.name || 'غير مرتبط') + '</td><td class="class-name">' + esc(student.class_name || student.grade || 'غير متوفر') + '</td><td class="phone" dir="ltr">' + esc(maskPhone(row.phone)) + '</td><td><span class="status ' + (active ? 'active' : 'pending') + '">' + (active ? '● مُفعَّل' : '● في انتظار التفعيل') + '</span></td></tr>';
         }).join('');
         document.getElementById('result-count').textContent = rows.length.toLocaleString('ar-EG') + ' سجل';
         table.hidden = rows.length === 0;
@@ -215,6 +215,11 @@
           if (nactEl) nactEl.textContent = (data.not_activated||0).toLocaleString('ar-EG');
           if (phEl) phEl.textContent = (data.with_phone||0).toLocaleString('ar-EG');
           // بناء parents array من rows
+          // حفظ الـ KPIs الحقيقية من DB
+          realKpis.total = data.total || 0;
+          realKpis.activated = data.activated || 0;
+          realKpis.not_activated = data.not_activated || 0;
+          realKpis.with_phone = data.with_phone || 0;
           var rows = data.rows || [];
           parents = rows.map(function(row) {
             if (row.student_name) {
