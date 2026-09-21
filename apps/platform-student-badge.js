@@ -15,16 +15,21 @@
 
   const _cache = {};
 
-  async function _fetch(sb, studentId) {
+  async function _fetch(sb, studentId, studentMeta) {
     if (_cache[studentId]) return _cache[studentId];
+    // VARK: يُبحث بـ student_name لأن vark_results لا يحتوي student_id
+    const studentName = studentMeta?.name || studentMeta?.student_name || (window._studentNameMap && window._studentNameMap[studentId]) || String(studentId);
+    const studentClass = studentMeta?.class_name || studentMeta?.class || (window._studentClassMap && window._studentClassMap[studentId]) || '';
     const [beh, vark, homeroom] = await Promise.all([
-      sb.from('behavior_incidents').select('action_type,violation_category,degree,created_at').eq('student_id', studentId).order('created_at', { ascending: false }).limit(5),
-      sb.from('vark_results').select('dominant_style').eq('student_id', studentId).order('created_at', { ascending: false }).limit(1),
-      sb.from('teacher_assignments').select('teacher_name_ar').eq('class_name', window._studentClassMap?.[studentId] || '').eq('is_homeroom', true).limit(1)
+      sb.from('behavior_incidents').select('action_type,violation_category,degree,created_at').eq('student_db_id', studentId).order('created_at', { ascending: false }).limit(5).then(r => r).catch(() => ({data:[]})),
+      sb.from('vark_results').select('dominant_style,v_score,a_score,r_score,k_score').eq('student_name', studentName).eq('is_latest', true).limit(1).then(r => r).catch(() => ({data:[]})),
+      sb.from('teacher_assignments').select('teacher_name_ar').eq('class_name', studentClass).eq('is_homeroom', true).limit(1).then(r => r).catch(() => ({data:[]}))
     ]);
+    const varkRow = vark.data?.[0] || null;
     const data = {
       incidents: beh.data || [],
-      vark: vark.data?.[0]?.dominant_style || null,
+      vark: varkRow?.dominant_style || null,
+      vark_scores: varkRow ? {V: varkRow.v_score, A: varkRow.a_score, R: varkRow.r_score, K: varkRow.k_score} : null,
       homeroom: homeroom.data?.[0]?.teacher_name_ar || null
     };
     _cache[studentId] = data;
@@ -62,7 +67,7 @@
     return `
       <div style="font-weight:700;margin-bottom:6px;font-size:14px;">${student.name || student.student_name || ''}</div>
       <div style="font-size:13px;">🏫 ${student.class_name||''} &nbsp;|&nbsp; 👩‍🏫 ${data.homeroom||'—'}</div>
-      ${data.vark ? `<div style="font-size:13px;margin-top:4px;">${VARK_ICON[data.vark]||''} نمط التعلم: ${VARK_AR[data.vark]||data.vark}</div>` : ''}
+      ${data.vark ? `<div style="font-size:13px;margin-top:4px;">${VARK_ICON[data.vark]||''} نمط التعلم: ${VARK_AR[data.vark]||data.vark}${data.vark_scores ? ' ('+['V','A','R','K'].map(x=>x+':'+data.vark_scores[x]).join(' / ')+')' : ''}</div>` : ''}
       <div style="font-size:13px;margin-top:4px;">⚠️ المخالفات: ${count}</div>
       ${rows}
     `;
@@ -135,7 +140,7 @@
    */
   async function addBadgesToElement(el, student, sb) {
     _injectCss();
-    const data = await _fetch(sb, student.id || student.student_id);
+    const data = await _fetch(sb, student.id || student.student_id, student);
     const badgeEl = document.createElement('div');
     badgeEl.innerHTML = _badgeHtml(data, student);
     el.appendChild(badgeEl);
@@ -157,7 +162,7 @@
       const id = el.dataset.studentId;
       const name = el.dataset.studentName || el.textContent.trim();
       const cls  = el.dataset.className || '';
-      const data = await _fetch(sb, id);
+      const data = await _fetch(sb, id, {name, class_name: cls});
       const student = { id, name, class_name: cls };
       el.style.cursor = 'pointer';
       const tipHtml = _tooltipHtml(data, student);
