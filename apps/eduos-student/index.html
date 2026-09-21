@@ -686,14 +686,22 @@ async function loadSchedule() {
   var DAYS_EN = ['Mon','Tue','Wed','Thu','Fri'];
   var cls = encodeURIComponent(user.class_name || '');
   if (!cls) { empty('fullSchedule', 'لا فصل محدد | No class'); return; }
-  var data = await dbGet('schedules', 'is_active=eq.true&class_name=eq.' + cls + '&select=day,period,subject&order=period&limit=60');
+  var data = await dbGet('schedules', 'is_active=eq.true&class_name=eq.' + cls + '&select=day,period,subject,teacher_name&order=day,period&limit=200');
   if (!data || data.length === 0) { empty('fullSchedule', 'لا جدول مسجّل | No timetable'); return; }
 
   var map = {};
   var maxPeriodWeekday = 0;
   data.forEach(function(s) {
     if (!map[s.day]) map[s.day] = {};
-    map[s.day][s.period] = s;
+    var existing = map[s.day][s.period];
+    // إذا لا يوجد سجل → أضف
+    // إذا الموجود "شاغر" والجديد معلمة حقيقية → استبدل
+    // إذا الموجود معلمة حقيقية → احتفظ به (لا تستبدل)
+    var isVacancy = (s.teacher_name === 'شاغر' || s.vacancy_reason);
+    var existingIsVacancy = existing && (existing.teacher_name === 'شاغر' || existing.vacancy_reason);
+    if (!existing || (existingIsVacancy && !isVacancy)) {
+      map[s.day][s.period] = s;
+    }
     if (s.day !== 'الجمعة' && s.period > maxPeriodWeekday) maxPeriodWeekday = s.period;
   });
   // الجمعة = 4 حصص فقط في كل الحلقات
