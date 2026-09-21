@@ -495,6 +495,7 @@ const KEY = window.EduOS?.SB_KEY || '';
 
 let user = null;
 let studentId = null;
+let studentNo  = null; // student_number (text) — يُستخدم في student_grades
 let isEN = false;
 
 // ── HELPERS ──
@@ -554,6 +555,7 @@ async function init() {
     return;
   }
   studentId = user.id || user.student_id || '';
+  studentNo  = user.student_number || '';
 
   // Week pill
   if (window.EduOSWeek) {
@@ -620,22 +622,23 @@ async function loadTodaySchedule() {
 async function loadGradeSummary() {
   const el = document.getElementById('gradeSummary');
   if (!studentId) { empty('gradeSummary', 'لا بيانات | No data'); return; }
-  const data = await dbGet('student_grades', 'student_id=eq.' + encodeURIComponent(studentId) + '&select=subject,total_grade,effort_grade&order=total_grade.desc&limit=20');
-  if (!data || data.length === 0) { empty('gradeSummary', 'لا بيانات | No data'); return; }
-  const avg = Math.round(data.reduce((s, g) => s + (g.total_grade || 0), 0) / data.length);
+  if (!studentNo) { empty('gradeSummary', 'لا بيانات | No data'); return; }
+  const data = await dbGet('student_grades', 'student_no=eq.' + encodeURIComponent(studentNo) + '&select=subject,term_total,effort,sb1,formative,summative&order=term_total.desc&limit=20');
+  if (!data || data.length === 0) { empty('gradeSummary', 'لا درجات مسجّلة بعد | No grades yet'); return; }
+  const avg = Math.round(data.reduce((s, g) => s + (g.term_total || 0), 0) / data.length);
   document.getElementById('statAvg').textContent = avg + '%';
   document.getElementById('kpiAvg').textContent = avg + '%';
   document.getElementById('kpiAvgBar').style.width = avg + '%';
   const top = data[0];
   document.getElementById('kpiTop').textContent = top.subject || '—';
-  const eff = data[0]?.effort_grade;
-  document.getElementById('kpiEffort').textContent = eff ? eff + '/20' : '—';
+  const eff = data[0]?.effort;
+  document.getElementById('kpiEffort').textContent = eff !== null && eff !== undefined ? eff + '/20' : '—';
 
   function gc(g) { return g >= 90 ? 'grade-a' : g >= 75 ? 'grade-b' : g >= 60 ? 'grade-c' : 'grade-f'; }
   el.innerHTML = data.slice(0, 6).map(g =>
     '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)">' +
     '<span style="font-weight:700;font-size:15px">' + g.subject + '</span>' +
-    '<span class="grade-num ' + gc(g.total_grade || 0) + '">' + (g.total_grade || '—') + (g.total_grade ? '%' : '') + '</span>' +
+    '<span class="grade-num ' + gc(g.term_total || 0) + '">' + (g.term_total !== null && g.term_total !== undefined ? g.term_total + '%' : '—') + '</span>' +
     '</div>'
   ).join('') + (data.length > 6 ? '<div style="text-align:center;padding:12px;font-size:13px;color:var(--text2)">' + (data.length - 6) + ' مادة أخرى...</div>' : '');
 }
@@ -644,17 +647,18 @@ async function loadGradeSummary() {
 async function loadGrades() {
   const term = document.getElementById('termSelect').value;
   spinner('gradesTable');
-  const data = await dbGet('student_grades', 'student_id=eq.' + encodeURIComponent(studentId) + '&term=eq.' + term + '&select=subject,total_grade,sb1,oral_grade,effort_grade,class_work&order=subject&limit=30');
+  if (!studentNo) { empty('gradesTable', 'لا بيانات | No data'); return; }
+  const data = await dbGet('student_grades', 'student_no=eq.' + encodeURIComponent(studentNo) + '&term=eq.' + term + '&select=subject,term_total,sb1,effort,formative,summative&order=subject&limit=30');
   if (!data || data.length === 0) { empty('gradesTable', 'لا بيانات لهذا الفصل | No data for this term'); return; }
-  const avg = Math.round(data.reduce((s, g) => s + (g.total_grade || 0), 0) / data.length);
+  const avg = Math.round(data.reduce((s, g) => s + (g.term_total || 0), 0) / data.length);
   document.getElementById('kpiAvg').textContent = avg + '%';
   document.getElementById('kpiAvgBar').style.width = avg + '%';
-  const sorted = [...data].sort((a, b) => (b.total_grade || 0) - (a.total_grade || 0));
+  const sorted = [...data].sort((a, b) => (b.term_total || 0) - (a.term_total || 0));
   document.getElementById('kpiTop').textContent = sorted[0]?.subject || '—';
   const sb1 = data[0]?.sb1;
   document.getElementById('kpiSB1').textContent = sb1 !== undefined && sb1 !== null ? sb1 + '' : '—';
-  const eff = data[0]?.effort_grade;
-  document.getElementById('kpiEffort').textContent = eff ? eff + '/20' : '—';
+  const eff = data[0]?.effort;
+  document.getElementById('kpiEffort').textContent = eff !== null && eff !== undefined ? eff + '/20' : '—';
 
   function gc(g) { return g >= 90 ? 'grade-a' : g >= 75 ? 'grade-b' : g >= 60 ? 'grade-c' : 'grade-f'; }
   function label(g) { return g >= 90 ? 'ممتاز | Excellent' : g >= 75 ? 'جيد جداً | V.Good' : g >= 60 ? 'جيد | Good' : 'يحتاج تحسين | Needs Work'; }
@@ -662,15 +666,15 @@ async function loadGrades() {
 
   document.getElementById('gradesTable').innerHTML =
     '<div class="tbl-wrap"><table>' +
-    '<thead><tr><th>المادة | Subject</th><th>الكلي | Total</th><th>SB1</th><th>الشفهي | Oral</th><th>المجهود | Effort</th><th>التقدير | Grade</th></tr></thead>' +
+    '<thead><tr><th>المادة | Subject</th><th>الكلي | Total</th><th>SB1</th><th>التكويني | Formative</th><th>المجهود | Effort</th><th>التقدير | Grade</th></tr></thead>' +
     '<tbody>' + data.map(g =>
       '<tr>' +
       '<td><strong>' + (g.subject || '—') + '</strong></td>' +
-      '<td><span class="grade-num ' + gc(g.total_grade || 0) + '">' + (g.total_grade !== null ? g.total_grade : '—') + '</span></td>' +
-      '<td>' + (g.sb1 !== null ? g.sb1 : '—') + '</td>' +
-      '<td>' + (g.oral_grade !== null ? g.oral_grade : '—') + '</td>' +
-      '<td>' + (g.effort_grade !== null ? g.effort_grade + '/20' : '—') + '</td>' +
-      '<td><span class="badge ' + lclass(g.total_grade || 0) + '">' + label(g.total_grade || 0) + '</span></td>' +
+      '<td><span class="grade-num ' + gc(g.term_total || 0) + '">' + (g.term_total !== null && g.term_total !== undefined ? g.term_total : '—') + '</span></td>' +
+      '<td>' + (g.sb1 !== null && g.sb1 !== undefined ? g.sb1 : '—') + '</td>' +
+      '<td>' + (g.formative !== null && g.formative !== undefined ? g.formative : '—') + '</td>' +
+      '<td>' + (g.effort !== null && g.effort !== undefined ? g.effort + '/20' : '—') + '</td>' +
+      '<td><span class="badge ' + lclass(g.term_total || 0) + '">' + label(g.term_total || 0) + '</span></td>' +
       '</tr>'
     ).join('') + '</tbody></table></div>';
 }
@@ -716,7 +720,7 @@ async function loadSchedule() {
 async function loadHomework() {
   spinner('homeworkList');
   // Try homework table (may not exist, show لا بيانات)
-  const data = await dbGet('homework', 'class_id=eq.' + encodeURIComponent(user.class_id || '') + '&select=subject,title,due_date,status&order=due_date.desc&limit=20');
+  const data = await dbGet('homework', 'student_id=eq.' + encodeURIComponent(studentId) + '&select=subject,title,due_date,status&order=due_date.desc&limit=20');
   if (!data || data.length === 0) {
     empty('homeworkList', 'لا واجبات مسجّلة | No homework recorded');
     document.getElementById('hwPending').textContent = '0 معلّق';
@@ -741,7 +745,7 @@ async function loadHomework() {
 async function loadAttendance() {
   spinner('attLog');
   if (!studentId) { empty('attLog', 'لا بيانات | No data'); return; }
-  const data = await dbGet('attendance_records', 'student_id=eq.' + encodeURIComponent(studentId) + '&select=date,status&order=date.desc&limit=60');
+  const data = await dbGet('student_attendance', 'student_id=eq.' + encodeURIComponent(studentId) + '&select=date,status&order=date.desc&limit=60');
   if (!data || data.length === 0) {
     empty('attLog', 'لا سجلات حضور | No records');
     document.getElementById('attPct').textContent = 'لا بيانات';
@@ -772,30 +776,16 @@ async function loadAttendance() {
 async function loadAchievements() {
   spinner('achievementsList');
   if (!studentId) { empty('achievementsList', 'لا بيانات | No data'); return; }
-  const data = await dbGet('achievements', 'student_id=eq.' + encodeURIComponent(studentId) + '&select=title,icon,awarded_at,stars&order=awarded_at.desc&limit=20');
-  if (!data || data.length === 0) {
-    empty('achievementsList', 'لا إنجازات مسجّلة بعد | No achievements yet');
-    document.getElementById('starsTotal').textContent = '0 نجوم';
-    document.getElementById('statStars').textContent = '0';
-    return;
-  }
-  const totalStars = data.reduce((s, a) => s + (a.stars || 1), 0);
-  document.getElementById('starsTotal').textContent = totalStars + ' نجوم';
-  document.getElementById('statStars').textContent = totalStars;
-  document.getElementById('achievementsList').innerHTML = data.map(a =>
-    '<div class="ach-item">' +
-    '<div class="ach-icon">' + (a.icon || '🏆') + '</div>' +
-    '<div><div class="ach-name">' + (a.title || '—') + '</div>' +
-    '<div class="ach-date">' + (a.awarded_at ? new Date(a.awarded_at).toLocaleDateString('ar-AE') : '') + '</div></div>' +
-    '<div style="margin-right:auto">' + '⭐'.repeat(a.stars || 1) + '</div>' +
-    '</div>'
-  ).join('');
+  // جدول achievements غير موجود بعد — يُعرض رسالة ودية
+  empty('achievementsList', '🌟 الإنجازات قادمة قريباً | Achievements coming soon');
+  document.getElementById('starsTotal').textContent = '— نجوم';
+  document.getElementById('statStars').textContent = '—';
 }
 
 // ── NOTIFICATIONS ──
 async function loadNotifications() {
   spinner('notifList');
-  const data = await dbGet('notifications', 'target_id=eq.' + encodeURIComponent(studentId) + '&select=title,body,created_at,is_read&order=created_at.desc&limit=20');
+  const data = await dbGet('notifications', 'user_id=eq.' + encodeURIComponent(studentId) + '&select=title,body,created_at,is_read&order=created_at.desc&limit=20');
   if (!data || data.length === 0) {
     empty('notifList', 'لا إشعارات | No notifications');
     return;
