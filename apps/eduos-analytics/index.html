@@ -475,18 +475,27 @@ async function loadKPIs() {
   const sessions = await sq('lesson_sessions?select=id&created_at=gte.'+monday+'&limit=2000');
   if (Array.isArray(sessions)) document.getElementById('kpiSessions').textContent = sessions.length;
 
-  // الموظفون وأولياء الأمور (sidebar)
-  const [staffTotal, parentsTotal, classesData] = await Promise.all([
-    sqCount('staff_profiles'),
-    sqCount('parent_credentials'),
-    sq('students?select=class_name&limit=2000')
-  ]);
-  if (staffTotal > 0) document.getElementById('sbStaff').textContent = staffTotal;
-  if (parentsTotal > 0) document.getElementById('sbParents').textContent = parentsTotal.toLocaleString('ar-AE');
-  if (Array.isArray(classesData)) {
-    const uniqueClasses = [...new Set(classesData.map(r=>r.class_name).filter(Boolean))];
-    document.getElementById('sbClasses').textContent = uniqueClasses.length;
-  }
+  // الموظفون وأولياء الأمور والفصول — عبر RPC SECURITY DEFINER (تعمل مع anon)
+  try {
+    const counts = await sqrpc('get_dashboard_counts', {});
+    if (counts && !counts.error) {
+      const sbStaff = document.getElementById('sbStaff');
+      const sbParents = document.getElementById('sbParents');
+      const sbClasses = document.getElementById('sbClasses');
+      const sbSched = document.getElementById('sbSchedules');
+      if (sbStaff && counts.staff_count > 0) sbStaff.textContent = counts.staff_count;
+      if (sbParents && counts.parents_count > 0) sbParents.textContent = Number(counts.parents_count).toLocaleString('ar-AE');
+      if (sbClasses && counts.classes_count > 0) sbClasses.textContent = counts.classes_count;
+      if (sbSched && counts.schedules_count > 0) sbSched.textContent = Number(counts.schedules_count).toLocaleString('ar-AE');
+      // KPI الطلاب من RPC أيضاً إذا لم يُحمَّل
+      const kpiEl = document.getElementById('kpiStudents');
+      const sbStudEl = document.getElementById('sbStudents');
+      if (counts.students_count > 0) {
+        if (kpiEl && kpiEl.textContent === '—') kpiEl.textContent = Number(counts.students_count).toLocaleString('ar-AE');
+        if (sbStudEl) sbStudEl.textContent = Number(counts.students_count).toLocaleString('ar-AE');
+      }
+    }
+  } catch(e) { console.warn('get_dashboard_counts failed:', e); }
 }
 
 // ── حضور الصفوف ──
@@ -840,29 +849,8 @@ setInterval(loadAll, 60000);
   }
   tick(); setInterval(tick,1000);
   // Week label from platform-week.js
-  document.addEventListener('eduos-week-ready', function(e){
-    const wb=document.getElementById('weekLabel');
-    if(wb && e.detail && e.detail.label) wb.textContent=e.detail.label;
-  });
-  // fallback: إذا لم يصل الحدث خلال 3 ثوان → استعلم مباشرة
-  setTimeout(function(){
-    const wb=document.getElementById('weekLabel');
-    if(!wb) return;
-    if(wb.textContent && wb.textContent !== '...' && wb.textContent !== '') return;
-    // حاول من EduWeek أولاً
-    if(window.EduWeek && window.EduWeek.label){ wb.textContent=window.EduWeek.label; return; }
-    // استعلام مباشر من academic_calendar
-    var k=getKey();
-    if(!k) return;
-    var today=new Date().toISOString().split('T')[0];
-    fetch('https://zuyizaiugpmhmeycqton.supabase.co/rest/v1/academic_calendar?start_date=lte.'+today+'&end_date=gte.'+today+'&select=week_number,label&limit=1',{
-      headers:{'apikey':k,'Authorization':'Bearer '+k}
-    }).then(r=>r.json()).then(rows=>{
-      if(rows && rows[0]){
-        wb.textContent = rows[0].label || ('الأسبوع '+(rows[0].week_number||''));
-      }
-    }).catch(()=>{});
-  }, 3000);
+  // الأسبوع: يُعيَّن من platform-lang.js تلقائياً عبر data-week-badge
+  // لا حاجة لكود إضافي هنا — platform-week.js يُطلق الحدث
 })();
 
 </body>
