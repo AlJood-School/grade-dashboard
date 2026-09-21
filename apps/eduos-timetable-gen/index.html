@@ -696,6 +696,42 @@ async function _meSaveRow(i) {
 var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
 var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
 
+/* ═══════════════════════════════════════════
+ * تحميل الفصول ASAP — قبل DOMContentLoaded
+ * ══════════════════════════════════════════ */
+(function _earlyLoadClasses() {
+  var _url = (window.EduOS && window.EduOS.SB_URL) || SB_URL;
+  var _key = (window.EduOS && window.EduOS.SB_KEY) || SB_KEY;
+  if (!_url || !_key) { setTimeout(_earlyLoadClasses, 200); return; }
+
+  /* expose كعلامة عالمية لمنع التكرار */
+  if (window._earlyClassesLoaded) return;
+  window._earlyClassesLoaded = true;
+
+  fetch(_url + '/rest/v1/students?select=class_name&order=class_name&limit=2000', {
+    headers: { 'apikey': _key, 'Authorization': 'Bearer ' + _key }
+  }).then(function(r) {
+    return r.ok ? r.json() : [];
+  }).then(function(data) {
+    if (!Array.isArray(data) || data.length === 0) return;
+    var seen = {}, classes = [];
+    data.forEach(function(r) {
+      if (r.class_name && !seen[r.class_name]) { seen[r.class_name] = true; classes.push(r.class_name); }
+    });
+    classes.sort();
+    /* انتظر حتى يُحدَّد STATE */
+    var _wait = setInterval(function() {
+      if (typeof STATE !== 'undefined') {
+        clearInterval(_wait);
+        if (!STATE.classes || STATE.classes.length === 0) {
+          STATE.classes = classes;
+          if (typeof renderClassChips === 'function') renderClassChips();
+        }
+      }
+    }, 50);
+  }).catch(function() {});
+})();
+
 /* ── تعريفات مجموعات المواد — تُجلب من DB فقط، لا hard-coding ── */
 var _subjectGroupDefs = [];
 
