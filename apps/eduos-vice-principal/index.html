@@ -2144,31 +2144,26 @@ async function deleteAbsence(id) {
 
 async function checkMassAttendanceStatus() {
   var massCard = document.getElementById('massAbsenceCard');
-  if (!massCard) return false; // لا بطاقة = لا حاجة
+  if (!massCard) return false;
 
   var today = todayStr();
 
   // 1. كم سجّل دخول اليوم؟
   var checkins = [];
-  try {
-    checkins = await apiGet('staff_checkin_log?date=eq.' + today + '&select=id&limit=1');
-  } catch(e) {}
+  try { checkins = await apiGet('staff_checkin_log?date=eq.' + today + '&select=id&limit=1'); } catch(e) {}
   var zeroCheckins = !Array.isArray(checkins) || checkins.length === 0;
 
   if (!zeroCheckins) {
-    // يوجد حضور — أخفِ البطاقة
     massCard.style.display = 'none';
     return false;
   }
 
-  // 2. صفر حضور — هل هناك توثيق مسبق؟
-  var massCard = document.getElementById('massAbsenceCard');
+  // صفر حضور — أظهر البطاقة
   massCard.style.display = '';
 
+  // 2. هل هناك توثيق مسبق في daily_attendance_status؟
   var dasRows = [];
-  try {
-    dasRows = await apiGet('daily_attendance_status?date=eq.' + today + '&select=*&limit=1');
-  } catch(e) {}
+  try { dasRows = await apiGet('daily_attendance_status?date=eq.' + today + '&select=*&limit=1'); } catch(e) {}
 
   if (Array.isArray(dasRows) && dasRows.length > 0) {
     var das = dasRows[0];
@@ -2188,13 +2183,82 @@ async function checkMassAttendanceStatus() {
     document.getElementById('massAbsenceApproverLabel').textContent =
       'بواسطة: ' + (das.approver_name || das.approved_by || '—') +
       ' — ' + (das.approved_at ? new Date(das.approved_at).toLocaleTimeString('ar-AE',{hour:'2-digit',minute:'2-digit'}) : '');
-    return true; // موثَّق — خطة الاحتياط لا تعمل اليوم
+    return true;
   }
 
-  // صفر حضور + لا توثيق → اعرض النموذج
-  document.getElementById('massAbsenceForm').style.display = '';
+  // 3. ✅ اكتشاف ذكي — فحص academic_calendar أولاً
+  var smartDetected = null;
+  try {
+    var calRows = await apiGet(
+      'academic_calendar?event_date=lte.' + today +
+      '&event_end_date=gte.' + today +
+      '&select=event_name,event_type,is_holiday&limit=5'
+    );
+    if (Array.isArray(calRows) && calRows.length > 0) {
+      var holiday = calRows.find(function(r) { return r.is_holiday; });
+      var mourning = calRows.find(function(r) { return (r.event_type||'').toLowerCase().includes('حداد') || (r.event_type||'').toLowerCase().includes('mourning'); });
+      if (mourning) {
+        smartDetected = { status: 'mourning', reason: '🕊 حداد رسمي — ' + (mourning.event_name || '') };
+      } else if (holiday) {
+        smartDetected = { status: 'official_holiday', reason: '🏖 إجازة رسمية — ' + (holiday.event_name || '') };
+      } else if (calRows[0]) {
+        smartDetected = { status: 'other', reason: '📅 ' + calRows[0].event_name };
+      }
+    }
+  } catch(e) {}
+
+  // 4. إذا لم يكتشف من التقويم، فحص school_news
+  if (!smartDetected) {
+    try {
+      var newsRows = await apiGet('school_news?published_at=gte.' + today + 'T00:00:00&select=title,category&limit=10');
+      if (Array.isArray(newsRows)) {
+        var mourningNews = newsRows.find(function(r) {
+          var t = (r.title || '').toLowerCase();
+          return t.includes('حداد') || t.includes('mourning') || t.includes('وفاة') || t.includes('رحيل');
+        });
+        var emergencyNews = newsRows.find(function(r) {
+          var t = (r.title || '').toLowerCase();
+          return t.includes('طوارئ') || t.includes('emergency') || t.includes('تعليق الدراسة');
+        });
+        var holidayNews = newsRows.find(function(r) {
+          var t = (r.title || '').toLowerCase();
+          return t.includes('إجازة') || t.includes('عطلة') || t.includes('holiday');
+        });
+        if (mourningNews) smartDetected = { status: 'mourning', reason: '🕊 ' + mourningNews.title };
+        else if (emergencyNews) smartDetected = { status: 'emergency', reason: '🏥 ' + emergencyNews.title };
+        else if (holidayNews) smartDetected = { status: 'official_holiday', reason: '🏖 ' + holidayNews.title };
+      }
+    } catch(e) {}
+  }
+
+  // 5. عرض النتيجة
   document.getElementById('massAbsenceDocumented').style.display = 'none';
-  return true; // أوقف تحميل خطة الاحتياط
+  var formEl = document.getElementById('massAbsenceForm');
+  formEl.style.display = '';
+
+  if (smartDetected) {
+    // اكتُشف تلقائياً — أضف اقتراحاً ذكياً في أعلى النموذج
+    var existingHint = document.getElementById('smartDetectionHint');
+    if (!existingHint) {
+      var hint = document.createElement('div');
+      hint.id = 'smartDetectionHint';
+      hint.style.cssText = 'background:rgba(99,102,241,0.1);border:1.5px solid #6366F1;border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px';
+      hint.innerHTML =
+        '<div>' +
+          '<div style="font-weight:800;font-size:13px;color:#6366F1">🤖 اكتُشف تلقائياً من التقويم أو الأخبار</div>' +
+          '<div style="font-size:13px;color:var(--text);margin-top:2px" id="smartDetectionText">' + smartDetected.reason + '</div>' +
+        '</div>' +
+        '<button onclick="confirmSmartDetection(\'' + smartDetected.status + '\',\'' + smartDetected.reason.replace(/'/g,"\\'") + '\')" ' +
+          'style="background:#6366F1;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:13px;font-family:Tajawal,Arial,sans-serif;cursor:pointer;white-space:nowrap">✅ تأكيد وحفظ</button>';
+      formEl.insertBefore(hint, formEl.firstChild);
+    }
+  }
+
+  return true;
+}
+
+async function confirmSmartDetection(status, reason) {
+  await saveMassAbsence(status, reason);
 }
 
 async function saveMassAbsence(status, reason) {
