@@ -1353,6 +1353,15 @@ tr:hover td{background:var(--surface2)}
           <div id="leaveDateWarn" style="font-size:12px;color:var(--rose);margin-top:4px;display:none">⛔ لا يُسمح بالاستئذان يوم الجمعة</div>
         </div>
 
+        <!-- ساعة العمل الذكية — تُحمَّل تلقائياً -->
+        <div id="workhoursBannerLeave" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:16px;display:none">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:13px;font-weight:700;color:var(--text2)">⏱ ساعات العمل الفعلية اليوم</span>
+            <span id="wh_worked_leave" style="font-size:15px;font-weight:900;color:var(--brand)">--:--</span>
+          </div>
+          <div id="wh_shortday_warn" style="font-size:12px;color:#D97706;margin-top:6px;display:none">⚠️ هذا الاستئذان سيجعل يومك أقل من 8 ساعات — أنت مسؤول عن ذلك</div>
+        </div>
+
         <!-- الشخصي: عدد الساعات -->
         <div id="personalHoursSection">
           <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px">عدد الساعات</div>
@@ -1360,6 +1369,12 @@ tr:hover td{background:var(--surface2)}
             <button class="hour-btn" onclick="selectHours(1)" style="flex:1;padding:14px;border-radius:10px;border:2px solid var(--border);background:var(--surface2);color:var(--text);font-family:'Tajawal',Arial,sans-serif;font-size:18px;font-weight:900;cursor:pointer;transition:all .15s">1</button>
             <button class="hour-btn" onclick="selectHours(2)" style="flex:1;padding:14px;border-radius:10px;border:2px solid var(--border);background:var(--surface2);color:var(--text);font-family:'Tajawal',Arial,sans-serif;font-size:18px;font-weight:900;cursor:pointer;transition:all .15s">2</button>
             <button class="hour-btn" onclick="selectHours(3)" style="flex:1;padding:14px;border-radius:10px;border:2px solid var(--border);background:var(--surface2);color:var(--text);font-family:'Tajawal',Arial,sans-serif;font-size:18px;font-weight:900;cursor:pointer;transition:all .15s">3</button>
+          </div>
+          <!-- وقت المغادرة — إلزامي لاحتساب استئناف الساعة -->
+          <div style="margin-bottom:16px">
+            <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px">🕐 وقت المغادرة <span style="color:var(--rose)">*</span></div>
+            <input type="time" id="leaveTimeFrom" required style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;font-family:'Tajawal',Arial,sans-serif;font-size:15px;background:var(--surface2);color:var(--text)" onchange="checkWorkHoursImpact()">
+            <div style="font-size:11px;color:var(--text3);margin-top:4px">عند عودتك: امسحي الباركود لاستئناف حساب ساعات عملك</div>
           </div>
         </div>
 
@@ -5916,6 +5931,228 @@ function printWeeklyPlan() {
     </div>
   </div>
 </div><!-- /lp-modal-overlay -->
+
+
+<!-- ══ نظام الاستئذان — Leave Request System ══ -->
+<script>
+(function() {
+  var _leaveType = 'personal';
+  var _leaveHours = null;
+  var SB_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+
+  function _sbKey() {
+    var u = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+    return u._k || (window._k1 && window._k2 ? window._k1 + '.' + window._k2 + '.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c' : '');
+  }
+  function _token() {
+    var u = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+    return u.access_token || _sbKey();
+  }
+  function _hdrs() {
+    return { 'Content-Type': 'application/json', apikey: _sbKey(), Authorization: 'Bearer ' + _token() };
+  }
+  function _user() { return JSON.parse(sessionStorage.getItem('edoos_user') || '{}'); }
+
+  window.setLeaveType = function(type) {
+    _leaveType = type;
+    var pBtn = document.getElementById('leaveTypePersonal');
+    var oBtn = document.getElementById('leaveTypeOfficial');
+    var pSec = document.getElementById('personalHoursSection');
+    var oSec = document.getElementById('officialSection');
+    var rReq = document.getElementById('reasonRequired');
+    if (type === 'personal') {
+      pBtn.style.border = '2px solid var(--brand)';
+      pBtn.style.background = 'var(--brand-lt)';
+      pBtn.style.color = 'var(--brand)';
+      oBtn.style.border = '2px solid var(--border)';
+      oBtn.style.background = 'var(--surface2)';
+      oBtn.style.color = 'var(--text)';
+      if (pSec) pSec.style.display = 'block';
+      if (oSec) oSec.style.display = 'none';
+      if (rReq) rReq.style.display = 'none';
+    } else {
+      oBtn.style.border = '2px solid var(--brand)';
+      oBtn.style.background = 'var(--brand-lt)';
+      oBtn.style.color = 'var(--brand)';
+      pBtn.style.border = '2px solid var(--border)';
+      pBtn.style.background = 'var(--surface2)';
+      pBtn.style.color = 'var(--text)';
+      if (pSec) pSec.style.display = 'none';
+      if (oSec) oSec.style.display = 'block';
+      if (rReq) rReq.style.display = 'inline';
+    }
+  };
+
+  window.selectHours = function(h) {
+    _leaveHours = h;
+    document.querySelectorAll('.hour-btn').forEach(function(b) {
+      var isSelected = (parseInt(b.textContent) === h);
+      b.style.border = isSelected ? '2px solid var(--brand)' : '2px solid var(--border)';
+      b.style.background = isSelected ? 'var(--brand-lt)' : 'var(--surface2)';
+      b.style.color = isSelected ? 'var(--brand)' : 'var(--text)';
+    });
+    checkWorkHoursImpact();
+  };
+
+  window.checkLeaveDate = function() {
+    var d = document.getElementById('leaveDate');
+    var w = document.getElementById('leaveDateWarn');
+    if (!d || !w) return;
+    var day = new Date(d.value).getDay();
+    if (day === 5) { w.style.display = 'block'; } // الجمعة
+    else { w.style.display = 'none'; }
+  };
+
+  window.checkWorkHoursImpact = function() {
+    var banner = document.getElementById('workhoursBannerLeave');
+    var warn = document.getElementById('wh_shortday_warn');
+    var workedEl = document.getElementById('wh_worked_leave');
+    if (!banner) return;
+    // جلب ساعات العمل الفعلية من platform-workhours.js إذا محملة
+    if (window.EduOSWorkHours && window.EduOSWorkHours.getTodayWorkedMinutes) {
+      var workedMin = window.EduOSWorkHours.getTodayWorkedMinutes();
+      var totalMin = 8 * 60;
+      var leaveMin = (_leaveHours || 0) * 60;
+      var remaining = workedMin - leaveMin;
+      if (workedEl) {
+        var h = Math.floor(workedMin / 60);
+        var m = workedMin % 60;
+        workedEl.textContent = h + ':' + (m < 10 ? '0' : '') + m;
+      }
+      banner.style.display = 'block';
+      if (warn) {
+        warn.style.display = (remaining < totalMin && _leaveHours > 0) ? 'block' : 'none';
+      }
+    } else {
+      banner.style.display = 'none';
+    }
+  };
+
+  window.submitLeaveRequest = function() {
+    var u = _user();
+    var staffId = u.staff_db_id || u.id || '';
+    var staffName = u.username || '';
+    var leaveDate = (document.getElementById('leaveDate') || {}).value || '';
+    var reason = (document.getElementById('leaveReason') || {}).value || '';
+    var timeFrom = (document.getElementById('leaveTimeFrom') || {}).value || null;
+
+    // تحقق يوم الجمعة
+    if (leaveDate) {
+      var dayOfWeek = new Date(leaveDate).getDay();
+      if (dayOfWeek === 5) { showToast('⛔ لا يُسمح بالاستئذان يوم الجمعة'); return; }
+    }
+
+    var payload = {};
+
+    if (_leaveType === 'personal') {
+      if (!_leaveHours) { showToast('يرجى اختيار عدد الساعات'); return; }
+      if (!leaveDate) { showToast('يرجى اختيار تاريخ الاستئذان'); return; }
+      if (!timeFrom) { showToast('يرجى إدخال وقت المغادرة'); return; }
+      payload = {
+        staff_db_id: staffId,
+        staff_name: staffName,
+        leave_type: 'personal',
+        request_date: leaveDate,
+        hours: _leaveHours,
+        time_from: timeFrom,
+        reason_short: reason || 'personal',
+        status: 'pending'
+      };
+    } else {
+      var dateFrom = (document.getElementById('officialDateFrom') || {}).value || '';
+      var dateTo = (document.getElementById('officialDateTo') || {}).value || '';
+      if (!dateFrom || !dateTo) { showToast('يرجى تحديد مدة الإجازة'); return; }
+      if (!reason) { showToast('يرجى إدخال سبب الإجازة الرسمية'); return; }
+      payload = {
+        staff_db_id: staffId,
+        staff_name: staffName,
+        leave_type: 'official',
+        date_from: dateFrom,
+        date_to: dateTo,
+        all_day: true,
+        reason_short: reason,
+        status: 'pending'
+      };
+    }
+
+    var btn = document.querySelector('[onclick="submitLeaveRequest()"]');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ جارٍ الإرسال...'; }
+
+    fetch(SB_URL + '/rest/v1/leave_requests', {
+      method: 'POST',
+      headers: Object.assign({}, _hdrs(), { Prefer: 'return=minimal' }),
+      body: JSON.stringify(payload)
+    }).then(function(r) {
+      if (!r.ok) throw new Error(r.status);
+      showToast('✅ تم إرسال طلب الاستئذان بنجاح');
+      // إعادة تعيين النموذج
+      _leaveHours = null;
+      var ld = document.getElementById('leaveDate'); if (ld) ld.value = '';
+      var tf = document.getElementById('leaveTimeFrom'); if (tf) tf.value = '';
+      var lr = document.getElementById('leaveReason'); if (lr) lr.value = '';
+      document.querySelectorAll('.hour-btn').forEach(function(b) {
+        b.style.border = '2px solid var(--border)';
+        b.style.background = 'var(--surface2)';
+        b.style.color = 'var(--text)';
+      });
+      loadLeaveHistory();
+    }).catch(function(e) {
+      showToast('❌ خطأ في الإرسال: ' + e.message);
+    }).finally(function() {
+      if (btn) { btn.disabled = false; btn.textContent = '📤 إرسال الطلب'; }
+    });
+  };
+
+  window.loadLeaveHistory = function() {
+    var u = _user();
+    var staffId = u.staff_db_id || u.id || '';
+    var container = document.getElementById('leaveHistory');
+    if (!container || !staffId) return;
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3)">جارٍ التحميل...</div>';
+
+    fetch(SB_URL + '/rest/v1/leave_requests?staff_db_id=eq.' + encodeURIComponent(staffId) + '&order=created_at.desc&limit=20', {
+      headers: _hdrs()
+    }).then(function(r) { return r.json(); }).then(function(rows) {
+      if (!rows || !rows.length) {
+        container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3)">لا توجد طلبات سابقة</div>';
+        return;
+      }
+      var statusMap = { pending: '⏳ معلق', approved: '✅ مُعتمَد', rejected: '❌ مرفوض' };
+      var statusColor = { pending: '#D97706', approved: '#059669', rejected: '#DC2626' };
+      var typeMap = { personal: '🕐 شخصي', official: '📋 رسمي' };
+      container.innerHTML = rows.map(function(r) {
+        var s = r.status || 'pending';
+        var sc = statusColor[s] || '#64748B';
+        var sm = statusMap[s] || s;
+        var dateStr = r.request_date || r.date_from || '—';
+        var detail = r.leave_type === 'personal'
+          ? (r.hours + ' ساعة' + (r.time_from ? ' — مغادرة ' + r.time_from : ''))
+          : (r.date_from + ' → ' + r.date_to);
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">' +
+          '<div>' +
+            '<div style="font-size:13px;font-weight:700;color:var(--text)">' + (typeMap[r.leave_type] || r.leave_type) + ' — ' + dateStr + '</div>' +
+            '<div style="font-size:12px;color:var(--text3)">' + detail + '</div>' +
+          '</div>' +
+          '<span style="font-size:12px;font-weight:700;color:' + sc + '">' + sm + '</span>' +
+        '</div>';
+      }).join('');
+    }).catch(function(e) {
+      container.innerHTML = '<div style="color:var(--rose);padding:10px">خطأ في التحميل</div>';
+    });
+  };
+
+  // تحميل السجل عند فتح تبويب الاستئذان
+  document.addEventListener('DOMContentLoaded', function() {
+    // تشغيل عند تبديل التبويب
+    var leaveNav = document.querySelector('[onclick*="leave"]') || document.querySelector('[href*="leave"]');
+    loadLeaveHistory();
+  });
+
+})();
+</script>
+
+<!-- platform-workhours.js — يُحمَّل بعد تهيئة الجلسة -->
+<script src="../platform-workhours.js" defer></script>
 
 </body>
 </html>
