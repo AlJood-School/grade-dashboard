@@ -5,19 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>بوابة نائب/ة المدير — EduOS</title>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
-<script src="../platform-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="../platform-auth-guard.js"></script>
-<script src="../platform-shield.js" defer></script>
-<script src="../platform-week.js" defer></script>
-<script src="../platform-lang.js" defer></script>
-<script src="../platform-aqdar-survey.js" defer></script>
-<script src="../platform-agent-brain.js" defer></script>
-<script src="../platform-messages.js" defer></script>
-<script src="../platform-duties.js" defer></script>
+<script src="../platform-auth-guard.js?v=4"></script>
+<script src="../platform-config.js?v=4"></script>
+<script src="../platform-shield.js?v=4" defer></script>
+<script src="../platform-week.js?v=4" defer></script>
+<script src="../platform-lang.js?v=4" defer></script>
+<script src="../platform-aqdar-survey.js?v=4" defer></script>
+<script src="../platform-agent-brain.js?v=4" defer></script>
+<script src="../platform-messages.js?v=4" defer></script>
+<script src="../platform-duties.js?v=4" defer></script>
 <script src="../platform-tasks.js" defer></script>
 <script src="../platform-rewards.js" defer></script>
-<script src="../platform-live-clock.js" defer></script>
+<script src="../platform-live-clock.js?v=4" defer></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#F2F4F7;--surface:#fff;--surface2:#F8FAFB;--brand:#6C3DD6;--brand2:#22D3EE;--brand-lt:rgba(108,61,214,0.08);--emerald:#059669;--rose:#E11D48;--rose-lt:rgba(225,29,72,0.08);--amber:#D97706;--text:#1E293B;--text2:#475569;--text3:#94A3B8;--border:#E2E8F0;--shadow:0 1px 4px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.04)}
@@ -392,6 +392,19 @@ body{overflow:hidden}
         </div>
         <div id="absenceList"><div class="skeleton" style="height:120px"></div></div>
       </div>
+      <!-- خطة الاحتياط الذكية -->
+      <div class="card" style="margin-top:18px;border:2px solid rgba(34,211,238,0.25);background:rgba(34,211,238,0.02)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div class="sec-title" style="margin-bottom:0">&#x1F916; خطة الاحتياط الذكية</div>
+          <div style="display:flex;gap:8px">
+            <button onclick="loadSubPlan()" class="btn btn-info btn-sm">&#x1F504; تحديث</button>
+            <button onclick="approveFullPlan()" class="btn btn-approve btn-sm" id="approveAllBtn" style="display:none">&#x2705; اعتماد الخطة كاملة</button>
+          </div>
+        </div>
+        <p style="font-size:12px;color:var(--text3);margin-bottom:12px">كشف تلقائي من نظام تسجيل الحضور — تُعيَّن البديلة فوراً من المعلمات الفارغات في نفس الوقت</p>
+        <div id="subPlanList"><div class="empty"><p>لا غياب مكتشف حتى الآن</p></div></div>
+      </div>
+
       <!-- Available substitutes -->
       <div class="card">
         <div class="sec-title">&#x1F4DD; المعلمون البدلاء المتاحون / Available Substitutes</div>
@@ -1605,6 +1618,15 @@ async function apiPost(path, body) {
 async function apiPatch(path, body) {
   return await fetch(SB_URL + '/rest/v1/' + path, {method:'PATCH', headers:{apikey:SB_KEY,'Authorization':'Bearer ' + AUTH_TOKEN,'Content-Type':'application/json','Prefer':'return=minimal'}, body:JSON.stringify(body)});
 }
+async function apiRpc(fnName, params) {
+  var res = await fetch(SB_URL + '/rest/v1/rpc/' + fnName, {
+    method: 'POST',
+    headers: {apikey: SB_KEY, 'Authorization': 'Bearer ' + AUTH_TOKEN, 'Content-Type': 'application/json'}  ,
+    body: JSON.stringify(params || {})
+  });
+  if (!res.ok) { var t = await res.text(); throw new Error('RPC ' + fnName + ' error ' + res.status + ': ' + t); }
+  return await res.json();
+}
 
 async function getAttDate() {
   try {
@@ -1938,6 +1960,7 @@ async function loadAbsencePanel() {
     await initSwapSection();
   }
   await loadTodayAbsences();
+  await loadSubPlan();
   await loadAvailableSubs();
   await loadLeaveRequests();
 }
@@ -2035,11 +2058,14 @@ async function saveAbsence() {
     btn.textContent = '✔ تسجيل';
     btn.disabled = false;
     if (res.ok || res.status === 201 || res.status === 204) {
+      var absentTeacherId = sel.value;
       sel.value = '';
       notes.value = '';
-      showToast('✅ تم تسجيل الغياب');
+      showToast('&#x2705; تم تسجيل الغياب');
       loadTodayAbsences();
       loadKPIs();
+      // إنشاء خطة الاحتياط تلقائياً لهذه المعلمة
+      generateSubPlanForTeacher(absentTeacherId, todayStr());
     } else {
       var errText = await res.text();
       showToast('خطأ: ' + res.status);
@@ -2056,6 +2082,146 @@ async function deleteAbsence(id) {
     loadTodayAbsences();
     loadKPIs();
   } catch(e) { showToast('خطأ في الحذف'); }
+}
+
+// ========== نظام الاحتياط الذكي ==========
+
+async function loadSubPlan() {
+  var el = document.getElementById('subPlanList');
+  var appBtn = document.getElementById('approveAllBtn');
+  if (!el) return;
+  el.innerHTML = '<div class="skeleton" style="height:120px"></div>';
+  try {
+    var today = todayStr();
+    var rows = await apiGet('substitute_alerts?alert_date=eq.' + today + '&order=period&select=id,teacher_id,teacher_name,class_name,subject,period,day,status,substitute_id,substitute_name,resolved_at');
+    if (!Array.isArray(rows) || rows.length === 0) {
+      el.innerHTML = '<div class="empty"><div class="icon">&#x2705;</div><p>لا غياب مكتشف اليوم — جميع المعلمات حاضرات</p></div>';
+      if (appBtn) appBtn.style.display = 'none';
+      return;
+    }
+    var hasUnApproved = rows.some(function(r) { return r.status === 'auto_assigned'; });
+    if (appBtn) appBtn.style.display = hasUnApproved ? '' : 'none';
+    // تجميع حسب المعلمة الغائبة
+    var byTeacher = {};
+    rows.forEach(function(r) {
+      if (!byTeacher[r.teacher_id]) byTeacher[r.teacher_id] = {name: r.teacher_name, periods: []};
+      byTeacher[r.teacher_id].periods.push(r);
+    });
+    var html = '';
+    Object.values(byTeacher).forEach(function(teacher) {
+      html += '<div style="border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden">';
+      html += '<div style="background:rgba(239,68,68,0.07);padding:10px 16px;display:flex;align-items:center;gap:10px">';
+      html += '<span style="font-size:18px">&#x1F534;</span>';
+      html += '<span style="font-weight:800;font-size:15px;color:var(--text)">' + (teacher.name || '—') + '</span>';
+      html += '<span style="font-size:12px;color:#DC2626;font-weight:600">غائبة اليوم</span>';
+      html += '</div>';
+      html += '<div class="table-wrap"><table><thead><tr>';
+      html += '<th>الحصة</th><th>الصف</th><th>المادة</th><th>البديلة المقترحة</th><th>الحالة</th><th>تعديل</th>';
+      html += '</tr></thead><tbody>';
+      teacher.periods.forEach(function(p) {
+        var statusBadge = '';
+        if (p.status === 'approved') statusBadge = '<span class="chip chip-green">&#x2705; معتمد</span>';
+        else if (p.status === 'auto_assigned') statusBadge = '<span class="chip chip-blue">&#x1F916; تلقائي</span>';
+        else if (p.status === 'needs_manual') statusBadge = '<span class="chip chip-red">&#x26A0;&#xFE0F; يحتاج تدخل</span>';
+        else statusBadge = '<span class="chip chip-amber">معالجة...</span>';
+        var subName = p.substitute_name
+          ? '<span style="font-weight:700;color:var(--brand)">' + p.substitute_name + '</span>'
+          : '<span style="color:#DC2626;font-size:12px">لم تُعيَّن بعد</span>';
+        var changeBtn = (p.status !== 'approved')
+          ? '<button class="btn btn-ghost btn-sm" onclick="changeSubstitute(\'' + p.id + '\',\'' + (p.class_name||'').replace(/'/g,'') + '\',' + p.period + ',\'' + (p.day||'').replace(/'/g,'') + '\')">&#x270F;&#xFE0F; تغيير</button>'
+          : '<span style="font-size:12px;color:var(--text3)">—</span>';
+        html += '<tr>';
+        html += '<td style="font-weight:700;text-align:center">&#x62;' + p.period + '</td>';
+        html += '<td style="text-align:center">' + (p.class_name || '—') + '</td>';
+        html += '<td>' + (p.subject || '—') + '</td>';
+        html += '<td>' + subName + '</td>';
+        html += '<td>' + statusBadge + '</td>';
+        html += '<td>' + changeBtn + '</td>';
+        html += '</tr>';
+      });
+      html += '</tbody></table></div></div>';
+    });
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--rose);padding:20px;text-align:center">خطأ في تحميل خطة الاحتياط: ' + e.message + '</div>';
+  }
+}
+
+async function approveFullPlan() {
+  var btn = document.getElementById('approveAllBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    var result = await apiRpc('vp_approve_day_plan', {p_date: todayStr(), p_resolved_by: vpId || 'vp'});
+    var count = typeof result === 'number' ? result : (Array.isArray(result) ? (result[0] || 0) : 0);
+    showToast('&#x2705; تم اعتماد ' + count + ' إحلال');
+    await loadSubPlan();
+  } catch(e) { showToast('خطأ في الاعتماد: ' + e.message); }
+  if (btn) { btn.disabled = false; btn.textContent = '&#x2705; اعتماد الخطة كاملة'; }
+}
+
+async function changeSubstitute(alertId, className, period, day) {
+  // إزالة أي مودال مفتوح مسبقاً
+  var old = document.getElementById('changeSubModal');
+  if (old) old.remove();
+  var el = document.getElementById('subPlanList');
+  if (!el) return;
+  try {
+    var today = todayStr();
+    var allTeachers = await apiGet('staff_profiles?role_key=eq.teacher&is_active=eq.true&order=name_ar&select=staff_db_id,name_ar,subject');
+    var busyRows = await apiGet('schedules?day=eq.' + encodeURIComponent(day) + '&period=eq.' + period + '&is_active=eq.true&select=teacher_id');
+    var absentRows = await apiGet('substitute_alerts?alert_date=eq.' + today + '&select=teacher_id');
+    var busyIds = new Set(Array.isArray(busyRows) ? busyRows.map(function(r) { return r.teacher_id; }) : []);
+    var absentIds = new Set(Array.isArray(absentRows) ? absentRows.map(function(r) { return r.teacher_id; }) : []);
+    var available = Array.isArray(allTeachers) ? allTeachers.filter(function(t) {
+      return t.staff_db_id && !busyIds.has(t.staff_db_id) && !absentIds.has(t.staff_db_id);
+    }) : [];
+    var opts = available.map(function(t) {
+      return '<option value="' + t.staff_db_id + '" data-name="' + (t.name_ar||'').replace(/"/g,'') + '">' + (t.name_ar || t.staff_db_id) + '</option>';
+    }).join('');
+    el.insertAdjacentHTML('afterbegin',
+      '<div id="changeSubModal" style="background:var(--surface);border:2px solid var(--brand);border-radius:14px;padding:20px;margin-bottom:16px">' +
+      '<div style="font-weight:700;font-size:15px;margin-bottom:12px">&#x270F;&#xFE0F; تغيير البديلة — ' + className + ' ح' + period + '</div>' +
+      '<select id="newSubSel" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:14px;margin-bottom:12px">' +
+      '<option value="">-- اختر البديلة --</option>' + opts + '</select>' +
+      '<div style="display:flex;gap:10px">' +
+      '<button onclick="confirmChangeSubstitute(\'' + alertId + '\')" class="btn btn-approve" style="flex:1">&#x2705; تأكيد</button>' +
+      '<button onclick="document.getElementById(\'changeSubModal\').remove()" class="btn btn-ghost" style="flex:1">إلغاء</button>' +
+      '</div></div>'
+    );
+  } catch(e) { showToast('خطأ في تحميل قائمة المعلمات: ' + e.message); }
+}
+
+async function confirmChangeSubstitute(alertId) {
+  var sel = document.getElementById('newSubSel');
+  if (!sel || !sel.value) { showToast('اختر البديلة أولاً'); return; }
+  var subId = sel.value;
+  var subName = sel.options[sel.selectedIndex].dataset.name || subId;
+  try {
+    await apiRpc('vp_assign_substitute', {
+      p_alert_id: alertId,
+      p_sub_id: subId,
+      p_sub_name: subName,
+      p_resolved_by: vpId || 'vp'
+    });
+    var m = document.getElementById('changeSubModal');
+    if (m) m.remove();
+    showToast('&#x2705; تم تغيير البديلة');
+    await loadSubPlan();
+  } catch(e) { showToast('خطأ في التغيير: ' + e.message); }
+}
+
+async function generateSubPlanForTeacher(teacherId, dateStr) {
+  // تُستدعى بعد تسجيل غياب يدوي — تنشئ سجلات الاحتياط لكل حصص المعلمة اليوم
+  try {
+    await apiRpc('create_absence_with_plan', {
+      p_teacher_id: teacherId,
+      p_date: dateStr,
+      p_absence_type: 'يدوي',
+      p_notes: null,
+      p_reported_by: vpId || 'vp'
+    });
+    await loadSubPlan();
+  } catch(e) { console.warn('generateSubPlan error:', e.message); }
 }
 
 /* ===== TIMETABLE ===== */
