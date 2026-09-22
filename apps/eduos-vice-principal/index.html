@@ -15,6 +15,7 @@
 <script src="../platform-agent-brain.js?v=4" defer></script>
 <script src="../platform-messages.js?v=4" defer></script>
 <script src="../platform-duties.js?v=4" defer></script>
+<script src="../platform-workhours.js?v=1" defer></script>
 <script src="../platform-tasks.js" defer></script>
 <script src="../platform-rewards.js" defer></script>
 <script src="../platform-live-clock.js?v=4" defer></script>
@@ -392,6 +393,36 @@ body{overflow:hidden}
         </div>
         <div id="absenceList"><div class="skeleton" style="height:120px"></div></div>
       </div>
+      <!-- بطاقة حالة الحضور الجماعي — تظهر عند صفر حضور -->
+      <div id="massAbsenceCard" style="display:none;background:rgba(239,68,68,0.06);border:2px solid #DC2626;border-radius:14px;padding:20px;margin-top:18px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+          <div style="font-size:32px">🚨</div>
+          <div>
+            <div style="font-weight:900;font-size:16px;color:#DC2626">لم تسجّل أي موظفة دخولها بالباركود اليوم</div>
+            <div style="font-size:13px;color:var(--text2);margin-top:2px">يجب توثيق السبب قبل أي إجراء آخر</div>
+          </div>
+        </div>
+        <!-- إذا لم يُوثَّق بعد -->
+        <div id="massAbsenceForm">
+          <div style="font-weight:700;font-size:14px;margin-bottom:10px">ما سبب غياب الجميع اليوم؟</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+            <button class="btn" onclick="saveMassAbsence('official_holiday','إجازة رسمية من الدولة')" style="background:#059669;color:#fff;border:none;padding:12px;border-radius:10px;font-size:14px;font-family:Tajawal,Arial,sans-serif;cursor:pointer">🏖 إجازة رسمية</button>
+            <button class="btn" onclick="saveMassAbsence('mourning','حداد رسمي')" style="background:#374151;color:#fff;border:none;padding:12px;border-radius:10px;font-size:14px;font-family:Tajawal,Arial,sans-serif;cursor:pointer">🕊 حداد رسمي</button>
+            <button class="btn" onclick="saveMassAbsence('emergency','حالة طوارئ')" style="background:#DC2626;color:#fff;border:none;padding:12px;border-radius:10px;font-size:14px;font-family:Tajawal,Arial,sans-serif;cursor:pointer">🏥 حالة طوارئ</button>
+            <button class="btn" onclick="saveMassAbsence('training','يوم تدريب')" style="background:#6C3DD6;color:#fff;border:none;padding:12px;border-radius:10px;font-size:14px;font-family:Tajawal,Arial,sans-serif;cursor:pointer">📚 يوم تدريب</button>
+          </div>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="massAbsenceCustom" placeholder="سبب آخر — اكتبيه هنا..." style="flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:Tajawal,Arial,sans-serif;font-size:13px">
+            <button onclick="saveMassAbsence('other',document.getElementById('massAbsenceCustom').value)" style="background:#D97706;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-size:13px;font-family:Tajawal,Arial,sans-serif;cursor:pointer">💾 حفظ</button>
+          </div>
+        </div>
+        <!-- بعد التوثيق -->
+        <div id="massAbsenceDocumented" style="display:none;background:rgba(5,150,105,0.08);border:1.5px solid #059669;border-radius:10px;padding:14px">
+          <div style="font-weight:800;color:#059669;font-size:15px" id="massAbsenceReasonLabel"></div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px" id="massAbsenceApproverLabel"></div>
+        </div>
+      </div>
+
       <!-- خطة الاحتياط الذكية -->
       <div class="card" style="margin-top:18px;border:2px solid rgba(34,211,238,0.25);background:rgba(34,211,238,0.02)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -869,6 +900,19 @@ body{overflow:hidden}
     <!-- ATTENDANCE -->
     <div class="panel" id="panel-attendance">
       <div class="sec-title">&#x1F4CB; الحضور / Attendance</div>
+
+      <!-- ── شريط الحضور الحي (باركود) ── -->
+      <div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:14px;padding:16px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:14px;font-weight:800;color:var(--text)">🔴 حضور المعلمات الحي — بيانات الباركود</div>
+          <button onclick="loadLiveAttendance()" style="padding:6px 14px;background:var(--brand);color:#fff;border:none;border-radius:8px;font-family:'Tajawal',Arial,sans-serif;font-size:12px;font-weight:700;cursor:pointer">🔄 تحديث</button>
+        </div>
+        <div id="liveAttendanceDashboard">
+          <div style="padding:16px;text-align:center;color:var(--text3)">⏳ جارٍ التحميل...</div>
+        </div>
+      </div>
+
+      <!-- ── KPIs الإجمالية (الطلاب) ── -->
       <div class="grid-3" style="margin-bottom:20px">
         <div class="kpi b-emerald"><div class="kpi-icon">&#x2705;</div><div class="kpi-val" id="attPresent">—</div><div class="kpi-label">حاضر/ة / Present</div></div>
         <div class="kpi b-rose"><div class="kpi-icon">&#x274C;</div><div class="kpi-val" id="attAbsent">—</div><div class="kpi-label">غائب/ة / Absent</div></div>
@@ -1959,8 +2003,20 @@ async function loadAbsencePanel() {
     await populateAbsStaffDD();
     await initSwapSection();
   }
+  // ✅ فحص الحضور الجماعي أولاً
+  var massAbsenceDay = await checkMassAttendanceStatus();
   await loadTodayAbsences();
-  await loadSubPlan();
+  // لا تحمّل خطة الاحتياط إذا اليوم مُوثَّق كغياب جماعي/إجازة
+  if (!massAbsenceDay) {
+    await loadSubPlan();
+  } else {
+    var el = document.getElementById('subPlanList');
+    if (el) el.innerHTML = '<div class="empty"><p>لا خطة احتياط — اليوم مُوثَّق كـ' +
+      (document.getElementById('massAbsenceReasonLabel')?.textContent?.replace('✅ موثَّق: ','') || 'غياب جماعي') +
+      '</p></div>';
+    var appBtn = document.getElementById('approveAllBtn');
+    if (appBtn) appBtn.style.display = 'none';
+  }
   await loadAvailableSubs();
   await loadLeaveRequests();
 }
@@ -2084,6 +2140,104 @@ async function deleteAbsence(id) {
   } catch(e) { showToast('خطأ في الحذف'); }
 }
 
+// ========== حالة الحضور الجماعي ==========
+
+async function checkMassAttendanceStatus() {
+  var massCard = document.getElementById('massAbsenceCard');
+  if (!massCard) return false; // لا بطاقة = لا حاجة
+
+  var today = todayStr();
+
+  // 1. كم سجّل دخول اليوم؟
+  var checkins = [];
+  try {
+    checkins = await apiGet('staff_checkin_log?date=eq.' + today + '&select=id&limit=1');
+  } catch(e) {}
+  var zeroCheckins = !Array.isArray(checkins) || checkins.length === 0;
+
+  if (!zeroCheckins) {
+    // يوجد حضور — أخفِ البطاقة
+    massCard.style.display = 'none';
+    return false;
+  }
+
+  // 2. صفر حضور — هل هناك توثيق مسبق؟
+  var massCard = document.getElementById('massAbsenceCard');
+  massCard.style.display = '';
+
+  var dasRows = [];
+  try {
+    dasRows = await apiGet('daily_attendance_status?date=eq.' + today + '&select=*&limit=1');
+  } catch(e) {}
+
+  if (Array.isArray(dasRows) && dasRows.length > 0) {
+    var das = dasRows[0];
+    var reasonMap = {
+      official_holiday:'🏖 إجازة رسمية من الدولة',
+      mourning:'🕊 حداد رسمي',
+      emergency:'🏥 حالة طوارئ',
+      training:'📚 يوم تدريب',
+      mass_absence:'⚠️ غياب جماعي',
+      other:'📝 ' + (das.reason_custom || das.reason || 'سبب آخر')
+    };
+    document.getElementById('massAbsenceForm').style.display = 'none';
+    var docEl = document.getElementById('massAbsenceDocumented');
+    docEl.style.display = '';
+    document.getElementById('massAbsenceReasonLabel').textContent =
+      '✅ موثَّق: ' + (reasonMap[das.status] || das.reason || das.status);
+    document.getElementById('massAbsenceApproverLabel').textContent =
+      'بواسطة: ' + (das.approver_name || das.approved_by || '—') +
+      ' — ' + (das.approved_at ? new Date(das.approved_at).toLocaleTimeString('ar-AE',{hour:'2-digit',minute:'2-digit'}) : '');
+    return true; // موثَّق — خطة الاحتياط لا تعمل اليوم
+  }
+
+  // صفر حضور + لا توثيق → اعرض النموذج
+  document.getElementById('massAbsenceForm').style.display = '';
+  document.getElementById('massAbsenceDocumented').style.display = 'none';
+  return true; // أوقف تحميل خطة الاحتياط
+}
+
+async function saveMassAbsence(status, reason) {
+  if (status === 'other' && !reason.trim()) {
+    showToast('⚠️ اكتبي السبب أولاً');
+    return;
+  }
+  var today = todayStr();
+  var user = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+  try {
+    // محاولة INSERT — إذا موجود UPDATE
+    var existing = await apiGet('daily_attendance_status?date=eq.' + today + '&select=id&limit=1');
+    var payload = {
+      date: today,
+      status: status,
+      reason: reason,
+      reason_custom: status === 'other' ? reason : null,
+      approved_by: user.id || user.staff_db_id || null,
+      approver_name: user.username || null,
+      approved_at: new Date().toISOString()
+    };
+    if (Array.isArray(existing) && existing.length > 0) {
+      await fetch(SB_URL + '/rest/v1/daily_attendance_status?date=eq.' + today, {
+        method: 'PATCH',
+        headers: {'apikey': SB_KEY, 'Authorization': 'Bearer ' + AUTH_TOKEN,
+          'Content-Type': 'application/json', 'Prefer': 'return=minimal'},
+        body: JSON.stringify(payload)
+      });
+    } else {
+      await apiPost('daily_attendance_status', payload);
+    }
+    showToast('✅ تم توثيق السبب');
+    // تحديث البطاقة
+    await checkMassAttendanceStatus();
+    // تفريغ substitute_alerts اليوم الخاطئة
+    await fetch(SB_URL + '/rest/v1/substitute_alerts?alert_date=eq.' + today + '&status=eq.no_staff_present', {
+      method: 'DELETE',
+      headers: {'apikey': SB_KEY, 'Authorization': 'Bearer ' + AUTH_TOKEN}
+    });
+    await loadSubPlan();
+  } catch(e) { showToast('خطأ في الحفظ: ' + e.message); }
+}
+
 // ========== نظام الاحتياط الذكي ==========
 
 async function loadSubPlan() {
@@ -2095,7 +2249,14 @@ async function loadSubPlan() {
     var today = todayStr();
     var rows = await apiGet('substitute_alerts?alert_date=eq.' + today + '&order=period&select=id,teacher_id,teacher_name,class_name,subject,period,day,status,substitute_id,substitute_name,resolved_at');
     if (!Array.isArray(rows) || rows.length === 0) {
-      el.innerHTML = '<div class="empty"><div class="icon">&#x2705;</div><p>لا غياب مكتشف اليوم — جميع المعلمات حاضرات</p></div>';
+      el.innerHTML = '<div class="empty"><div class="icon">&#x2705;</div><p>لا غياب مكتشف اليوم — جميع المعلمات سجّلن دخولهن</p></div>';
+      if (appBtn) appBtn.style.display = 'none';
+      return;
+    }
+    // تصفية سجلات no_staff_present — لا تعرضها كقائمة
+    rows = rows.filter(function(r) { return r.status !== 'no_staff_present'; });
+    if (rows.length === 0) {
+      el.innerHTML = '<div class="empty"><p>لا حالات تحتاج إحلالاً — راجعي بطاقة حالة الحضور أعلاه</p></div>';
       if (appBtn) appBtn.style.display = 'none';
       return;
     }
@@ -2107,13 +2268,21 @@ async function loadSubPlan() {
       if (!byTeacher[r.teacher_id]) byTeacher[r.teacher_id] = {name: r.teacher_name, periods: []};
       byTeacher[r.teacher_id].periods.push(r);
     });
-    var html = '';
+    // إجمالي للنائبة
+    var totalRows = rows.length;
+    var assignedCount = rows.filter(function(r){ return r.status==='auto_assigned'||r.status==='approved'; }).length;
+    var manualCount = rows.filter(function(r){ return r.status==='needs_manual'; }).length;
+    var html = '<div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">';
+    html += '<span style="background:rgba(239,68,68,0.1);color:#DC2626;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700">🔴 غائبات: ' + Object.keys(byTeacher).length + '</span>';
+    html += '<span style="background:rgba(99,102,241,0.1);color:#6366F1;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700">🤖 عُيِّنت تلقائياً: ' + assignedCount + '</span>';
+    if (manualCount > 0) html += '<span style="background:rgba(245,158,11,0.1);color:#D97706;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700">⚠️ تحتاج تدخلاً: ' + manualCount + '</span>';
+    html += '</div>';
     Object.values(byTeacher).forEach(function(teacher) {
       html += '<div style="border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden">';
       html += '<div style="background:rgba(239,68,68,0.07);padding:10px 16px;display:flex;align-items:center;gap:10px">';
       html += '<span style="font-size:18px">&#x1F534;</span>';
       html += '<span style="font-weight:800;font-size:15px;color:var(--text)">' + (teacher.name || '—') + '</span>';
-      html += '<span style="font-size:12px;color:#DC2626;font-weight:600">غائبة اليوم</span>';
+      html += '<span style="font-size:12px;color:#DC2626;font-weight:600">لم تسجّل دخولاً بالباركود</span>';
       html += '</div>';
       html += '<div class="table-wrap"><table><thead><tr>';
       html += '<th>الحصة</th><th>الصف</th><th>المادة</th><th>البديلة المقترحة</th><th>الحالة</th><th>تعديل</th>';
@@ -2122,11 +2291,14 @@ async function loadSubPlan() {
         var statusBadge = '';
         if (p.status === 'approved') statusBadge = '<span class="chip chip-green">&#x2705; معتمد</span>';
         else if (p.status === 'auto_assigned') statusBadge = '<span class="chip chip-blue">&#x1F916; تلقائي</span>';
-        else if (p.status === 'needs_manual') statusBadge = '<span class="chip chip-red">&#x26A0;&#xFE0F; يحتاج تدخل</span>';
+        else if (p.status === 'needs_manual') statusBadge = '<span class="chip chip-red">&#x26A0;&#xFE0F; يحتاج تدخل يدوي</span>';
+        else if (p.status === 'no_staff_present') statusBadge = '<span class="chip chip-red">🚨 لا حاضرات</span>';
         else statusBadge = '<span class="chip chip-amber">معالجة...</span>';
         var subName = p.substitute_name
           ? '<span style="font-weight:700;color:var(--brand)">' + p.substitute_name + '</span>'
-          : '<span style="color:#DC2626;font-size:12px">لم تُعيَّن بعد</span>';
+          : (p.status === 'needs_manual'
+            ? '<span style="color:#D97706;font-size:12px">لا يوجد من هي فارغة الآن — اختاري يدوياً</span>'
+            : '<span style="color:#DC2626;font-size:12px">—</span>');
         var changeBtn = (p.status !== 'approved')
           ? '<button class="btn btn-ghost btn-sm" onclick="changeSubstitute(\'' + p.id + '\',\'' + (p.class_name||'').replace(/'/g,'') + '\',' + p.period + ',\'' + (p.day||'').replace(/'/g,'') + '\')">&#x270F;&#xFE0F; تغيير</button>'
           : '<span style="font-size:12px;color:var(--text3)">—</span>';
@@ -2740,8 +2912,34 @@ function positionTooltip(e) {
 }
 
 /* ===== ATTENDANCE ===== */
+/* ── لوحة الحضور الحي (بيانات الباركود) ── */
+async function loadLiveAttendance() {
+  if (!window.EduOSWorkHours) return;
+  var sbUrl = window.EduOS ? window.EduOS.SB_URL : '';
+  var sbKey = window.EduOS ? window.EduOS.SB_KEY : '';
+  try {
+    // جلب قائمة المعلمات مع تحديد الحلقة لكل منها
+    var nowUAE = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Dubai' }));
+    var today = nowUAE.getFullYear() + '-' + String(nowUAE.getMonth()+1).padStart(2,'0') + '-' + String(nowUAE.getDate()).padStart(2,'0');
+    var [staffRes, cycleRes] = await Promise.all([
+      fetch(sbUrl + '/rest/v1/staff_profiles?role_key=eq.teacher&select=staff_db_id,name_ar&limit=150',
+        {headers:{apikey:sbKey,'Authorization':'Bearer '+sbKey}}).then(function(r){return r.json();}),
+      fetch(sbUrl + '/rest/v1/v_staff_cycle?select=staff_db_id,cycle',
+        {headers:{apikey:sbKey,'Authorization':'Bearer '+sbKey}}).then(function(r){return r.json();}).catch(function(){return [];})
+    ]);
+    var cycleMap = {};
+    (cycleRes||[]).forEach(function(c){cycleMap[c.staff_db_id]=c.cycle;});
+    var staffList = (staffRes||[]).map(function(s){return {staff_db_id:s.staff_db_id, name_ar:s.name_ar, cycle:cycleMap[s.staff_db_id]||'c1'};});
+    window.EduOSWorkHours.buildAttendanceDashboard('liveAttendanceDashboard', staffList, sbUrl, sbKey);
+  } catch(e) {
+    document.getElementById('liveAttendanceDashboard').innerHTML = '<div style="color:#EF4444;padding:12px">خطأ في تحميل الحضور</div>';
+  }
+}
+
 async function loadAttendance() {
   if (!sb) return;
+  // تشغيل لوحة الحضور الحي
+  loadLiveAttendance();
   try {
     var attDate = await getAttDate();
     var res = await sb.from('student_attendance').select('class_name,status,student_id').eq('date',attDate).limit(2000);
