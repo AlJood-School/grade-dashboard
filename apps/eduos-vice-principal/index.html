@@ -5955,14 +5955,32 @@ async function reviewVacApp(id, status) {
   try {
     var url = window.EduOS?.SB_URL || '', key = window.EduOS?.SB_KEY || '', token = await vacancyJwt();
     if (!token || token === key) throw new Error('انتهت الجلسة');
+    // The PATCH returns the exact row changed, including verified applicant data.
     var r = await fetch(url + '/rest/v1/substitute_applications?id=eq.' + encodeURIComponent(id) + '&status=in.(pending,reviewing)', {
       method:'PATCH', headers:{'apikey':key,'Authorization':'Bearer '+token,'Content-Type':'application/json','Prefer':'return=representation'},
       body: JSON.stringify({status:status, reviewed_at:new Date().toISOString()})
     });
     if (!r.ok) throw new Error('تعذر تحديث الطلب (' + r.status + ')');
-    if (!(await r.json()).length) throw new Error('الطلب تغيّر أو ليس قيد المراجعة');
-    if (typeof showToast === 'function') showToast(status === 'accepted' ? '✅ تم القبول' : '❌ تم الرفض');
+    var appData = (await r.json())[0];
+    if (!appData) throw new Error('الطلب تغيّر أو ليس قيد المراجعة');
     await loadVacancyApplications();
+    if (!appData.email) {
+      if (typeof showToast === 'function') showToast('تم تحديث الطلب، لكن لا يوجد بريد لإشعار المتقدمة');
+      return;
+    }
+    try {
+      // Server validates the reviewer and reads the recipient from the database.
+      var emailResponse = await fetch(url + '/functions/v1/vacancy-notification', {
+        method:'POST', headers:{'apikey':key,'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({application_id:appData.id,status:status})
+      });
+      var emailResult = await emailResponse.json();
+      if (!emailResponse.ok || !emailResult.success) throw new Error(emailResult.error || 'فشل إرسال البريد');
+      if (typeof showToast === 'function') showToast(status === 'accepted' ? '✅ تم القبول وإرسال البريد' : '❌ تم الرفض وإرسال البريد');
+    } catch(emailError) {
+      console.error('Vacancy email notification failed:', emailError);
+      alert('تم تحديث الطلب، لكن تعذر إرسال البريد للمتقدمة: ' + emailError.message);
+    }
   } catch(e) { alert('❌ ' + e.message); }
 }
 
