@@ -652,13 +652,16 @@ window.EduLang = (function () {
       else hdr.appendChild(tools);
     }
 
-    // 2b. زر تغيير كلمة المرور — يُضاف لـ #header-tools إذا كان المستخدم مسجّلاً
-    setTimeout(function() {
+    // 2b. زر تغيير كلمة المرور — retry loop حتى يتأكد من وجود #header-tools
+    (function tryAddPwdBtn(attempts) {
+      attempts = attempts || 0;
+      if (attempts > 12) return; // max 6 seconds
       var ht = document.getElementById('header-tools');
-      if (!ht || ht.querySelector('[data-change-pwd]')) return;
+      if (!ht) { setTimeout(function(){ tryAddPwdBtn(attempts+1); }, 500); return; }
+      if (ht.querySelector('[data-change-pwd]')) return;
       try {
         var su = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
-        if (!su.username) return;
+        if (!su.username) { setTimeout(function(){ tryAddPwdBtn(attempts+1); }, 500); return; }
       } catch(e) { return; }
       var cpBtn = document.createElement('button');
       cpBtn.setAttribute('data-change-pwd', '1');
@@ -669,7 +672,7 @@ window.EduLang = (function () {
       cpBtn.onmouseout = function(){this.style.background='rgba(255,255,255,0.12)';};
       cpBtn.onclick = function() { window.location.href = '../eduos-change-password/'; };
       ht.appendChild(cpBtn);
-    }, 900);
+    })(0);
 
     // 3. فقاعة الأسبوع + الوقت الحي في المنتصف
     if (!hdr.querySelector('[data-center-info]')) {
