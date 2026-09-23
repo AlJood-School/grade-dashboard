@@ -315,6 +315,18 @@ tr:hover td{background:#F8FAFC;}
         </div>
       </div>
 
+      <div class="card" style="margin-bottom:16px;padding:18px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+          <h3 style="font-size:1rem;font-weight:800;color:var(--text);flex:1">🔐 سجل تغييرات كلمة المرور</h3>
+          <label>التاريخ <input id="pwLogDate" type="date" onchange="loadPwLog()" style="padding:7px;border:1px solid var(--border);border-radius:9px"></label>
+          <select id="pwLogSource" onchange="loadPwLog()" style="padding:7px;border:1px solid var(--border);border-radius:9px;font-family:inherit">
+            <option value="">كل المصادر</option><option value="self">غيّرت بنفسها</option><option value="admin">غيّرها الأدمن</option>
+          </select>
+          <button onclick="loadPwLog()" class="btn btn-outline btn-sm">🔄 تحديث</button>
+        </div>
+        <div id="pwLogList" style="overflow-x:auto">⏳ جاري التحميل...</div>
+      </div>
+
       <div class="card">
         <div class="card-header">
           <div class="card-title">👥 قائمة الكادر · Staff List</div>
@@ -342,6 +354,9 @@ tr:hover td{background:#F8FAFC;}
 
     <!-- ═══ PANEL: STUDENTS ═══ -->
     <div class="panel" id="panel-students">
+      <div style="margin-bottom:16px">
+        <button onclick="openStudentReset()" style="background:#EDE9FE;color:#6C3DD6;border:1.5px solid #DDD6FE;border-radius:10px;padding:8px 16px;cursor:pointer;font-family:Tajawal,Arial,sans-serif;font-size:.85rem;font-weight:700">🔐 إعادة تعيين كلمة مرور طالبة</button>
+      </div>
       <div class="kpi-grid" id="stuKpi" style="margin-bottom:20px">
         <div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--text3)">⏳</div>
       </div>
@@ -883,6 +898,19 @@ tr:hover td{background:#F8FAFC;}
   </div>
 </div>
 
+<div id="studentResetModal" role="dialog" aria-modal="true" aria-label="إعادة تعيين كلمة مرور الطالبة" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:18px;padding:28px;width:420px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+    <h3 style="font-size:1.1rem;font-weight:800;margin-bottom:16px">🔐 إعادة تعيين كلمة مرور الطالبة</h3>
+    <input id="studentSearchInput" oninput="searchStudents(this.value)" placeholder="ابحث بالاسم أو الرقم..." style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:10px;direction:rtl">
+    <div id="studentSearchResults" style="max-height:180px;overflow-y:auto;margin:12px 0"></div>
+    <div id="selectedStudentInfo" style="display:none;background:#EFF6FF;border-radius:10px;padding:12px;margin-bottom:12px"></div>
+    <input id="newStudentPassword" type="text" autocomplete="off" placeholder="اتركيه فارغاً لإنشاء كلمة قوية تلقائياً" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:10px;direction:ltr;text-align:left;margin-bottom:14px">
+    <div style="display:flex;gap:10px"><button onclick="doResetStudentPassword()" style="flex:1;background:#6C3DD6;color:#fff;border:none;border-radius:10px;padding:11px;cursor:pointer">✅ إعادة التعيين</button>
+      <button onclick="closeStudentReset()" style="border:1px solid #E2E8F0;border-radius:10px;padding:11px;cursor:pointer">إلغاء</button></div>
+    <div id="studentResetResult" role="status" style="margin-top:10px;font-size:.82rem"></div>
+  </div>
+</div>
+
 <script>
 
 // ── Auth ──
@@ -976,7 +1004,7 @@ window.showPanel = function showPanel(p, btnEl) {
   const panel = document.getElementById('panel-' + p);
   if (panel) { panel.classList.add('active'); panel.style.display = 'block'; }
   if (p === 'overview') loadOverview();
-  else if (p === 'staff') { loadStaff(); loadInviteTable(); }
+  else if (p === 'staff') { loadStaff(); loadInviteTable(); loadPwLog(); }
   else if (p === 'students') loadStudents();
   else if (p === 'parents') loadParents();
   else if (p === 'roles') loadRoles();
@@ -1424,7 +1452,7 @@ async function loadSubTeachers() {
   try {
     var SB_ = (window.EduOS && window.EduOS.SB_URL) || '';
     var KEY_ = (window.EduOS && window.EduOS.SB_KEY) || '';
-    var _authData = JSON.parse(localStorage.getItem('sb-' + SB_.replace(/.*\/\/([^.]+).*/,'$1') + '-auth-token') || '{}');
+    var _authData = {access_token:_getJWT()};
     var _jwt = _authData?.access_token || KEY_;
     var q = 'select=staff_db_id,name_ar,username,subject,contract_type,contract_start_date,contract_end_date,is_active,is_sub_teacher,phone,email,coord_classes' +
       '&or=(role_key.eq.sub_teacher,is_sub_teacher.eq.true)&order=is_active.desc,name_ar';
@@ -2197,6 +2225,33 @@ async function sendInviteAll() {
   btn.disabled = false; btn.textContent = '📧 إرسال للجميع';
 }
 
+// سجل آخر تغيير محفوظ في staff_profiles، وليس سلسلة تاريخية متعددة لكل موظفة.
+function escapeAdminText(x) {
+  return String(x == null ? '' : x).replace(/[&<>"']/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
+}
+async function loadPwLog() {
+  var el = document.getElementById('pwLogList'); if (!el) return;
+  el.textContent = '⏳ جاري التحميل...';
+  try {
+    var source = document.getElementById('pwLogSource').value;
+    var date = document.getElementById('pwLogDate').value;
+    var q = 'select=name_ar,password_changed_at,change_source&password_changed_at=not.is.null&order=password_changed_at.desc&limit=100';
+    if (source) q += '&change_source=eq.' + encodeURIComponent(source);
+    if (date) {
+      var start = new Date(date + 'T00:00:00+04:00');
+      q += '&password_changed_at=gte.' + encodeURIComponent(start.toISOString());
+      q += '&password_changed_at=lt.' + encodeURIComponent(new Date(start.getTime()+86400000).toISOString());
+    }
+    var url = window.EduOS?.SB_URL || '', key = window.EduOS?.SB_KEY || '', token = _getJWT();
+    if (!url || !key || !token || token === key) throw new Error('يرجى تسجيل الدخول مجددًا');
+    var r = await fetch(url + '/rest/v1/staff_profiles?' + q, {headers:{apikey:key,Authorization:'Bearer '+token}});
+    if (!r.ok) throw new Error('تعذر تحميل السجل (' + r.status + ')');
+    var rows = await r.json();
+    if (!rows.length) { el.textContent = 'لا توجد سجلات مطابقة'; return; }
+    el.innerHTML = '<table style="width:100%;border-collapse:collapse"><thead><tr><th>الاسم</th><th>تاريخ التغيير</th><th>المصدر</th></tr></thead><tbody>'
+      + rows.map(function(x){ return '<tr><td style="padding:10px">'+escapeAdminText(x.name_ar||'—')+'</td><td style="padding:10px">'+escapeAdminText(new Date(x.password_changed_at).toLocaleString('ar-AE',{timeZone:'Asia/Dubai'}))+'</td><td style="padding:10px">'+escapeAdminText(({self:'👤 ذاتي',admin:'🔧 الأدمن'})[x.change_source]||x.change_source||'—')+'</td></tr>'; }).join('')+'</tbody></table>';
+  } catch(e) { el.textContent = '❌ ' + e.message; }
+}
 // ── إعادة تعيين كلمة المرور من الأدمن ──
 async function resetPasswordAdmin(username, btn) {
   if (!confirm('هل تريدين إرسال رابط إعادة تعيين كلمة المرور لـ ' + username + '؟')) return;
@@ -2396,7 +2451,7 @@ async function loadVacancySubjects() {
   try {
     var SB_ = (window.EduOS && window.EduOS.SB_URL) || '';
     var KEY_ = (window.EduOS && window.EduOS.SB_KEY) || '';
-    var _authData = JSON.parse(localStorage.getItem('sb-' + SB_.replace(/.*\/\/([^.]+).*/,'$1') + '-auth-token') || '{}');
+    var _authData = {access_token:_getJWT()};
     var _jwt = _authData?.access_token || KEY_;
     var r = await fetch(SB_ + '/rest/v1/rpc/get_vacant_subjects', {
       method: 'POST', headers: {'apikey': KEY_, 'Authorization': 'Bearer ' + _jwt, 'Content-Type': 'application/json'}, body: '{}'
@@ -2420,7 +2475,7 @@ async function loadVacancyApps() {
   try {
     var SB_ = (window.EduOS && window.EduOS.SB_URL) || '';
     var KEY_ = (window.EduOS && window.EduOS.SB_KEY) || '';
-    var _authData = JSON.parse(localStorage.getItem('sb-' + SB_.replace(/.*\/\/([^.]+).*/,'$1') + '-auth-token') || '{}');
+    var _authData = {access_token:_getJWT()};
     var _jwt = _authData?.access_token || KEY_;
     var statusF = (document.getElementById('vacStatusFilter')||{}).value || '';
     var subjectF = (document.getElementById('vacSubjectFilter')||{}).value || '';
@@ -2430,7 +2485,8 @@ async function loadVacancyApps() {
     var r = await fetch(SB_ + '/rest/v1/substitute_applications?' + q, {
       headers: {'apikey': KEY_, 'Authorization': 'Bearer ' + _jwt}
     });
-    var apps = r.ok ? await r.json() : [];
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var apps = await r.json();
     // بادج
     var badge = document.getElementById('vacBadge');
     var pending = apps.filter(function(a){ return a.status === 'pending'; }).length;
@@ -2477,13 +2533,13 @@ async function loadVacancyApps() {
     });
     html += '</tbody></table></div>';
     el.innerHTML = html;
-  } catch(e) { el.innerHTML = '<div style="text-align:center;padding:20px;color:#ef4444">خطأ في التحميل</div>'; }
+  } catch(e) { el.textContent = '❌ خطأ في التحميل: ' + e.message; }
 }
 
 async function updateVacApp(id, newStatus) {
   var SB_ = (window.EduOS && window.EduOS.SB_URL) || '';
   var KEY_ = (window.EduOS && window.EduOS.SB_KEY) || '';
-  var _authData = JSON.parse(localStorage.getItem('sb-' + SB_.replace(/.*\/\/([^.]+).*/,'$1') + '-auth-token') || '{}');
+  var _authData = {access_token:_getJWT()};
   var _jwt = _authData?.access_token || KEY_;
   var r = await fetch(SB_ + '/rest/v1/substitute_applications?id=eq.' + id, {
     method: 'PATCH',
@@ -2503,6 +2559,81 @@ async function saveAnnouncement() {
   if (msg) { msg.textContent = ok ? '✅ تم الحفظ' : '❌ خطأ'; setTimeout(function(){ msg.textContent = ''; }, 2000); }
 }
 
+
+var _selectedStudent = null;
+var _studentSearchSerial = 0;
+function openStudentReset() {
+  _selectedStudent = null;
+  document.getElementById('studentSearchInput').value = '';
+  document.getElementById('newStudentPassword').value = '';
+  document.getElementById('studentSearchResults').textContent = '';
+  document.getElementById('studentResetResult').textContent = '';
+  document.getElementById('selectedStudentInfo').style.display = 'none';
+  document.getElementById('studentResetModal').style.display = 'flex';
+  document.getElementById('studentSearchInput').focus();
+}
+function closeStudentReset() {
+  document.getElementById('studentResetModal').style.display = 'none';
+  document.getElementById('newStudentPassword').value = '';
+}
+async function searchStudents(q) {
+  var el = document.getElementById('studentSearchResults');
+  var serial = ++_studentSearchSerial;
+  if (!q || q.trim().length < 2) { el.textContent = ''; return; }
+  try {
+    var term = q.trim().replace(/[,()*%]/g,'').slice(0,60);
+    if (term.length < 2) return;
+    var key = window.EduOS?.SB_KEY || '', token = _getJWT();
+    if (!token || token === key) throw new Error('يرجى تسجيل الدخول');
+    var condition = '(name.ilike.*' + term + '*,student_number.ilike.*' + term + '*)';
+    var url = window.EduOS.SB_URL + '/rest/v1/students?select=id,name,student_number,class_name&or=' + encodeURIComponent(condition) + '&limit=10';
+    var r = await fetch(url, {headers:{apikey:key,Authorization:'Bearer '+token}});
+    if (!r.ok) throw new Error('تعذر البحث (' + r.status + ')');
+    var rows = await r.json();
+    if (serial !== _studentSearchSerial) return;
+    el.textContent = '';
+    if (!rows.length) { el.textContent = 'لا نتائج'; return; }
+    rows.forEach(function(s) {
+      var item = document.createElement('button'); item.type = 'button';
+      item.style.cssText = 'display:block;width:100%;padding:10px;text-align:right;border:0;border-bottom:1px solid #EEF2F7;background:#fff;cursor:pointer';
+      item.textContent = (s.name||'—') + ' — ' + (s.student_number||'—') + ' — ' + (s.class_name||'');
+      item.addEventListener('click', function() { selectStudent(s); }); el.appendChild(item);
+    });
+  } catch(e) { if (serial === _studentSearchSerial) el.textContent = '❌ '+ e.message; }
+}
+function selectStudent(s) {
+  _selectedStudent = s;
+  var el = document.getElementById('selectedStudentInfo');
+  el.style.display = 'block';
+  el.textContent = 'الطالبة: ' + (s.name||'—') + ' | الرقم: ' + (s.student_number||'—') + ' | الصف: ' + (s.class_name||'—');
+  document.getElementById('studentSearchResults').textContent = '';
+}
+function generateStudentPassword() {
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#';
+  var bytes = new Uint8Array(18); crypto.getRandomValues(bytes);
+  return Array.from(bytes, function(b){ return chars[b % chars.length]; }).join('');
+}
+async function doResetStudentPassword() {
+  var out = document.getElementById('studentResetResult');
+  if (!_selectedStudent || !_selectedStudent.student_number) { out.textContent = 'اختاري طالبة لها رقم أولاً'; return; }
+  var password = document.getElementById('newStudentPassword').value.trim() || generateStudentPassword();
+  if (password.length < 12) { out.textContent = '❌ كلمة المرور يجب أن تكون 12 حرفًا على الأقل'; return; }
+  if (!confirm('هل تريدين إعادة تعيين كلمة مرور الطالبة المختارة؟')) return;
+  out.textContent = '⏳ جاري إعادة التعيين...';
+  try {
+    var key = window.EduOS?.SB_KEY || '', token = _getJWT();
+    if (!token || token === key) throw new Error('يرجى تسجيل الدخول مجددًا');
+    var r = await fetch(window.EduOS.SB_URL + '/functions/v1/admin-reset-student-password', {
+      method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,apikey:key},
+      body:JSON.stringify({student_number:_selectedStudent.student_number,new_password:password})
+    });
+    var data = await r.json();
+    if (!r.ok || !data.success) throw new Error(data.error || 'تعذر إعادة التعيين');
+    out.textContent = '✅ تم بنجاح — كلمة المرور الجديدة: ' + password;
+    navigator.clipboard?.writeText(password).catch(function(){});
+    document.getElementById('newStudentPassword').value = '';
+  } catch(e) { out.textContent = '❌ ' + e.message; }
+}
 </script>
 </body>
 </html>
