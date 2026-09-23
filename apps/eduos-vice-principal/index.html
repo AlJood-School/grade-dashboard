@@ -317,7 +317,7 @@ body{overflow:hidden}
         </div>
       </div>
     </div>
-    <div style="display:flex;align-items:center;gap:10px" id="header-tools"><button data-change-pwd="1" title="تغيير كلمة المرور" onclick="window.location.href='../eduos-change-password/'" style="width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.12);color:#fff;cursor:pointer;font-size:14px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .2s;" onmouseover="this.style.background='rgba(255,255,255,0.22)'" onmouseout="this.style.background='rgba(255,255,255,0.12)'">🔐</button></div>
+    <div style="display:flex;align-items:center;gap:10px" id="header-tools"></div>
   </div>
 
   <div class="scroll-area">
@@ -4307,6 +4307,7 @@ async function loadCounselorOverview() {
       '<div style="margin-bottom:14px"><label style="font-size:13px;font-weight:700;color:#475569;display:block;margin-bottom:6px">الحلقة</label>' +
         '<select id="vp-coord-cycle-sel" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px">' +
           '<option value="">-- اختري الحلقة --</option>' +
+          '<option value="kg">الروضة / الكيجي</option>' +
           '<option value="cycle1">الحلقة الأولى (1-4)</option>' +
           '<option value="cycle2">الحلقة الثانية (5-8)</option>' +
         '</select></div>' +
@@ -4368,8 +4369,10 @@ async function loadCoordinators() {
     var vpCycle = await getVpCycle();
     // بناء الفلتر حسب حلقة النائبة
     var cycleFilter = '';
-    if (vpCycle === 'cycle1') cycleFilter = '&coord_cycle=eq.cycle1';
+    if (vpCycle === 'kg') cycleFilter = '&coord_cycle=eq.kg';
+    else if (vpCycle === 'cycle1') cycleFilter = '&coord_cycle=eq.cycle1';
     else if (vpCycle === 'cycle2') cycleFilter = '&coord_cycle=eq.cycle2';
+    else if (vpCycle === 'kg_c2') cycleFilter = '&coord_cycle=in.(kg,cycle2)';
     // جلب الكل مرة واحدة ثم تقسيمهم حسب coord_type
     var res = await fetch(sbUrl+'/rest/v1/staff_profiles?is_coordinator=eq.true&is_active=eq.true&select=name_ar,coord_type,coord_scope,coord_cycle,assigned_by_vp_id,staff_db_id,extra_permissions&order=coord_scope.asc'+cycleFilter,{headers:getCoordHeadersVP()});
     var rows = await res.json();
@@ -4395,7 +4398,7 @@ async function loadCoordinators() {
         '<div style="font-size:16px;font-weight:900;color:#1E293B;margin-bottom:12px;padding-bottom:6px;border-bottom:2px solid '+c+'">' + label + ' (' + list.length + ')</div>' +
         (list.length ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">' +
           list.map(function(r){
-            var cycleLabel = r.coord_cycle==='cycle1'?'الحلقة الأولى':r.coord_cycle==='cycle2'?'الحلقة الثانية':'';
+            var cycleLabel = r.coord_cycle==='kg'?'الروضة':r.coord_cycle==='cycle1'?'الحلقة الأولى':r.coord_cycle==='cycle2'?'الحلقة الثانية':r.coord_cycle==='kg_c2'?'الكيجي+الثانية':'';
             return '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px;border-right:4px solid '+c+'">' +
               '<div style="font-size:14px;font-weight:800;color:#1E293B">'+(r.name_ar||'')+'</div>' +
               '<div style="font-size:12px;color:'+c+';font-weight:700;margin-top:3px">'+(r.coord_scope||'')+'</div>' +
@@ -4444,7 +4447,8 @@ async function showAssignModalVP(){
   var vpCycle=await getVpCycle();
   var cycleSel=document.getElementById('vp-coord-cycle-sel');
   if(cycleSel){
-    if(vpCycle==='cycle1'||vpCycle==='cycle2'){cycleSel.value=vpCycle;cycleSel.disabled=true;}
+    if(vpCycle==='kg'||vpCycle==='cycle1'||vpCycle==='cycle2'){cycleSel.value=vpCycle;cycleSel.disabled=true;}
+    else if(vpCycle==='kg_c2'){cycleSel.disabled=false;cycleSel.value='';}  // تختار kg أو cycle2
     else{cycleSel.disabled=false;cycleSel.value='';}
   }
   var sel=document.getElementById('vp-coord-teacher-sel');

@@ -540,9 +540,17 @@ tr:hover td{background:#F8FAFC;}
           </div>
           <div class="tbl-scroll">
             <table>
-              <thead>
-                <tr><th>الاسم</th><th>الدور</th><th>تاريخ الاستجابة</th><th>مستوى الراحة التقنية</th></tr>
-              </thead>
+              <thead><tr style="background:var(--bg2)">
+          <th style="padding:10px;text-align:right;font-size:13px">الاسم</th>
+          <th style="padding:10px;text-align:right;font-size:13px">المادة</th>
+          <th style="padding:10px;text-align:right;font-size:13px">الصفوف</th>
+          <th style="padding:10px;text-align:right;font-size:13px">التواصل</th>
+          <th style="padding:10px;text-align:right;font-size:13px">نوع العقد</th>
+          <th style="padding:10px;text-align:right;font-size:13px">تاريخ البداية</th>
+          <th style="padding:10px;text-align:right;font-size:13px">تاريخ الانتهاء</th>
+          <th style="padding:10px;text-align:right;font-size:13px">الحالة</th>
+          <th style="padding:10px;text-align:right;font-size:13px">إجراء</th>
+        </tr></thead>
               <tbody id="aqSurveyBody">
                 <tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">⏳ تحميل…</td></tr>
               </tbody>
@@ -1323,7 +1331,7 @@ async function loadSubTeachers() {
   try {
     var SB_ = (window.EduOS && window.EduOS.SB_URL) || '';
     var KEY_ = (window.EduOS && window.EduOS.SB_KEY) || '';
-    var q = 'select=staff_db_id,name_ar,username,subject,contract_type,contract_start_date,contract_end_date,is_active,is_sub_teacher' +
+    var q = 'select=staff_db_id,name_ar,username,subject,contract_type,contract_start_date,contract_end_date,is_active,is_sub_teacher,phone,email,coord_classes' +
       '&or=(role_key.eq.sub_teacher,is_sub_teacher.eq.true,contract_type.neq.permanent)&order=is_active.desc,name_ar';
     var r_ = await fetch(SB_ + '/rest/v1/staff_profiles?' + q, {headers:{'apikey':KEY_,'Authorization':'Bearer '+KEY_}});
     var rows = r_.ok ? await r_.json() : [];
@@ -1346,12 +1354,21 @@ async function loadSubTeachers() {
       var ctMap = {daily_rate:'اجر يومي',fixed_term:'محدد المدة',volunteer:'متطوع/ة',permanent:'دائم'};
       html += '<tr style="border-bottom:1px solid #f1f5f9">';
       html += '<td style="padding:10px;font-weight:700">' + (r.name_ar||'—') + '</td>';
-      html += '<td style="padding:10px;direction:ltr;text-align:left;color:#64748b">' + (r.username||'—') + '</td>';
       html += '<td style="padding:10px;color:#64748b">' + (r.subject||'أي مادة') + '</td>';
+      var classes = Array.isArray(r.coord_classes) ? r.coord_classes.join('، ') : (r.coord_classes||'—');
+      html += '<td style="padding:10px;font-size:12px;color:#0284C7">' + classes + '</td>';
+      var contact = '';
+      if (r.phone) contact += '<div style="font-size:11px">📱 ' + r.phone + '</div>';
+      if (r.email) contact += '<div style="font-size:11px">✉ ' + r.email + '</div>';
+      html += '<td style="padding:10px">' + (contact || '<span style="color:#94A3B8;font-size:12px">—</span>') + '</td>';
       html += '<td style="padding:10px">' + (ctMap[r.contract_type]||r.contract_type||'—') + '</td>';
+      html += '<td style="padding:10px;font-size:12px;color:#64748b">' + (r.contract_start_date||'—') + '</td>';
       html += '<td style="padding:10px;color:' + (expired?'#dc2626':'#374151') + '">' + (r.contract_end_date||'غير محدد') + '</td>';
       html += '<td style="padding:10px">' + status + '</td>';
-      html += '<td style="padding:10px"><button onclick="editSubEndDate(\'' + r.staff_db_id + '\',\'' + (r.contract_end_date||'') + '\')" style="background:#F0F4F8;border:1.5px solid #e2e8f0;border-radius:6px;padding:4px 10px;cursor:pointer;font-family:Tajawal,Arial,sans-serif;font-size:.75rem">تعديل تاريخ</button></td>';
+      html += '<td style="padding:10px"><div style="display:flex;gap:5px;flex-wrap:wrap">';
+      html += '<button onclick="openEditSubModal(\'' + r.staff_db_id + '\',\'' + (r.contract_end_date||'') + '\',\'' + (r.name_ar||'').replace(/\'/g,\'\\\'\'') + '\')" style="background:#F0F4F8;border:1.5px solid #e2e8f0;border-radius:6px;padding:5px 10px;cursor:pointer;font-family:Tajawal,Arial,sans-serif;font-size:.75rem">📅 تعديل</button>';
+      html += '<button onclick="terminateSubNow(\'' + r.staff_db_id + '\',\'' + (r.name_ar||'').replace(/\'/g,\'\\\'\'') + '\')" style="background:#FFF1F2;border:1.5px solid #FECACA;border-radius:6px;padding:5px 10px;cursor:pointer;font-family:Tajawal,Arial,sans-serif;font-size:.75rem;color:#BE123C">🔴 إنهاء</button>';
+      html += '</div></td>';
       html += '</tr>';
     });
     html += '</tbody></table></div>';
@@ -1361,15 +1378,49 @@ async function loadSubTeachers() {
   }
 }
 
-function editSubEndDate(id, current) {
-  var d = prompt('أدخل تاريخ انتهاء العقد (YYYY-MM-DD):', current);
-  if (d === null) return;
-  dbPatch('staff_profiles', 'staff_db_id.eq.' + id, {contract_end_date: d||null})
-    .then(function(ok) {
-      showToast(ok ? '✅ تم تحديث تاريخ الانتهاء' : '❌ خطأ في الحفظ');
-      if (ok) loadSubTeachers();
-    });
+function openEditSubModal(id, current, name) {
+  var modal = document.getElementById('editSubDateModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'editSubDateModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center';
+    modal.innerHTML = '<div style="background:#fff;border-radius:18px;padding:28px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.2);direction:rtl;font-family:Tajawal,Arial,sans-serif">'
+      + '<div style="font-size:1.1rem;font-weight:800;color:#1e293b;margin-bottom:6px">📅 تعديل تاريخ انتهاء العقد</div>'
+      + '<div id="editSubName" style="font-size:.85rem;color:#64748b;margin-bottom:18px"></div>'
+      + '<label style="font-size:.85rem;font-weight:700;color:#374151;display:block;margin-bottom:6px">تاريخ الانتهاء</label>'
+      + '<input type="date" id="editSubDateInput" style="width:100%;padding:10px 14px;border:1.5px solid #E2E8F0;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:15px;box-sizing:border-box;margin-bottom:20px">'
+      + '<div style="display:flex;gap:10px;justify-content:flex-end">'
+      + '<button onclick="document.getElementById('editSubDateModal').style.display='none'" style="padding:10px 20px;background:#F1F5F9;border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;cursor:pointer;color:#475569">إلغاء</button>'
+      + '<button onclick="saveSubEndDate()" style="padding:10px 22px;background:linear-gradient(135deg,#6C3DD6,#22D3EE);border:none;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:800;cursor:pointer;color:#fff">حفظ</button>'
+      + '</div></div>';
+    document.body.appendChild(modal);
+  }
+  document.getElementById('editSubName').textContent = name;
+  document.getElementById('editSubDateInput').value = current || '';
+  modal._staffId = id;
+  modal.style.display = 'flex';
 }
+
+async function saveSubEndDate() {
+  var modal = document.getElementById('editSubDateModal');
+  var id = modal._staffId;
+  var d = document.getElementById('editSubDateInput').value;
+  modal.style.display = 'none';
+  var ok = await dbPatch('staff_profiles', 'staff_db_id.eq.' + id, {contract_end_date: d||null});
+  showToast(ok ? '✅ تم تحديث تاريخ الانتهاء' : '❌ خطأ في الحفظ');
+  if (ok) loadSubTeachers();
+}
+
+async function terminateSubNow(id, name) {
+  if (!confirm('إنهاء عقد ' + name + ' فوراً؟\nسيُعطَّل حسابها من النظام.')) return;
+  var today = new Date().toISOString().slice(0,10);
+  var ok = await dbPatch('staff_profiles', 'staff_db_id.eq.' + id, {contract_end_date: today, is_active: false});
+  showToast(ok ? '✅ تم إنهاء العقد وتعطيل الحساب' : '❌ خطأ في الإنهاء');
+  if (ok) loadSubTeachers();
+}
+
+// legacy alias
+function editSubEndDate(id, current) { openEditSubModal(id, current, ''); }
 
 function openAddSubModal() {
   ['asName','asUsername','asPassword','asSubject'].forEach(function(id){ document.getElementById(id).value=''; });
@@ -1783,7 +1834,7 @@ async function loadVpCycleList() {
   var res = await dbGet('staff_profiles','select=name_ar,staff_db_id,vp_cycle,role_key&role_key=eq.vice_principal&is_active=eq.true&order=name_ar.asc');
   var vps = res.data || [];
   if (!vps.length) { wrap.innerHTML='<div style="text-align:center;padding:32px;color:var(--text3)">لا توجد نائبات مسجّلات برمز vice_principal</div>'; return; }
-  var cycleLabels = {'cycle1':'الحلقة الأولى (1-4)','cycle2':'الحلقة الثانية (5-8)','both':'كلتا الحلقتين'};
+  var cycleLabels = {'kg':'الروضة / الكيجي','cycle1':'الحلقة الأولى (1-4)','cycle2':'الحلقة الثانية (5-8)','both':'كلتا الحلقتين','kg_c2':'الكيجي والحلقة الثانية'};
   var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">';
   vps.forEach(function(vp){
     var cur = vp.vp_cycle || '';
@@ -1792,7 +1843,7 @@ async function loadVpCycleList() {
       + '<div style="font-size:12px;color:var(--text3);margin-bottom:10px">الحلقة الحالية: <strong>' + (cycleLabels[cur]||'غير محدد') + '</strong></div>'
       + '<select onchange="saveVpCycle(\''+vp.staff_db_id+'\',this.value)" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-family:Tajawal,Arial,sans-serif;font-size:13px">'
       + '<option value="">-- اختري الحلقة --</option>'
-      + ['cycle1','cycle2','both'].map(function(v){ return '<option value="'+v+'"'+(cur===v?' selected':'')+'>'+cycleLabels[v]+'</option>'; }).join('')
+      + ['kg','cycle1','cycle2','both','kg_c2'].map(function(v){ return '<option value="'+v+'"'+(cur===v?' selected':'')+'>'+cycleLabels[v]+'</option>'; }).join('')
       + '</select>'
       + '</div>';
   });
@@ -1813,7 +1864,7 @@ async function saveVpCycle(staffDbId, cycle) {
     });
     if (!r.ok) throw new Error(r.status);
     // تأكيد بصري
-    var cycleLabels = {'cycle1':'الحلقة الأولى','cycle2':'الحلقة الثانية','both':'كلتاهما'};
+    var cycleLabels = {'kg':'الروضة','cycle1':'الحلقة الأولى','cycle2':'الحلقة الثانية','both':'كلتاهما','kg_c2':'الكيجي+الثانية'};
     var toast = document.createElement('div');
     toast.textContent = '✅ تم تعيين ' + cycleLabels[cycle];
     toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#059669;color:#fff;padding:12px 24px;border-radius:12px;font-family:Tajawal,Arial,sans-serif;font-size:14px;font-weight:700;z-index:9999';
@@ -1831,8 +1882,8 @@ async function loadPermissions() {
 function renderPermTable(list) {
   var wrap=document.getElementById('permList'); if(!wrap)return;
   if(!list.length){wrap.innerHTML='<div style="text-align:center;padding:32px;color:var(--text3)">لا نتائج</div>';return;}
-  var roleLabels={teacher:'معلمة',principal:'مديرة',vice_principal:'نائبة المديرة',admin:'مدير النظام',nurse:'ممرضة',specialist:'أخصائية',social_worker:'أخصائية اجتماعية',secretary:'أمينة سر',technician:'تقنية',security:'أمن',coach:'مدربة',sub_teacher:'معلمة احتياطية'};
-  wrap.innerHTML='<div class="tbl-scroll"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--bg2)"><th style="padding:10px;text-align:right;font-size:13px">الاسم</th><th style="padding:10px;text-align:right;font-size:13px">الدور</th><th style="padding:10px;text-align:right;font-size:13px">الصلاحيات الإضافية</th><th style="padding:10px;text-align:center;font-size:13px">تعديل</th></tr></thead><tbody>'+list.map(function(s){var ep=s.extra_permissions||[];return '<tr style="border-bottom:1px solid var(--border)"><td style="padding:10px;font-size:13px;font-weight:700">'+(s.name_ar||'—')+'</td><td style="padding:10px"><span style="background:rgba(108,61,214,.1);color:#6C3DD6;padding:3px 8px;border-radius:20px;font-size:12px">'+(roleLabels[s.role_key]||s.role_key||'—')+'</span></td><td style="padding:10px;font-size:12px;color:var(--text3)">'+(ep.length?'<span style="color:#10B981;font-weight:700">✓ '+ep.length+' صلاحية</span>':'لا صلاحيات إضافية')+'</td><td style="padding:10px;text-align:center"><button class="btn btn-primary btn-sm" data-perm-id="'+s.id+'" style="font-size:12px">✏️ تعديل</button></td></tr>';}).join('')+'</tbody></table></div>';
+  var roleLabels={teacher:'معلمة',principal:'مديرة',vice_principal:'نائبة المديرة',admin:'مدير النظام',nurse:'ممرضة',specialist:'أخصائية',social_worker:'أخصائية اجتماعية',secretary:'أمينة سر',technician:'تقنية',security:'أمن',coach:'مدربة',sub_teacher:'معلمة احتياطية',librarian:'أمين/ة المكتبة',financial_coordinator:'منسقة مالية',registrar:'مسجّلة',counselor:'مرشدة'};
+  wrap.innerHTML='<div class="tbl-scroll"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--bg2)"><th style="padding:10px;text-align:right;font-size:13px">الاسم</th><th style="padding:10px;text-align:right;font-size:13px">الدور</th><th style="padding:10px;text-align:right;font-size:13px">الصلاحيات الإضافية</th><th style="padding:10px;text-align:center;font-size:13px">تعديل</th></tr></thead><tbody>'+list.map(function(s){var ep=s.extra_permissions||[];return '<tr style="border-bottom:1px solid var(--border)"><td style="padding:10px;font-size:13px;font-weight:700">'+(s.name_ar||'—')+'</td><td style="padding:10px"><span style="background:rgba(108,61,214,.1);color:#6C3DD6;padding:3px 8px;border-radius:20px;font-size:12px">'+(roleLabels[s.role_key]||s.role_key||'—')+'</span></td><td style="padding:10px;font-size:12px;color:var(--text3)">'+(ep.length?'<span style="color:#10B981;font-weight:700;cursor:pointer" title="'+ep.join(', ')+'" onclick="showPermDetail(this,'+JSON.stringify(ep)+')">✓ '+ep.length+' صلاحية ← عرض</span>':'<span style="color:#94A3B8;font-size:11px">—</span>')+'</td><td style="padding:10px;text-align:center"><button class="btn btn-primary btn-sm" data-perm-id="'+s.id+'" style="font-size:12px">✏️ تعديل</button></td></tr>';}).join('')+'</tbody></table></div>';
   wrap.querySelectorAll('[data-perm-id]').forEach(function(btn){btn.addEventListener('click',function(){var staff=permSearchList.find(function(x){return x.id===btn.dataset.permId;});if(staff)openPermModal(staff.id,staff.name_ar||'');});});
 }
 async function openPermModal(staffId,staffName) {
