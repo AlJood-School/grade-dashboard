@@ -2435,6 +2435,9 @@ function enableDragDrop() {
 }
 
 /* ── Save ── */
+/* ═══════════════════════════════════════════════
+   مقارنة قبل/بعد — تُستدعى قبل الحفظ الفعلي
+   ═══════════════════════════════════════════════ */
 async function saveTimetable() {
   if (!STATE.timetable) return;
 
@@ -2455,6 +2458,139 @@ async function saveTimetable() {
     return;
   }
 
+  /* ── عرض شاشة المقارنة قبل النشر ── */
+  await showCompareModal();
+}
+
+async function showCompareModal() {
+  var selYear = (document.getElementById('academicYear') || {value:'2026-2027'}).value;
+  var selTerm = parseInt((document.getElementById('termNumber') || {value:'1'}).value);
+  var classes = STATE.selectedClasses;
+
+  /* بناء الجدول الجديد من STATE */
+  var newRows = [];
+  STATE.selectedClasses.forEach(function(cls) {
+    STATE.selectedDays.forEach(function(day) {
+      var maxP = (day === 'الجمعة') ? (STATE.fridayPeriodsPerDay||4) : STATE.periodsPerDay;
+      for (var p = 1; p <= maxP; p++) {
+        var slot = STATE.timetable[cls] && STATE.timetable[cls][day] && STATE.timetable[cls][day][p];
+        newRows.push({
+          class_name: cls,
+          day: day,
+          period: p,
+          subject: slot ? slot.subject : 'فراغ',
+          teacher_name: slot ? (slot.teacherName || '') : ''
+        });
+      }
+    });
+  });
+
+  /* جلب الجدول الحالي من DB */
+  var oldMap = {};
+  try {
+    var clsList = classes.map(function(c){return '"'+c+'"';}).join(',');
+    var dbRes = await sbFetch(
+      'schedules?class_name=in.(' + clsList + ')&academic_year=eq.' + selYear + '&term=eq.' + selTerm + '&is_active=eq.true&select=class_name,day,period,subject,teacher_name'
+    );
+    if (dbRes.ok) {
+      var dbRows = await dbRes.json();
+      dbRows.forEach(function(r) {
+        oldMap[r.class_name + '|' + r.day + '|' + r.period] = r;
+      });
+    }
+  } catch(e) { /* تابع حتى بدون بيانات قديمة */ }
+
+  /* حساب التغييرات */
+  var changed = [], added = [], unchanged = 0;
+  newRows.forEach(function(nr) {
+    var key = nr.class_name + '|' + nr.day + '|' + nr.period;
+    var or = oldMap[key];
+    if (!or) {
+      added.push(nr);
+    } else if (or.subject !== nr.subject || or.teacher_name !== nr.teacher_name) {
+      changed.push({ old: or, new: nr });
+    } else {
+      unchanged++;
+    }
+  });
+  var oldTotal = Object.keys(oldMap).length;
+  var hasOldData = oldTotal > 0;
+
+  /* بناء محتوى المودال */
+  var summaryHtml = '';
+  if (!hasOldData) {
+    summaryHtml = '<div style="background:#e0f2fe;border-radius:10px;padding:14px 18px;margin-bottom:14px;font-size:15px;color:#075985;">' +
+      '<strong>📋 لا يوجد جدول منشور حالياً لهذه الفصول.</strong><br>سيُنشأ جدول جديد بـ ' + newRows.length + ' حصة.' +
+      '</div>';
+  } else {
+    summaryHtml = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">' +
+      '<div style="background:#fef9c3;border-radius:10px;padding:12px;text-align:center;">' +
+        '<div style="font-size:22px;font-weight:900;color:#854d0e;">' + changed.length + '</div>' +
+        '<div style="font-size:12px;color:#854d0e;">حصة ستتغير</div>' +
+      '</div>' +
+      '<div style="background:#dcfce7;border-radius:10px;padding:12px;text-align:center;">' +
+        '<div style="font-size:22px;font-weight:900;color:#166534;">' + added.length + '</div>' +
+        '<div style="font-size:12px;color:#166534;">حصة جديدة ستُضاف</div>' +
+      '</div>' +
+      '<div style="background:#f1f5f9;border-radius:10px;padding:12px;text-align:center;">' +
+        '<div style="font-size:22px;font-weight:900;color:#475569;">' + unchanged + '</div>' +
+        '<div style="font-size:12px;color:#475569;">حصة بدون تغيير</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  /* تفاصيل التغييرات */
+  var detailsHtml = '';
+  if (changed.length > 0) {
+    detailsHtml += '<div style="margin-bottom:12px;">' +
+      '<div style="font-weight:700;font-size:13px;color:#92400e;margin-bottom:6px;">🔄 الحصص المتغيّرة (أول 20):</div>' +
+      '<div style="max-height:180px;overflow-y:auto;border:1px solid #fde68a;border-radius:8px;">' +
+      '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+      '<thead><tr style="background:#fef3c7;"><th style="padding:6px;text-align:right;">الفصل</th><th style="padding:6px;">اليوم</th><th style="padding:6px;">ح</th><th style="padding:6px;">قبل</th><th style="padding:6px;">بعد</th></tr></thead><tbody>';
+    changed.slice(0,20).forEach(function(ch) {
+      detailsHtml += '<tr style="border-bottom:1px solid #fde68a;">' +
+        '<td style="padding:5px 6px;font-weight:600;">' + ch.new.class_name + '</td>' +
+        '<td style="padding:5px 6px;text-align:center;">' + ch.new.day + '</td>' +
+        '<td style="padding:5px 6px;text-align:center;">' + ch.new.period + '</td>' +
+        '<td style="padding:5px 6px;color:#dc2626;">' + (ch.old.subject||'-') + ' / ' + (ch.old.teacher_name||'شاغر') + '</td>' +
+        '<td style="padding:5px 6px;color:#16a34a;">' + (ch.new.subject||'-') + ' / ' + (ch.new.teacher_name||'شاغر') + '</td>' +
+      '</tr>';
+    });
+    if (changed.length > 20) detailsHtml += '<tr><td colspan="5" style="text-align:center;padding:6px;color:#92400e;">... و' + (changed.length-20) + ' تغيير إضافي</td></tr>';
+    detailsHtml += '</tbody></table></div></div>';
+  }
+
+  var modal = document.getElementById('compareModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'compareModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = '<div style="background:#fff;border-radius:16px;padding:28px;max-width:640px;width:94%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);direction:rtl;">' +
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">' +
+      '<div style="background:linear-gradient(135deg,#6C3DD6,#22D3EE);border-radius:10px;width:42px;height:42px;display:flex;align-items:center;justify-content:center;font-size:20px;">📊</div>' +
+      '<div>' +
+        '<div style="font-size:18px;font-weight:900;color:#1e293b;">مراجعة قبل النشر</div>' +
+        '<div style="font-size:12px;color:#64748b;">' + selYear + ' — الفصل ' + selTerm + ' — ' + classes.length + ' فصل</div>' +
+      '</div>' +
+    '</div>' +
+    summaryHtml +
+    detailsHtml +
+    '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:13px;color:#9a3412;">' +
+      '⚠️ بعد التأكيد: الجدول الحالي في قاعدة البيانات سيُؤرشَف وسيحل محله الجدول الجديد. لا يمكن التراجع من هنا.' +
+    '</div>' +
+    '<div style="display:flex;gap:12px;justify-content:flex-end;">' +
+      '<button onclick="document.getElementById(\'compareModal\').style.display=\'none\';document.getElementById(\'btnSave\').disabled=false;" ' +
+        'style="background:#f1f5f9;color:#475569;border:none;border-radius:10px;padding:10px 22px;font-size:14px;font-weight:700;cursor:pointer;">إلغاء — مراجعة الجدول</button>' +
+      '<button id="btnConfirmPublish" onclick="document.getElementById(\'compareModal\').style.display=\'none\';_doSaveTimetable();" ' +
+        'style="background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:14px;font-weight:700;cursor:pointer;">✅ تأكيد النشر</button>' +
+    '</div>' +
+  '</div>';
+  modal.style.display = 'flex';
+}
+
+async function _doSaveTimetable() {
   document.getElementById('btnSave').disabled = true;
   var rows = [];
   var classes = STATE.selectedClasses;
