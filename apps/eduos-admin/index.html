@@ -1188,20 +1188,36 @@ function filterStaff() {
 
 // ── STUDENTS ──
 async function loadStudents() {
-  var res = await dbGet('students', 'select=id,name,class_name,student_number,grade,parent_national_id&order=class_name.asc&limit=2000');
-  var list = res.data;
-  var total = list.length;
-  var hasNum = list.filter(function(s) { return s.student_number; }).length;
-  var hasParent = list.filter(function(s) { return s.parent_national_id; }).length;
+  // إحصاءات حقيقية من الخادم بدون limit
+  var SB = window.SUPABASE_URL || '';
+  var KEY = window.SUPABASE_KEY || '';
+  var hdr = { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY, 'Prefer': 'count=exact', 'Range': '0-0' };
+  async function cnt(q) {
+    try {
+      var r = await fetch(SB + '/rest/v1/students?select=id' + (q ? '&' + q : ''), { headers: hdr });
+      var m = (r.headers.get('Content-Range') || '').match(/\/(\d+)/);
+      return m ? +m[1] : 0;
+    } catch(e) { return 0; }
+  }
+  var [total, noNum, hasParent] = await Promise.all([
+    cnt(''), cnt('student_number=is.null'), cnt('parent_national_id=not.is.null')
+  ]);
+  var hasNum = total - noNum;
+
+  // جلب الطلاب بصفحتين (يغطي حتى 2000 طالبة)
+  var res1 = await dbGet('students', 'select=class_name,student_number&order=class_name.asc&limit=1000&offset=0');
+  var res2 = await dbGet('students', 'select=class_name,student_number&order=class_name.asc&limit=1000&offset=1000');
+  var list = ((res1 && res1.data) || []).concat((res2 && res2.data) || []);
 
   document.getElementById('stuKpi').innerHTML = [
     { icon: '🎓', val: total, label: 'إجمالي الطلاب', bg: '#EDE9FE' },
     { icon: '🔢', val: hasNum, label: 'لديهم رقم طالب/ة', bg: '#D1FAE5' },
-    { icon: '⚠️', val: total - hasNum, label: 'بدون رقم', bg: '#FEE2E2' },
+    { icon: '⚠️', val: noNum, label: 'بدون رقم', bg: '#FEE2E2' },
     { icon: '👨‍👩‍👧', val: hasParent, label: 'مرتبطون بولي أمر', bg: '#FEF3C7' }
   ].map(function(k) {
     return '<div class="kpi-card"><div class="kpi-icon" style="background:' + k.bg + '">' + k.icon + '</div><div class="kpi-val">' + k.val + '</div><div class="kpi-label">' + k.label + '</div></div>';
   }).join('');
+
 
   var classCounts = {};
   list.forEach(function(s) {
