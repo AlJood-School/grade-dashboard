@@ -652,6 +652,25 @@ window.EduLang = (function () {
       else hdr.appendChild(tools);
     }
 
+    // 2b. زر تغيير كلمة المرور — يُضاف لـ #header-tools إذا كان المستخدم مسجّلاً
+    setTimeout(function() {
+      var ht = document.getElementById('header-tools');
+      if (!ht || ht.querySelector('[data-change-pwd]')) return;
+      try {
+        var su = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+        if (!su.username) return;
+      } catch(e) { return; }
+      var cpBtn = document.createElement('button');
+      cpBtn.setAttribute('data-change-pwd', '1');
+      cpBtn.title = 'تغيير كلمة المرور';
+      cpBtn.innerHTML = '🔐';
+      cpBtn.style.cssText = 'width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.12);color:#fff;cursor:pointer;font-size:14px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .2s;';
+      cpBtn.onmouseover = function(){this.style.background='rgba(255,255,255,0.22)';};
+      cpBtn.onmouseout = function(){this.style.background='rgba(255,255,255,0.12)';};
+      cpBtn.onclick = function() { window.location.href = '../eduos-change-password/'; };
+      ht.appendChild(cpBtn);
+    }, 900);
+
     // 3. فقاعة الأسبوع + الوقت الحي في المنتصف
     if (!hdr.querySelector('[data-center-info]')) {
       // CSS animation للنبضة
