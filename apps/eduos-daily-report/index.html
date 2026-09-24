@@ -188,6 +188,7 @@
         var anonKey = (window.EduOS && window.EduOS.SB_KEY) || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
         var bearer = anonKey;
         try {
+          // 1: sessionStorage edoos_user
           var s = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
           var jwt = s.access_token || s.token;
           if (jwt && jwt.split('.').length === 3) {
@@ -195,6 +196,20 @@
             if (p.exp && p.exp > Date.now() / 1000 + 30) bearer = jwt;
           }
         } catch (e) {}
+        // 2: Supabase SDK localStorage (sb-{ref}-auth-token)
+        if (bearer === anonKey) {
+          try {
+            var sbKeys = Object.keys(localStorage).filter(function(k) { return k.startsWith('sb-') && k.endsWith('-auth-token'); });
+            if (sbKeys.length) {
+              var sbSession = JSON.parse(localStorage.getItem(sbKeys[0]) || '{}');
+              var jwtSb = (sbSession.access_token) || (sbSession.session && sbSession.session.access_token);
+              if (jwtSb && jwtSb.split('.').length === 3) {
+                var pb = JSON.parse(atob(jwtSb.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+                if (pb.exp && pb.exp > Date.now() / 1000 + 30) bearer = jwtSb;
+              }
+            }
+          } catch (e) {}
+        }
         return Object.assign({ 'apikey': anonKey, 'Authorization': 'Bearer ' + bearer }, extra || {});
       }
       window.getHeaders = getHeaders;
