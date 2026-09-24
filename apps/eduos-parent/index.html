@@ -756,35 +756,37 @@ async function loadStaffInfo(uid) {
     }
   }
 
-  // Counselor (social workers) — فلترة حسب حلقة الطالب
+  // Counselor (social workers) — فلترة حسب شعبة الطالب ثم الحلقة
   var cslEl = document.getElementById('counselorInfo');
   if (cslEl) cslEl.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div>جارٍ التحميل...</div>';
   // تحديد الحلقة من اسم الصف
   var gradeMatch = className ? className.match(/^(KG|\d+)/i) : null;
   var gradeNum = gradeMatch ? (isNaN(parseInt(gradeMatch[1])) ? 0 : parseInt(gradeMatch[1])) : 0;
   var studentCycle = (gradeNum === 0) ? 'kg' : (gradeNum <= 4 ? 'c1' : 'c2');
-  // جلب الأخصائيات المعيّنة للحلقة، أو من لا حلقة معيّنة (تغطي الكل)
+  // 1️⃣ الأخصائية المعيّنة للشعبة بالضبط (coord_classes يحتوي className)
   var counselors = await dbGet('staff_profiles',
-    'select=name_ar&role_key=eq.social_worker&or=(coord_cycle.eq.' + studentCycle + ',coord_cycle.is.null)&order=name_ar'
+    'select=name_ar&role_key=eq.social_worker&is_active=eq.true&coord_classes=cs.{' + className + '}&limit=1'
   );
-  // إذا لم تُوجد نتائج بالفلتر — اعرض كل الأخصائيات (احتياط)
+  // 2️⃣ احتياط: إذا لا أخصائية للشعبة — ابحث بالحلقة
   if (!counselors || !counselors.length) {
-    counselors = await dbGet('staff_profiles', 'select=name_ar&role_key=eq.social_worker&order=name_ar');
+    counselors = await dbGet('staff_profiles',
+      'select=name_ar&role_key=eq.social_worker&is_active=eq.true&coord_cycle=eq.' + studentCycle + '&limit=1'
+    );
   }
   if (cslEl) {
     if (counselors && counselors.length) {
-      cslEl.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:12px;">' +
-        counselors.map(function(c) {
-          return '<div style="display:flex;align-items:center;gap:10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:10px 14px;justify-content:space-between;flex:1;min-width:200px">' +
-            '<div style="display:flex;align-items:center;gap:10px">' +
-            '<span style="font-size:22px">💙</span>' +
-            '<div><div style="font-weight:700;color:#1E293B">' + (c.name_ar || '—') + '</div>' +
-            '<div style="font-size:12px;color:#64748B">أخصائي/ة اجتماعي/ة · ' + (studentCycle === 'kg' ? 'الروضة' : studentCycle === 'c1' ? 'الحلقة الأولى' : 'الحلقة الثانية') + '</div></div></div>' +
-            '<button onclick="openQuickMessage(\'الأخصائية الاجتماعية\')" style="background:#3B82F6;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-family:Tajawal,Arial,sans-serif;font-size:13px;cursor:pointer;flex-shrink:0">📨 رسالة</button>' +
-            '</div>';
-        }).join('') + '</div>';
+      var csl = counselors[0];
+      var cycleLabel = studentCycle === 'kg' ? 'الروضة' : studentCycle === 'c1' ? 'الحلقة الأولى' : 'الحلقة الثانية';
+      cslEl.innerHTML =
+        '<div style="display:flex;align-items:center;gap:16px;padding:8px 0;justify-content:space-between">' +
+        '<div style="display:flex;align-items:center;gap:16px">' +
+        '<div style="width:52px;height:52px;background:linear-gradient(135deg,#3B82F6,#8B5CF6);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">💙</div>' +
+        '<div><div style="font-size:18px;font-weight:800;color:var(--text)">' + (csl.name_ar || '—') + '</div>' +
+        '<div style="font-size:14px;color:var(--text3);margin-top:4px">أخصائي/ة اجتماعي/ة · ' + cycleLabel + ' · ' + className + '</div></div></div>' +
+        '<button onclick="openQuickMessage(\'الأخصائية الاجتماعية\')" style="background:#3B82F6;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:Tajawal,Arial,sans-serif;font-size:14px;cursor:pointer;flex-shrink:0">📨 رسالة</button>' +
+        '</div>';
     } else {
-      cslEl.innerHTML = '<div class="empty"><div class="empty-icon">💙</div>لا بيانات</div>';
+      cslEl.innerHTML = '<div class="empty"><div class="empty-icon">💙</div>لا توجد أخصائي/ة مُعيَّنة لهذا الصف بعد</div>';
     }
   }
 
