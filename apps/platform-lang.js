@@ -13,6 +13,23 @@
  * ═══════════════════════════════════════════════════════════════
  */
 
+
+/* ─────────────────────────────────────────────────────────────
+ * تحميل نظام اللغة المحايدة (platform-gender.js)
+ * يُحمَّل مرة واحدة تلقائياً مع platform-lang.js
+ * ──────────────────────────────────────────────────────────── */
+(function() {
+  if (window.__genderLoaded) return;
+  window.__genderLoaded = true;
+  var base = (document.currentScript && document.currentScript.src)
+    ? document.currentScript.src.replace(/platform-lang\.js.*$/, '')
+    : '../';
+  var s = document.createElement('script');
+  s.src = base + 'platform-gender.js';
+  s.async = false;
+  document.head.appendChild(s);
+})();
+
 window.EduLang = (function () {
 
   const STORAGE_KEY = 'eduos_lang';
