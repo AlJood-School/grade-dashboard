@@ -235,18 +235,26 @@
       }
       function renderAttendance(rows) {
         var list = Array.isArray(rows) ? rows : [];
-        var present = list.filter(function (r) { return String(r.status || '').toLowerCase() === 'present'; }).length;
-        var absent = list.filter(function (r) { return String(r.status || '').toLowerCase() === 'absent'; }).length;
-        setText('present-count', present); setText('attendance-absent-count', absent); setText('attendance-total-count', list.length);
+        var presentList = list.filter(function (r) { return String(r.status || '').toLowerCase() === 'present'; });
+        var absentList = list.filter(function (r) { return String(r.status || '').toLowerCase() === 'absent'; });
+        setText('present-count', list.length > 0 ? presentList.length : '—');
+        setText('attendance-absent-count', list.length > 0 ? absentList.length : '—');
+        setText('attendance-total-count', list.length > 0 ? list.length : '—');
         document.getElementById('attendance-empty').hidden = list.length > 0;
-        return list.filter(function (r) { return String(r.status || '').toLowerCase() === 'absent'; });
+        return { absent: absentList, total: list.length };
       }
-      function renderAbsences(rows) {
+      function renderAbsences(rows, hasData) {
         var body = document.getElementById('absences-body');
+        var emptyEl = document.getElementById('absences-empty');
         body.innerHTML = (rows || []).map(function (r) {
           return '<tr><td>' + escapeHtml(getField(r, ['student_name', 'name', 'student', 'full_name'], 'غير محدد')) + '</td><td>' + escapeHtml(getField(r, ['class_name', 'grade', 'class', 'section'], 'غير محدد')) + '</td></tr>';
         }).join('');
-        document.getElementById('absences-empty').hidden = (rows || []).length > 0;
+        if (!hasData) {
+          emptyEl.textContent = 'لا توجد بيانات حضور الطلاب لهذا اليوم بعد — يتطلب تسجيل الحضور الرقمي.';
+        } else {
+          emptyEl.textContent = 'جميع الطالبات حاضرات اليوم 🎉';
+        }
+        emptyEl.hidden = (rows || []).length > 0;
         body.parentElement.parentElement.hidden = !(rows || []).length;
       }
       function renderIncidents(rows) {
@@ -299,8 +307,8 @@
         var incidents = results[1].status === 'fulfilled' ? results[1].value : (errors.push('الحوادث السلوكية'), []);
         var news = results[2].status === 'fulfilled' ? results[2].value : (errors.push('الأخبار'), []);
         var staffParts = results[3].status === 'fulfilled' ? results[3].value : (errors.push('سجل حضور الكادر'), [[], []]);
-        var absent = renderAttendance(attendance);
-        renderAbsences(absent);
+        var attResult = renderAttendance(attendance);
+        renderAbsences(attResult.absent, attResult.total > 0);
         renderIncidents(incidents);
         renderNews(news);
         var checked = staffParts[1] || [];
