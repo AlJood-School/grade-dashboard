@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<script src="/apps/platform-lang.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>جدول المشاهدات الصفية | EduOS</title>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="../platform-lang.js" defer></script>
 <script src="../platform-shield.js" defer></script>
+<script src="../platform-rubric.js"></script>
 <script src="../platform-week.js"></script>
 <style>
 :root {
@@ -23,7 +24,9 @@
   --shadow-md:0 4px 16px rgba(0,0,0,.10);
 }
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Tajawal',Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:16px;}
+body{
+    margin: 0;
+    padding: 0;font-family:'Tajawal',Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:16px;}
 
 /* HEADER */
 .header{background:var(--surface);border-bottom:2px solid var(--border);padding:0 24px;position:sticky;top:0;z-index:200;box-shadow:var(--shadow);}
@@ -387,7 +390,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 async function loadData(){
   const [staffRes, obsRes] = await Promise.all([
-    fetch(`${SB_URL}/rest/v1/staff_profiles?select=id,full_name,role,subject&order=full_name.asc`, {headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`}}),
+    fetch(`${SB_URL}/rest/v1/staff_profiles?select=id,name_ar,subject&order=name_ar.asc`, {headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`}}),
     fetch(`${SB_URL}/rest/v1/lesson_observation_results?order=observed_at.desc&limit=200`, {headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`}})
   ]);
   allStaff = await staffRes.json().catch(()=>[]);
@@ -506,7 +509,7 @@ function buildCriteriaForm(){
       <div class="crit-desc">${c.desc}</div>
       <div class="rating-btns">
         ${[4,3,2,1].map(r=>`<button class="rb" data-r="${r}" data-crit="${c.id}" onclick="setRating('${c.id}',${r},this)">
-          ${r===4?'ممتاز':r===3?'جيد':r===2?'مقبول':'يحتاج تطوير'}
+          ${r===4?'متقدم':r===3?'متقن':r===2?'قيد التطور':'ناشئ'}
         </button>`).join('')}
       </div>
     </div>
@@ -526,8 +529,12 @@ function updateScore(){
   const avg=vals.reduce((a,b)=>a+b,0)/vals.length;
   const pct=Math.round((avg/4)*100);
   document.getElementById('scorePct').textContent=pct+'%';
-  const grade=pct>=90?'ممتاز ⭐':pct>=75?'جيد جداً 👍':pct>=60?'جيد':'يحتاج تطوير 📈';
-  document.getElementById('scoreGrade').textContent=grade;
+  if(window.EduRubric){
+    document.getElementById('scoreGrade').innerHTML=window.EduRubric.badge(pct,undefined,{showNum:true});
+  } else {
+    const grade=pct>=90?'متقدم':pct>=75?'متقن':pct>=60?'قيد التطور':'ناشئ';
+    document.getElementById('scoreGrade').textContent=grade;
+  }
 }
 
 async function submitObservation(){
