@@ -584,8 +584,8 @@ tr:hover td{background:var(--surface2)}
       <!-- Greeting -->
       <div class="greeting-card">
         <div class="greeting-text">
-          <h2 id="greetMsg">مرحباً 👋</h2>
-          <p id="greetSub">جارٍ تحميل بيانات اليوم…</p>
+          <h2 id="greetMsg" data-ar="مرحباً 👋" data-en="Welcome 👋">مرحباً 👋</h2>
+          <p id="greetSub" data-ar="جارٍ تحميل بيانات اليوم…" data-en="Loading today's data…">جارٍ تحميل بيانات اليوم…</p>
         </div>
         <div class="greeting-meta">
           <div class="meta-pill">
@@ -1548,15 +1548,40 @@ async function checkTodaySwaps() {
 }
 
 // ── DATETIME ──
+function getCurrentEduLang() {
+  return window.EduLang?.getLang?.() || sessionStorage.getItem('eduos_lang') || 'ar';
+}
+function updateGreetingMessage() {
+  const h = new Date().getHours();
+  const ar = h < 12 ? 'صباح الخير ☀️' : h < 17 ? 'مساء الخير 🌤️' : 'مساء الخير 🌙';
+  const en = h < 12 ? 'Good Morning ☀️' : h < 17 ? 'Good Afternoon 🌤️' : 'Good Evening 🌙';
+  const el = document.getElementById('greetMsg');
+  if (!el) return;
+  el.dataset.ar = ar;
+  el.dataset.en = en;
+  el.textContent = getCurrentEduLang() === 'en' ? en : ar;
+}
+function updateGreetingSub(data) {
+  const el = document.getElementById('greetSub');
+  if (!el) return;
+  const nameAr = data.name_ar || data.name_en || 'الكادر الأكاديمي';
+  const nameEn = data.name_en || data.name_ar || 'Staff Member';
+  const hClass = data.department || data.grades_taught || '';
+  const hClassEn = data.department_en || data.grades_taught_en || (hClass && !/[\u0600-\u06FF]/.test(hClass) ? hClass : '');
+  const ar = 'أهلاً ' + nameAr + (hClass ? ' — ' + hClass : '') + ' · يوم موفق إن شاء الله';
+  const en = 'Hello ' + nameEn + (hClassEn ? ' — ' + hClassEn : '') + ' · Have a great day';
+  el.dataset.ar = ar;
+  el.dataset.en = en;
+  el.textContent = getCurrentEduLang() === 'en' ? en : ar;
+}
 function setupDateTime() {
   const now = new Date();
   const days = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
   const months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
   document.getElementById('todayDate').textContent = days[now.getDay()] + ' ' + now.getDate() + ' ' + months[now.getMonth()];
-  const h = now.getHours();
-  const greet = h < 12 ? 'صباح الخير ☀️ / Good Morning' : h < 17 ? 'مساء الخير 🌤️ / Good Afternoon' : 'مساء الخير 🌙 / Good Evening';
-  document.getElementById('greetMsg').textContent = greet;
+  updateGreetingMessage();
 }
+window.addEventListener('eduos-lang-change', updateGreetingMessage);
 
 function setupWeekHeader() {
   if (window.getPlatformWeek) {
@@ -1681,8 +1706,7 @@ async function loadTeacherProfile() {
     // تحديث الدور ديناميكياً
     const roleEl = document.getElementById('userRoleLabel');
     if (roleEl) roleEl.textContent = ROLE_LABELS_AR[data.role_key] || data.role_key || 'كادر أكاديمي';
-    const hClass = data.department || data.grades_taught || '';
-    document.getElementById('greetSub').textContent = 'أهلاً ' + displayName + (hClass ? ' — ' + hClass : '') + ' · يوم موفق إن شاء الله';
+    updateGreetingSub(data);
     const classSet = new Set();
     (data.department||'').split(',').map(c=>c.trim()).filter(Boolean).forEach(c=>classSet.add(c));
     if (teacherNumericId) {

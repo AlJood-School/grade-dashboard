@@ -46,6 +46,11 @@ window.EduLang = (function () {
     'جميع الحقوق محفوظة'               : 'All rights reserved',
     'رخصة'                             : 'License',
 
+    /* ── التحيات ── */
+    'مرحباً'                          : 'Welcome',
+    'أهلاً بك'                         : 'Hello',
+    'أهلاً'                            : 'Hello',
+
     /* ── هيدر ── */
     'جارٍ التحميل...'                  : 'Loading...',
     'جارٍ التحميل'                     : 'Loading',
