@@ -127,6 +127,7 @@
     'eduos-secretary':            ['secretary'],
     'eduos-coach':                ['coach'],
     'eduos-registrar':            ['registrar'],
+    'eduos-parent-mgmt':           ['admin', 'registrar', 'principal', 'vice_principal'],
     'eduos-parent-activate':      ['*'],
     'eduos-parent':               ['parent'],
     'eduos-parent-portal':        ['parent'],

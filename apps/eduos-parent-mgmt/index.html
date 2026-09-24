@@ -32,6 +32,12 @@ body{font-family:'Tajawal',Arial,sans-serif;background:var(--bg);color:var(--tex
 .h-title small{display:block;font-size:11px;font-weight:400;opacity:.8;}
 .h-week{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;}
 .h-dot{width:7px;height:7px;border-radius:50%;background:#4ADE80;animation:pulse 1.5s infinite;}
+/* تناسق زر المناوبة مع الهيدر */
+.duty-pill,.header-duty-btn,[class*='duty'][class*='btn'],[class*='duty'][class*='pill']{
+  background:rgba(255,255,255,0.18)!important;
+  color:#fff!important;
+  border:1px solid rgba(255,255,255,0.35)!important;
+}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .h-clock{color:rgba(255,255,255,.85);font-size:13px;font-weight:700;min-width:56px;text-align:center;}
 #header-tools{display:flex;gap:8px;align-items:center;}
@@ -273,7 +279,9 @@ tr:hover td{background:#FAFBFF;}
 
 <script>
 // ── الثوابت ──
-var SUPABASE_URL, SUPABASE_KEY, supabase;
+var SB_URL = (window.EduOS && window.EduOS.SB_URL) || '';
+var SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || '';
+var sb = null;  // سيُهيَّأ في DOMContentLoaded
 var currentUser = null;
 var allData = [];
 var filteredData = [];
@@ -282,11 +290,10 @@ var resetTarget = null;
 
 // ── تهيئة ──
 document.addEventListener('DOMContentLoaded', function () {
-  var EduOS = window.EduOS;
-  if (!EduOS || !EduOS.SB_URL) { showToast('خطأ: لم يُحمَّل الإعداد'); return; }
-  SUPABASE_URL = EduOS.SB_URL;
-  SUPABASE_KEY = EduOS.SB_KEY;
-  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  // استخدام EduOS_SB (client موثَّق من auth-guard) أو إنشاء جديد
+  sb = window.EduOS_SB || (window.supabase && SB_URL && SB_KEY
+    ? window.supabase.createClient(SB_URL, SB_KEY) : null);
+  if (!sb) { showToast('خطأ: لم يُهيَّأ الاتصال'); return; }
 
   // التحقق من الجلسة
   var raw = sessionStorage.getItem('edoos_user');
@@ -332,12 +339,12 @@ function goBack() {
 async function loadData() {
   try {
     // جلب parent_credentials مع student_ids
-    var pcRes = await supabase.from('parent_credentials').select('national_id,activated,phone,student_ids,parent_name');
+    var pcRes = await sb.from('parent_credentials').select('national_id,activated,phone,student_ids,parent_name');
     if (pcRes.error) throw pcRes.error;
     var credentials = pcRes.data || [];
 
     // جلب students برقم الطالب
-    var stRes = await supabase.from('students').select('name,class_name,student_number,grade');
+    var stRes = await sb.from('students').select('name,class_name,student_number,grade');
     if (stRes.error) throw stRes.error;
     var students = stRes.data || [];
 
@@ -517,7 +524,7 @@ function showSection(section) {
 // ── تفعيل / إلغاء تفعيل ──
 async function toggleActivate(nationalId, activate) {
   try {
-    var res = await supabase.from('parent_credentials')
+    var res = await sb.from('parent_credentials')
       .update({ activated: activate })
       .eq('national_id', nationalId);
     if (res.error) throw res.error;
@@ -591,7 +598,7 @@ async function confirmReset() {
   // كلمة المرور الجديدة = رقم الهوية
   var newPass = resetTarget;
   try {
-    var res = await supabase.from('parent_credentials')
+    var res = await sb.from('parent_credentials')
       .update({ activated: false })
       .eq('national_id', resetTarget);
     if (res.error) throw res.error;
