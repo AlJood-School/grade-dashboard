@@ -4356,25 +4356,72 @@ async function counselorAssignmentHeaders() {
   return { apikey: SB_KEY, Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', Prefer: 'return=representation' };
 }
 
-// تعريف المراحل والشعب
-var GRADE_GROUPS = [
-  { key:'kg1', label:'روضة 1', emoji:'🌸', classes:['KG1A','KG1B','KG1C'], color:'#f43f5e', bg:'#fff1f2' },
-  { key:'kg2', label:'روضة 2', emoji:'🌺', classes:['KG2A','KG2B','KG2C'], color:'#ec4899', bg:'#fdf2f8' },
-  { key:'g1',  label:'الصف الأول',  emoji:'1️⃣', classes:['1A','1B','1C','1D','1E','1F'], color:'#6C3DD6', bg:'#f5f3ff' },
-  { key:'g2',  label:'الصف الثاني', emoji:'2️⃣', classes:['2A','2B','2C','2D','2E','2F'], color:'#7c3aed', bg:'#f5f3ff' },
-  { key:'g3',  label:'الصف الثالث', emoji:'3️⃣', classes:['3A','3B','3C','3D','3E','3F'], color:'#4f46e5', bg:'#eef2ff' },
-  { key:'g4',  label:'الصف الرابع', emoji:'4️⃣', classes:['4A','4B','4C','4D','4E'], color:'#2563eb', bg:'#eff6ff' },
-  { key:'g5',  label:'الصف الخامس', emoji:'5️⃣', classes:['5A','5B','5C','5D'], color:'#0891b2', bg:'#ecfeff' },
-  { key:'g6',  label:'الصف السادس', emoji:'6️⃣', classes:['6A','6B','6C','6D'], color:'#0d9488', bg:'#f0fdfa' },
-  { key:'g7',  label:'الصف السابع', emoji:'7️⃣', classes:['7A','7B','7C'], color:'#059669', bg:'#f0fdf4' },
-  { key:'g8',  label:'الصف الثامن', emoji:'8️⃣', classes:['8A','8B','8C'], color:'#16a34a', bg:'#f0fdf4' }
-];
+// تعريف المراحل والشعب — ديناميكي من DB
+var GRADE_GROUPS = []; // يُملأ من fetchGradeGroupsFromDB()
+
+var GRADE_META = {
+  'KG1': { label:'روضة 1',        emoji:'🌸', color:'#f43f5e', bg:'#fff1f2', order:0 },
+  'KG2': { label:'روضة 2',        emoji:'🌺', color:'#ec4899', bg:'#fdf2f8', order:1 },
+  'G1':  { label:'الصف الأول',    emoji:'1️⃣', color:'#6C3DD6', bg:'#f5f3ff', order:2 },
+  'G2':  { label:'الصف الثاني',   emoji:'2️⃣', color:'#7c3aed', bg:'#f5f3ff', order:3 },
+  'G3':  { label:'الصف الثالث',   emoji:'3️⃣', color:'#4f46e5', bg:'#eef2ff', order:4 },
+  'G4':  { label:'الصف الرابع',   emoji:'4️⃣', color:'#2563eb', bg:'#eff6ff', order:5 },
+  'G5':  { label:'الصف الخامس',   emoji:'5️⃣', color:'#0891b2', bg:'#ecfeff', order:6 },
+  'G6':  { label:'الصف السادس',   emoji:'6️⃣', color:'#0d9488', bg:'#f0fdfa', order:7 },
+  'G7':  { label:'الصف السابع',   emoji:'7️⃣', color:'#059669', bg:'#f0fdf4', order:8 },
+  'G8':  { label:'الصف الثامن',   emoji:'8️⃣', color:'#16a34a', bg:'#f0fdf4', order:9 }
+};
+
+function classToGradeKey(cls) {
+  cls = String(cls || '').trim();
+  if (/^KG1/i.test(cls)) return 'KG1';
+  if (/^KG2/i.test(cls)) return 'KG2';
+  var m = cls.match(/^(\d+)/);
+  if (m) return 'G' + m[1];
+  return null;
+}
+
+async function fetchGradeGroupsFromDB() {
+  try {
+    var r = await fetch(SB_URL + '/rest/v1/students?select=class_name&is_active=eq.true&order=class_name', {
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+    });
+    var rows = await r.json();
+    var groupMap = {};
+    (rows || []).forEach(function(row) {
+      var cls = (row.class_name || '').trim();
+      if (!cls) return;
+      var gk = classToGradeKey(cls);
+      if (!gk) return;
+      if (!groupMap[gk]) groupMap[gk] = { key: gk.toLowerCase(), classes: [] };
+      if (!groupMap[gk].classes.includes(cls)) groupMap[gk].classes.push(cls);
+    });
+    // ترتيب الشعب أبجدياً داخل كل مرحلة
+    Object.values(groupMap).forEach(function(g) { g.classes.sort(); });
+    // دمج مع الميتاداتا وترتيب المراحل
+    GRADE_GROUPS = Object.keys(groupMap)
+      .sort(function(a,b) {
+        var oa = (GRADE_META[a] || {}).order || 99;
+        var ob = (GRADE_META[b] || {}).order || 99;
+        return oa - ob;
+      })
+      .map(function(gk) {
+        var meta = GRADE_META[gk] || { label:gk, emoji:'🏫', color:'#6b7280', bg:'#f9fafb', order:99 };
+        return Object.assign({}, meta, groupMap[gk]);
+      });
+    return GRADE_GROUPS;
+  } catch(e) {
+    console.error('fetchGradeGroupsFromDB error', e);
+    return GRADE_GROUPS;
+  }
+}
 
 async function loadCounselorAssignments() {
   var el = document.getElementById('counselorAssignmentList');
   if (!el) return;
   el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:30px">جارٍ التحميل...</div>';
   try {
+    if (!GRADE_GROUPS.length) await fetchGradeGroupsFromDB();
     var headers = await counselorAssignmentHeaders();
     var r = await fetch(SB_URL + '/rest/v1/staff_profiles?select=staff_db_id,name_ar,coord_classes&role_key=in.(social_worker,specialist,counselor)&is_active=eq.true&order=name_ar', { headers: headers });
     if (!r.ok) throw new Error('تعذّر تحميل الأخصائيين/ات (' + r.status + ')');
