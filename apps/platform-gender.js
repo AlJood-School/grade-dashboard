@@ -35,8 +35,11 @@
 
   // تحميل الإعداد من Supabase
   function loadGenderSetting() {
-    var SB_URL = window.SUPABASE_URL || '';
-    var SB_KEY = window.SUPABASE_ANON_KEY || '';
+    // دعم إعدادات البوابة الفعلية، إضافةً إلى الاسمين العامّين القديمين.
+    var SB_URL = window.SUPABASE_URL || (window.EduOS && window.EduOS.SB_URL) || '';
+    var schoolKeyParts = [window.EduOS_k1, window.EduOS_k2, window.EduOS_k3];
+    var generatedSchoolKey = schoolKeyParts.every(Boolean) ? schoolKeyParts.join('') : '';
+    var SB_KEY = window.SUPABASE_ANON_KEY || (window.EduOS && window.EduOS.SB_KEY) || generatedSchoolKey;
     if (!SB_URL || !SB_KEY) return;
 
     fetch(SB_URL + '/rest/v1/app_settings?key=eq.staff_gender&select=value', {
