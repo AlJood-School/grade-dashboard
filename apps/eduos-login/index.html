@@ -823,16 +823,29 @@ async function loginStaff() {
     password: password,
   });
   if (authError || !authData?.user) {
+    try {
+      var trackResp = await supabase.functions.invoke('track-failed-login', { body: { username: username } });
+      if (trackResp?.data?.locked) {
+        showGeneralError('حسابك موقوف بسبب تجاوز عدد محاولات الدخول — تواصلي مع الإدارة');
+        return;
+      }
+    } catch (e) { /* تجاهل أخطاء التتبع */ }
     showGeneralError('اسم المستخدم أو كلمة المرور غير صحيحة');
     return;
   }
   var { data: profile, error: profileError } = await supabase
     .from('staff_profiles')
-    .select('id, role_key, name_ar, must_change_password, staff_db_id')
+    .select('id, role_key, name_ar, must_change_password, staff_db_id, is_active, suspension_reason')
     .eq('username', username)
     .single();
   if (profileError || !profile) {
     showGeneralError('تعذّر العثور على بيانات الكادر الأكاديمي');
+    return;
+  }
+  if (profile.is_active === false) {
+    await supabase.auth.signOut();
+    var suspReason = profile.suspension_reason || 'يرجى التواصل مع الإدارة';
+    showGeneralError('حسابك موقوف — ' + suspReason);
     return;
   }
   // فحص إجبار تغيير كلمة المرور

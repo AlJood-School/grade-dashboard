@@ -1121,7 +1121,7 @@ async function loadOverview() {
 // ── STAFF ──
 var allStaff = [];
 async function loadStaff() {
-  var res = await dbGet('staff_profiles', 'select=id,name_ar,name_en,username,role_key,subject,department,is_active,is_coordinator&order=name_ar.asc&limit=500');
+  var res = await dbGet('staff_profiles', 'select=id,name_ar,name_en,username,role_key,subject,department,is_active,is_coordinator,staff_db_id&order=name_ar.asc&limit=500');
   allStaff = res.data;
   // Populate subject filter
   var subjects = [...new Set(allStaff.map(function(s){return s.subject;}).filter(Boolean))].sort();
@@ -1136,6 +1136,8 @@ async function loadStaff() {
     var badge = document.getElementById('staffBadge');
     badge.textContent = inactive + ' موقوف/ة';
     badge.style.display = 'inline-block';
+    badge.onclick = function() { showSuspendedModal(); };
+    badge.style.cursor = 'pointer';
   }
 }
 
@@ -1166,9 +1168,100 @@ function renderStaff(list) {
         '</div>' +
         '<span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px;'+statusDot+'"></span>' +
       '</div>' +
-      '<button class="btn btn-outline btn-sm" style="width:100%;font-size:12px" data-id="'+s.id+'" data-name="'+safeName+'" data-role="'+effectiveRole+'" onclick="openEditRole(this)">✏️ تعديل الدور</button>' +
+      '<div style="display:flex;gap:6px">' +
+      '<button class="btn btn-outline btn-sm" style="flex:1;font-size:12px" data-id="'+s.id+'" data-name="'+safeName+'" data-role="'+effectiveRole+'" onclick="openEditRole(this)">✏️ تعديل الدور</button>' +
+      (isActive ? '<button class="btn btn-outline btn-sm" style="flex:1;font-size:12px;color:#dc2626;border-color:#FECACA" onclick="suspendStaff(\''+(s.staff_db_id||'')+'\',\''+safeName+'\')">🚫 إيقاف</button>' : '') +
+      '</div>' +
     '</div>';
   }).join('');
+}
+
+// ── إيقاف / إعادة تفعيل حساب موظفة ──
+async function showSuspendedModal() {
+  var res = await dbGet('staff_profiles', 'select=name_ar,username,role_key,staff_db_id,suspension_reason,suspended_at,suspended_by&is_active=eq.false&order=suspended_at.desc.nullslast');
+  var list = res.data || [];
+  var html = '<div id="suspendModal" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">' +
+    '<div style="background:#fff;border-radius:20px;padding:28px;width:min(92%,640px);max-height:80vh;overflow-y:auto">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">' +
+    '<h3 style="font-size:1.1rem;font-weight:900;color:#EF4444">🚫 الحسابات الموقوفة (' + list.length + ')</h3>' +
+    '<button onclick="document.getElementById(\'suspendModal\').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748b">✕</button></div>';
+  if (!list.length) {
+    html += '<p style="text-align:center;color:#64748b;padding:30px">لا توجد حسابات موقوفة</p>';
+  } else {
+    html += list.map(function(s) {
+      var roleLabels = {teacher:'معلمة',principal:'مديرة',vice_principal:'وكيلة',admin:'أدمن',nurse:'تمريض',coach:'مدرب/ة',counselor:'مرشدة',sub_teacher:'احتياط'};
+      var dt = s.suspended_at ? new Date(s.suspended_at).toLocaleDateString('ar', {day:'2-digit',month:'long',year:'numeric'}) : '—';
+      var safeName = (s.name_ar||'').replace(/'/g,'');
+      return '<div style="border:1px solid #FEE2E2;border-radius:12px;padding:14px 16px;margin-bottom:10px;background:#FFFBFB">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
+        '<div>' +
+        '<div style="font-weight:800;font-size:.95rem;color:#1E293B">' + (s.name_ar||'—') + '</div>' +
+        '<div style="font-size:.8rem;color:#64748b;margin-top:3px">' + (roleLabels[s.role_key]||s.role_key||'—') + ' · @' + (s.username||'—') + '</div>' +
+        '<div style="margin-top:6px;font-size:.82rem"><span style="background:#FEE2E2;color:#dc2626;padding:2px 10px;border-radius:20px;font-weight:700">' + (s.suspension_reason||'لم يُحدَّد السبب') + '</span></div>' +
+        '<div style="font-size:.78rem;color:#94a3b8;margin-top:5px">📅 ' + dt + (s.suspended_by ? ' · بواسطة ' + s.suspended_by : '') + '</div>' +
+        '</div>' +
+        '<button onclick="reactivateStaff(\'' + safeName + '\',\'' + (s.staff_db_id||'') + '\')" style="background:linear-gradient(135deg,#10B981,#059669);color:#fff;border:none;border-radius:10px;padding:7px 14px;font-family:Tajawal,Arial,sans-serif;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">✅ إعادة تفعيل</button>' +
+        '</div></div>';
+    }).join('');
+  }
+  html += '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function reactivateStaff(name, staffDbId) {
+  if (!staffDbId) { alert('تعذّر العثور على معرّف الموظفة'); return; }
+  if (!confirm('إعادة تفعيل حساب ' + name + '؟')) return;
+  var u = sessionStorage.getItem('edoos_user');
+  var sess = u ? JSON.parse(u) : {};
+  var actor = sess.name || 'الأدمن';
+  var efResp = await fetch((window.EduOS?window.EduOS.SB_URL:'') + '/functions/v1/suspend-account', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': (window.EduOS?window.EduOS.SB_KEY:''), 'Authorization': 'Bearer ' + _getJWT() },
+    body: JSON.stringify({ target_staff_db_id: staffDbId, action: 'reactivate', actor_name: actor })
+  });
+  if (efResp.ok) {
+    var m = document.getElementById('suspendModal'); if (m) m.remove();
+    showToast('✅ تم إعادة تفعيل حساب ' + name);
+    await loadStaff();
+  } else {
+    alert('حدث خطأ أثناء إعادة التفعيل');
+  }
+}
+
+function suspendStaff(staffDbId, staffName) {
+  if (!staffDbId) { alert('تعذّر العثور على معرّف الموظفة — لا يمكن إيقاف هذا الحساب من هنا'); return; }
+  var reasons = ['نقل إلى مدرسة أخرى', 'انتهاء العقد', 'وفاة (رحمها الله)', 'إيقاف إداري', 'أخرى'];
+  var html = '<div id="suspReasonModal" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center">' +
+    '<div style="background:#fff;border-radius:18px;padding:26px;width:min(90%,420px)">' +
+    '<h3 style="font-weight:900;font-size:1rem;color:#EF4444;margin-bottom:16px">🚫 سبب إيقاف حساب ' + staffName + '</h3>' +
+    '<select id="suspReasonSel" style="width:100%;padding:10px;border:1px solid #e2e8f0;border-radius:10px;font-family:Tajawal,Arial,sans-serif;font-size:.9rem;margin-bottom:12px">' +
+    reasons.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('') +
+    '</select>' +
+    '<div style="display:flex;gap:10px">' +
+    '<button onclick="doSuspendStaff(\''+staffDbId+'\',\''+staffName+'\')" style="flex:1;background:#EF4444;color:#fff;border:none;border-radius:10px;padding:10px;font-family:Tajawal,Arial,sans-serif;font-weight:700;cursor:pointer">تأكيد الإيقاف</button>' +
+    '<button onclick="document.getElementById(\'suspReasonModal\').remove()" style="flex:1;background:#f1f5f9;color:#334155;border:none;border-radius:10px;padding:10px;font-family:Tajawal,Arial,sans-serif;font-weight:700;cursor:pointer">إلغاء</button>' +
+    '</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function doSuspendStaff(staffDbId, staffName) {
+  var reason = document.getElementById('suspReasonSel');
+  reason = reason ? reason.value : 'إيقاف إداري';
+  var m = document.getElementById('suspReasonModal'); if (m) m.remove();
+  var u = sessionStorage.getItem('edoos_user');
+  var sess = u ? JSON.parse(u) : {};
+  var actor = sess.name || 'الأدمن';
+  var efResp = await fetch((window.EduOS?window.EduOS.SB_URL:'') + '/functions/v1/suspend-account', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': (window.EduOS?window.EduOS.SB_KEY:''), 'Authorization': 'Bearer ' + _getJWT() },
+    body: JSON.stringify({ target_staff_db_id: staffDbId, reason: reason, action: 'suspend', actor_name: actor })
+  });
+  if (efResp.ok) {
+    showToast('🚫 تم إيقاف حساب ' + staffName + ' (' + reason + ')');
+    await loadStaff();
+  } else {
+    alert('حدث خطأ أثناء الإيقاف');
+  }
 }
 
 function filterStaff() {
