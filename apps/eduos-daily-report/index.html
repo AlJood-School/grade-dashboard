@@ -250,12 +250,21 @@
         document.getElementById('incidents-empty').hidden = (rows || []).length > 0;
         body.parentElement.parentElement.hidden = !(rows || []).length;
       }
-      function renderStaff(rows) {
+      function renderStaff(rows, noCheckinData) {
         var body = document.getElementById('staff-absences-body');
+        var emptyEl = document.getElementById('staff-absences-empty');
+        if (noCheckinData) {
+          body.innerHTML = '';
+          emptyEl.textContent = 'بيانات تسجيل حضور الكادر عبر البصمة/الباركود غير متوفرة اليوم — لا يمكن تحديد الغائبات حالياً.';
+          emptyEl.hidden = false;
+          body.parentElement.parentElement.hidden = false;
+          return;
+        }
+        emptyEl.textContent = 'لا توجد معلمات غائبات بحسب سجل الحضور.';
         body.innerHTML = (rows || []).map(function (r) {
           return '<tr><td>' + escapeHtml(getField(r, ['name_ar', 'name', 'full_name'], 'غير محدد')) + '</td><td>' + escapeHtml(getField(r, ['job_title', 'role', 'position'], '')) + '</td></tr>';
         }).join('');
-        document.getElementById('staff-absences-empty').hidden = (rows || []).length > 0;
+        emptyEl.hidden = (rows || []).length > 0;
         body.parentElement.parentElement.hidden = !(rows || []).length;
       }
       function renderNews(rows) {
@@ -287,11 +296,13 @@
         var checked = staffParts[1] || [];
         var checkedIds = {};
         checked.forEach(function (r) { ['staff_id', 'profile_id', 'employee_id', 'user_id'].forEach(function (k) { if (r[k] !== null && r[k] !== undefined) checkedIds[String(r[k])] = true; }); });
-        var absentStaff = (staffParts[0] || []).filter(function (r) {
+        var allStaff = staffParts[0] || [];
+        var noCheckinData = checked.length === 0 && allStaff.length > 0;
+        var absentStaff = noCheckinData ? [] : allStaff.filter(function (r) {
           var id = getField(r, ['id', 'staff_id', 'user_id'], '');
           return id && !checkedIds[String(id)];
         });
-        renderStaff(absentStaff);
+        renderStaff(absentStaff, noCheckinData);
         var status = errors.length ? 'تعذر تحميل بعض البيانات: ' + errors.join('، ') : 'تم تحديث التقرير بتاريخ ' + dateText;
         setText('load-status', status);
         if (errors.length) document.getElementById('load-status').className = 'status error';
@@ -301,3 +312,4 @@
   </script>
 </body>
 </html>
+
