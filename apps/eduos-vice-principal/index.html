@@ -4020,37 +4020,14 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="panel" id="panel-counselor" style="display:none">
   <!-- ═══ قسم تعيين الأخصائيين/ات للصفوف ═══ -->
   <div style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:18px;margin-bottom:20px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:10px">
       <div style="font-weight:800;font-size:15px;color:#1e293b">👥 تعيين الأخصائيين/ات للصفوف</div>
       <button onclick="loadCounselorAssignments()" style="background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;font-weight:700">🔄 تحديث</button>
     </div>
-    <p style="font-size:12px;color:#6b7280;margin-bottom:14px">يمكن لنائب/ة المدير/ة تعيين الأخصائيين/ات المسؤولين/ات عن كل صف. الفلترة في بوابة الطالب/ة ستعتمد هذا التعيين.</p>
-    <div id="counselorAssignmentList" style="margin-bottom:16px">
-      <div style="text-align:center;color:#9ca3af;padding:20px">جارٍ التحميل...</div>
-    </div>
-    <div style="background:#f8fafc;border-radius:10px;padding:14px;border:1px dashed #d1d5db">
-      <div style="font-weight:700;font-size:13px;color:#374151;margin-bottom:12px">➕ تعيين/تعديل أخصائي/ة لصف</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end">
-        <div>
-          <label for="assignCounselorSelect" style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px">الأخصائي/ة</label>
-          <select id="assignCounselorSelect" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fff">
-            <option value="">-- اختر --</option>
-          </select>
-        </div>
-        <div>
-          <label for="assignClassSelect" style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px">الصف</label>
-          <select id="assignClassSelect" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fff">
-            <option value="">-- اختر الصف --</option>
-            <optgroup label="الصف الرابع"><option>4A</option><option>4B</option><option>4C</option><option>4D</option><option>4E</option></optgroup>
-            <optgroup label="الصف الخامس"><option>5A</option><option>5B</option><option>5C</option><option>5D</option></optgroup>
-            <optgroup label="الصف السادس"><option>6A</option><option>6B</option><option>6C</option><option>6D</option></optgroup>
-            <optgroup label="الصف السابع"><option>7A</option><option>7B</option><option>7C</option></optgroup>
-            <optgroup label="الصف الثامن"><option>8A</option><option>8B</option><option>8C</option></optgroup>
-          </select>
-        </div>
-        <button onclick="addCounselorAssignment()" style="background:#10b981;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;font-weight:700;white-space:nowrap">✅ تعيين</button>
-      </div>
-      <div id="assignMsg" role="status" aria-live="polite" style="margin-top:8px;font-size:12px"></div>
+    <p style="font-size:12px;color:#6b7280;margin-bottom:16px">اختر الأخصائي/ة المسؤول/ة عن كل مرحلة والشعب المندرجة تحتها. التغيير يؤثر فوراً على بوابة الطالب/ة.</p>
+    <div id="assignMsg" role="status" aria-live="polite" style="margin-bottom:10px;font-size:13px;min-height:20px"></div>
+    <div id="counselorAssignmentList">
+      <div style="text-align:center;color:#9ca3af;padding:30px">جارٍ التحميل...</div>
     </div>
   </div>
   <p class="sec-title">🤝 الأخصائي/ة الاجتماعي/ة</p>
@@ -4354,107 +4331,187 @@ async function loadCounselorOverview() {
   loadReferralsDashboard();
 }
 
-// إدارة تعيين الأخصائيين/ات — استخدام رمز مستخدم مصادق عليه، لا مفتاح الزائر للكتابة.
+// ═══ إدارة تعيين الأخصائيين/ات — بطاقات المراحل ═══
 async function counselorAssignmentHeaders() {
   if (!SB_URL || !SB_KEY) throw new Error('إعدادات قاعدة البيانات غير متاحة');
   var token = typeof vacancyJwt === 'function' ? await vacancyJwt() : '';
   if (!token || token === SB_KEY) throw new Error('يرجى تسجيل الدخول مجدداً لإدارة التعيينات');
-  return { apikey: SB_KEY, Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
+  return { apikey: SB_KEY, Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', Prefer: 'return=representation' };
 }
+
+// تعريف المراحل والشعب
+var GRADE_GROUPS = [
+  { key:'kg1', label:'روضة 1', emoji:'🌸', classes:['KG1A','KG1B','KG1C'], color:'#f43f5e', bg:'#fff1f2' },
+  { key:'kg2', label:'روضة 2', emoji:'🌺', classes:['KG2A','KG2B','KG2C'], color:'#ec4899', bg:'#fdf2f8' },
+  { key:'g1',  label:'الصف الأول',  emoji:'1️⃣', classes:['1A','1B','1C','1D','1E','1F'], color:'#6C3DD6', bg:'#f5f3ff' },
+  { key:'g2',  label:'الصف الثاني', emoji:'2️⃣', classes:['2A','2B','2C','2D','2E','2F'], color:'#7c3aed', bg:'#f5f3ff' },
+  { key:'g3',  label:'الصف الثالث', emoji:'3️⃣', classes:['3A','3B','3C','3D','3E','3F'], color:'#4f46e5', bg:'#eef2ff' },
+  { key:'g4',  label:'الصف الرابع', emoji:'4️⃣', classes:['4A','4B','4C','4D','4E'], color:'#2563eb', bg:'#eff6ff' },
+  { key:'g5',  label:'الصف الخامس', emoji:'5️⃣', classes:['5A','5B','5C','5D'], color:'#0891b2', bg:'#ecfeff' },
+  { key:'g6',  label:'الصف السادس', emoji:'6️⃣', classes:['6A','6B','6C','6D'], color:'#0d9488', bg:'#f0fdfa' },
+  { key:'g7',  label:'الصف السابع', emoji:'7️⃣', classes:['7A','7B','7C'], color:'#059669', bg:'#f0fdf4' },
+  { key:'g8',  label:'الصف الثامن', emoji:'8️⃣', classes:['8A','8B','8C'], color:'#16a34a', bg:'#f0fdf4' }
+];
 
 async function loadCounselorAssignments() {
   var el = document.getElementById('counselorAssignmentList');
-  var selEl = document.getElementById('assignCounselorSelect');
   if (!el) return;
-  el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:12px">جارٍ التحميل...</div>';
+  el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:30px">جارٍ التحميل...</div>';
   try {
     var headers = await counselorAssignmentHeaders();
-    var r = await fetch(SB_URL + '/rest/v1/staff_profiles?select=staff_db_id,name_ar,coord_classes,coord_type&role_key=in.(social_worker,specialist,counselor)&is_active=eq.true&order=name_ar', { headers: headers });
-    if (!r.ok) throw new Error('تعذّر تحميل التعيينات (' + r.status + ')');
-    var data = await r.json();
-    if (!Array.isArray(data)) throw new Error('استجابة غير صالحة');
-    if (selEl) {
-      var selected = selEl.value;
-      selEl.innerHTML = '<option value="">-- اختر --</option>';
-      data.forEach(function(c) {
-        var option = document.createElement('option');
-        option.value = String(c.staff_db_id || '');
-        option.textContent = c.name_ar || '—';
-        selEl.appendChild(option);
+    var r = await fetch(SB_URL + '/rest/v1/staff_profiles?select=staff_db_id,name_ar,coord_classes&role_key=in.(social_worker,specialist,counselor)&is_active=eq.true&order=name_ar', { headers: headers });
+    if (!r.ok) throw new Error('تعذّر تحميل الأخصائيين/ات (' + r.status + ')');
+    var counselors = await r.json();
+
+    // بناء خريطة: class → counselorId
+    var classMap = {};
+    counselors.forEach(function(c) {
+      (c.coord_classes || []).forEach(function(cls) { classMap[cls] = String(c.staff_db_id); });
+    });
+
+    // بناء البطاقات
+    var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">';
+    GRADE_GROUPS.forEach(function(grade) {
+      // تحديد الأخصائي/ة المعيَّن/ة حالياً لهذه المرحلة
+      var assignedId = '';
+      var assignedCount = {};
+      grade.classes.forEach(function(cls) {
+        if (classMap[cls]) {
+          assignedCount[classMap[cls]] = (assignedCount[classMap[cls]] || 0) + 1;
+        }
       });
-      if (data.some(function(c) { return String(c.staff_db_id) === selected; })) selEl.value = selected;
-    }
-    if (!data.length) {
-      el.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:20px">لا يوجد أخصائيون/ات مسجّلون/ات</div>';
-      return;
-    }
-    var html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
-    html += '<thead><tr style="background:#f1f5f9"><th style="padding:8px 12px;text-align:right;font-weight:700;color:#374151;border-bottom:1px solid #e5e7eb">الاسم</th><th style="padding:8px 12px;text-align:right;font-weight:700;color:#374151;border-bottom:1px solid #e5e7eb">الصفوف المعيَّنة</th><th style="padding:8px 12px;text-align:center;font-weight:700;color:#374151;border-bottom:1px solid #e5e7eb">إجراء</th></tr></thead><tbody>';
-    data.forEach(function(c) {
-      var classes = Array.isArray(c.coord_classes) && c.coord_classes.length ? c.coord_classes.map(vpEsc).join('، ') : '<span style="color:#9ca3af">لم تُعيَّن بعد</span>';
-      html += '<tr style="border-bottom:1px solid #f3f4f6">';
-      html += '<td style="padding:10px 12px;font-weight:600">' + vpEsc(c.name_ar || '—') + '</td>';
-      html += '<td style="padding:10px 12px">' + classes + '</td>';
-      html += '<td style="padding:10px 12px;text-align:center"><button class="clear-counselor-classes" style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">🗑 مسح</button></td>';
-      html += '</tr>';
+      // أكثر أخصائي/ة تغطية للشعب
+      var maxCount = 0;
+      Object.keys(assignedCount).forEach(function(id) {
+        if (assignedCount[id] > maxCount) { maxCount = assignedCount[id]; assignedId = id; }
+      });
+
+      var isAssigned = assignedId !== '';
+      var badgeHtml = isAssigned
+        ? '<span style="background:' + grade.color + '22;color:' + grade.color + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">✅ مُعيَّن/ة</span>'
+        : '<span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">⚠️ لم يُعيَّن بعد</span>';
+
+      html += '<div style="background:' + grade.bg + ';border:2px solid ' + grade.color + '33;border-radius:14px;padding:16px;transition:box-shadow .2s" data-grade-key="' + grade.key + '">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+      html += '<div style="font-weight:800;font-size:14px;color:' + grade.color + '">' + grade.emoji + ' ' + grade.label + '</div>';
+      html += badgeHtml + '</div>';
+
+      // checkboxes الشعب
+      html += '<div style="margin-bottom:12px">';
+      html += '<div style="font-size:11px;color:#6b7280;margin-bottom:6px;font-weight:600">الشعب:</div>';
+      html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+      grade.classes.forEach(function(cls) {
+        var isChecked = classMap[cls] === assignedId && isAssigned;
+        html += '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;background:#fff;border:1px solid ' + grade.color + '44;border-radius:6px;padding:3px 8px;font-size:12px;font-weight:600;color:#374151">';
+        html += '<input type="checkbox" data-cls="' + cls + '" data-grade="' + grade.key + '" ' + (isChecked ? 'checked' : '') + ' style="accent-color:' + grade.color + ';cursor:pointer"> ' + cls;
+        html += '</label>';
+      });
+      html += '</div></div>';
+
+      // dropdown الأخصائي/ة
+      html += '<div style="margin-bottom:10px">';
+      html += '<div style="font-size:11px;color:#6b7280;margin-bottom:4px;font-weight:600">الأخصائي/ة المسؤول/ة:</div>';
+      html += '<select data-counselor-select="' + grade.key + '" style="width:100%;padding:7px 10px;border:1.5px solid ' + grade.color + '44;border-radius:8px;font-size:13px;background:#fff;color:#1e293b;font-weight:600">';
+      html += '<option value="">-- غير مُعيَّن/ة --</option>';
+      counselors.forEach(function(c) {
+        var sel = String(c.staff_db_id) === assignedId ? ' selected' : '';
+        html += '<option value="' + vpEsc(String(c.staff_db_id)) + '"' + sel + '>' + vpEsc(c.name_ar || '—') + '</option>';
+      });
+      html += '</select></div>';
+
+      // زر الحفظ
+      html += '<button onclick="saveCounselorCard(' + JSON.stringify(grade.key) + ')" style="width:100%;background:' + grade.color + ';color:#fff;border:none;border-radius:8px;padding:8px;font-size:13px;cursor:pointer;font-weight:700">&#128190; حفظ التعيين</button>';
+      html += '</div>';
     });
-    html += '</tbody></table></div>';
+    html += '</div>';
     el.innerHTML = html;
-    el.querySelectorAll('.clear-counselor-classes').forEach(function(button, i) {
-      button.addEventListener('click', function() { clearCounselorClasses(String(data[i].staff_db_id)); });
-    });
   } catch(e) {
-    el.textContent = 'خطأ في التحميل: ' + e.message;
-    el.style.color = '#dc2626';
+    el.innerHTML = '<div style="color:#dc2626;padding:16px;text-align:center">خطأ: ' + vpEsc(e.message) + '</div>';
   }
 }
 
-async function addCounselorAssignment() {
-  var sId = document.getElementById('assignCounselorSelect').value;
-  var cls = document.getElementById('assignClassSelect').value;
+async function saveCounselorCard(gradeKey) {
   var msg = document.getElementById('assignMsg');
-  if (!sId || !cls) { msg.textContent = 'اختر الأخصائي/ة والصف'; msg.style.color = '#dc2626'; return; }
+  var gradeConf = GRADE_GROUPS.find(function(g){ return g.key === gradeKey; });
+  if (!gradeConf) return;
+
+  // الشعب المحددة
+  var checked = [];
+  document.querySelectorAll('input[data-grade="' + gradeKey + '"]:checked').forEach(function(cb){ checked.push(cb.dataset.cls); });
+
+  // الأخصائي/ة المختار/ة
+  var selEl = document.querySelector('[data-counselor-select="' + gradeKey + '"]');
+  var newCounselorId = selEl ? selEl.value : '';
+
+  if (!newCounselorId && checked.length > 0) {
+    msg.textContent = 'اختر أخصائي/ة قبل الحفظ أو أزل تحديد الشعب';
+    msg.style.color = '#f59e0b'; return;
+  }
+
   msg.textContent = 'جارٍ الحفظ...'; msg.style.color = '#6b7280';
   try {
     var headers = await counselorAssignmentHeaders();
-    var path = '/rest/v1/staff_profiles?staff_db_id=eq.' + encodeURIComponent(sId) + '&role_key=in.(social_worker,specialist,counselor)&is_active=eq.true';
-    var r = await fetch(SB_URL + path + '&select=coord_classes', { headers: headers });
-    if (!r.ok) throw new Error('تعذّر قراءة الصفوف الحالية (' + r.status + ')');
-    var d = await r.json();
-    if (!Array.isArray(d) || d.length !== 1) throw new Error('لم يُعثر على الأخصائي/ة');
-    var existing = Array.isArray(d[0].coord_classes) ? d[0].coord_classes : [];
-    if (existing.includes(cls)) { msg.textContent = 'هذا الصف معيَّن بالفعل'; msg.style.color = '#f59e0b'; return; }
-    var r2 = await fetch(SB_URL + path + '&select=staff_db_id', {
-      method: 'PATCH', headers: Object.assign({}, headers, { Prefer: 'return=representation' }),
-      body: JSON.stringify({ coord_classes: existing.concat([cls]), coord_type: 'counselor' })
-    });
-    if (!r2.ok) throw new Error('تعذّر حفظ التعيين (' + r2.status + ')');
-    var saved = await r2.json();
-    if (!Array.isArray(saved) || saved.length !== 1) throw new Error('لم يُحفظ التعيين؛ تحقق من الصلاحيات');
-    msg.textContent = '✅ تم التعيين بنجاح'; msg.style.color = '#10b981';
+    // جلب كل الأخصائيين/ات الحاليين
+    var r = await fetch(SB_URL + '/rest/v1/staff_profiles?select=staff_db_id,coord_classes&role_key=in.(social_worker,specialist,counselor)&is_active=eq.true', { headers: headers });
+    if (!r.ok) throw new Error('تعذّر قراءة البيانات (' + r.status + ')');
+    var all = await r.json();
+
+    // إزالة شعب هذه المرحلة من كل الأخصائيين/ات
+    for (var i = 0; i < all.length; i++) {
+      var c = all[i];
+      var existing = Array.isArray(c.coord_classes) ? c.coord_classes : [];
+      var filtered = existing.filter(function(cls){ return !gradeConf.classes.includes(cls); });
+      if (filtered.length !== existing.length) {
+        // تحديث فقط إذا تغيّر
+        var pu = await fetch(SB_URL + '/rest/v1/staff_profiles?staff_db_id=eq.' + encodeURIComponent(String(c.staff_db_id)) + '&role_key=in.(social_worker,specialist,counselor)&is_active=eq.true', {
+          method: 'PATCH', headers: headers, body: JSON.stringify({ coord_classes: filtered, coord_type: filtered.length ? 'counselor' : null })
+        });
+        if (!pu.ok) { var err = await pu.text(); throw new Error('خطأ عند تحديث ' + c.staff_db_id + ': ' + err); }
+        await pu.json();
+      }
+    }
+
+    // إضافة الشعب المحددة للأخصائي/ة الجديد/ة
+    if (newCounselorId && checked.length > 0) {
+      var cur = all.find(function(c){ return String(c.staff_db_id) === newCounselorId; });
+      var base = Array.isArray(cur && cur.coord_classes) ? cur.coord_classes.filter(function(cls){ return !gradeConf.classes.includes(cls); }) : [];
+      var merged = base.concat(checked);
+      var pu2 = await fetch(SB_URL + '/rest/v1/staff_profiles?staff_db_id=eq.' + encodeURIComponent(newCounselorId) + '&role_key=in.(social_worker,specialist,counselor)&is_active=eq.true', {
+        method: 'PATCH', headers: headers, body: JSON.stringify({ coord_classes: merged, coord_type: 'counselor' })
+      });
+      if (!pu2.ok) { var err2 = await pu2.text(); throw new Error('خطأ عند تعيين الأخصائي/ة: ' + err2); }
+      await pu2.json();
+    }
+
+    msg.textContent = '✅ تم حفظ تعيين ' + gradeConf.label + ' بنجاح';
+    msg.style.color = '#10b981';
+    setTimeout(function(){ msg.textContent = ''; }, 3000);
     await loadCounselorAssignments();
-  } catch(e) { msg.textContent = 'خطأ: ' + e.message; msg.style.color = '#dc2626'; }
+  } catch(e) {
+    msg.textContent = 'خطأ: ' + e.message;
+    msg.style.color = '#dc2626';
+  }
 }
 
+// دالة قديمة — تُعاد توجيهاً للواجهة الجديدة
+async function addCounselorAssignment() { await loadCounselorAssignments(); }
 async function clearCounselorClasses(sId) {
   if (!confirm('هل تريد مسح جميع الصفوف المعيَّنة لهذا الأخصائي/ة؟')) return;
   var msg = document.getElementById('assignMsg');
   try {
     var headers = await counselorAssignmentHeaders();
-    var path = '/rest/v1/staff_profiles?staff_db_id=eq.' + encodeURIComponent(sId) + '&role_key=in.(social_worker,specialist,counselor)&is_active=eq.true&select=staff_db_id';
-    var r = await fetch(SB_URL + path, {
-      method: 'PATCH', headers: Object.assign({}, headers, { Prefer: 'return=representation' }),
-      body: JSON.stringify({ coord_classes: [], coord_type: null })
+    var pu = await fetch(SB_URL + '/rest/v1/staff_profiles?staff_db_id=eq.' + encodeURIComponent(sId) + '&role_key=in.(social_worker,specialist,counselor)&is_active=eq.true', {
+      method: 'PATCH', headers: headers, body: JSON.stringify({ coord_classes: [], coord_type: null })
     });
-    if (!r.ok) throw new Error('تعذّر المسح (' + r.status + ')');
-    var saved = await r.json();
-    if (!Array.isArray(saved) || saved.length !== 1) throw new Error('لم يُمسح التعيين؛ تحقق من الصلاحيات');
+    if (!pu.ok) throw new Error('تعذّر المسح (' + pu.status + ')');
+    await pu.json();
     if (msg) { msg.textContent = '✅ مُسحت الصفوف المعيَّنة'; msg.style.color = '#10b981'; }
     await loadCounselorAssignments();
   } catch(e) {
     if (msg) { msg.textContent = 'خطأ: ' + e.message; msg.style.color = '#dc2626'; }
   }
 }
+
 </script>
 
 <script>
