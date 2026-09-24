@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>أصحاب الهمم — EduOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="/apps/platform-lang.js" defer></script>
+<script src="/apps/platform-shield.js" defer></script>
+<script src="/apps/platform-theme.js" defer></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Tajawal',Arial,sans-serif;background:var(--bg,#F0F4F8);color:#1E293B;font-size:18px;}
+:root{--purple:#6C3DD6;--teal:#22D3EE;--red:#EF4444;--green:#16A34A;--orange:#F59E0B;}
+
+/* هيدر */
+.header{background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;padding:0 20px;height:64px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.header-right{display:flex;align-items:center;gap:12px;}
+.back-btn{width:36px;height:36px;border-radius:50%;background:#EF4444;border:none;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.header-title{font-size:18px;font-weight:900;}
+.header-sub{font-size:13px;opacity:.8;}
+#header-tools{display:flex;align-items:center;gap:8px;}
+
+/* بنر التحذير */
+.warn-banner{background:#FEF3C7;border:1.5px solid #FCD34D;border-radius:12px;padding:14px 18px;margin:20px 16px 0;display:flex;align-items:center;gap:12px;}
+.warn-banner .icon{font-size:24px;}
+.warn-banner h4{font-size:15px;font-weight:700;color:#92400E;}
+.warn-banner p{font-size:13px;color:#78350F;margin-top:2px;}
+.warn-banner .action-btn{margin-right:auto;background:#F59E0B;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:'Tajawal',Arial;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px;margin-top:4px;}
+.kpi{background:#fff;border-radius:12px;padding:14px 16px;box-shadow:0 1px 6px rgba(0,0,0,.06);text-align:center;}
+.kpi .num{font-size:28px;font-weight:900;color:#6C3DD6;}
+.kpi .lbl{font-size:12px;color:#64748B;margin-top:4px;}
+@media(max-width:600px){.kpis{grid-template-columns:repeat(2,1fr);}}
+
+/* شريط الأدوات */
+.toolbar{padding:0 16px 12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+.search-box{flex:1;min-width:200px;position:relative;}
+.search-box input{width:100%;padding:10px 40px 10px 14px;border:1.5px solid #E2E8F0;border-radius:10px;font-family:'Tajawal',Arial;font-size:15px;background:#fff;}
+.search-box::before{content:'🔍';position:absolute;left:12px;top:50%;transform:translateY(-50%);}
+.filter-sel{padding:10px 14px;border:1.5px solid #E2E8F0;border-radius:10px;font-family:'Tajawal',Arial;font-size:14px;background:#fff;color:#1E293B;}
+.year-tabs{display:flex;gap:6px;background:#F1F5F9;border-radius:10px;padding:4px;}
+.year-tab{padding:6px 16px;border-radius:8px;border:none;font-family:'Tajawal',Arial;font-size:14px;font-weight:700;cursor:pointer;background:transparent;color:#64748B;}
+.year-tab.active{background:#fff;color:#6C3DD6;box-shadow:0 1px 4px rgba(0,0,0,.1);}
+.add-btn{background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-family:'Tajawal',Arial;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;}
+.migrate-btn{background:#F0FDF4;color:#16A34A;border:1.5px solid #86EFAC;border-radius:10px;padding:10px 14px;font-family:'Tajawal',Arial;font-size:13px;font-weight:700;cursor:pointer;}
+
+/* الجدول */
+.table-wrap{padding:0 16px 80px;overflow-x:auto;}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.06);}
+th{background:#F8FAFC;padding:12px 14px;font-size:13px;font-weight:700;color:#475569;text-align:right;border-bottom:2px solid #E2E8F0;}
+td{padding:12px 14px;font-size:14px;border-bottom:1px solid #F1F5F9;vertical-align:middle;}
+tr:hover td{background:#F8FAFC;}
+tr:last-child td{border-bottom:none;}
+
+/* بادجات الإعاقة */
+.dis-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;}
+.dis-توحد{background:#EDE9FE;color:#7C3AED;}
+.dis-صعوبات{background:#DBEAFE;color:#1D4ED8;}
+.dis-إعاقة{background:#FEE2E2;color:#B91C1C;}
+.dis-موهوب{background:#D1FAE5;color:#065F46;}
+.dis-تأخر{background:#FEF3C7;color:#B45309;}
+.dis-default{background:#F1F5F9;color:#475569;}
+
+/* بادجات مستوى الدعم */
+.sup-1{background:#DCFCE7;color:#166534;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:700;}
+.sup-2{background:#FEF3C7;color:#B45309;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:700;}
+.sup-3{background:#FEE2E2;color:#B91C1C;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:700;}
+
+.act-btn{padding:5px 12px;border-radius:8px;border:none;font-family:'Tajawal',Arial;font-size:13px;font-weight:700;cursor:pointer;margin-left:4px;}
+.btn-edit{background:#EDE9FE;color:#7C3AED;}
+.btn-view{background:#F0F9FF;color:#0369A1;}
+
+/* حالة فارغة */
+.empty-state{text-align:center;padding:60px 20px;color:#94A3B8;}
+.empty-state .icon{font-size:48px;margin-bottom:12px;}
+.empty-state h3{font-size:18px;font-weight:700;margin-bottom:8px;}
+
+/* مودال */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center;padding:20px;}
+.modal-overlay.open{display:flex;}
+.modal{background:#fff;border-radius:16px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;}
+.modal-header{padding:20px 24px;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;justify-content:space-between;}
+.modal-header h3{font-size:18px;font-weight:900;}
+.modal-close{background:none;border:none;font-size:24px;cursor:pointer;color:#94A3B8;}
+.modal-body{padding:24px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.form-group{display:flex;flex-direction:column;gap:6px;}
+.form-group label{font-size:13px;font-weight:700;color:#374151;}
+.form-group input,.form-group select,.form-group textarea{padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-family:'Tajawal',Arial;font-size:14px;color:#1E293B;}
+.form-group textarea{resize:vertical;min-height:80px;}
+.modal-footer{padding:16px 24px;border-top:1px solid #F1F5F9;display:flex;gap:10px;justify-content:flex-end;}
+.btn-primary{background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-family:'Tajawal',Arial;font-size:15px;font-weight:700;cursor:pointer;}
+.btn-cancel{background:#F1F5F9;color:#475569;border:none;border-radius:10px;padding:10px 20px;font-family:'Tajawal',Arial;font-size:15px;font-weight:700;cursor:pointer;}
+@media(max-width:500px){.form-row{grid-template-columns:1fr;}}
+
+/* لودر */
+.loading{text-align:center;padding:40px;color:#94A3B8;font-size:14px;}
+.spinner{width:32px;height:32px;border:3px solid #E2E8F0;border-top-color:#6C3DD6;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* إشعار */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1E293B;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:700;z-index:999;opacity:0;transition:opacity .3s;}
+.toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-right">
+    <button class="back-btn" onclick="history.back()">←</button>
+    <div>
+      <div class="header-title">♾️ أصحاب الهمم</div>
+      <div class="header-sub" id="hdr-sub">جارٍ التحميل...</div>
+    </div>
+  </div>
+  <div id="header-tools"></div>
+</div>
+
+<!-- بنر التحذير -->
+<div class="warn-banner" id="warn2627" style="display:none">
+  <div class="icon">⚠️</div>
+  <div>
+    <h4>بيانات 2026-2027 غير متوفرة بعد</h4>
+    <p>تظهر بيانات العام الماضي للمرجعية فقط. يرجى إضافة بيانات العام الجديد أو ترحيلها.</p>
+  </div>
+  <button class="action-btn" onclick="migrateData()">ترحيل من 2025-2026 ⟶</button>
+</div>
+
+<!-- KPIs -->
+<div class="kpis">
+  <div class="kpi"><div class="num" id="kpi-total">—</div><div class="lbl">إجمالي أصحاب الهمم</div></div>
+  <div class="kpi"><div class="num" id="kpi-autisme">—</div><div class="lbl">توحد</div></div>
+  <div class="kpi"><div class="num" id="kpi-learn">—</div><div class="lbl">صعوبات تعلّم</div></div>
+  <div class="kpi"><div class="num" id="kpi-gifted">—</div><div class="lbl">موهوب/ة</div></div>
+</div>
+
+<!-- شريط الأدوات -->
+<div class="toolbar">
+  <div class="year-tabs">
+    <button class="year-tab active" onclick="setYear('2026-2027')">2026-2027</button>
+    <button class="year-tab" onclick="setYear('2025-2026')">2025-2026 (مرجع)</button>
+  </div>
+  <div class="search-box">
+    <input type="text" id="search-inp" placeholder="ابحث بالاسم أو الشعبة..." oninput="filterTable()">
+  </div>
+  <select class="filter-sel" id="grade-filter" onchange="filterTable()">
+    <option value="">كل الصفوف</option>
+  </select>
+  <select class="filter-sel" id="dis-filter" onchange="filterTable()">
+    <option value="">كل الفئات</option>
+    <option value="توحد">توحد</option>
+    <option value="صعوبات">صعوبات تعلّم</option>
+    <option value="إعاقة">إعاقة</option>
+    <option value="موهوب">موهوب/ة</option>
+    <option value="تأخر">تأخر بسيط</option>
+  </select>
+  <button class="add-btn" onclick="openAddModal()" id="add-btn">+ إضافة طالب/ة</button>
+</div>
+
+<!-- الجدول -->
+<div class="table-wrap">
+  <div id="loading-state" class="loading">
+    <div class="spinner"></div>
+    <div>جارٍ تحميل البيانات...</div>
+  </div>
+  <div id="table-container" style="display:none">
+    <table id="sen-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>الاسم</th>
+          <th>الصف</th>
+          <th>الشعبة</th>
+          <th>الفئة</th>
+          <th>مستوى الدعم</th>
+          <th>نوع الدمج</th>
+          <th>ملاحظات</th>
+          <th>إجراء</th>
+        </tr>
+      </thead>
+      <tbody id="sen-body"></tbody>
+    </table>
+    <div id="empty-state" class="empty-state" style="display:none">
+      <div class="icon">♾️</div>
+      <h3>لا يوجد طلاب/ات في هذه الفئة</h3>
+      <p>جرّبي فلتراً آخر أو أضيفي طالب/ة جديد/ة</p>
+    </div>
+  </div>
+</div>
+
+<!-- مودال الإضافة/التعديل -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">إضافة طالب/ة من أصحاب الهمم</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>رقم الطالب/ة</label>
+          <input type="text" id="f-sid" placeholder="مثال: 12345">
+        </div>
+        <div class="form-group">
+          <label>الاسم بالعربي</label>
+          <input type="text" id="f-name-ar" placeholder="اسم الطالب/ة">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>الصف</label>
+          <select id="f-grade">
+            <option value="">اختر الصف</option>
+            <option>KG1</option><option>KG2</option>
+            <option>G1</option><option>G2</option><option>G3</option><option>G4</option>
+            <option>G5</option><option>G6</option><option>G7</option><option>G8</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>الشعبة</label>
+          <input type="text" id="f-class" placeholder="مثال: 3A">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>الفئة</label>
+          <select id="f-dis">
+            <option value="">اختر الفئة</option>
+            <option>توحد</option>
+            <option>صعوبات تعلّم</option>
+            <option>إعاقة حركية</option>
+            <option>إعاقة سمعية</option>
+            <option>إعاقة بصرية</option>
+            <option>تأخر بسيط</option>
+            <option>موهوب/ة</option>
+            <option>أخرى</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>مستوى الدعم</label>
+          <select id="f-support">
+            <option value="1">1 — دعم خفيف</option>
+            <option value="2">2 — دعم متوسط</option>
+            <option value="3">3 — دعم مكثف</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>نوع الدمج</label>
+          <select id="f-inclusion">
+            <option>دمج كامل</option>
+            <option>دمج جزئي</option>
+            <option>تعليم فردي</option>
+            <option>غرفة مصادر</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>السنة الدراسية</label>
+          <select id="f-year">
+            <option value="2026-2027">2026-2027</option>
+            <option value="2025-2026">2025-2026</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>ملاحظات</label>
+        <textarea id="f-notes" placeholder="أي ملاحظات خاصة..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
+      <button class="btn-primary" onclick="saveRecord()">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var SURL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+var SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTc1MDk5MTEsImV4cCI6MjAzMzA4NTkxMX0.4aVHFhnAkqMcJWbfpVsIJGMNnJLPOjmCpQG0yMJqQNA';
+var sb = supabase.createClient(SURL, SKEY);
+
+var allData = [];
+var currentYear = '2026-2027';
+var editId = null;
+
+// فحص الصلاحية
+var session = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+var role = session.role_key || '';
+var canEdit = ['admin','registrar','principal'].includes(role);
+if (!canEdit) {
+  document.getElementById('add-btn').style.display = 'none';
+}
+
+async function loadData() {
+  var { data, error } = await sb.from('special_ed_students')
+    .select('*')
+    .order('grade').order('class_section').order('name_ar');
+  if (error) { console.error(error); return; }
+  allData = data || [];
+  updateKPIs();
+  populateGradeFilter();
+  renderTable();
+  document.getElementById('loading-state').style.display = 'none';
+  document.getElementById('table-container').style.display = 'block';
+
+  // فحص هل 2026-2027 غائبة
+  var has2627 = allData.some(function(r){ return r.academic_year === '2026-2027'; });
+  if (!has2627 && canEdit) {
+    document.getElementById('warn2627').style.display = 'flex';
+  }
+  document.getElementById('hdr-sub').textContent = allData.length + ' طالب/ة مسجل/ة';
+}
+
+function updateKPIs() {
+  var yr = allData.filter(function(r){ return r.academic_year === currentYear; });
+  var total = yr.length;
+  var autisme = yr.filter(function(r){ return r.disability_type && r.disability_type.includes('توحد'); }).length;
+  var learn = yr.filter(function(r){ return r.disability_type && r.disability_type.includes('صعوبات'); }).length;
+  var gifted = yr.filter(function(r){ return r.disability_type && r.disability_type.includes('موهوب'); }).length;
+  document.getElementById('kpi-total').textContent = total || '—';
+  document.getElementById('kpi-autisme').textContent = autisme || '—';
+  document.getElementById('kpi-learn').textContent = learn || '—';
+  document.getElementById('kpi-gifted').textContent = gifted || '—';
+}
+
+function populateGradeFilter() {
+  var grades = [...new Set(allData.map(function(r){ return r.grade; }).filter(Boolean))].sort();
+  var sel = document.getElementById('grade-filter');
+  grades.forEach(function(g){
+    var o = document.createElement('option');
+    o.value = g; o.textContent = g;
+    sel.appendChild(o);
+  });
+}
+
+function setYear(yr) {
+  currentYear = yr;
+  document.querySelectorAll('.year-tab').forEach(function(t,i){
+    t.classList.toggle('active', (i===0 && yr==='2026-2027') || (i===1 && yr==='2025-2026'));
+  });
+  updateKPIs();
+  filterTable();
+}
+
+function filterTable() {
+  var q = document.getElementById('search-inp').value.toLowerCase();
+  var gf = document.getElementById('grade-filter').value;
+  var df = document.getElementById('dis-filter').value;
+  var filtered = allData.filter(function(r){
+    if (r.academic_year !== currentYear) return false;
+    if (gf && r.grade !== gf) return false;
+    if (df && !(r.disability_type || '').includes(df)) return false;
+    if (q) {
+      var txt = ((r.name_ar||'') + (r.class_section||'') + (r.disability_type||'')).toLowerCase();
+      if (!txt.includes(q)) return false;
+    }
+    return true;
+  });
+  renderRows(filtered);
+}
+
+function renderTable() { filterTable(); }
+
+function disClass(type) {
+  if (!type) return 'dis-default';
+  if (type.includes('توحد')) return 'dis-توحد';
+  if (type.includes('صعوبات')) return 'dis-صعوبات';
+  if (type.includes('إعاقة')) return 'dis-إعاقة';
+  if (type.includes('موهوب')) return 'dis-موهوب';
+  if (type.includes('تأخر')) return 'dis-تأخر';
+  return 'dis-default';
+}
+
+function supClass(level) {
+  if (level == 1) return 'sup-1';
+  if (level == 2) return 'sup-2';
+  return 'sup-3';
+}
+
+function renderRows(rows) {
+  var tbody = document.getElementById('sen-body');
+  tbody.innerHTML = '';
+  if (!rows.length) {
+    document.getElementById('empty-state').style.display = 'block';
+    return;
+  }
+  document.getElementById('empty-state').style.display = 'none';
+  rows.forEach(function(r, i){
+    var tr = document.createElement('tr');
+    var editBtn = canEdit ? '<button class="act-btn btn-edit" onclick="openEdit('+r.id+')">تعديل</button>' : '';
+    tr.innerHTML = '<td>'+(i+1)+'</td>'
+      +'<td><strong>'+(r.name_ar||'—')+'</strong>'+(r.student_id ? '<br><small style="color:#94A3B8">'+r.student_id+'</small>' : '')+'</td>'
+      +'<td>'+(r.grade||'—')+'</td>'
+      +'<td>'+(r.class_section||'—')+'</td>'
+      +'<td><span class="dis-badge '+(disClass(r.disability_type))+'">'+(r.disability_type||'غير محدد')+'</span></td>'
+      +'<td><span class="'+(supClass(r.support_level))+'">مستوى '+(r.support_level||'—')+'</span></td>'
+      +'<td style="font-size:13px;color:#475569">'+(r.inclusion_type||'—')+'</td>'
+      +'<td style="font-size:13px;color:#64748B;max-width:150px">'+(r.notes ? r.notes.substring(0,50)+(r.notes.length>50?'...':'') : '—')+'</td>'
+      +'<td>'+editBtn+'</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function openAddModal() {
+  editId = null;
+  document.getElementById('modal-title').textContent = 'إضافة طالب/ة من أصحاب الهمم';
+  ['f-sid','f-name-ar','f-class','f-notes'].forEach(function(id){ document.getElementById(id).value=''; });
+  document.getElementById('f-grade').value='';
+  document.getElementById('f-dis').value='';
+  document.getElementById('f-support').value='1';
+  document.getElementById('f-inclusion').value='دمج كامل';
+  document.getElementById('f-year').value=currentYear;
+  document.getElementById('modal').classList.add('open');
+}
+
+function openEdit(id) {
+  var r = allData.find(function(x){ return x.id===id; });
+  if (!r) return;
+  editId = id;
+  document.getElementById('modal-title').textContent = 'تعديل بيانات ' + (r.name_ar||'الطالب/ة');
+  document.getElementById('f-sid').value = r.student_id||'';
+  document.getElementById('f-name-ar').value = r.name_ar||'';
+  document.getElementById('f-grade').value = r.grade||'';
+  document.getElementById('f-class').value = r.class_section||'';
+  document.getElementById('f-dis').value = r.disability_type||'';
+  document.getElementById('f-support').value = r.support_level||'1';
+  document.getElementById('f-inclusion').value = r.inclusion_type||'دمج كامل';
+  document.getElementById('f-year').value = r.academic_year||currentYear;
+  document.getElementById('f-notes').value = r.notes||'';
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+
+async function saveRecord() {
+  var payload = {
+    student_id: document.getElementById('f-sid').value.trim(),
+    name_ar: document.getElementById('f-name-ar').value.trim(),
+    grade: document.getElementById('f-grade').value,
+    class_section: document.getElementById('f-class').value.trim(),
+    disability_type: document.getElementById('f-dis').value,
+    support_level: parseInt(document.getElementById('f-support').value)||1,
+    inclusion_type: document.getElementById('f-inclusion').value,
+    academic_year: document.getElementById('f-year').value,
+    notes: document.getElementById('f-notes').value.trim(),
+    school_id: 'aljood',
+    is_active: true
+  };
+  if (!payload.name_ar) { showToast('يرجى إدخال اسم الطالب/ة'); return; }
+
+  var err;
+  if (editId) {
+    var res = await sb.from('special_ed_students').update(payload).eq('id', editId);
+    err = res.error;
+  } else {
+    var res = await sb.from('special_ed_students').insert(payload);
+    err = res.error;
+  }
+  if (err) { showToast('خطأ: ' + err.message); return; }
+  showToast(editId ? '✅ تم التعديل' : '✅ تمت الإضافة');
+  closeModal();
+  await loadData();
+}
+
+async function migrateData() {
+  if (!confirm('سيتم نسخ جميع سجلات 2025-2026 إلى 2026-2027. هل تريدين المتابعة؟')) return;
+  var old = allData.filter(function(r){ return r.academic_year==='2025-2026'; });
+  var newRecs = old.map(function(r){
+    return {
+      student_id: r.student_id, name_ar: r.name_ar, name_en: r.name_en,
+      gender: r.gender, grade: r.grade, class_section: r.class_section,
+      academic_year: '2026-2027', disability_type: r.disability_type,
+      disability_code: r.disability_code, support_level: r.support_level,
+      inclusion_type: r.inclusion_type, notes: r.notes,
+      school_id: r.school_id, is_active: true
+    };
+  });
+  var { error } = await sb.from('special_ed_students').insert(newRecs);
+  if (error) { showToast('خطأ في الترحيل: ' + error.message); return; }
+  showToast('✅ تم ترحيل ' + newRecs.length + ' سجل إلى 2026-2027');
+  document.getElementById('warn2627').style.display = 'none';
+  await loadData();
+  setYear('2026-2027');
+}
+
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, 3000);
+}
+
+loadData();
+</script>
+</body>
+</html>
