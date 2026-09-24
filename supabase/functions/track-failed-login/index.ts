@@ -118,7 +118,7 @@ Deno.serve(async (req: Request) => {
         '<p style="font-size:12px;color:#94a3b8">هذا إشعار تلقائي من نظام EduOS — لا داعي للرد على هذا البريد.</p>' +
         '</div>';
 
-      await sendManagerEmails(managers || [], 'إيقاف تلقائي لحساب موظفة', htmlBody);
+      await sendManagerEmails(managers || [], 'إيقاف تلقائي لحساب في المنصة', htmlBody);
     }
 
     return jsonResponse({ locked: willLock, count: newCount });

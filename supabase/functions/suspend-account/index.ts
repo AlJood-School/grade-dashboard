@@ -1,5 +1,5 @@
 // supabase/functions/suspend-account/index.ts
-// EduOS — إيقاف / إعادة تفعيل حساب موظفة
+// EduOS — إيقاف / إعادة تفعيل حساب في المنصة
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
@@ -143,7 +143,7 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: 'target_not_found' }, 404);
     }
 
-    const targetName = targetRows[0].name_ar || 'موظفة';
+    const targetName = targetRows[0].name_ar || 'عضو الكادر';
 
     // ── إشعار الإدارة عبر البريد ──
     const { data: managers } = await supabaseAdmin
@@ -152,7 +152,7 @@ Deno.serve(async (req: Request) => {
       .in('role_key', MANAGER_ROLES)
       .eq('is_active', true);
 
-    const subject = action === 'suspend' ? 'إيقاف حساب موظفة' : 'إعادة تفعيل حساب موظفة';
+    const subject = action === 'suspend' ? 'إيقاف حساب في المنصة' : 'إعادة تفعيل حساب في المنصة';
     const actionLabel = action === 'suspend' ? 'تم إيقاف' : 'تمت إعادة تفعيل';
     const dateStr = new Date().toLocaleDateString('ar', { day: '2-digit', month: 'long', year: 'numeric' });
     const reasonLine = action === 'suspend'
