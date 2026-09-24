@@ -331,25 +331,28 @@ function goBack() {
 // ── تحميل البيانات ──
 async function loadData() {
   try {
-    // جلب parent_credentials
-    var pcRes = await supabase.from('parent_credentials').select('national_id,activated,phone');
+    // جلب parent_credentials مع student_ids
+    var pcRes = await supabase.from('parent_credentials').select('national_id,activated,phone,student_ids,parent_name');
     if (pcRes.error) throw pcRes.error;
     var credentials = pcRes.data || [];
 
-    // جلب students (national_id لربطها)
-    var stRes = await supabase.from('students').select('name,class_name,student_number,grade,parent_national_id');
+    // جلب students برقم الطالب
+    var stRes = await supabase.from('students').select('name,class_name,student_number,grade');
     if (stRes.error) throw stRes.error;
     var students = stRes.data || [];
 
-    // بناء خريطة الطلاب برقم الهوية
+    // بناء خريطة الطلاب برقم الطالب
     var studentMap = {};
     students.forEach(function(s) {
-      if (s.parent_national_id) studentMap[s.parent_national_id] = s;
+      if (s.student_number) studentMap[String(s.student_number)] = s;
     });
 
     // دمج البيانات
     allData = credentials.map(function(p) {
-      var student = studentMap[p.national_id] || null;
+      var ids = p.student_ids || [];
+      var studentNum = ids.find(function(id){ return studentMap[String(id)]; });
+      var student = studentNum ? studentMap[String(studentNum)] : null;
+      var linkedCount = ids.filter(function(id){ return studentMap[String(id)]; }).length;
       var status = 'unlinked';
       if (student) {
         status = p.activated ? 'active' : 'pending';
@@ -360,6 +363,9 @@ async function loadData() {
         national_id: p.national_id,
         phone: p.phone || '—',
         activated: p.activated,
+        parent_name: p.parent_name || '—',
+        student_ids: ids,
+        linked_count: linkedCount,
         student: student,
         student_name: student ? student.name : '—',
         class_name: student ? student.class_name : '—',
