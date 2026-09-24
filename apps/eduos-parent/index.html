@@ -11,6 +11,7 @@
 <script src="/apps/platform-autologout.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/apps/platform-auth-guard.js"></script>
+<script src="/apps/platform-rubric.js"></script>
 <style>
 :root {
   --bg: #F0F4F8;
@@ -934,19 +935,22 @@ async function loadGrades(id) {
 function renderGrades() {
   const el = document.getElementById('gradesTable');
   if (!gradesData.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📊</div>لا بيانات</div>'; return; }
+  const rubric = window.EduRubric || null;
   el.innerHTML = `
     <div class="tbl-wrap">
+      ${rubric ? rubric.scaleHTML() : ''}
       <table>
-        <thead><tr><th>المادة | Subject</th><th>الفصل | Term</th><th>الدرجة | Grade</th><th>التقدير | Rating</th></tr></thead>
+        <thead><tr><th>المادة</th><th>الفصل</th><th>الدرجة</th><th>المستوى</th></tr></thead>
         <tbody>${gradesData.map(g => {
           const pct = g.max_score > 0 ? Math.round((g.score / g.max_score) * 100) : 0;
-          const badge = pct >= 90 ? 'badge-green' : pct >= 75 ? 'badge-blue' : pct >= 60 ? 'badge-amber' : 'badge-red';
-          const label = pct >= 90 ? 'ممتاز | Excellent' : pct >= 75 ? 'جيد جداً | V.Good' : pct >= 60 ? 'جيد | Good' : 'دون المتوسط';
+          const badgeHTML = (g.score !== null && g.score !== undefined && rubric)
+            ? rubric.badge(pct, undefined, {showNum:true})
+            : '<span style="color:#94A3B8">—</span>';
           return `<tr>
             <td style="font-weight:700">${g.subject || '—'}</td>
             <td>${g.term || '—'}</td>
-            <td style="font-weight:800;font-size:17px">${g.score !== null && g.score !== undefined ? g.score + '/' + g.max_score : '—'}</td>
-            <td><span class="badge ${badge}">${label}</span></td>
+            <td style="font-weight:800;font-size:17px">${g.score !== null && g.score !== undefined ? g.score + '/' + g.max_score + ' (' + pct + '%)' : '—'}</td>
+            <td>${badgeHTML}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>
@@ -1145,6 +1149,10 @@ function updateHomeKpis() {
     const nums = gradesData.map(g => g.max_score > 0 ? Math.round((g.score/g.max_score)*100) : null).filter(n => n !== null);
     const avg = nums.length ? (nums.reduce((a,b) => a+b, 0) / nums.length).toFixed(1) : '—';
     document.getElementById('kpiAvg').textContent = avg + '%';
+    if (window.EduRubric && avg !== '—') {
+      const avgBadge = document.getElementById('kpiAvgBadge');
+      if (avgBadge) avgBadge.innerHTML = window.EduRubric.badge(parseFloat(avg));
+    }
   } else {
     document.getElementById('kpiAvg').textContent = '—';
   }
@@ -1174,6 +1182,7 @@ function updateHomeKpis() {
           <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
             <span style="color:var(--text2)">${g.subject}</span>
             <span style="font-weight:800;color:var(--brand)">${g.score !== null && g.score !== undefined ? g.score + '/' + g.max_score : '—'}</span>
+            ${(g.score !== null && g.score !== undefined && window.EduRubric) ? window.EduRubric.badge(g.max_score > 0 ? Math.round((g.score/g.max_score)*100) : 0, undefined, {showNum:false}) : ''}
           </div>`).join('') || '<div class="empty" style="padding:16px">لا بيانات</div>'}
       </div>
       <div>
