@@ -1,7 +1,7 @@
 /**
- * platform-student-badge.js
+ * platform-student-badge.js v2
  * EduOS — مكوّن بادج + Tooltip الطالب
- * يُضمَّن في أي بوابة تعرض أسماء الطلاب
+ * v2: أضاف إذن التصوير الإعلامي من media_permission
  */
 
 (function(window) {
@@ -17,20 +17,49 @@
 
   async function _fetch(sb, studentId, studentMeta) {
     if (_cache[studentId]) return _cache[studentId];
-    // VARK: يُبحث بـ student_name لأن vark_results لا يحتوي student_id
-    const studentName = studentMeta?.name || studentMeta?.student_name || (window._studentNameMap && window._studentNameMap[studentId]) || String(studentId);
-    const studentClass = studentMeta?.class_name || studentMeta?.class || (window._studentClassMap && window._studentClassMap[studentId]) || '';
-    const [beh, vark, homeroom] = await Promise.all([
-      sb.from('behavior_incidents').select('action_type,violation_category,degree,created_at').eq('student_db_id', studentId).order('created_at', { ascending: false }).limit(5).then(r => r).catch(() => ({data:[]})),
-      sb.from('vark_results').select('dominant_style,v_score,a_score,r_score,k_score').eq('student_name', studentName).eq('is_latest', true).limit(1).then(r => r).catch(() => ({data:[]})),
-      sb.from('teacher_assignments').select('teacher_name_ar').eq('class_name', studentClass).eq('is_homeroom', true).limit(1).then(r => r).catch(() => ({data:[]}))
+    const studentName = studentMeta?.name || studentMeta?.student_name || String(studentId);
+    const studentClass = studentMeta?.class_name || studentMeta?.class || '';
+    const studentDbId = studentMeta?.student_db_id || studentMeta?.student_number || String(studentId);
+    const nationalId = studentMeta?.national_id || '';
+
+    const [beh, vark, homeroom, media] = await Promise.all([
+      sb.from('behavior_incidents')
+        .select('action_type,violation_category,degree,created_at')
+        .eq('student_db_id', studentDbId)
+        .order('created_at', { ascending: false })
+        .limit(5)
+        .then(r => r).catch(() => ({data:[]})),
+      sb.from('vark_results')
+        .select('dominant_style,v_score,a_score,r_score,k_score')
+        .eq('student_name', studentName)
+        .eq('is_latest', true)
+        .limit(1)
+        .then(r => r).catch(() => ({data:[]})),
+      sb.from('teacher_assignments')
+        .select('teacher_name_ar')
+        .eq('class_name', studentClass)
+        .eq('is_homeroom', true)
+        .limit(1)
+        .then(r => r).catch(() => ({data:[]})),
+      // إذن التصوير — يُبحث بالرقم الوطني
+      nationalId
+        ? sb.from('media_permission')
+            .select('parent_allowed,allowed_platforms')
+            .eq('national_id', nationalId)
+            .limit(1)
+            .then(r => r).catch(() => ({data:[]}))
+        : Promise.resolve({data:[]})
     ]);
+
     const varkRow = vark.data?.[0] || null;
+    const mediaRow = media.data?.[0] || null;
     const data = {
       incidents: beh.data || [],
       vark: varkRow?.dominant_style || null,
       vark_scores: varkRow ? {V: varkRow.v_score, A: varkRow.a_score, R: varkRow.r_score, K: varkRow.k_score} : null,
-      homeroom: homeroom.data?.[0]?.teacher_name_ar || null
+      homeroom: homeroom.data?.[0]?.teacher_name_ar || null,
+      media_allowed: mediaRow ? mediaRow.parent_allowed : null,
+      media_platforms: mediaRow ? (mediaRow.allowed_platforms || []) : []
     };
     _cache[studentId] = data;
     return data;
@@ -52,6 +81,12 @@
     if (vark) html += `<span class="eduos-badge-chip info">${VARK_ICON[vark]||'📚'} ${VARK_AR[vark]||vark}</span>`;
     if (cls)  html += `<span class="eduos-badge-chip neutral">🏫 ${cls}</span>`;
     if (hm)   html += `<span class="eduos-badge-chip neutral">👩‍🏫 ${hm}</span>`;
+    // إذن التصوير
+    if (data.media_allowed === true) {
+      html += '<span class="eduos-badge-chip" style="background:#EFF6FF;color:#1D4ED8">📸 إذن التصوير ✓</span>';
+    } else if (data.media_allowed === false) {
+      html += '<span class="eduos-badge-chip" style="background:#FFF1F2;color:#BE123C">📷 لا إذن تصوير</span>';
+    }
     html += '</div>';
     return html;
   }
@@ -64,12 +99,22 @@
         🔸 ${CAT_AR[i.violation_category]||i.violation_category||'—'} — ${ACTION_AR[i.action_type]||i.action_type||'—'} (${DEG_AR[i.degree]||'—'}) · ${(i.created_at||'').slice(0,10)}
       </div>`;
     });
+    // إذن التصوير
+    let mediaHtml = '';
+    if (data.media_allowed === true) {
+      mediaHtml = `<div style="font-size:13px;margin-top:4px;color:#93C5FD">📸 إذن التصوير: ممنوح${data.media_platforms.length ? ' ('+data.media_platforms.join('، ')+')' : ''}</div>`;
+    } else if (data.media_allowed === false) {
+      mediaHtml = `<div style="font-size:13px;margin-top:4px;color:#FCA5A5">📷 إذن التصوير: مرفوض</div>`;
+    } else {
+      mediaHtml = `<div style="font-size:13px;margin-top:4px;color:#94A3B8">📷 إذن التصوير: لم يُحدَّد</div>`;
+    }
     return `
       <div style="font-weight:700;margin-bottom:6px;font-size:14px;">${student.name || student.student_name || ''}</div>
       <div style="font-size:13px;">🏫 ${student.class_name||''} &nbsp;|&nbsp; 👩‍🏫 ${data.homeroom||'—'}</div>
       ${data.vark ? `<div style="font-size:13px;margin-top:4px;">${VARK_ICON[data.vark]||''} نمط التعلم: ${VARK_AR[data.vark]||data.vark}${data.vark_scores ? ' ('+['V','A','R','K'].map(x=>x+':'+data.vark_scores[x]).join(' / ')+')' : ''}</div>` : ''}
       <div style="font-size:13px;margin-top:4px;">⚠️ المخالفات: ${count}</div>
       ${rows}
+      ${mediaHtml}
     `;
   }
 
@@ -86,7 +131,7 @@
       .eduos-badge-chip.neutral { background:#F1F5F9;color:#475569; }
       .eduos-tooltip-box {
         position:fixed;z-index:99999;background:rgba(15,23,42,0.97);color:#fff;
-        padding:12px 16px;border-radius:12px;max-width:280px;min-width:200px;
+        padding:12px 16px;border-radius:12px;max-width:300px;min-width:200px;
         font-family:'Tajawal',Arial,sans-serif;line-height:1.6;
         box-shadow:0 8px 32px rgba(0,0,0,0.4);pointer-events:none;
         direction:rtl;text-align:right;transition:opacity .15s;
@@ -134,8 +179,7 @@
 
   /**
    * addBadgesToElement(el, student, sb)
-   * يضيف بادجات تحت العنصر el ويضيف Tooltip عند hover
-   * student: { id, name, class_name }
+   * student: { id, name, class_name, student_db_id?, national_id? }
    * sb: supabase client
    */
   async function addBadgesToElement(el, student, sb) {
@@ -154,6 +198,7 @@
   /**
    * initStudentTooltips(containerSelector, sb)
    * يُفعَّل على أي حاوية تحتوي على [data-student-id]
+   * يدعم data-national-id للحصول على إذن التصوير
    */
   function initStudentTooltips(containerSelector, sb) {
     _injectCss();
@@ -162,7 +207,9 @@
       const id = el.dataset.studentId;
       const name = el.dataset.studentName || el.textContent.trim();
       const cls  = el.dataset.className || '';
-      const data = await _fetch(sb, id, {name, class_name: cls});
+      const sDbId = el.dataset.studentDbId || id;
+      const natId = el.dataset.nationalId || '';
+      const data = await _fetch(sb, id, {name, class_name: cls, student_db_id: sDbId, national_id: natId});
       const student = { id, name, class_name: cls };
       el.style.cursor = 'pointer';
       const tipHtml = _tooltipHtml(data, student);
