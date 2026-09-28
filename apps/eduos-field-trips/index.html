@@ -425,7 +425,14 @@ var TRIP_TYPES = ['ميدانية','مكافأة التزام','مكافأة ت�
 var STATIC_GRADES = ['KG1','KG2','G1','G2','G3','G4','G5','G6','G7','G8','G9','G10','G11','G12'];
 
 function authH(json) {
-  var h = {apikey:SB_KEY, Authorization:'Bearer '+((session&&session.token)?session.token:SB_KEY)};
+  var jwt = SB_KEY;
+  try {
+    var sbKey = 'sb-' + SB_URL.replace('https://','').split('.')[0] + '-auth-token';
+    var raw = localStorage.getItem(sbKey);
+    if (raw) { var parsed = JSON.parse(raw); if (parsed && parsed.access_token) jwt = parsed.access_token; }
+  } catch(_) {}
+  if (session && session.token) jwt = session.token;
+  var h = {apikey:SB_KEY, Authorization:'Bearer '+jwt};
   if (json) h['Content-Type'] = 'application/json';
   return h;
 }
@@ -685,11 +692,12 @@ async function saveTrip() {
     is_active: true
   };
   try {
-    await fetch(SB_URL+'/rest/v1/field_trips', {method:'POST', headers:Object.assign({},authH(true),{'Prefer':'return=minimal'}), body:JSON.stringify(body)});
+    var res = await fetch(SB_URL+'/rest/v1/field_trips', {method:'POST', headers:Object.assign({},authH(true),{'Prefer':'return=minimal'}), body:JSON.stringify(body)});
+    if (!res.ok) { var err = await res.text(); throw new Error('HTTP '+res.status+': '+err.slice(0,100)); }
     closeModal('modalTrip');
     showToast('✓ تم إنشاء الرحلة');
     loadTrips();
-  } catch(e) { showToast('خطأ في الحفظ'); }
+  } catch(e) { showToast('خطأ في الحفظ: '+e.message); }
 }
 
 async function openTripDetail(id) {
