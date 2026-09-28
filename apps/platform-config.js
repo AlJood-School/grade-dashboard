@@ -91,6 +91,41 @@
         _k2: 'eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhka2lrdHd1dXdnaHZ6Y3VrdmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExNzQ2NzksImV4cCI6MjA5Njc1MDY3OX0',
         _k3: '3vL9Xi0wW9xDyDKtCsX7lYgwCvRDnNOUDbCHLiJmfgU'
       }
+    },
+
+    // ────────────────────────────────────────
+    // 🌐 eduos.ae — الصفحة الرئيسية (alias → Demo DB)
+    // ────────────────────────────────────────
+    'eduos.ae': {
+      school: {
+        id:           'demo',
+        nameAr:       'منصة EduOS التجريبية',
+        nameEn:       'EduOS Platform Demo',
+        shortNameAr:  'EduOS',
+        shortNameEn:  'EduOS',
+        number:       '0000',
+        type:         'moe_public',
+        authority:    'MOE',
+        emirate:      'abu_dhabi',
+        city:         'الإمارات',
+        region:       'الإمارات العربية المتحدة',
+        domain:       'demo.eduos.ae',
+        telegram:     '',
+        logo:         '/apps/eduos-logo-transparent.png',
+        logoColored:  '/apps/eduos-logo.png',
+        levels:       'KG — الصف 12',
+        levelsEn:     'KG — Grade 12',
+        gender:       'mixed',
+        isDemo:       true,
+        geo: { lat: 25.2048, lng: 55.2708, radius: 150 },
+        attendance: { startTime: '07:00', endTime: '08:30', qrRotation: 60 }
+      },
+      supabase: {
+        url: 'https://xdkiktwuuwghvzcukvew.supabase.co',
+        _k1: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
+        _k2: 'eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhka2lrdHd1dXdnaHZ6Y3VrdmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExNzQ2NzksImV4cCI6MjA5Njc1MDY3OX0',
+        _k3: '3vL9Xi0wW9xDyDKtCsX7lYgwCvRDnNOUDbCHLiJmfgU'
+      }
     }
 
     // ────────────────────────────────────────
@@ -153,12 +188,12 @@
 
     // التقويم الدراسي
     calendar: {
-      year:         '2025–2026',
-      sem1Start:    '2025-09-01',
-      sem1End:      '2026-01-31',
-      sem2Start:    '2026-02-01',
-      sem2End:      '2026-06-30',
-      currentSem:   2,
+      year:         '2026–2027',
+      sem1Start:    '2026-09-01',
+      sem1End:      '2027-01-31',
+      sem2Start:    '2027-02-01',
+      sem2End:      '2027-06-30',
+      currentSem:   1,
       weekStartDay: 0
     },
 
