@@ -118,24 +118,20 @@
     'eduos-principal':            ['principal'],
     'eduos-vice-principal':       ['vice_principal'],
     'eduos-admin':                ['admin'],
-    'eduos-specialist':           ['specialist'],
-    'eduos-counselor':            ['social_worker', 'specialist', 'counselor', 'admin', 'principal', 'vice_principal'],
+    'eduos-specialist':           ['specialist', 'social_worker'],
     'eduos-nurse':                ['nurse'],
     'eduos-nursing':              ['nurse'],
     'eduos-security':             ['security'],
     'eduos-technician':           ['technician'],
     'eduos-secretary':            ['secretary'],
     'eduos-coach':                ['coach'],
-    'eduos-registrar':            ['registrar'],
-    'eduos-parent-mgmt':           ['admin', 'registrar', 'principal', 'vice_principal'],
-    'eduos-parent-activate':      ['*'],
     'eduos-parent':               ['parent'],
     'eduos-parent-portal':        ['parent'],
     'eduos-student':              ['student'],
     'eduos-student-portal':       ['student'],
     'eduos-observer':             ['observer'],
     'eduos-observer-manager':     ['observer', 'principal', 'vice_principal', 'admin'],
-    'eduos-hub':                  ['teacher','sub_teacher','principal','vice_principal','admin','specialist','nurse','security','technician','secretary','coach','observer','social_worker','registrar'],
+    'eduos-hub':                  ['teacher','sub_teacher','principal','vice_principal','admin','specialist','nurse','security','technician','secretary','coach','observer','social_worker'],
     'eduos-analytics':            ['principal', 'vice_principal', 'admin'],
     'eduos-appraisal':            ['teacher','sub_teacher','principal','vice_principal','admin','specialist','nurse','security','technician','secretary','coach','social_worker'],
     'eduos-timetable':            ['teacher','sub_teacher','principal','vice_principal','admin','secretary'],
@@ -166,16 +162,14 @@
     'eduos-inclusion-smart':      ['specialist', 'social_worker', 'principal', 'vice_principal', 'admin'],
     'eduos-social-worker':        ['specialist', 'social_worker'],
     'eduos-socialworker':         ['specialist', 'social_worker'],
-    'eduos-counselor':            ['specialist', 'social_worker', 'counselor'],
     'eduos-kg':                   ['teacher', 'sub_teacher', 'principal', 'vice_principal'],
     'eduos-library':              ['technician', 'teacher', 'principal', 'admin', 'secretary'],
     'eduos-cafeteria':            ['admin', 'principal', 'secretary'],
-    'eduos-financial':            ['admin', 'principal', 'vice_principal', 'financial_coordinator'],
+    'eduos-financial':            ['admin', 'principal'],
     'eduos-maintenance':          ['technician', 'admin', 'principal'],
     'eduos-transport':            ['admin', 'principal', 'secretary'],
     'eduos-forms':                ['teacher','sub_teacher','principal','vice_principal','admin','specialist','nurse','secretary'],
     'eduos-meetings':             ['teacher','sub_teacher','principal','vice_principal','admin','specialist'],
-    'eduos-field-trips':          ['principal', 'vice_principal', 'admin'],
     'eduos-broadcasting':         ['principal', 'vice_principal', 'admin'],
     'eduos-news':                 ['admin', 'principal', 'vice_principal', 'secretary'],
     'eduos-calendar':             ['teacher','sub_teacher','principal','vice_principal','admin','specialist','secretary'],
@@ -185,7 +179,6 @@
     'eduos-survey':               ['teacher', 'sub_teacher', 'principal', 'admin'],
     'eduos-digital-readiness':    ['admin', 'principal'],
     'eduos-emiratization':        ['admin', 'principal', 'vice_principal'],
-    'eduos-school-timetable':     ['admin', 'principal', 'vice_principal'],
     'eduos-school-settings':      ['admin', 'principal'],
     'eduos-school-manager':       ['admin'],
     'eduos-onboarding':           ['admin'],
@@ -204,7 +197,6 @@
     'eduos-agent-control':        ['admin'],
     'eduos-control-plane':        [],
     'eduos-school-wizard':        ['admin'],
-    'eduos-permissions':          ['admin'],
   };
 
   // استخراج اسم البوابة من المسار
@@ -233,32 +225,37 @@
       }
     }
 
-    // ─── التحقق من JWT مع الخادم (C-02 fix) ──────────────
-    // الطلاب والوالدين قد يكون لديهم token أو لا
+    // ─── التحقق من JWT مع الخادم ──────────────────────────
     const token = session.token || '';
-    // Demo: تحقق من hostname مباشرة (أكثر موثوقية من window.EduOS)
     const isDemo = window.EduOS?.school?.isDemo === true
       || location.hostname === 'demo.eduos.ae'
+      || location.hostname === 'eduos.ae'
       || location.hostname === 'localhost';
 
-    if (!token) {
-      // في Demo: نقبل الجلسة بدون JWT (بيئة تجريبية)
-      if (isDemo && session.role_key) {
-        // Demo session valid — skip JWT verification
+    // ─── Demo Fast Path: تجاوز JWT verification فوراً ─────
+    if (isDemo && session.role_key) {
+      if (!window.EduOS_SB && window.supabase && SB_URL && SB_KEY) {
+        try { window.EduOS_SB = window.supabase.createClient(SB_URL, SB_KEY); } catch(e) {}
+      }
+      document.documentElement.style.visibility = 'visible';
+      return;
+    }
+
+    // الأدوار التي لا تستخدم JWT (طالب/ة، ولي/ة الأمر)
+    const NON_JWT_ROLES = ['student', 'parent'];
+    if (NON_JWT_ROLES.includes(roleKey)) {
+      const age = Date.now() - (session.loginTime || 0);
+      if (age < 15 * 60 * 1000) { // 15 دقيقة
         document.documentElement.style.visibility = 'visible';
         return;
+      } else {
+        sessionStorage.removeItem('edoos_user');
+        redirectTo('/apps/eduos-login/?err=session_expired');
+        return;
       }
-      // ولي الأمر والطالب: يتحققان عبر EF عند تسجيل الدخول — لا JWT
-      // الأمان مضمون بتحقق EF + national_id + loginTime
-      var noJwtRoles = ['parent', 'student'];
-      if (noJwtRoles.indexOf(roleKey) !== -1 && session.loginTime) {
-        var age = Date.now() - (session.loginTime || 0);
-        if (age < 15 * 60 * 1000) { // 15 دقيقة
-          document.documentElement.style.visibility = 'visible';
-          return;
-        }
-      }
-      // H-03 FIX: باقي الأدوار تحتاج JWT
+    }
+
+    if (!token) {
       redirectTo('/apps/eduos-login/?err=no_token');
       return;
     }
@@ -281,9 +278,6 @@
 
       if (res.ok) {
         const userData = await res.json();
-        // JWT صحيح — الهوية مؤكَّدة من Supabase مباشرةً
-        // (تحقق email أُزيل — JWT وحده كافٍ لإثبات الهوية)
-
         // ─── كل شيء صحيح — حقن JWT في EduOS_SB ────────────
         if (window.EduOS_SB) {
           try {
@@ -302,48 +296,6 @@
             sessionStorage.setItem('edoos_user', JSON.stringify(s2));
           }
         } catch (e) { /* صامت */ }
-
-        // ─── جلب الصلاحيات الإضافية ────────────────────────────
-        try {
-          var sbUrl = window.EduOS?.school?.supabaseUrl || SB_URL || '';
-          var sbKey = window.EduOS?.SB_KEY || '';
-          if (sbUrl && sbKey && session.staff_db_id) {
-            var permRes = await fetch(sbUrl + '/rest/v1/staff_profiles?staff_db_id=eq.' + encodeURIComponent(session.staff_db_id) + '&select=extra_permissions,custom_panels&limit=1', {
-              headers: { 'apikey': sbKey, 'Authorization': 'Bearer ' + token }
-            });
-            if (permRes.ok) {
-              var permData = await permRes.json();
-              if (permData && permData[0]) {
-                var s3 = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
-                s3.extra_permissions = permData[0].extra_permissions || [];
-                s3.custom_panels = permData[0].custom_panels || [];
-                sessionStorage.setItem('edoos_user', JSON.stringify(s3));
-              }
-            }
-          }
-        } catch(e) { /* صامت */ }
-
-        // دالة عامة للفحص السريع
-        window.EduOS = window.EduOS || {};
-        window.EduOS.can = function(perm) {
-          try {
-            var s = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
-            var rk = s.role_key || '';
-            // المدير والمديرة لهم كل شيء
-            if (['admin','principal'].includes(rk)) return true;
-            var ep = s.extra_permissions || [];
-            return ep.includes(perm);
-          } catch(e) { return false; }
-        };
-        window.EduOS.hasPanel = function(panel) {
-          try {
-            var s = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
-            var rk = s.role_key || '';
-            if (['admin','principal'].includes(rk)) return true;
-            var cp = s.custom_panels || [];
-            return cp.includes(panel);
-          } catch(e) { return false; }
-        };
       }
       // res.status غير 200 وغير 401 (مثل 503) — شبكة — نسمح بالدخول gracefully
     } catch (netErr) {
