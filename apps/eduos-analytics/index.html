@@ -12,6 +12,7 @@
 <script src="/apps/platform-shield.js" defer></script>
 <script src="/apps/platform-autologout.js" defer></script>
 <script src="/apps/platform-week.js" defer></script>
+<script src="/apps/platform-curriculum.js" defer></script>
 <script src="/apps/platform-duties.js" defer></script>
 <style>
 :root {
@@ -196,6 +197,15 @@ body{font-family:'Tajawal',Arial,sans-serif;background:var(--bg);color:var(--tex
         <div class="kpi-num" id="kpiSessions">—</div>
         <div class="kpi-lbl">جلسات هذا الأسبوع</div>
       </div>
+    </div>
+
+    <!-- تغطية المنهج الفصلي -->
+    <div id="curriculum-coverage-card" style="background:#fff;border:1px solid #E2E8F0;border-radius:16px;padding:18px;margin-bottom:18px;display:none;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="font-size:17px;font-weight:800;color:#6C3DD6;display:flex;align-items:center;gap:8px;">📚 تغطية المنهج الفصلي</div>
+        <a href="/apps/eduos-curriculum-plan/" style="font-size:13px;color:#6C3DD6;text-decoration:none;font-weight:700;">عرض التفاصيل ←</a>
+      </div>
+      <div id="curriculum-coverage-body" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;"></div>
     </div>
 
     <!-- AI BOX -->
@@ -446,6 +456,36 @@ function getMonday() {
   const m = new Date(d);
   m.setDate(diff);
   return m.toISOString().split('T')[0];
+}
+
+
+// ── تغطية المنهج الفصلي ──
+async function loadCurriculumCoverage() {
+  try {
+    const plansRes = await sq('curriculum_plans?select=id,subject,grade,curriculum_plan_weeks(week_number)&is_active=eq.true&term=eq.1&academic_year=eq.2026-2027&limit=30');
+    if (!Array.isArray(plansRes) || !plansRes.length) return;
+    const trackRes = await sq('weekly_track?select=subject_name,week_number&academic_year=eq.2026-2027&term=eq.1&limit=1000');
+    const track = Array.isArray(trackRes) ? trackRes : [];
+    const body = document.getElementById('curriculum-coverage-body');
+    const card = document.getElementById('curriculum-coverage-card');
+    if (!body || !card) return;
+    var html = '';
+    plansRes.slice(0, 8).forEach(function(p) {
+      var total = (p.curriculum_plan_weeks || []).length;
+      if (!total) return;
+      var fw = (p.subject || '').split(' ')[0];
+      var taught = track.filter(function(t) { return t.subject_name && t.subject_name.indexOf(fw) >= 0; }).length;
+      var pct = Math.min(100, Math.round(taught / total * 100));
+      var col = pct >= 80 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
+      html += '<div style="background:#F8FAFC;border-radius:10px;padding:12px;">'
+        + '<div style="font-size:13px;font-weight:800;margin-bottom:6px;">' + (p.subject||'') + ' — ' + (p.grade||'') + '</div>'
+        + '<div style="height:6px;background:#E2E8F0;border-radius:3px;overflow:hidden;margin-bottom:4px;">'
+        + '<div style="height:100%;width:'+pct+'%;background:'+col+';border-radius:3px;"></div></div>'
+        + '<div style="font-size:12px;color:#64748B;">' + taught + '/' + total + ' أسبوع — <b style="color:'+col+';">' + pct + '%</b></div>'
+        + '</div>';
+    });
+    if (html) { body.innerHTML = html; card.style.display = 'block'; }
+  } catch(e) { console.warn('curriculum coverage error', e); }
 }
 
 // ── KPIs الرئيسية ──
@@ -827,6 +867,7 @@ async function loadAll() {
   await Promise.all([
     buildStory(),
     loadKPIs(),
+    loadCurriculumCoverage(),
     loadAttByClass(),
     loadGradesDist(),
     loadSubjectPerf(),
