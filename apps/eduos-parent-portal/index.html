@@ -362,7 +362,7 @@ footer{text-align:center;color:#6B7280;font-size:.8rem;padding:28px 16px;margin-
       var ap = tripApproval(t.id);
       var ok = ap && ap.parent_consent;
       h += '<div class="item"><div class="row"><div><div style="font-weight:800">' + esc(t.title) + '</div>';
-      h += '<div class="muted">📅 ' + fmtDate(t.trip_date) + ' · ' + (t.type ? esc(t.type) : 'نوع غير محدّد') + '</div>';
+      h += '<div class="muted">📅 ' + fmtDate(t.trip_date) + ' · ' + (t.trip_type || t.type ? esc(t.trip_type || t.type) : 'رحلة مدرسية') + '</div>';
       if (t.classes && t.classes.length) { h += '<div class="muted">الصفوف: ' + esc(t.classes.join('، ')) + '</div>'; }
       h += '</div><div>';
       if (ok) {
@@ -383,7 +383,7 @@ footer{text-align:center;color:#6B7280;font-size:.8rem;padding:28px 16px;margin-
     var h = '<h3>🚌 الموافقة على الرحلة</h3>';
     h += '<div class="item" style="margin-top:0"><div style="font-weight:800">' + esc(t.title) + '</div>';
     h += '<div class="muted">📅 ' + fmtDate(t.trip_date) + '</div>';
-    h += '<div class="muted">النوع: ' + (t.type ? esc(t.type) : '—') + '</div>';
+    h += '<div class="muted">النوع: ' + (t.trip_type || t.type || '—') + '</div>';
     if (t.classes && t.classes.length) { h += '<div class="muted">الصفوف: ' + esc(t.classes.join('، ')) + '</div>'; }
     h += '<div class="muted">الطالبة: ' + esc(current.name) + '</div></div>';
     h += '<label class="chk"><input type="checkbox" id="trip-media"' + (g && g.media_consent ? ' checked' : '') + '> <span>أوافق على التصوير الإعلامي خلال هذه الرحلة</span></label>';
@@ -496,8 +496,8 @@ footer{text-align:center;color:#6B7280;font-size:.8rem;padding:28px 16px;margin-
     var h = '';
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
-      h += '<div class="item"><div class="muted">رسالتك إلى ' + esc(ROLE_LABEL[r.target_role] || r.target_role || 'المدرسة') + ' · ' + fmtDate(r.sent_at) + '</div>';
-      h += '<div style="margin-top:4px">' + esc(r.message) + '</div>';
+      h += '<div class="item"><div class="muted">رسالتك · ' + fmtDate(r.created_at || r.sent_at) + '</div>';
+      h += '<div style="margin-top:4px">' + esc(r.body || r.message || '') + '</div>';
       h += '<div class="reply"><b>الرد</b> <span class="muted">(' + fmtDate(r.replied_at) + ')</span><div>' + esc(r.reply) + '</div></div></div>';
     }
     $('sec-replies').innerHTML = h;
@@ -510,12 +510,15 @@ footer{text-align:center;color:#6B7280;font-size:.8rem;padding:28px 16px;margin-
     btn.disabled = true;
     st.innerHTML = spinner();
     try {
+      // parent_messages: يستخدم student_id = student_number, body, message_type, direction
       await dbWrite('POST', 'parent_messages', {
-        parent_id: user.national_id,
-        student_id: current.id,
-        message: txt,
-        target_role: $('msg-target').value,
-        sent_at: new Date().toISOString()
+        student_id: current.student_number,
+        student_name: current.name,
+        body: txt,
+        message_type: $('msg-target').value,
+        direction: 'parent_to_school',
+        status: 'unread',
+        created_at: new Date().toISOString()
       });
       $('msg-text').value = '';
       st.innerHTML = '<div class="msg-ok">✅ تم إرسال الرسالة بنجاح</div>';
@@ -554,7 +557,8 @@ footer{text-align:center;color:#6B7280;font-size:.8rem;padding:28px 16px;margin-
     section('sec-trips', async function () {
       var today = todayStr();
       // field_trips: جلب كل الرحلات القادمة بغض النظر عن الحالة (DB قد يكون فارغاً)
-      var trips = await dbFetch('field_trips?trip_date=gte.' + today + '&select=id,title,trip_date,type,status,classes&order=trip_date.asc&limit=10');
+      // field_trips: استخدام trip_type بدلاً من type
+      var trips = await dbFetch('field_trips?trip_date=gte.' + today + '&is_active=eq.true&select=id,title,trip_date,trip_type,status,classes,grades&order=trip_date.asc&limit=10');
       if (!(await pApprovals)) { throw new Error('approvals'); }
       if (token !== loadToken) { return; }
       tripsCache = trips;
@@ -587,7 +591,8 @@ footer{text-align:center;color:#6B7280;font-size:.8rem;padding:28px 16px;margin-
       if (token === loadToken) { renderNotifs(rows); }
     });
     section('sec-replies', async function () {
-      var rows = await dbFetch('parent_messages?parent_id=eq.' + encodeURIComponent(user.national_id) + '&student_id=eq.' + sid + '&reply=not.is.null&select=id,message,target_role,sent_at,reply,replied_at&order=replied_at.desc&limit=3');
+      // parent_messages: يستخدم student_id وbody وdirection — لا parent_id ولا target_role
+      var rows = await dbFetch('parent_messages?student_id=eq.' + encodeURIComponent(current.student_number) + '&direction=eq.parent_to_school&reply=not.is.null&select=id,body,message_type,created_at,reply,replied_at&order=replied_at.desc&limit=3');
       if (token === loadToken) { renderReplies(rows); }
     });
 
