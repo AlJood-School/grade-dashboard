@@ -224,6 +224,25 @@ textarea{resize:vertical;min-height:80px}
   .stats-grid{grid-template-columns:repeat(2,1fr)}
   .card-actions{grid-template-columns:repeat(3,1fr)}
 }
+
+/* ═══ SIDEBAR (shared) ══════════════════════════════ */
+.sidebar{
+  width:220px;flex-shrink:0;background:#fff;
+  border-left:1px solid #E5E7EB;
+  padding:16px 0;overflow-y:auto;
+  position:sticky;top:62px;height:calc(100vh - 62px);
+}
+.sidebar-section{padding:8px 16px 4px;font-size:11px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.05em}
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 16px;cursor:pointer;
+  font-size:14px;font-weight:500;color:#374151;
+  border-right:3px solid transparent;
+  transition:all .15s;text-decoration:none;
+}
+.nav-item:hover{background:#F5F3FF;color:#6C3DD6;border-right-color:#C4B5FD}
+.nav-item.active{background:#F5F3FF;color:#6C3DD6;border-right-color:#6C3DD6;font-weight:700}
+.nav-icon{font-size:16px;width:20px;text-align:center}
 </style>
 </head>
 <body>
@@ -1318,7 +1337,79 @@ function printReport(tripId, tripTitle) {
     '<p>التاريخ: ' + formatDate(trip.trip_date) + ' · الوجهة: ' + escHtml(trip.destination||'—') + '</p>' +
     '<p>الصفوف: ' + (trip.classes||[]).join('، ') + '</p>' +
     '<p style="margin-top:20px"><em>جارٍ تحميل بيانات الطلاب...</em></p>' +
-    '<script>window.onload=function(){window.print();}<\/script></body></html>');
+    '<script>window.onload=function(){window.print();}<\/script>
+// ═══════════════════════════════════════════════════
+// SIDEBAR BUILD
+// ═══════════════════════════════════════════════════
+function buildSidebar() {
+  var user = {};
+  try { user = JSON.parse(sessionStorage.getItem('edoos_user') || '{}'); } catch(e){}
+  var role = user.role_key || user.role || '';
+  var nav = document.getElementById('sidebar');
+  if (!nav) return;
+  var sections = getSidebarSections(role);
+  sections.forEach(function(sec) {
+    if (sec.label) {
+      var lbl = document.createElement('div');
+      lbl.className = 'sidebar-section';
+      lbl.textContent = sec.label;
+      nav.appendChild(lbl);
+    }
+    sec.items.forEach(function(item) {
+      var a = document.createElement('a');
+      a.className = 'nav-item' + (item.active ? ' active' : '');
+      a.href = item.href;
+      a.innerHTML = '<span class="nav-icon">' + item.icon + '</span>' + item.label;
+      nav.appendChild(a);
+    });
+  });
+}
+
+function getSidebarSections(role) {
+  var isAdmin  = role === 'admin';
+  var isPrin   = role === 'principal';
+  var isVP     = role === 'vice_principal';
+  var isTeacher= ['teacher','sub_teacher'].includes(role);
+  var isCoord  = role === 'coordinator';
+  var path     = window.location.pathname;
+
+  var teacherItems = [
+    {icon:'📅', label:'المسار الأسبوعي',  href:'/apps/eduos-weekly-track/',    active: path.includes('weekly-track')},
+    {icon:'📚', label:'الخطة الفصلية',    href:'/apps/eduos-curriculum-plan/',  active: path.includes('curriculum-plan')},
+    {icon:'📋', label:'الخطة الدرسية',    href:'/apps/eduos-lesson-plans/',     active: path.includes('lesson-plans')},
+    {icon:'🎯', label:'خطط التمايز',       href:'/apps/eduos-diff-plans/',       active: path.includes('diff-plans')},
+    {icon:'🚌', label:'الرحلات الميدانية', href:'/apps/eduos-field-trips/',      active: path.includes('field-trips')},
+    {icon:'📊', label:'الدرجات',           href:'/apps/eduos-grade-analytics/',  active: path.includes('grade-analytics')},
+  ];
+
+  var adminItems = [
+    {icon:'📚', label:'الخطة الفصلية',    href:'/apps/eduos-curriculum-plan/',  active: path.includes('curriculum-plan')},
+    {icon:'📅', label:'المسارات الأسبوعية',href:'/apps/eduos-weekly-track/',     active: path.includes('weekly-track')},
+    {icon:'🎯', label:'خطط التمايز',       href:'/apps/eduos-diff-plans/',       active: path.includes('diff-plans')},
+    {icon:'🚌', label:'الرحلات الميدانية', href:'/apps/eduos-field-trips/',      active: path.includes('field-trips')},
+    {icon:'📊', label:'التحليلات',         href:'/apps/eduos-analytics/',        active: path.includes('analytics')},
+    {icon:'⚙️', label:'لوحة التحكم',       href:'/apps/eduos-admin/',            active: path.includes('eduos-admin')},
+  ];
+
+  var principalItems = [
+    {icon:'📚', label:'الخطة الفصلية',    href:'/apps/eduos-curriculum-plan/',  active: path.includes('curriculum-plan')},
+    {icon:'📅', label:'المسارات الأسبوعية',href:'/apps/eduos-weekly-track/',     active: path.includes('weekly-track')},
+    {icon:'🎯', label:'خطط التمايز',       href:'/apps/eduos-diff-plans/',       active: path.includes('diff-plans')},
+    {icon:'🚌', label:'الرحلات الميدانية', href:'/apps/eduos-field-trips/',      active: path.includes('field-trips')},
+    {icon:'📊', label:'التحليلات',         href:'/apps/eduos-analytics/',        active: path.includes('analytics')},
+    {icon:'🏫', label:'البوابة الرئيسية',  href:'/apps/eduos-principal/',        active: path.includes('principal')},
+  ];
+
+  var items = isTeacher ? teacherItems
+            : (isAdmin ? adminItems
+            : (isPrin || isVP ? principalItems
+            : teacherItems));
+
+  return [{label:'', items: items}];
+}
+
+document.addEventListener("DOMContentLoaded", buildSidebar);
+</body></html>');
   w.document.close();
 }
 
