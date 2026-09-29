@@ -559,22 +559,44 @@ async function onClassChange() {
 }
 
 async function loadClasses() {
-  // قراءة صفوف المعلمة من teacher_assignments باستخدام staff_db_id
-  const staffId = _user.id || _user.staff_db_id;
-  const { data } = await _supabase
-    .from('teacher_assignments')
-    .select('class_name, subject')
-    .eq('staff_db_id', staffId)
-    .eq('academic_year', ACADEMIC_YEAR)
-    .eq('is_active', true)
-    .neq('subject', 'مربية الصف')
-    .order('class_name');
+  const role = _user.role_key || _user.role || '';
+  const isTeacher = (role === 'teacher');
+  const canSeeAll = ['admin','principal','vice_principal','registrar'].includes(role);
 
-  const uniqueClasses = [...new Set((data||[]).map(r => r.class_name).filter(Boolean))].sort();
-  const uniqueSubjects = [...new Set((data||[]).map(r => r.subject).filter(Boolean))].sort();
+  let uniqueClasses = [];
+  let uniqueSubjects = [];
+
+  if (isTeacher || (!canSeeAll && _user.staff_db_id)) {
+    // المعلمة: صفوفها من teacher_assignments فقط
+    const staffId = _user.id || _user.staff_db_id;
+    const { data } = await _supabase
+      .from('teacher_assignments')
+      .select('class_name, subject')
+      .eq('staff_db_id', staffId)
+      .eq('academic_year', ACADEMIC_YEAR)
+      .eq('is_active', true)
+      .neq('subject', 'مربية الصف')
+      .order('class_name');
+    uniqueClasses = [...new Set((data||[]).map(r => r.class_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'en',{numeric:true}));
+    uniqueSubjects = [...new Set((data||[]).map(r => r.subject).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));
+  } else {
+    // المديرة / النائبة / الأدمن: كل الصفوف
+    const { data: stuData } = await _supabase
+      .from('students')
+      .select('class_name')
+      .order('class_name');
+    uniqueClasses = [...new Set((stuData||[]).map(r => r.class_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'en',{numeric:true}));
+    const { data: taData } = await _supabase
+      .from('teacher_assignments')
+      .select('subject')
+      .eq('academic_year', ACADEMIC_YEAR)
+      .neq('subject', 'مربية الصف');
+    uniqueSubjects = [...new Set((taData||[]).map(r => r.subject).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));
+  }
 
   // ملء قائمة الصفوف
   const sel = document.getElementById('class-select');
+  sel.innerHTML = '<option value="">اختر الصف...</option>';
   uniqueClasses.forEach(cls => {
     const opt = document.createElement('option');
     opt.value = cls;
@@ -584,12 +606,15 @@ async function loadClasses() {
 
   // ملء قائمة المواد في modal الإضافة
   const subSel = document.getElementById('f-subject');
-  uniqueSubjects.forEach(sub => {
-    const opt = document.createElement('option');
-    opt.value = sub;
-    opt.textContent = sub;
-    subSel.appendChild(opt);
-  });
+  if (subSel) {
+    subSel.innerHTML = '';
+    uniqueSubjects.forEach(sub => {
+      const opt = document.createElement('option');
+      opt.value = sub;
+      opt.textContent = sub;
+      subSel.appendChild(opt);
+    });
+  }
 
   // اختيار الصف الأول تلقائياً إذا كان الوحيد
   if (uniqueClasses.length === 1) {
