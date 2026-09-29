@@ -655,6 +655,26 @@ var selectedStrategies = [];
 var selectedResources = [];
 
 // ===================================================
+// JWT من الجلسة
+// ===================================================
+function getJWT() {
+  // أولاً: من localStorage لـ Supabase
+  for (var i = 0; i < localStorage.length; i++) {
+    var k = localStorage.key(i);
+    if (k && k.indexOf('auth-token') > -1) {
+      try { var p = JSON.parse(localStorage.getItem(k)); if (p && p.access_token) return p.access_token; } catch(e){}
+    }
+  }
+  // ثانياً: من sessionStorage
+  try { var u = JSON.parse(sessionStorage.getItem('edoos_user')||'{}'); if (u.access_token) return u.access_token; } catch(e){}
+  return SB_KEY; // fallback: anon key
+}
+function authHeaders() {
+  var jwt = getJWT();
+  return {'apikey': SB_KEY, 'Authorization': 'Bearer ' + jwt};
+}
+
+// ===================================================
 // تهيئة
 // ===================================================
 document.addEventListener('DOMContentLoaded', function() {
@@ -719,15 +739,13 @@ function loadWeek() {
 function loadPlans() {
   var url = SB_URL + '/rest/v1/student_diff_plans?order=created_at.desc&is_active=eq.true';
   var role = currentUser.role_key;
-  // المعلمة ترى خططها فقط
   if (role === 'teacher' || role === 'coach') {
     url += '&teacher_id=eq.' + encodeURIComponent(currentUser.staff_db_id || currentUser.id);
   }
-  return fetch(url, {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}})
+  return fetch(url, {headers: authHeaders()})
     .then(function(r){return r.json()})
-    .then(function(data){
-      allPlans = Array.isArray(data) ? data : [];
-    }).catch(function(){ allPlans = []; });
+    .then(function(data){ allPlans = Array.isArray(data) ? data : []; })
+    .catch(function(){ allPlans = []; });
 }
 
 // ===================================================
@@ -735,7 +753,7 @@ function loadPlans() {
 // ===================================================
 function loadStudents() {
   return fetch(SB_URL + '/rest/v1/students?select=id,name,class_name,grade,student_number&order=name.asc&limit=2000',
-    {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}})
+    {headers: authHeaders()})
   .then(function(r){return r.json()})
   .then(function(data){ allStudents = Array.isArray(data) ? data : []; })
   .catch(function(){ allStudents = []; });
@@ -743,7 +761,7 @@ function loadStudents() {
 
 function loadSEN() {
   return fetch(SB_URL + '/rest/v1/special_ed_students?is_active=eq.true&select=id,student_id,name_ar,grade,class_section,disability_type,support_level&order=name_ar.asc',
-    {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}})
+    {headers: authHeaders()})
   .then(function(r){return r.json()})
   .then(function(data){ senStudents = Array.isArray(data) ? data : []; })
   .catch(function(){ senStudents = []; });
@@ -1197,11 +1215,10 @@ function savePlan() {
     body.created_at = new Date().toISOString();
   }
 
-  fetch(url, {
-    method: method,
-    headers: {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},
-    body: JSON.stringify(body)
-  }).then(function(r){
+  var hdr = authHeaders();
+  hdr['Content-Type'] = 'application/json';
+  hdr['Prefer'] = 'return=representation';
+  fetch(url, {method: method, headers: hdr, body: JSON.stringify(body)}).then(function(r){
     if (!r.ok) throw new Error(r.status);
     return r.json();
   }).then(function(data) {
@@ -1217,10 +1234,9 @@ function savePlan() {
 function deletePlan() {
   if (!editingId) return;
   if (!confirm('هل أنت متأكدة من حذف هذه الخطة؟')) return;
+  var dh = authHeaders(); dh['Content-Type']='application/json';
   fetch(SB_URL + '/rest/v1/student_diff_plans?id=eq.' + editingId, {
-    method: 'PATCH',
-    headers: {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
-    body: JSON.stringify({is_active:false})
+    method: 'PATCH', headers: dh, body: JSON.stringify({is_active:false})
   }).then(function(){
     showToast('تم حذف الخطة');
     closeModal();
