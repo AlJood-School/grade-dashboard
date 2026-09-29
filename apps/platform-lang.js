@@ -684,6 +684,8 @@ window.EduLang = (function () {
       try {
         var su = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
         if (!su.username) { setTimeout(function(){ tryAddPwdBtn(attempts+1); }, 500); return; }
+        // 🔐 يظهر فقط عند الحاجة لتغيير كلمة المرور
+        if (!su.must_change_password) return;
       } catch(e) { return; }
       var cpBtn = document.createElement('button');
       cpBtn.setAttribute('data-change-pwd', '1');
