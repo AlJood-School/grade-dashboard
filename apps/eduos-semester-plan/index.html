@@ -10,6 +10,7 @@
 <script src="../platform-lang.js" defer></script>
 <script src="../platform-shield.js" defer></script>
 <script src="../platform-agent-brain.js" defer></script>
+<script src="../platform-curriculum.js" defer></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{
@@ -200,11 +201,11 @@
       <h3>📋 بيانات الخطة</h3>
       <div class="form-group">
         <label>المادة</label>
-        <input type="text" id="s-subject" placeholder="مثال: رياضيات">
+        <input type="text" id="s-subject" placeholder="مثال: رياضيات" oninput="loadSemesterCurrCtx()">
       </div>
       <div class="form-group">
         <label>الصف</label>
-        <select id="s-class">
+        <select id="s-class" onchange="loadSemesterCurrCtx()">
           <option value="">— اختر الصف —</option>
           <option value="KG1">KG1</option><option value="KG2">KG2</option>
           <option value="G1">الصف الأول</option><option value="G2">الصف الثاني</option>
@@ -237,6 +238,12 @@
         <label>ملاحظات</label>
         <textarea id="s-notes" placeholder="أي معلومة مفيدة للتخطيط..."></textarea>
       </div>
+    </div>
+
+    <!-- Curriculum Context Banner -->
+    <div class="sidebar-section" id="curr-ctx-semester" style="display:none;background:#F5F3FF;border-color:#C4B5FD;">
+      <h3 style="color:#6C3DD6;">📚 من الخطة الفصلية الوزارية</h3>
+      <div id="curr-ctx-body" style="font-size:14px;color:#374151;"></div>
     </div>
 
     <!-- Units input -->
@@ -350,6 +357,24 @@ const UNIT_FIELDS = [
   {id:'pages_from', label:'من صفحة', type:'number', ph:'1'},
   {id:'pages_to', label:'إلى صفحة', type:'number', ph:'40'},
 ];
+
+
+function loadSemesterCurrCtx() {
+  var subj = (document.getElementById('s-subject')||{}).value || '';
+  var grade = (document.getElementById('s-class')||{}).value || '';
+  if (!subj || !grade || !window.EduOS || !window.EduOS.curriculum) return;
+  var weekNum = window.EduOS.curriculum.getCurrentWeekNum();
+  window.EduOS.curriculum.getWeekContext(subj, grade, weekNum, 1, '2026-2027').then(function(ctx) {
+    var box = document.getElementById('curr-ctx-semester');
+    var body = document.getElementById('curr-ctx-body');
+    if (!box || !body) return;
+    if (!ctx) { box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    body.innerHTML = (ctx.unit_number ? '<div style="font-weight:700;margin-bottom:4px;">وحدة ' + ctx.unit_number + ': ' + (ctx.unit_name||'') + '</div>' : '')
+      + '<div style="font-weight:800;color:#1e293b;">' + (ctx.topic||'') + '</div>'
+      + (ctx.keywords && ctx.keywords.length ? '<div style="margin-top:4px;color:#64748B;font-size:12px;">' + ctx.keywords.join('، ') + '</div>' : '');
+  });
+}
 
 window.addEventListener('DOMContentLoaded', () => {
   _user = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
