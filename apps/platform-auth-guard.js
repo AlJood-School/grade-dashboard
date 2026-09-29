@@ -194,6 +194,7 @@
     'eduos-space':                ['teacher','sub_teacher','principal','vice_principal','admin'],
     'eduos-lab':                  ['teacher', 'sub_teacher', 'technician', 'principal', 'vice_principal', 'admin'],
     'eduos-swap-builder':         ['principal', 'vice_principal', 'admin'],
+    'eduos-curriculum-plan':  ['teacher', 'sub_teacher', 'principal', 'vice_principal', 'admin', 'coordinator', 'social_worker', 'dept_head'],
     'eduos-diff-plans':           ['teacher', 'sub_teacher', 'principal', 'vice_principal', 'admin', 'coordinator', 'social_worker'],
     'eduos-field-trips':          ['social_worker', 'teacher', 'sub_teacher', 'principal', 'vice_principal', 'admin'],
     'eduos-grade-analytics':      ['teacher', 'sub_teacher', 'principal', 'vice_principal', 'admin'],
