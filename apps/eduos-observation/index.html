@@ -208,7 +208,7 @@ body{font-family:'Tajawal',Arial,sans-serif;background:var(--bg);color:var(--tex
             <div class="tc-icon">🌱</div>
             <div class="tc-title">دعم وتطوير</div>
             <div class="tc-desc">ملاحظات دعم فقط — بلا تقييم رسمي</div>
-            <div class="tc-who">المدرّب/ة · رئيسة القسم</div>
+            <div class="tc-who">النائبة · منسقة المادة · المدرّب/ة</div>
           </div>
           <div class="type-card" onclick="selectType('targeted')">
             <div class="tc-icon">🎯</div>
@@ -235,7 +235,7 @@ body{font-family:'Tajawal',Arial,sans-serif;background:var(--bg);color:var(--tex
           <div class="form-grid">
             <div class="form-group">
               <label>المعلمة / الموظف/ة</label>
-              <select id="teacherSelect"><option value="">اختر...</option></select>
+              <select id="teacherSelect" onchange="onTeacherChange(this.value)"><option value="">اختر...</option></select>
             </div>
             <div class="form-group">
               <label>الصف</label>
@@ -243,7 +243,7 @@ body{font-family:'Tajawal',Arial,sans-serif;background:var(--bg);color:var(--tex
             </div>
             <div class="form-group">
               <label>المادة</label>
-              <input type="text" id="subjectInput" placeholder="المادة الدراسية">
+              <select id="subjectInput"><option value="">اختر المادة...</option></select>
             </div>
             <div class="form-group">
               <label>الحصة</label>
@@ -1325,6 +1325,28 @@ function updateLiveScore(){
 }
 
 // ─── تحميل المعلمات والصفوف ──────────────────────────────────
+async function onTeacherChange(staffId){
+  var subSel = document.getElementById('subjectInput');
+  subSel.innerHTML = '<option value="">اختر المادة...</option>';
+  if(!staffId) return;
+  try{
+    var r = await fetch(SB_URL+'/rest/v1/teacher_assignments?staff_db_id=eq.'+staffId+'&select=subject,class_name&limit=50',{headers:hdrs()});
+    var rows = r.ok?await r.json():[];
+    var subjects = [...new Set(rows.map(function(x){return x.subject;}).filter(Boolean))];
+    subjects.forEach(function(s){
+      var o=document.createElement('option'); o.value=s; o.textContent=s; subSel.appendChild(o);
+    });
+    if(subjects.length===1) subSel.value=subjects[0];
+    // كذلك فلتر الصفوف بناءً على تعيينات المعلمة
+    var classSel = document.getElementById('classSelect');
+    var classes = [...new Set(rows.map(function(x){return x.class_name;}).filter(Boolean))].sort();
+    classSel.innerHTML = '<option value="">اختر الصف...</option>';
+    classes.forEach(function(c){
+      var o=document.createElement('option'); o.value=c; o.textContent=c; classSel.appendChild(o);
+    });
+  }catch(e){}
+}
+
 async function loadTeachers(){
   try{
     var r = await fetch(SB_URL+'/rest/v1/staff_profiles?select=staff_db_id,name_ar,role_key&order=name_ar&limit=200',{headers:hdrs()});
@@ -1644,6 +1666,8 @@ function init(){
   _user = JSON.parse(sessionStorage.getItem('edoos_user')||'{}');
   
   var teacherRoles = ['teacher','sub_teacher'];
+  var supportRoles = ['vice_principal','principal','admin','coach','coordinator'];
+  _canDoSupport = supportRoles.includes(_user.role_key) || ((_user.extra_permissions||[]).includes('do_support_visit'));
   _isTeacher = teacherRoles.includes(_user.role_key);
   _isReadOnly = _isTeacher; // المعلمة في وضع قراءة في السجل
   
@@ -1655,6 +1679,18 @@ function init(){
   }
   
   document.getElementById('visitDate').value = new Date().toISOString().split('T')[0];
+  
+  // قراءة نوع الزيارة من URL parameter
+  var urlParams = new URLSearchParams(window.location.search);
+  var preType = urlParams.get('type');
+  if(preType && ['formal','targeted','support'].includes(preType)){
+    selectType(preType);
+  }
+  
+  // hash للسجل
+  if(window.location.hash === '#history'){
+    switchTab('history', document.getElementById('tab-history'));
+  }
   
   if(SB_URL && SB_KEY){
     loadTeachers();
