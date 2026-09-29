@@ -201,14 +201,21 @@ footer{text-align:center;color:#6B7280;font-size:.8rem;padding:28px 16px;margin-
 
   // ---------- تحميل الطالبات ----------
   async function loadStudents() {
-    var creds = await dbFetch('parent_credentials?national_id=eq.' + encodeURIComponent(user.national_id) + '&select=student_ids');
-    var ids = [];
-    for (var i = 0; i < creds.length; i++) {
-      var arr = creds[i].student_ids || [];
-      for (var j = 0; j < arr.length; j++) { if (ids.indexOf(arr[j]) < 0) { ids.push(arr[j]); } }
-    }
-    if (!ids.length) { return []; }
-    return dbFetch('students?id=in.(' + ids.map(function (x) { return encodeURIComponent(x); }).join(',') + ')&select=id,name,class_name,grade,student_number,gender&order=name.asc');
+    // استخدام RPC لتجاوز RLS (parent بدون JWT لا يستطيع قراءة parent_credentials مباشرة)
+    var SB_URL = window.EduOS.SB_URL;
+    var SB_KEY = window.EduOS.SB_KEY;
+    var r = await fetch(SB_URL + '/rest/v1/rpc/get_parent_students', {
+      method: 'POST',
+      headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_national_id: user.national_id })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var rows = await r.json();
+    if (!Array.isArray(rows) || !rows.length) return [];
+    // تحويل أسماء الأعمدة من RPC إلى ما يتوقعه الكود
+    return rows.map(function(s) {
+      return { id: s.student_id, name: s.student_name, student_number: s.student_number, class_name: s.class_name, grade: s.grade };
+    });
   }
 
   // ---------- 1. بطاقة الطالبة ----------
