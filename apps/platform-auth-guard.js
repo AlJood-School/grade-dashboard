@@ -153,7 +153,7 @@
     'eduos-exam':                 ['teacher', 'sub_teacher', 'principal', 'vice_principal', 'admin'],
     'eduos-exam-calendar':        ['teacher', 'sub_teacher', 'principal', 'vice_principal', 'admin', 'secretary'],
     'eduos-semester-plan':        ['teacher', 'sub_teacher', 'principal', 'vice_principal'],
-    'eduos-weekly-track':         ['teacher', 'sub_teacher', 'principal', 'vice_principal'],
+    'eduos-weekly-track':         ['teacher', 'sub_teacher', 'principal', 'vice_principal', 'admin', 'coordinator', 'social_worker'],
     'eduos-observation':          ['principal', 'vice_principal', 'specialist'],
     'eduos-pdp':                  ['teacher','sub_teacher','principal','vice_principal','admin','specialist','nurse','security','technician','secretary','coach','social_worker'],
     'eduos-regulatory-dashboard': ['admin', 'principal'],
