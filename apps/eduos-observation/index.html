@@ -354,6 +354,7 @@ tr:hover td{background:#F8FAFF}
             <div class="btn-row">
               <button class="btn btn-outline" onclick="backToDetails()">← السابق</button>
               <button class="btn btn-primary" onclick="saveObservation()">حفظ الزيارة الصفية</button>
+              <button class="btn" onclick="printObservation()" style="background:#fff;border:1.5px solid var(--border);color:var(--text2);padding:10px 20px;border-radius:10px;cursor:pointer;font-family:inherit;font-size:.88rem;font-weight:700">🖨 طباعة التقرير</button>
             </div>
           </div>
         </div>
@@ -1059,6 +1060,80 @@ if(typeof setupWeek !== 'undefined') {
   var _origSetup = setupWeek;
   setupWeek = async function(){ await _origSetup(); setupWeekBadge(); };
 }
+
+function printObservation() {
+  var obs = sessionStorage.getItem('_obsFormData');
+  var d = obs ? JSON.parse(obs) : {};
+  var u = JSON.parse(sessionStorage.getItem('edoos_user')||'{}');
+  var observer = u.username || '—';
+  var date = document.getElementById('visitDate') ? document.getElementById('visitDate').value : new Date().toISOString().split('T')[0];
+  var teacher = document.getElementById('teacherSelect') ? document.getElementById('teacherSelect').options[document.getElementById('teacherSelect').selectedIndex]?.text : '—';
+  var type = document.getElementById('visitType') ? document.getElementById('visitType').options[document.getElementById('visitType').selectedIndex]?.text : '—';
+  var notes = document.getElementById('visitNotes') ? document.getElementById('visitNotes').value : '';
+  
+  // جمع الدرجات من الصفحة
+  var criteria = document.querySelectorAll('.criterion-row');
+  var scores = [];
+  criteria.forEach(function(row) {
+    var label = row.querySelector('.criterion-label');
+    var selected = row.querySelector('.score-btn.selected');
+    if (label) scores.push({
+      label: label.textContent.trim(),
+      score: selected ? selected.textContent.trim() : '—'
+    });
+  });
+  
+  var html = '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8">';
+  html += '<title>تقرير الزيارة الصفية</title>';
+  html += '<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">';
+  html += '<style>';
+  html += 'body{font-family:Tajawal,Arial,sans-serif;direction:rtl;color:#1e293b;padding:30px;font-size:14px}';
+  html += '.hdr{background:linear-gradient(135deg,#6C3DD6,#22D3EE);color:#fff;padding:20px 24px;border-radius:12px;margin-bottom:20px}';
+  html += '.hdr h1{font-size:1.3rem;margin:0 0 4px}';
+  html += '.hdr p{margin:0;font-size:.82rem;opacity:.85}';
+  html += '.meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px}';
+  html += '.meta-item{background:#f8faff;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-size:.85rem}';
+  html += '.meta-item strong{display:block;color:#6C3DD6;font-size:.72rem;margin-bottom:4px}';
+  html += '.section{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:14px}';
+  html += '.section-title{font-weight:800;font-size:.95rem;color:#1e293b;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #6C3DD6}';
+  html += '.cr-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:.82rem}';
+  html += '.cr-score{background:#6C3DD6;color:#fff;border-radius:6px;padding:2px 10px;font-weight:700}';
+  html += '.notes{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px;margin-top:16px;font-size:.88rem}';
+  html += '.footer{text-align:center;color:#94a3b8;font-size:.72rem;margin-top:24px}';
+  html += '@media print{body{padding:15px}}';
+  html += '</style></head><body>';
+  html += '<div class="hdr"><h1>🏫 تقرير الزيارة الصفية</h1>';
+  html += '<p>إطار المجلس التعليمي 6 · بوابة الجود الذكية</p></div>';
+  html += '<div class="meta">';
+  html += '<div class="meta-item"><strong>اسم المعلم/ة</strong>' + (teacher||'—') + '</div>';
+  html += '<div class="meta-item"><strong>نوع الزيارة</strong>' + (type||'—') + '</div>';
+  html += '<div class="meta-item"><strong>تاريخ الزيارة</strong>' + (date||'—') + '</div>';
+  html += '<div class="meta-item"><strong>المشرف/ة</strong>' + observer + '</div>';
+  html += '<div class="meta-item"><strong>الصف / الحلقة</strong>' + (document.getElementById('classSelect')?document.getElementById('classSelect').value:'—') + '</div>';
+  html += '<div class="meta-item"><strong>المادة</strong>' + (document.getElementById('subjectInput')?document.getElementById('subjectInput').value:'—') + '</div>';
+  html += '</div>';
+  
+  if (scores.length) {
+    html += '<div class="section"><div class="section-title">نتائج التقييم</div>';
+    scores.forEach(function(s){
+      html += '<div class="cr-row"><span>' + s.label + '</span><span class="cr-score">' + s.score + '</span></div>';
+    });
+    html += '</div>';
+  }
+  
+  if (notes) {
+    html += '<div class="notes"><strong>ملاحظات المشرف/ة:</strong><br>' + notes + '</div>';
+  }
+  
+  html += '<div class="footer">NAFAS FOR ARTIFICIAL INTELLIGENCE · CN-6573712 · بوابة الجود الذكية © 2026</div>';
+  html += '</body></html>';
+  
+  var w = window.open('','_blank','width=800,height=900');
+  w.document.write(html);
+  w.document.close();
+  setTimeout(function(){ w.print(); }, 800);
+}
+
 </script>
 </body>
 </html>
