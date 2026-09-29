@@ -578,32 +578,38 @@ window.EduLang = (function () {
     s.textContent = `
       .eduos-has-tooltip { position: relative !important; }
       .eduos-has-tooltip .eduos-tip {
-        display: none;
-        position: absolute;
-        bottom: calc(100% + 8px);
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(15,23,42,0.92);
-        color: #fff;
-        padding: 5px 11px;
-        border-radius: 8px;
-        font-size: 12px;
-        font-family: 'Tajawal', Arial, sans-serif;
-        white-space: nowrap;
-        pointer-events: none;
-        z-index: 999999;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-        direction: rtl;
-      }
-      .eduos-has-tooltip .eduos-tip::after {
-        content: '';
-        position: absolute;
-        top: 100%;
-        left: 50%;
-        transform: translateX(-50%);
-        border: 5px solid transparent;
-        border-top-color: rgba(15,23,42,0.92);
-      }
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    left: auto;
+    transform: none;
+    background: rgba(15,23,42,0.92);
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-family: Tajawal, Arial, sans-serif;
+    white-space: normal;
+    max-width: 180px;
+    text-align: right;
+    pointer-events: none;
+    z-index: 999999;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    direction: rtl;
+    line-height: 1.5;
+  }
+  .eduos-has-tooltip .eduos-tip::after {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    right: 12px;
+    left: auto;
+    transform: none;
+    border-width: 5px;
+    border-style: solid;
+    border-color: transparent transparent rgba(15,23,42,0.92) transparent;
+  }
       .eduos-has-tooltip:hover .eduos-tip { display: block !important; }
     `;
     document.head.appendChild(s);
