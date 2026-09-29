@@ -581,8 +581,8 @@ window.EduLang = (function () {
     display: none;
     position: absolute;
     top: calc(100% + 6px);
-    right: 0;
-    left: auto;
+    left: 0;
+    right: auto;
     transform: none;
     background: rgba(15,23,42,0.92);
     color: #fff;
@@ -603,8 +603,8 @@ window.EduLang = (function () {
     content: '';
     position: absolute;
     bottom: 100%;
-    right: 12px;
-    left: auto;
+    left: 12px;
+    right: auto;
     transform: none;
     border-width: 5px;
     border-style: solid;
@@ -612,7 +612,54 @@ window.EduLang = (function () {
   }
       .eduos-has-tooltip:hover .eduos-tip { display: block !important; }
     `;
-    document.head.appendChild(s);
+
+  // Smart tooltip: adjusts left/right based on button screen position
+  (function initSmartTooltips() {
+    function positionTooltip(btn) {
+      var tip = btn.querySelector('.eduos-tip');
+      if (!tip) return;
+      var r = btn.getBoundingClientRect();
+      var vw = window.innerWidth || document.documentElement.clientWidth;
+      var half = vw / 2;
+      var btnCenter = r.left + r.width / 2;
+      if (btnCenter > half) {
+        // زر في النصف الأيمن → tooltip يمتد يساراً
+        tip.style.right = '0';
+        tip.style.left = 'auto';
+        var arrow = btn.querySelector('.eduos-tip::after') || tip;
+        tip.setAttribute('data-tip-side', 'right');
+      } else {
+        // زر في النصف الأيسر → tooltip يمتد يميناً
+        tip.style.left = '0';
+        tip.style.right = 'auto';
+        tip.setAttribute('data-tip-side', 'left');
+      }
+    }
+    function bindAll() {
+      document.querySelectorAll('.eduos-has-tooltip').forEach(function(btn) {
+        if (btn._smartTipBound) return;
+        btn._smartTipBound = true;
+        btn.addEventListener('mouseenter', function() { positionTooltip(this); });
+      });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', bindAll);
+    } else {
+      bindAll();
+    }
+    // Watch for dynamically added tooltips (platform-duties, platform-rewards, etc.)
+    var obs = new MutationObserver(function(mutations) {
+      mutations.forEach(function(m) {
+        m.addedNodes.forEach(function(n) {
+          if (n.nodeType === 1) {
+            if (n.classList && n.classList.contains('eduos-has-tooltip')) bindAll();
+            else if (n.querySelectorAll) n.querySelectorAll('.eduos-has-tooltip').forEach(function() { bindAll(); });
+          }
+        });
+      });
+    });
+    obs.observe(document.body || document.documentElement, { childList: true, subtree: true });
+  })();    document.head.appendChild(s);
 
     // ربط الـ tooltip بكل عناصر data-tooltip في الصفحة
     function bindTooltips() {
