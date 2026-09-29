@@ -11,6 +11,7 @@
 <script src="../platform-auth-guard.js"></script>
 <script src="../platform-lang.js" defer></script>
 <script src="../platform-shield.js" defer></script>
+<script src="../platform-curriculum.js" defer></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html{font-size:18px}
@@ -105,6 +106,7 @@ footer{text-align:center;color:#6B7280;font-size:.8rem;padding:28px 16px;margin-
   <div class="section"><div class="card"><h2>📊 آخر النتائج الدراسية</h2><div id="sec-grades"><div class="spinner"></div></div></div></div>
 
   <!-- 5. ملف السلوك -->
+  <div class="section"><div class="card"><h2>📚 المنهج هذا الأسبوع</h2><div id="sec-curriculum"><div class="spinner"></div></div></div></div>
   <div class="section"><div class="card"><h2>🧭 ملف السلوك</h2><div id="sec-behavior"><div class="spinner"></div></div></div></div>
 
   <!-- 6. خطط التعليم المتمايز -->
@@ -568,6 +570,44 @@ footer{text-align:center;color:#6B7280;font-size:.8rem;padding:28px 16px;margin-
       // student_grades يستخدم student_no (رقم الطالبة) وليس student_id
       var rows = await dbFetch('student_grades?student_no=eq.' + encodeURIComponent(current.student_number) + '&select=subject,term_total,formative,summative,term,academic_year&order=academic_year.desc,term.desc');
       if (token === loadToken) { renderGrades(rows); }
+    });
+    section('sec-curriculum', async function () {
+      var grade = current && current.grade ? 'G' + current.grade : '';
+      var SBU = window.EduOS.SB_URL;
+      var SBK = window.EduOS.SB_KEY;
+      var weekNum = (window.CURRENT_WEEK_NUM || window.EDUOS_WEEK_NUM || 1);
+      var hdrs = { apikey: SBK, Authorization: 'Bearer ' + SBK };
+      try {
+        var pr = await fetch(SBU + '/rest/v1/curriculum_plans?is_active=eq.true&term=eq.1&academic_year=eq.2026-2027&grade=eq.' + encodeURIComponent(grade) + '&select=id,subject', { headers: hdrs });
+        var plans = await pr.json();
+        if (!Array.isArray(plans) || !plans.length) {
+          if (token === loadToken) $('sec-curriculum').innerHTML = '<div class="muted" style="padding:12px 0;">لا توجد خطط منهج مُدخَلة لهذا الصف بعد</div>';
+          return;
+        }
+        var planIds = '(' + plans.map(function(p){return p.id;}).join(',') + ')';
+        var wr = await fetch(SBU + '/rest/v1/curriculum_plan_weeks?plan_id=in.' + planIds + '&week_number=eq.' + weekNum + '&select=plan_id,week_number,unit_number,unit_name,topic,keywords', { headers: hdrs });
+        var weeks = await wr.json();
+        if (!Array.isArray(weeks) || !weeks.length) {
+          if (token === loadToken) $('sec-curriculum').innerHTML = '<div class="muted" style="padding:12px 0;">لا تفاصيل منهجية للأسبوع الحالي</div>';
+          return;
+        }
+        var planMap = {};
+        plans.forEach(function(p){ planMap[p.id] = p.subject; });
+        var h = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:4px;">';
+        weeks.forEach(function(w) {
+          var sub = planMap[w.plan_id] || '';
+          h += '<div style="background:#F5F3FF;border-radius:12px;padding:12px;">'
+            + '<div style="font-size:14px;font-weight:800;color:#6C3DD6;margin-bottom:6px;">' + esc(sub) + '</div>'
+            + (w.unit_number ? '<div style="font-size:12px;color:#6B7280;margin-bottom:4px;">وحدة ' + w.unit_number + (w.unit_name ? ': ' + esc(w.unit_name) : '') + '</div>' : '')
+            + '<div style="font-size:15px;font-weight:700;color:#1F2937;">' + esc(w.topic || '') + '</div>'
+            + (w.keywords && w.keywords.length ? '<div style="font-size:12px;color:#6B7280;margin-top:4px;">' + esc(w.keywords.join('، ')) + '</div>' : '')
+            + '</div>';
+        });
+        h += '</div>';
+        if (token === loadToken) $('sec-curriculum').innerHTML = h;
+      } catch(e) {
+        if (token === loadToken) $('sec-curriculum').innerHTML = '<div class="muted" style="padding:12px 0;">تعذّر التحميل</div>';
+      }
     });
     section('sec-behavior', async function () {
       // behavior_incidents: student_id=TEXT(student_number), status يعوض resolved
