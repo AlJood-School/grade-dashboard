@@ -52,11 +52,19 @@
   /* ─────────────────────── أدوات مساعدة ─────────────────────── */
   function escH(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
+  function _buildSBFromEduOS() {
+    if (window.EduOS_SB) return true;
+    if (window.EduOS && window.EduOS.SB_URL && window.EduOS.SB_KEY && window.supabase) {
+      window.EduOS_SB = window.supabase.createClient(window.EduOS.SB_URL, window.EduOS.SB_KEY);
+      return true;
+    }
+    return false;
+  }
   function waitForSB(fn) {
-    if (window.EduOS_SB) { fn(); return; }
+    if (_buildSBFromEduOS()) { fn(); return; }
     var tries = 0;
     var iv = setInterval(function () {
-      if (window.EduOS_SB || ++tries > 30) { clearInterval(iv); if (window.EduOS_SB) fn(); }
+      if (_buildSBFromEduOS() || ++tries > 30) { clearInterval(iv); if (window.EduOS_SB) fn(); }
     }, 300);
   }
 
