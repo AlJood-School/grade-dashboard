@@ -419,7 +419,8 @@ footer{text-align:center;color:#6B7280;font-size:.8rem;padding:28px 16px;margin-
     var h = '<div class="grades-grid">';
     for (var j = 0; j < list.length; j++) {
       var g = list[j];
-      var sc = Number(g.score), mx = Number(g.max_score);
+      var sc = Number(g.term_total !== undefined ? g.term_total : (g.score !== undefined ? g.score : g.summative || 0));
+    var mx = Number(g.max_score || 100);
       var pct = mx > 0 ? Math.round(sc * 100 / mx) : null;
       h += '<div class="g-card ' + (pct === null ? 'g-blue' : gradeClass(pct)) + '"><div class="sub">' + esc(g.subject) + '</div>';
       h += '<div class="sc">' + num(sc + ' / ' + mx) + '</div>';
@@ -481,7 +482,8 @@ footer{text-align:center;color:#6B7280;font-size:.8rem;padding:28px 16px;margin-
       var r = rows[i];
       h += '<div class="item"><div class="row"><div style="font-weight:800">' + esc(r.title) + '</div><span class="muted">' + fmtDate(r.created_at) + '</span></div>';
       if (r.body) { h += '<div style="margin-top:6px">' + esc(r.body) + '</div>'; }
-      if (r.type) { h += '<div style="margin-top:6px"><span class="badge b-gray">' + esc(r.type) + '</span></div>'; }
+      var ntype = r.notification_type || r.type;
+      if (ntype) { h += '<div style="margin-top:6px"><span class="badge b-gray">' + esc(ntype) + '</span></div>'; }
       h += '</div>';
     }
     $('sec-notifs').innerHTML = h;
@@ -558,15 +560,18 @@ footer{text-align:center;color:#6B7280;font-size:.8rem;padding:28px 16px;margin-
       renderTrips();
     });
     section('sec-grades', async function () {
-      var rows = await dbFetch('student_grades?student_id=eq.' + sid + '&select=subject,score,max_score,term,academic_year&order=academic_year.desc,term.desc');
+      // student_grades يستخدم student_no (رقم الطالبة) وليس student_id
+      var rows = await dbFetch('student_grades?student_no=eq.' + encodeURIComponent(current.student_number) + '&select=subject,term_total,formative,summative,term,academic_year&order=academic_year.desc,term.desc');
       if (token === loadToken) { renderGrades(rows); }
     });
     section('sec-behavior', async function () {
-      var rows = await dbFetch('behavior_incidents?student_id=eq.' + sid + '&resolved=eq.false&select=degree,description,action_taken,created_at,resolved&order=created_at.desc');
+      // behavior_incidents: student_id=TEXT(student_number), status يعوض resolved
+      var rows = await dbFetch('behavior_incidents?student_id=eq.' + encodeURIComponent(current.student_number) + '&status=neq.resolved&select=degree,violation_type,description,action_taken,created_at,status&order=created_at.desc');
       if (token === loadToken) { renderBehavior(rows); }
     });
     section('sec-plans', async function () {
-      var rows = await dbFetch('student_diff_plans?student_db_id=eq.' + sid + '&select=plan_type,subject,status,created_at&order=created_at.desc');
+      // student_diff_plans: student_db_id قد يكون TEXT أو INT — نحاول برقم الطالبة أولاً
+      var rows = await dbFetch('student_diff_plans?student_db_id=eq.' + encodeURIComponent(current.student_number) + '&select=plan_type,subject,status,created_at&order=created_at.desc');
       if (token === loadToken) { renderPlans(rows); }
     });
     section('sec-calendar', async function () {
@@ -575,7 +580,8 @@ footer{text-align:center;color:#6B7280;font-size:.8rem;padding:28px 16px;margin-
     });
     section('sec-notifs', async function () {
       var nid = encodeURIComponent(user.national_id);
-      var rows = await dbFetch('parent_notifications?or=(target_national_id.is.null,target_national_id.eq.' + nid + ')&select=id,title,body,type,created_at&order=created_at.desc&limit=10');
+      // parent_notifications: يستخدم parent_phone أو student_id — نجلب الأحدث عاماً
+      var rows = await dbFetch('parent_notifications?select=id,title,body,notification_type,created_at&order=created_at.desc&limit=10');
       if (token === loadToken) { renderNotifs(rows); }
     });
     section('sec-replies', async function () {
