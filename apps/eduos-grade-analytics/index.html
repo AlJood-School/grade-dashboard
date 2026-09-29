@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>التحليل الذكي للدرجات — EduOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<script src="../platform-config.js"></script>
+<script src="../platform-auth-guard.js"></script>
+<script src="../platform-lang.js" defer></script>
+<script src="/apps/platform-shield.js" defer></script>
+<style>
+:root{--bg:#F8FAFC;--card:#FFFFFF;--border:#E2E8F0;--brand:#6C3DD6;--brand2:#22D3EE;--text:#1E293B;--text2:#475569;--muted:#64748B;--green:#059669;--green-bg:#ECFDF5;--yellow:#B45309;--yellow-bg:#FFFBEB;--red:#DC2626;--red-bg:#FEF2F2;--blue:#2563EB;--blue-bg:#EFF6FF}
+*{margin:0;padding:0;box-sizing:border-box}
+html{font-size:18px}
+body{font-family:'Tajawal',Arial,sans-serif;background:#F8FAFC;color:var(--text);min-height:100vh;direction:rtl;padding-top:60px;font-size:18px;line-height:1.6}
+.hdr{position:fixed;top:0;right:0;left:0;height:60px;background:#FFFFFF;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;padding:0 20px;z-index:100}
+.hdr-title{font-size:1.15rem;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hdr-spacer{flex:1}
+#header-tools{display:flex;align-items:center;gap:8px}
+.back-btn{width:32px;height:32px;min-width:32px;border-radius:50%;background:#DC2626;color:#FFFFFF;border:none;cursor:pointer;font-size:16px;line-height:32px;text-align:center;font-family:inherit;padding:0}
+.back-btn:hover{background:#B91C1C}
+.tabs{background:#FFFFFF;border-bottom:1px solid var(--border);display:flex;gap:4px;padding:0 20px;overflow-x:auto}
+.tab-btn{background:none;border:none;border-bottom:3px solid transparent;padding:12px 18px;font-family:inherit;font-size:1rem;font-weight:700;color:var(--muted);cursor:pointer;white-space:nowrap}
+.tab-btn:hover{color:var(--brand)}
+.tab-btn.active{color:var(--brand);border-bottom-color:var(--brand)}
+.wrap{max-width:1200px;margin:0 auto;padding:20px}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+.card{background:#FFFFFF;border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:18px}
+.card-title{font-size:1.1rem;font-weight:800;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.card-sub{font-size:.8rem;color:var(--muted);font-weight:400}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:18px}
+.kpi{background:#FFFFFF;border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center}
+.kpi-val{font-size:2rem;font-weight:900;color:var(--brand);line-height:1.2;direction:ltr;unicode-bidi:plaintext}
+.kpi-lbl{font-size:.85rem;color:var(--muted);font-weight:600;margin-top:4px}
+.kpi.warn .kpi-val{color:var(--red)}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th{background:#F1F5F9;color:var(--text2);font-weight:800;text-align:right;padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.num{direction:ltr;unicode-bidi:plaintext;text-align:right}
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.78rem;font-weight:700;margin:2px}
+.b-green{background:var(--green-bg);color:var(--green)}
+.b-yellow{background:var(--yellow-bg);color:var(--yellow)}
+.b-red{background:var(--red-bg);color:var(--red)}
+.b-blue{background:var(--blue-bg);color:var(--blue)}
+.b-gray{background:#F1F5F9;color:var(--text2)}
+.row-green td{background:var(--green-bg)}
+.row-yellow td{background:var(--yellow-bg)}
+.row-red td{background:var(--red-bg)}
+.btn{font-family:inherit;font-size:.9rem;font-weight:700;border:1px solid var(--border);background:#FFFFFF;color:var(--text);border-radius:10px;padding:8px 16px;cursor:pointer}
+.btn:hover{border-color:var(--brand);color:var(--brand)}
+.btn-primary{background:var(--brand);border-color:var(--brand);color:#FFFFFF}
+.btn-primary:hover{background:#5B32B8;color:#FFFFFF}
+.btn-sm{padding:4px 12px;font-size:.8rem}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.toolbar{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.field label{font-size:.85rem;font-weight:700;color:var(--text2)}
+.toolbar .field{margin-bottom:0}
+input,select,textarea{font-family:inherit;font-size:.95rem;padding:8px 12px;border:1px solid #CBD5E1;border-radius:10px;background:#FFFFFF;color:var(--text);width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--brand2);border-color:var(--brand2)}
+.toolbar input,.toolbar select{width:auto;min-width:150px}
+.hdr select{width:auto;min-width:120px;padding:4px 10px;font-size:.85rem}
+.spinner{width:34px;height:34px;border:4px solid #E2E8F0;border-top-color:var(--brand);border-radius:50%;animation:spin .8s linear infinite;margin:24px auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading{text-align:center;color:var(--muted);padding:10px}
+.empty{text-align:center;color:var(--muted);padding:24px 12px;font-weight:600}
+.err{text-align:center;color:var(--red);background:var(--red-bg);border-radius:10px;padding:14px;font-weight:600}
+.notice{background:var(--yellow-bg);color:var(--yellow);border-radius:10px;padding:10px 14px;font-size:.85rem;font-weight:600;margin-bottom:12px}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:200;align-items:center;justify-content:center;padding:16px}
+.modal-bg.open{display:flex}
+.modal{background:#FFFFFF;border-radius:16px;padding:22px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto}
+.modal h3{font-size:1.15rem;margin-bottom:14px}
+.modal-actions{display:flex;gap:10px;justify-content:flex-start;margin-top:8px}
+.modal-msg{font-size:.85rem;color:var(--red);min-height:1.2em;margin-bottom:6px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.toast{position:fixed;bottom:20px;right:50%;transform:translateX(50%);background:#1E293B;color:#FFFFFF;padding:10px 20px;border-radius:10px;font-size:.9rem;z-index:300;display:none}
+.toast.show{display:block}
+.footer{text-align:center;color:var(--muted);font-size:.8rem;padding:24px 12px;border-top:1px solid var(--border);margin-top:20px;direction:ltr}
+@media(max-width:640px){.wrap{padding:12px}.hdr{padding:0 10px}.grid2{grid-template-columns:1fr}.kpi-val{font-size:1.6rem}}
+
+.lv-cell{text-align:center;font-weight:700}
+.trend-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.trend-lbl{min-width:80px;font-weight:700}
+.trend-bar{flex:1;background:#F1F5F9;border-radius:8px;height:22px;overflow:hidden;direction:ltr}
+.trend-fill{height:100%;background:var(--brand);border-radius:8px}
+.trend-val{min-width:120px;font-weight:800;direction:ltr;text-align:right}
+.up{color:var(--green)}
+.down{color:var(--red)}
+.same{color:var(--muted)}
+.hdr .hdr-filter{display:flex;align-items:center;gap:6px;font-size:.85rem;font-weight:700;color:var(--text2)}
+</style>
+</head>
+<body>
+<header class="hdr">
+  <button class="back-btn" id="backBtn" title="رجوع" aria-label="رجوع">←</button>
+  <div class="hdr-title">📊 التحليل الذكي للدرجات</div>
+  <div class="hdr-spacer"></div>
+  <div class="hdr-filter"><label for="fClass">الصف</label><select id="fClass"><option value="all">كل الصفوف</option></select></div>
+  <div id="header-tools"></div>
+</header>
+
+<main class="wrap">
+  <div class="card">
+    <div class="toolbar">
+      <div class="field"><label for="fYear">العام الدراسي</label><select id="fYear"><option value="">الكل</option></select></div>
+      <div class="field"><label for="fTerm">الفصل (للأقسام 1 إلى 4)</label><select id="fTerm"><option value="">كل الفصول</option></select></div>
+      <div id="scopeNote" class="card-sub"></div>
+    </div>
+  </div>
+
+  <div class="kpis" id="kpiBox"></div>
+
+  <div class="card">
+    <div class="card-title">📚 توزيع المستويات حسب المادة</div>
+    <div id="levelsBox"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🚨 الطلاب في خطر <span class="card-sub">(أقل من 60% في مادتين أو أكثر)</span></div>
+    <div id="riskBox"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⭐ المتميزون <span class="card-sub">(90% فأكثر في جميع المواد)</span></div>
+    <div id="starBox"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📈 اتجاه المادة عبر الفصول</div>
+    <div class="toolbar">
+      <div class="field"><label for="fSubject">المادة</label><select id="fSubject"><option value="">اختر المادة</option></select></div>
+    </div>
+    <div id="trendBox"></div>
+  </div>
+</main>
+
+<div class="footer">NAFAS FOR ARTIFICIAL INTELLIGENCE · CN-6573712 · أبوظبي</div>
+<div class="toast" id="toast"></div>
+
+<script>
+async function dbFetch(path) {
+  var SB_URL = window.EduOS.SB_URL;
+  var SB_KEY = window.EduOS.SB_KEY;
+  var r = await fetch(SB_URL + '/rest/v1/' + path, {
+    headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY }
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+async function dbWrite(method, path, body) {
+  var SB_URL = window.EduOS.SB_URL;
+  var SB_KEY = window.EduOS.SB_KEY;
+  var r = await fetch(SB_URL + '/rest/v1/' + path, {
+    method: method,
+    headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+}
+async function initWait() {
+  var t = 0;
+  while ((!window.EduOS || !window.EduOS.SB_URL) && t < 30) {
+    await new Promise(function (r) { setTimeout(r, 100); });
+    t++;
+  }
+}
+/* جلب كل الصفوف بالصفحات (حد PostgREST الافتراضي 1000 صف) */
+async function dbFetchAll(path) {
+  var out = [];
+  var sep = path.indexOf('?') >= 0 ? '&' : '?';
+  for (var page = 0; page < 100; page++) {
+    var rows = await dbFetch(path + sep + 'limit=1000&offset=' + (page * 1000));
+    out = out.concat(rows);
+    if (rows.length < 1000) break;
+  }
+  return out;
+}
+function esc(v) {
+  if (v === null || v === undefined) return '';
+  return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function pad2(n) { return (n < 10 ? '0' : '') + n; }
+function dateStr(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+function todayStr() { return dateStr(new Date()); }
+function mondayStr() {
+  var d = new Date();
+  var diff = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - diff);
+  return dateStr(d);
+}
+function sundayStr() {
+  var d = new Date();
+  var diff = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - diff + 6);
+  return dateStr(d);
+}
+function fmtNum(n, dec) { return Number(n).toLocaleString('en-US', { minimumFractionDigits: dec || 0, maximumFractionDigits: dec || 0 }); }
+function getSess() {
+  try { return JSON.parse(sessionStorage.getItem('edoos_user') || '{}'); } catch (e) { return {}; }
+}
+function goHomePortal() {
+  var sess = getSess();
+  var role = sess.role_key || '';
+  var map = {'principal':'../eduos-principal/','vice_principal':'../eduos-vice-principal/','teacher':'../eduos-teacher/','admin':'../eduos-admin/','specialist':'../eduos-specialist/','nurse':'../eduos-nurse/','security':'../eduos-security/','technician':'../eduos-technician/','secretary':'../eduos-secretary/','coach':'../eduos-coach/'};
+  window.location.href = map[role] || '../eduos-hub/';
+}
+function spinnerHtml() { return '<div class="spinner"></div><div class="loading">جارٍ التحميل...</div>'; }
+function setLoading(id) { var el = document.getElementById(id); if (el) el.innerHTML = spinnerHtml(); }
+function emptyHtml(msg) { return '<div class="empty">' + esc(msg || 'لا بيانات') + '</div>'; }
+function errHtml(msg) { return '<div class="err">تعذّر تحميل البيانات — ' + esc(msg) + '</div>'; }
+function toast(msg) {
+  var t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.className = 'toast show';
+  setTimeout(function () { t.className = 'toast'; }, 2800);
+}
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function writeErrMsg(e) {
+  var m = String(e && e.message || e);
+  if (m.indexOf('401') >= 0 || m.indexOf('403') >= 0) return 'لا توجد صلاحية كتابة على هذا الجدول (' + m + ')';
+  return 'تعذّر الحفظ — ' + m;
+}
+
+
+var LEVELS = [
+  { key: 'advanced', label: '🟢 متقدم' },
+  { key: 'proficient', label: '🔵 متقن' },
+  { key: 'developing', label: '🟡 قيد التطور' },
+  { key: 'emerging', label: '🔴 ناشئ' }
+];
+var BLOCKED_ROLES = ['student', 'parent'];
+
+var sess = getSess();
+var role = sess.role_key || sess.role || '';
+var isTeacher = (role === 'teacher');
+var students = [];
+var grades = [];
+var byId = {};
+var byName = {};
+var loadOk = false;
+
+function classify(score, max_score) {
+  var pct = max_score > 0 ? (score / max_score * 100) : 0;
+  if (pct >= 90) return 'advanced';
+  if (pct >= 75) return 'proficient';
+  if (pct >= 60) return 'developing';
+  return 'emerging';
+}
+function classifyPct(pct) {
+  if (pct >= 90) return 'advanced';
+  if (pct >= 75) return 'proficient';
+  if (pct >= 60) return 'developing';
+  return 'emerging';
+}
+function normName(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
+
+/* الدرجة الفعلية والعظمى لصف واحد.
+   الأعمدة المعتمدة: score / max_score.
+   إذا لم توجد (مخطط الجود الحالي) يُستخدم term_total من 100. */
+function earnedPossible(r) {
+  if (r.score !== undefined && r.score !== null && r.max_score !== undefined && r.max_score !== null && Number(r.max_score) > 0) {
+    return { e: Number(r.score), p: Number(r.max_score) };
+  }
+  if (r.term_total !== undefined && r.term_total !== null) return { e: Number(r.term_total), p: 100 };
+  return null;
+}
+function gradeStudentKey(r) {
+  if (r.student_id !== undefined && r.student_id !== null) return 'id:' + String(r.student_id);
+  return 'nm:' + normName(r.student_name);
+}
+function resolveStudent(r) {
+  var st = null;
+  if (r.student_id !== undefined && r.student_id !== null) st = byId[String(r.student_id)];
+  if (!st && r.student_name) st = byName[normName(r.student_name)];
+  var name = st ? st.name : (normName(r.student_name) || (r.student_id !== undefined && r.student_id !== null ? '#' + r.student_id : '—'));
+  var cls = st && st.class_name ? st.class_name : ((r.grade !== undefined && r.grade !== null ? String(r.grade).trim() : '') + (r.section ? String(r.section).trim() : ''));
+  if (r.class_name && !(st && st.class_name)) cls = r.class_name;
+  return { name: name, cls: cls };
+}
+
+function pctFmt(v) { return fmtNum(v, 1) + '%'; }
+
+/* ---------- تجميع ---------- */
+function filteredRows(useTerm) {
+  var cls = document.getElementById('fClass').value;
+  var year = document.getElementById('fYear').value;
+  var term = document.getElementById('fTerm').value;
+  var out = [];
+  grades.forEach(function (r) {
+    if (year && String(r.academic_year) !== year) return;
+    if (useTerm && term && String(r.term) !== term) return;
+    var ep = earnedPossible(r);
+    if (!ep || !r.subject) return;
+    var info = resolveStudent(r);
+    if (cls !== 'all' && info.cls !== cls) return;
+    out.push({ r: r, ep: ep, info: info, key: gradeStudentKey(r) });
+  });
+  return out;
+}
+
+function aggregate(items) {
+  var studs = {};
+  items.forEach(function (it) {
+    var s = studs[it.key];
+    if (!s) { s = studs[it.key] = { name: it.info.name, cls: it.info.cls, subjects: {} }; }
+    var sub = it.r.subject;
+    if (!s.subjects[sub]) s.subjects[sub] = { e: 0, p: 0 };
+    s.subjects[sub].e += it.ep.e;
+    s.subjects[sub].p += it.ep.p;
+  });
+  var list = [];
+  Object.keys(studs).forEach(function (k) {
+    var s = studs[k];
+    var subs = [];
+    Object.keys(s.subjects).forEach(function (sub) {
+      var a = s.subjects[sub];
+      if (a.p > 0) subs.push({ subject: sub, pct: a.e / a.p * 100 });
+    });
+    if (!subs.length) return;
+    var sum = 0;
+    subs.forEach(function (x) { sum += x.pct; });
+    list.push({ name: s.name, cls: s.cls, subs: subs, avg: sum / subs.length });
+  });
+  return list;
+}
+
+/* ---------- عرض الأقسام ---------- */
+function renderAll() {
+  if (!loadOk) return;
+  var items = filteredRows(true);
+  var list = aggregate(items);
+  renderKpi(list);
+  renderLevels(list);
+  renderRisk(list);
+  renderStars(list);
+  fillSubjects();
+  renderTrend();
+}
+
+function kpiHtml(val, lbl, warn) {
+  return '<div class="kpi' + (warn ? ' warn' : '') + '"><div class="kpi-val">' + esc(val) + '</div><div class="kpi-lbl">' + esc(lbl) + '</div></div>';
+}
+
+function renderKpi(list) {
+  var box = document.getElementById('kpiBox');
+  if (!list.length) {
+    box.innerHTML = kpiHtml('—', 'متوسط الدرجات الكلي') + kpiHtml('—', 'المستوى المتقدم (90% فأكثر)') + kpiHtml('—', 'طلاب في خطر (المعدل 60% أو أقل)', true) + kpiHtml('—', 'أعلى مادة أداءً');
+    return;
+  }
+  var sum = 0;
+  var cnt = 0;
+  var subj = {};
+  var adv = 0;
+  var risk = 0;
+  list.forEach(function (s) {
+    if (s.avg >= 90) adv++;
+    if (s.avg <= 60) risk++;
+    s.subs.forEach(function (x) {
+      sum += x.pct; cnt++;
+      if (!subj[x.subject]) subj[x.subject] = { t: 0, n: 0 };
+      subj[x.subject].t += x.pct; subj[x.subject].n++;
+    });
+  });
+  var best = null;
+  var bestV = -1;
+  Object.keys(subj).forEach(function (k) {
+    var v = subj[k].t / subj[k].n;
+    if (v > bestV) { bestV = v; best = k; }
+  });
+  box.innerHTML = kpiHtml(pctFmt(sum / cnt), 'متوسط الدرجات الكلي') +
+    kpiHtml(fmtNum(adv), 'طلاب المستوى المتقدم (90% فأكثر)') +
+    kpiHtml(fmtNum(risk), 'طلاب في خطر (المعدل 60% أو أقل)', true) +
+    kpiHtml(best + ' (' + pctFmt(bestV) + ')', 'أعلى مادة أداءً');
+}
+
+function renderLevels(list) {
+  var box = document.getElementById('levelsBox');
+  if (!list.length) { box.innerHTML = emptyHtml('لا بيانات'); return; }
+  var subj = {};
+  list.forEach(function (s) {
+    s.subs.forEach(function (x) {
+      if (!subj[x.subject]) subj[x.subject] = { advanced: 0, proficient: 0, developing: 0, emerging: 0, t: 0, n: 0 };
+      subj[x.subject][classifyPct(x.pct)]++;
+      subj[x.subject].t += x.pct;
+      subj[x.subject].n++;
+    });
+  });
+  var names = Object.keys(subj).sort(function (a, b) { return a.localeCompare(b, 'ar'); });
+  var h = '<div class="tbl-wrap"><table><thead><tr><th>المادة</th>';
+  LEVELS.forEach(function (l) { h += '<th class="lv-cell">' + l.label + '</th>'; });
+  h += '<th class="lv-cell">المتوسط</th></tr></thead><tbody>';
+  names.forEach(function (n) {
+    var s = subj[n];
+    h += '<tr><td><b>' + esc(n) + '</b></td>';
+    LEVELS.forEach(function (l) { h += '<td class="lv-cell num">' + esc(s[l.key]) + '</td>'; });
+    h += '<td class="lv-cell num">' + esc(pctFmt(s.t / s.n)) + '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  box.innerHTML = h;
+}
+
+function renderRisk(list) {
+  var box = document.getElementById('riskBox');
+  var risk = [];
+  list.forEach(function (s) {
+    var emerging = s.subs.filter(function (x) { return classifyPct(x.pct) === 'emerging'; });
+    if (emerging.length >= 2) {
+      var developing = s.subs.filter(function (x) { return classifyPct(x.pct) === 'developing'; });
+      risk.push({ s: s, emerging: emerging, developing: developing });
+    }
+  });
+  if (!list.length || !risk.length) { box.innerHTML = emptyHtml('لا بيانات — لا يوجد طلاب بهذه المواصفات'); return; }
+  risk.sort(function (a, b) { return b.emerging.length - a.emerging.length || a.s.avg - b.s.avg; });
+  var total = risk.length;
+  var shown = risk.slice(0, 200);
+  var h = '<div class="card-sub" style="margin-bottom:8px">عدد الطلاب: ' + esc(fmtNum(total)) + (total > shown.length ? ' (يُعرض أول ' + esc(shown.length) + ')' : '') + '</div>';
+  h += '<div class="tbl-wrap"><table><thead><tr><th>الاسم</th><th>الصف</th><th>المواد الضعيفة</th><th>اقتراح</th></tr></thead><tbody>';
+  shown.forEach(function (x) {
+    h += '<tr><td><b>' + esc(x.s.name) + '</b></td><td>' + esc(x.s.cls || '—') + '</td><td>';
+    x.emerging.forEach(function (m) { h += '<span class="badge b-red">' + esc(m.subject) + ' ' + esc(pctFmt(m.pct)) + '</span>'; });
+    x.developing.forEach(function (m) { h += '<span class="badge b-yellow">' + esc(m.subject) + ' ' + esc(pctFmt(m.pct)) + '</span>'; });
+    h += '</td><td><div><span class="badge b-red">خطة تعزيز</span> ' + esc(x.emerging.map(function (m) { return m.subject; }).join('، ')) + '</div>';
+    if (x.developing.length) h += '<div><span class="badge b-yellow">متابعة</span> ' + esc(x.developing.map(function (m) { return m.subject; }).join('، ')) + '</div>';
+    h += '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  box.innerHTML = h;
+}
+
+function renderStars(list) {
+  var box = document.getElementById('starBox');
+  var stars = list.filter(function (s) {
+    return s.subs.length > 0 && s.subs.every(function (x) { return x.pct >= 90; });
+  });
+  if (!list.length || !stars.length) { box.innerHTML = emptyHtml('لا بيانات — لا يوجد طلاب بهذه المواصفات'); return; }
+  stars.sort(function (a, b) { return b.avg - a.avg; });
+  var shown = stars.slice(0, 200);
+  var h = '<div class="card-sub" style="margin-bottom:8px">عدد الطلاب: ' + esc(fmtNum(stars.length)) + (stars.length > shown.length ? ' (يُعرض أول ' + esc(shown.length) + ')' : '') + '</div>';
+  h += '<div class="tbl-wrap"><table><thead><tr><th></th><th>الاسم</th><th>الصف</th><th>المتوسط</th></tr></thead><tbody>';
+  shown.forEach(function (s) {
+    h += '<tr><td><span class="badge b-yellow">⭐</span></td><td><b>' + esc(s.name) + '</b></td><td>' + esc(s.cls || '—') + '</td><td class="num">' + esc(pctFmt(s.avg)) + '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  box.innerHTML = h;
+}
+
+/* ---------- اتجاه المادة ---------- */
+function fillSubjects() {
+  var items = filteredRows(false);
+  var seen = {};
+  items.forEach(function (it) { seen[it.r.subject] = true; });
+  var names = Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, 'ar'); });
+  var sel = document.getElementById('fSubject');
+  var cur = sel.value;
+  sel.innerHTML = '<option value="">اختر المادة</option>' + names.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
+  if (cur && seen[cur]) sel.value = cur;
+  else if (names.length) sel.value = names[0];
+}
+
+function renderTrend() {
+  var box = document.getElementById('trendBox');
+  var subj = document.getElementById('fSubject').value;
+  if (!subj) { box.innerHTML = emptyHtml('لا بيانات'); return; }
+  var items = filteredRows(false).filter(function (it) { return it.r.subject === subj && it.r.term !== null && it.r.term !== undefined; });
+  if (!items.length) { box.innerHTML = emptyHtml('لا بيانات لهذه المادة'); return; }
+  var terms = {};
+  items.forEach(function (it) {
+    var t = String(it.r.term);
+    if (!terms[t]) terms[t] = { e: 0, p: 0 };
+    terms[t].e += it.ep.e;
+    terms[t].p += it.ep.p;
+  });
+  var keys = Object.keys(terms).sort(function (a, b) { return Number(a) - Number(b); });
+  var prev = null;
+  var h = '';
+  keys.forEach(function (k) {
+    var v = terms[k].p > 0 ? terms[k].e / terms[k].p * 100 : 0;
+    var arrow = '';
+    if (prev !== null) {
+      if (v > prev + 0.05) arrow = '<span class="up">↑ ' + esc(fmtNum(v - prev, 1)) + '</span>';
+      else if (v < prev - 0.05) arrow = '<span class="down">↓ ' + esc(fmtNum(prev - v, 1)) + '</span>';
+      else arrow = '<span class="same">→ 0.0</span>';
+    }
+    h += '<div class="trend-row"><div class="trend-lbl">الفصل <span class="num">' + esc(k) + '</span></div>';
+    h += '<div class="trend-bar"><div class="trend-fill" style="width:' + Math.max(0, Math.min(100, v)).toFixed(1) + '%"></div></div>';
+    h += '<div class="trend-val">' + esc(pctFmt(v)) + ' ' + arrow + '</div></div>';
+    prev = v;
+  });
+  box.innerHTML = h;
+}
+
+/* ---------- تحميل ---------- */
+function fillFilters() {
+  var classes = {};
+  if (isTeacher) {
+    grades.forEach(function (r) { var c = resolveStudent(r).cls; if (c) classes[c] = true; });
+  } else {
+    students.forEach(function (s) { if (s.class_name) classes[s.class_name] = true; });
+  }
+  var cl = Object.keys(classes).sort(function (a, b) { return a.localeCompare(b, 'en', { numeric: true }); });
+  document.getElementById('fClass').innerHTML = '<option value="all">' + (isTeacher ? 'كل صفوفي' : 'كل الصفوف') + '</option>' +
+    cl.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
+
+  var years = {};
+  var terms = {};
+  grades.forEach(function (r) {
+    if (r.academic_year) years[r.academic_year] = true;
+    if (r.term !== null && r.term !== undefined) terms[String(r.term)] = true;
+  });
+  var ys = Object.keys(years).sort().reverse();
+  document.getElementById('fYear').innerHTML = '<option value="">الكل</option>' + ys.map(function (y) { return '<option value="' + esc(y) + '">' + esc(y) + '</option>'; }).join('');
+  if (ys.length) document.getElementById('fYear').value = ys[0];
+  var ts = Object.keys(terms).sort(function (a, b) { return Number(a) - Number(b); });
+  document.getElementById('fTerm').innerHTML = '<option value="">كل الفصول</option>' + ts.map(function (t) { return '<option value="' + esc(t) + '">الفصل ' + esc(t) + '</option>'; }).join('');
+}
+
+function showAllLoading() {
+  ['kpiBox', 'levelsBox', 'riskBox', 'starBox', 'trendBox'].forEach(setLoading);
+}
+function showAllMsg(html) {
+  ['levelsBox', 'riskBox', 'starBox', 'trendBox'].forEach(function (id) { document.getElementById(id).innerHTML = html; });
+  document.getElementById('kpiBox').innerHTML = '';
+}
+
+async function loadData() {
+  showAllLoading();
+  if (BLOCKED_ROLES.indexOf(role) >= 0) { showAllMsg(errHtml('لا تملكين صلاحية عرض هذه الصفحة')); return; }
+  var gpath = 'student_grades?select=*&order=id.asc';
+  if (isTeacher) {
+    if (!sess.staff_db_id) { showAllMsg(errHtml('تعذّر تحديد صفوف المعلمة (لا يوجد معرّف موظف في الجلسة)')); return; }
+    gpath += '&teacher_staff_db_id=eq.' + encodeURIComponent(sess.staff_db_id);
+    document.getElementById('scopeNote').textContent = 'يعرض تحليل صفوفك فقط';
+  }
+  try {
+    students = await dbFetchAll('students?select=id,name,class_name,grade,student_number&order=id.asc');
+    students.forEach(function (s) {
+      byId[String(s.id)] = s;
+      if (s.name) byName[normName(s.name)] = s;
+    });
+  } catch (e) {
+    showAllMsg(errHtml('الطلاب: ' + e.message));
+    return;
+  }
+  try {
+    grades = await dbFetchAll(gpath);
+  } catch (e) {
+    showAllMsg(errHtml('الدرجات: ' + e.message));
+    return;
+  }
+  if (!grades.length) { showAllMsg(emptyHtml('لا بيانات — لا توجد درجات مسجلة')); fillFilters(); return; }
+  loadOk = true;
+  fillFilters();
+  renderAll();
+}
+
+function reloadSections() {
+  if (!loadOk) return;
+  showAllLoading();
+  setTimeout(renderAll, 30);
+}
+
+function bind() {
+  document.getElementById('backBtn').addEventListener('click', goHomePortal);
+  document.getElementById('fClass').addEventListener('change', reloadSections);
+  document.getElementById('fYear').addEventListener('change', reloadSections);
+  document.getElementById('fTerm').addEventListener('change', reloadSections);
+  document.getElementById('fSubject').addEventListener('change', renderTrend);
+}
+
+(async function init() {
+  bind();
+  showAllLoading();
+  await initWait();
+  if (!window.EduOS || !window.EduOS.SB_URL) { showAllMsg(errHtml('إعدادات المنصة غير متوفرة')); return; }
+  loadData();
+})();
+</script>
+</body>
+</html>
