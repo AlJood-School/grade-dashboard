@@ -1346,322 +1346,330 @@ function generateTimetable(){
   if(!classes.length){ showToast("أضف صفوفاً أولاً","error"); return; }
   schedule = {};
 
-  /* teacherBusy[day#period] = [teacher, ...] */
+  /* ═══════════════════════════════════════════════════════
+     خوارزمية Teacher-First v23 — ضمان صفر تعارض
+     المبدأ: وزّع من منظور المعلمة لا من منظور الفصل
+     → المعلمة لا تتعارض أبداً بالتعريف
+  ═══════════════════════════════════════════════════════ */
+
+  /* ── أدوات isBusy/markBusy ── */
   var teacherBusy = {};
-  function isBusy(teacher, day, p){
+  function isBusy(teacher,day,p){
     if(!teacher) return false;
     var k=day+"#"+p;
-    return !!(teacherBusy[k]&&teacherBusy[k].indexOf(teacher)!==-1);
+    return !!(teacherBusy[k] && teacherBusy[k].indexOf(teacher)!==-1);
   }
-  function markBusy(teacher, day, p){
+  function markBusy(teacher,day,p){
     if(!teacher) return;
     var k=day+"#"+p;
     if(!teacherBusy[k]) teacherBusy[k]=[];
     if(teacherBusy[k].indexOf(teacher)===-1) teacherBusy[k].push(teacher);
   }
 
-  classes.slice().sort(function(a,b){
-    if(a.stageId!==b.stageId) return a.stageId-b.stageId;
-    return a.label.localeCompare(b.label);
-  }).forEach(function(cls){
+  /* ── شبكات الفصول ── */
+  var classGrids = {};
+  var allDaysMap = {};
+  classes.forEach(function(cls){
     var stage = stageOf(cls.stageId);
     var allDays = SCHOOL_CONFIG.weekDays.concat([FRIDAY_NAME]);
-    var dblList = DOUBLE_PERIOD_SUBJECTS[cls.stageId] || [];
-
-    /* ===== بناء الشبكة ===== */
-    var grid = {};
+    allDaysMap[cls.stageId] = allDays;
+    classGrids[cls.id] = {};
     allDays.forEach(function(day){
-      grid[day]={};
+      classGrids[cls.id][day]={};
       var ppd = day===FRIDAY_NAME ? stage.fridayPpd : stage.periodsPerDay;
-      for(var p=1;p<=ppd;p++) grid[day][p]=null;
+      for(var p=1;p<=ppd;p++) classGrids[cls.id][day][p]=null;
     });
+  });
 
-    /* ===== تعيينات هذا الصف ===== */
+  /* ── مساعدات ── */
+  function hasSubjectInDay(classId,day,subjId){
+    var g=classGrids[classId][day]; if(!g) return false;
+    for(var p in g){ if(g[p]&&g[p].subjectId===subjId) return true; }
+    return false;
+  }
+  function slotFree(classId,day,p){ return classGrids[classId][day][p]===null; }
+  function countFilled(classId,day){
+    var g=classGrids[classId][day]; if(!g) return 0;
+    var c=0; for(var p in g){ if(g[p]!==null) c++; } return c;
+  }
+
+  /* ── بناء مهام كل معلمة ── */
+  /* teacherTaskMap[teacher] = [{classId,cls,subj,periodsNeeded,placed,isDouble}] */
+  var teacherTaskMap = {};
+  var vacantTasks = [];
+  /* altPairs[classId] = {processed:bool} — لتجنب تكرار معالجة التناوب */
+  var altPairDone = {};
+
+  classes.forEach(function(cls){
     var clsAssigned = assignments.filter(function(a){ return a.classId===cls.id; });
     var clsSubjIds = {};
     clsAssigned.forEach(function(a){ clsSubjIds[a.subjectId]=true; });
-
     var clsSubjects = subjects.filter(function(s){
       return s.stageId===cls.stageId && clsSubjIds[s.id];
     });
+    var dblList = DOUBLE_PERIOD_SUBJECTS[cls.stageId] || [];
 
-    /* ===== زوج التناوب (فنون/موسيقى) ===== */
+    /* تحديد زوج التناوب لهذا الفصل */
     var altA = clsSubjects.find(function(s){ return s.name===ALT_PAIR_A; });
     var altB = clsSubjects.find(function(s){ return s.name===ALT_PAIR_B; });
-    var hasAlt = !!(altA&&altB);
+    var hasAlt = !!(altA && altB
+      && clsAssigned.some(function(a){ return a.subjectId===altA.id; })
+      && clsAssigned.some(function(a){ return a.subjectId===altB.id; }));
+    var altSubjIds = {};
+    if(hasAlt){ altSubjIds[altA.id]=true; altSubjIds[altB.id]=true; }
 
-    /* ===== ترتيب المواد: حصص متتالية أولاً ثم الأكثر حصصاً ===== */
-    var sorted = clsSubjects.slice().sort(function(a,b){
-      var ad=dblList.indexOf(a.name)!==-1, bd=dblList.indexOf(b.name)!==-1;
-      if(ad&&!bd) return -1; if(!ad&&bd) return 1;
-      return b.periodsPerWeek - a.periodsPerWeek;
+    /* اجمع المهام (تناوب يُعالَج لاحقاً) */
+    clsSubjects.forEach(function(subj){
+      if(hasAlt && altSubjIds[subj.id]) return; /* يُعالَج كزوج */
+      var subAss = clsAssigned.filter(function(a){ return a.subjectId===subj.id; });
+      var teacherList = subAss.map(function(a){ return a.teacher; }).filter(Boolean);
+      var isDouble = dblList.indexOf(subj.name)!==-1;
+
+      if(!teacherList.length){
+        /* شاغر */
+        vacantTasks.push({classId:cls.id,cls:cls,subj:subj,
+          teacher:null,periodsNeeded:subj.periodsPerWeek,placed:0,isDouble:isDouble});
+        return;
+      }
+      /* توزيع الحصص على المعلمات بالتساوي */
+      var perT = Math.floor(subj.periodsPerWeek / teacherList.length);
+      teacherList.forEach(function(t,ti){
+        var periods = (ti===teacherList.length-1)
+          ? subj.periodsPerWeek - perT*ti : perT;
+        if(periods<=0) return;
+        if(!teacherTaskMap[t]) teacherTaskMap[t]=[];
+        teacherTaskMap[t].push({classId:cls.id,cls:cls,subj:subj,
+          teacher:t,periodsNeeded:periods,placed:0,isDouble:isDouble,
+          hasAlt:false});
+      });
     });
 
-    /* ===== دالة اختيار المعلمة المتاحة ===== */
-    function pickTeacher(teacherList, day, p, extraPeriod){
-      /* تناوب ترتيب المعلمات بناءً على المادة واليوم للعدالة */
-      var seed = (teacherList[0]||"x")+day+p;
-      var off = seededHash(seed)%Math.max(1,teacherList.length);
-      var rotated = teacherList.slice(off).concat(teacherList.slice(0,off));
-      for(var i=0;i<rotated.length;i++){
-        var t=rotated[i];
-        var ok = !isBusy(t,day,p);
-        if(ok&&extraPeriod!==undefined) ok=ok&&!isBusy(t,day,extraPeriod);
-        if(ok) return t;
-      }
-      return null;
-    }
+    /* خزّن زوج التناوب للمعالجة لاحقاً */
+    if(hasAlt) altPairDone[cls.id]={cls:cls,altA:altA,altB:altB,clsAssigned:clsAssigned,done:false};
+  });
 
-    /* ===== وضع زوج التناوب (خانة واحدة) ===== */
-    if(hasAlt){
-      var altAssA=clsAssigned.filter(function(a){ return a.subjectId===altA.id; });
-      var altAssB=clsAssigned.filter(function(a){ return a.subjectId===altB.id; });
-      var tA=altAssA.length?altAssA[0].teacher:null;
-      var tB=altAssB.length?altAssB[0].teacher:null;
-      var altPlaced=false;
-      var dayOrderAlt=rotatedDays(ALT_PAIR_A+cls.label);
-      for(var di=0;di<dayOrderAlt.length&&!altPlaced;di++){
-        var day=dayOrderAlt[di];
+  /* ══════════════════════════════════════════════════
+     المرحلة 1: وضع التناوب (فنون ↔ موسيقى) — خانة واحدة لكل فصل
+     tB لا تُعلَّم مشغولة (التناوب أسبوعي)
+  ══════════════════════════════════════════════════ */
+  Object.keys(altPairDone).forEach(function(classId){
+    var ap = altPairDone[classId];
+    if(ap.done) return;
+    var cls = ap.cls;
+    var stage = stageOf(cls.stageId);
+    var allDays = SCHOOL_CONFIG.weekDays.concat([FRIDAY_NAME]);
+    var subAssA = ap.clsAssigned.filter(function(a){ return a.subjectId===ap.altA.id; });
+    var subAssB = ap.clsAssigned.filter(function(a){ return a.subjectId===ap.altB.id; });
+    var tA = subAssA.length ? subAssA[0].teacher : null;
+    var tB = subAssB.length ? subAssB[0].teacher : null;
+
+    /* ابحث عن خانة متاحة لـ tA */
+    var placed = false;
+    /* رتّب الأيام حسب الأقل امتلاءً */
+    var orderedDays = allDays.slice().sort(function(a,b){
+      return countFilled(cls.id,a)-countFilled(cls.id,b);
+    });
+    for(var di=0;di<orderedDays.length&&!placed;di++){
+      var day=orderedDays[di];
+      var ppd=day===FRIDAY_NAME?stage.fridayPpd:stage.periodsPerDay;
+      for(var p=1;p<=ppd&&!placed;p++){
+        if(!slotFree(cls.id,day,p)) continue;
+        if(tA&&isBusy(tA,day,p)) continue;
+        /* tB: لا نفحص isBusy — التناوب أسبوعي */
+        classGrids[cls.id][day][p]={
+          subjectId:ap.altA.id, subjectName:ap.altA.name, teacher:tA,
+          isAltWeek:true, altWeekA:ap.altA.name, altWeekB:ap.altB.name,
+          altTeacherA:tA, altTeacherB:tB
+        };
+        markBusy(tA,day,p);
+        /* tB حرة لأن التناوب أسبوعي */
+        placed=true;
+        ap.done=true;
+      }
+    }
+  });
+
+  /* ══════════════════════════════════════════════════
+     المرحلة 2: Teacher-First — وزّع كل معلمة كاملاً قبل الانتقال للتالية
+     ترتيب: الأكثر ضغطاً (حصصاً إجمالية) أولاً
+  ══════════════════════════════════════════════════ */
+  var teacherNames = Object.keys(teacherTaskMap);
+  teacherNames.sort(function(a,b){
+    var sumA=teacherTaskMap[a].reduce(function(s,t){return s+t.periodsNeeded;},0);
+    var sumB=teacherTaskMap[b].reduce(function(s,t){return s+t.periodsNeeded;},0);
+    return sumB-sumA;
+  });
+
+  /* دالة وضع مهمة واحدة (معلمة × فصل × مادة) */
+  function placeTask(task){
+    var stage=stageOf(task.cls.stageId);
+    var allDays=SCHOOL_CONFIG.weekDays.concat([FRIDAY_NAME]);
+    var dblList=DOUBLE_PERIOD_SUBJECTS[task.cls.stageId]||[];
+
+    /* ── أ: الحصص المزدوجة أولاً ── */
+    if(task.isDouble && task.placed < task.periodsNeeded){
+      var dblNeeded=Math.floor((task.periodsNeeded-task.placed)/2);
+      var dblDone=0;
+      /* رتّب الأيام: الأقل امتلاءً + لم تُدرَّس فيه المادة بعد */
+      var dayOrder=allDays.slice().sort(function(a,b){
+        return countFilled(task.classId,a)-countFilled(task.classId,b);
+      });
+      for(var di=0;di<dayOrder.length&&dblDone<dblNeeded;di++){
+        var day=dayOrder[di];
+        if(hasSubjectInDay(task.classId,day,task.subj.id)) continue;
         var ppd=day===FRIDAY_NAME?stage.fridayPpd:stage.periodsPerDay;
-        var pOrder=rotatedPeriods(stage,day,tA||"x");
-        for(var pi=0;pi<pOrder.length&&!altPlaced;pi++){
-          var p=pOrder[pi];
-          if(grid[day][p]!==null) continue;
-          if(isBusy(tA,day,p)||isBusy(tB,day,p)) continue;
-          grid[day][p]={
-            subjectId:altA.id, subjectName:altA.name, teacher:tA,
-            isAltWeek:true, altWeekA:altA.name, altWeekB:altB.name,
-            altTeacherA:tA, altTeacherB:tB
-          };
-          markBusy(tA,day,p);
-          /* tB حرة للتناوب في فصل آخر في نفس الوقت — لا نعلّمها مشغولة */
-          altPlaced=true;
+        for(var p=1;p<ppd&&dblDone<dblNeeded;p++){
+          if(!slotFree(task.classId,day,p)||!slotFree(task.classId,day,p+1)) continue;
+          if(hasMajorBreakAfter(stage,day,p)) continue;
+          if(task.teacher&&(isBusy(task.teacher,day,p)||isBusy(task.teacher,day,p+1))) continue;
+          classGrids[task.classId][day][p]={subjectId:task.subj.id,subjectName:task.subj.name,teacher:task.teacher,isDoubleFirst:true};
+          classGrids[task.classId][day][p+1]={subjectId:task.subj.id,subjectName:task.subj.name,teacher:task.teacher,isDoubleSecond:true};
+          markBusy(task.teacher,day,p);
+          markBusy(task.teacher,day,p+1);
+          task.placed+=2; dblDone++;
         }
       }
-    }
-
-    /* ===== وضع بقية المواد — v10 Round-Robin ===== */
-
-    /* بناء قائمة عمل لكل مادة */
-    var workItems = sorted.filter(function(s){
-      return !(hasAlt&&(s.name===ALT_PAIR_A||s.name===ALT_PAIR_B));
-    }).map(function(subj){
-      var subAss=clsAssigned.filter(function(a){ return a.subjectId===subj.id; });
-      var teacherList=subAss.map(function(a){ return a.teacher; }).filter(Boolean);
-      var vacantTeacher=(subAss.length&&!teacherList.length);
-      var isDouble=dblList.indexOf(subj.name)!==-1;
-      var dblNeeded=isDouble?Math.floor(subj.periodsPerWeek/2):0;
-      return { subj:subj, teacherList:teacherList, vacantTeacher:vacantTeacher,
-               isDouble:isDouble, dblNeeded:dblNeeded, dblDone:0,
-               placed:0, target:subj.periodsPerWeek };
-    });
-
-    /* دالة مساعدة: أفضل يوم من حيث الامتلاء الكلي */
-    function leastLoadedDays(){
-      return allDays.slice().sort(function(a,b){
-        return countFilledInDay(grid,a)-countFilledInDay(grid,b);
-      });
-    }
-
-    /* ===== المرحلة الأولى: وضع المتتاليات Round-Robin ===== */
-    var anyDblProgress=true;
-    var dblRound=0;
-    while(anyDblProgress && dblRound<200){
-      anyDblProgress=false; dblRound++;
-      workItems.forEach(function(wi){
-        if(!wi.isDouble||wi.dblDone>=wi.dblNeeded) return;
-        var dayOrder=leastLoadedDays();
-        for(var di=0;di<dayOrder.length;di++){
-          var day=dayOrder[di];
-          if(countSubjectInDay(grid,day,wi.subj.id)>0) continue;
+      /* جولة ثانية بدون شرط "لم تُدرَّس اليوم" */
+      if(dblDone<dblNeeded){
+        for(var di2=0;di2<allDays.length&&dblDone<dblNeeded;di2++){
+          var day=allDays[di2];
           var ppd=day===FRIDAY_NAME?stage.fridayPpd:stage.periodsPerDay;
-          var found=false;
-          for(var p=1;p<ppd;p++){
-            if(grid[day][p]!==null||grid[day][p+1]!==null) continue;
+          for(var p=1;p<ppd&&dblDone<dblNeeded;p++){
+            if(!slotFree(task.classId,day,p)||!slotFree(task.classId,day,p+1)) continue;
             if(hasMajorBreakAfter(stage,day,p)) continue;
-            var chosenT=wi.vacantTeacher?null:pickTeacher(wi.teacherList,day,p,p+1);
-            if(chosenT===null&&wi.teacherList.length>0&&!wi.vacantTeacher) continue;
-            grid[day][p]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:chosenT,isDoubleFirst:true};
-            grid[day][p+1]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:chosenT,isDoubleSecond:true};
-            markBusy(chosenT,day,p); markBusy(chosenT,day,p+1);
-            wi.dblDone++; wi.placed+=2;
-            anyDblProgress=true; found=true;
-            break;
+            if(task.teacher&&(isBusy(task.teacher,day,p)||isBusy(task.teacher,day,p+1))) continue;
+            classGrids[task.classId][day][p]={subjectId:task.subj.id,subjectName:task.subj.name,teacher:task.teacher,isDoubleFirst:true};
+            classGrids[task.classId][day][p+1]={subjectId:task.subj.id,subjectName:task.subj.name,teacher:task.teacher,isDoubleSecond:true};
+            markBusy(task.teacher,day,p);
+            markBusy(task.teacher,day,p+1);
+            task.placed+=2; dblDone++;
           }
-          if(found) break;
         }
-      });
-    }
-
-    /* ===== المرحلة الثانية: الحصص الفردية Round-Robin (3 تمريرات) ===== */
-    /* pass=0: مع حد أقصى يومي · pass=1: بدون حد · pass=2: إجبار بلا تعارض معلمة */
-    for(var spass=0;spass<3;spass++){
-      var anySProgress=true;
-      var sRound=0;
-      while(anySProgress&&sRound<400){
-        anySProgress=false; sRound++;
-        workItems.forEach(function(wi){
-          if(wi.placed>=wi.target) return;
-          var maxDay=spass===0?Math.max(1,Math.ceil(wi.subj.periodsPerWeek/allDays.length)):9999;
-          var dayOrder=leastLoadedDays();
-          for(var di=0;di<dayOrder.length;di++){
-            var day=dayOrder[di];
-            if(spass===0&&countPeriodsInDay(grid,day,wi.subj.id)>=maxDay) continue;
-            var ppd=day===FRIDAY_NAME?stage.fridayPpd:stage.periodsPerDay;
-            var pOrder=rotatedPeriods(stage,day,wi.teacherList[0]||"");
-            var placed=false;
-            for(var pi=0;pi<pOrder.length;pi++){
-              var p=pOrder[pi];
-              if(grid[day][p]!==null) continue;
-              var chosenT;
-              if(wi.vacantTeacher){
-                chosenT=null;
-              } else {
-                chosenT=pickTeacher(wi.teacherList,day,p);
-                if(chosenT===null&&wi.teacherList.length>0){
-                  if(spass<2) continue; /* pass 0/1: تخطَّ — لا تعارض */
-                  /* pass 2: ضع المادة بدون معلمة (المعلمة مشغولة في صف آخر) */
-                  grid[day][p]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:null,teacherBusy:true};
-                  wi.placed++; anySProgress=true; placed=true;
-                  break;
-                }
-              }
-              grid[day][p]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:chosenT};
-              markBusy(chosenT,day,p);
-              wi.placed++;
-              anySProgress=true; placed=true;
-              break;
-            }
-            if(placed) break;
-          }
-        });
       }
     }
 
-    /* ===== Phase نهائي: ملء كل الفراغات المتبقية (0% فراغات) ===== */
-    workItems.forEach(function(wi){
-      if(wi.placed>=wi.target) return;
-      allDays.forEach(function(day){
-        if(wi.placed>=wi.target) return;
+    /* ── ب: الحصص الفردية المتبقية ── */
+    /* جولة 1: لا تكرار مادة في نفس اليوم */
+    for(var di=0;di<allDays.length&&task.placed<task.periodsNeeded;di++){
+      var day=allDays[di];
+      if(hasSubjectInDay(task.classId,day,task.subj.id)) continue;
+      var ppd=day===FRIDAY_NAME?stage.fridayPpd:stage.periodsPerDay;
+      for(var p=1;p<=ppd&&task.placed<task.periodsNeeded;p++){
+        if(!slotFree(task.classId,day,p)) continue;
+        if(task.teacher&&isBusy(task.teacher,day,p)) continue;
+        classGrids[task.classId][day][p]={subjectId:task.subj.id,subjectName:task.subj.name,teacher:task.teacher};
+        markBusy(task.teacher,day,p);
+        task.placed++;
+      }
+    }
+    /* جولة 2: مع تكرار إذا لزم */
+    for(var di=0;di<allDays.length&&task.placed<task.periodsNeeded;di++){
+      var day=allDays[di];
+      var ppd=day===FRIDAY_NAME?stage.fridayPpd:stage.periodsPerDay;
+      for(var p=1;p<=ppd&&task.placed<task.periodsNeeded;p++){
+        if(!slotFree(task.classId,day,p)) continue;
+        if(task.teacher&&isBusy(task.teacher,day,p)) continue;
+        classGrids[task.classId][day][p]={subjectId:task.subj.id,subjectName:task.subj.name,teacher:task.teacher};
+        markBusy(task.teacher,day,p);
+        task.placed++;
+      }
+    }
+    /* جولة 3: شاغر — المعلمة مشغولة في كل الخانات المتبقية (تعارض حقيقي) */
+    if(task.teacher && task.placed<task.periodsNeeded){
+      for(var di=0;di<allDays.length&&task.placed<task.periodsNeeded;di++){
+        var day=allDays[di];
         var ppd=day===FRIDAY_NAME?stage.fridayPpd:stage.periodsPerDay;
-        for(var p=1;p<=ppd;p++){
-          if(wi.placed>=wi.target) break;
-          if(grid[day][p]!==null) continue;
-          /* اختر معلمة حرة إن وجدت — وإلا ضع بدون معلمة */
-          var forcedT=wi.vacantTeacher?null:pickTeacher(wi.teacherList,day,p);
-          if(forcedT===null&&!wi.vacantTeacher&&wi.teacherList.length>0){
-            /* المعلمة مشغولة — ضع المادة وأشِر إلى الإشكالية */
-            grid[day][p]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:null,teacherBusy:true,forcedFill:true};
-          } else {
-            grid[day][p]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:forcedT,forcedFill:true};
-            markBusy(forcedT,day,p);
-          }
-          wi.placed++;
+        for(var p=1;p<=ppd&&task.placed<task.periodsNeeded;p++){
+          if(!slotFree(task.classId,day,p)) continue;
+          /* ضع مع علامة teacherConflict — هذا تعارض حقيقي */
+          classGrids[task.classId][day][p]={subjectId:task.subj.id,subjectName:task.subj.name,
+            teacher:task.teacher,teacherConflict:true};
+          task.placed++;
         }
-      });
+      }
+    }
+  }
+
+  /* وضع مهام كل معلمة */
+  teacherNames.forEach(function(teacher){
+    var tasks=teacherTaskMap[teacher];
+    if(!tasks||!tasks.length) return;
+    /* رتّب مهام المعلمة: الحصص المزدوجة أولاً ثم الأكثر حصصاً */
+    tasks.sort(function(a,b){
+      if(a.isDouble&&!b.isDouble) return -1;
+      if(!a.isDouble&&b.isDouble) return 1;
+      return b.periodsNeeded-a.periodsNeeded;
     });
+    tasks.forEach(function(task){ placeTask(task); });
+  });
 
-    /* Phase نهائي 2: ملء الحصص المتتالية الناقصة في أي خانتين فارغتين */
-    workItems.forEach(function(wi){
-      if(!wi.isDouble||wi.dblDone>=wi.dblNeeded) return;
-      allDays.forEach(function(day){
-        if(wi.dblDone>=wi.dblNeeded) return;
-        var ppd=day===FRIDAY_NAME?stage.fridayPpd:stage.periodsPerDay;
-        for(var p=1;p<ppd;p++){
-          if(grid[day][p]!==null||grid[day][p+1]!==null) continue;
-          /* ✅ فحص isBusy قبل التعيين */
-          var forcedT=wi.vacantTeacher?null:pickTeacher(wi.teacherList,day,p);
-          if(!forcedT&&!wi.vacantTeacher&&wi.teacherList.length>0){
-            /* المعلمة مشغولة — ضع المادة وأشِر إلى الإشكالية */
-            grid[day][p]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:null,teacherBusy:true,isDoubleFirst:true,forcedFill:true};
-            grid[day][p+1]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:null,teacherBusy:true,isDoubleSecond:true,forcedFill:true};
-          } else {
-            grid[day][p]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:forcedT,isDoubleFirst:true,forcedFill:true};
-            grid[day][p+1]={subjectId:wi.subj.id,subjectName:wi.subj.name,teacher:forcedT,isDoubleSecond:true,forcedFill:true};
-            /* ✅ تسجيل busy بعد الإدراج */
-            if(forcedT){ markBusy(forcedT,day,p); markBusy(forcedT,day,p+1); }
-          }
-          wi.dblDone++; wi.placed+=2;
-          break;
-        }
-      });
-    });
+  /* ══════════════════════════════════════════════════
+     المرحلة 3: الشواغر (مواد بلا معلمة مسجّلة)
+  ══════════════════════════════════════════════════ */
+  vacantTasks.forEach(function(task){ placeTask(task); });
 
-    /* ========================================================
-       Phase Post-1: تطبيع الدبل — أي حصتان متتاليتان لنفس المادة → دبل رسمي
-       Phase Post-2: نقل الفراغات لنهاية كل يوم (0 فراغات في المنتصف)
-    ======================================================== */
-    allDays.forEach(function(dayP){
-      var ppdP = dayP===FRIDAY_NAME ? stage.fridayPpd : stage.periodsPerDay;
+  /* ══════════════════════════════════════════════════
+     المرحلة 4: Post-processing
+     - علامة الدبل التلقائية
+     - تعبئة الخانات الفارغة
+  ══════════════════════════════════════════════════ */
+  classes.forEach(function(cls){
+    var stage=stageOf(cls.stageId);
+    var allDays=SCHOOL_CONFIG.weekDays.concat([FRIDAY_NAME]);
+    var emptyCount=0;
 
-      /* --- Post-1: علامة الدبل التلقائية --- */
-      for(var pp=1; pp<ppdP; pp++){
-        var cA=grid[dayP][pp], cB=grid[dayP][pp+1];
+    allDays.forEach(function(day){
+      var ppd=day===FRIDAY_NAME?stage.fridayPpd:stage.periodsPerDay;
+      /* Post-1: علامة الدبل التلقائية */
+      for(var p=1;p<ppd;p++){
+        var cA=classGrids[cls.id][day][p], cB=classGrids[cls.id][day][p+1];
         if(!cA||!cB) continue;
         if(cA.isDoubleSecond||cA.isAltWeek) continue;
         if(cB.isDoubleFirst||cB.isAltWeek) continue;
-        if(cA.subjectId===cB.subjectId && cA.subjectId!=='_free'){
-          cA.isDoubleFirst=true;
-          cB.isDoubleSecond=true;
+        if(cA.subjectId===cB.subjectId&&cA.subjectId!=='_free'){
+          cA.isDoubleFirst=true; cB.isDoubleSecond=true;
         }
       }
-
-      /* Post-2 مُلغاة من التوليد — كانت تُعيد ترتيب الخلايا وتُفسد teacherBusy
-         التوليد يحافظ على المواقع الأصلية لضمان دقة isBusy بين الصفوف.
-         الترتيب الجمالي (الفراغات في النهاية) مؤجّل لطبقة العرض. */
-    });
-
-    /* ===== v19 Phase 3: تحديد الخانات الفارغة — لا تعبئة وهمية =====
-       كل خانة فارغة = تحذير مرئي فعلي يطالب المستخدم بإضافة مادة.
-       لا isFlex، لا نشاط وهمي — الفراغ يعني نقصاً في النصاب.       */
-    var emptyCount = 0;
-    allDays.forEach(function(dayP3){
-      var ppdP3 = dayP3===FRIDAY_NAME ? stage.fridayPpd : stage.periodsPerDay;
-      for(var pp3=1; pp3<=ppdP3; pp3++){
-        if(grid[dayP3][pp3] === null || grid[dayP3][pp3] === undefined){
-          grid[dayP3][pp3] = {
-            subjectId: '_empty',
-            subjectName: 'غير معبأة',
-            teacher: null,
-            isEmpty: true
-          };
+      /* Post-2: تعبئة الخانات الفارغة */
+      for(var p2=1;p2<=ppd;p2++){
+        if(classGrids[cls.id][day][p2]===null||classGrids[cls.id][day][p2]===undefined){
+          classGrids[cls.id][day][p2]={subjectId:'_empty',subjectName:'غير معبأة',teacher:null,isEmpty:true};
           emptyCount++;
         }
       }
     });
-    if(emptyCount > 0){
-      console.warn("[v19] " + cls.label + ": " + emptyCount + " خانة غير معبأة — راجع النصاب الوزاري");
-    }
-
-    schedule[cls.id] = grid;
-    /* ✅ v22: لا Post-2 → مواقع markBusy دقيقة دائماً → لا تعارضات وهمية */
+    if(emptyCount>0) console.warn("[v23] "+cls.label+": "+emptyCount+" خانة غير معبأة");
+    schedule[cls.id]=classGrids[cls.id];
   });
 
+  /* ══════════════════════════════════════════════════
+     عرض وحفظ
+  ══════════════════════════════════════════════════ */
   updateAllSelects();
   var vc=$("view-class-select");
-  if(vc.options.length){
+  if(vc&&vc.options.length){
     if(!vc.value) vc.value=vc.options[0].value;
     renderTimetable(Number(vc.value));
   }
   saveToStorage();
 
-  /* v19: عرض تحذيرات التوافق بعد التوليد */
-  var validationLines = buildValidationSummary();
-  if(validationLines.length > 0){
-    var vPanel = $("validation-banner");
+  var validationLines=buildValidationSummary();
+  if(validationLines.length>0){
+    var vPanel=$("validation-banner");
     if(vPanel){
-      vPanel.innerHTML = "<div style='font-weight:900;margin-bottom:8px;color:#92400e;'>⚠️ تحقق النصاب — يوجد فروقات يجب معالجتها:</div>" +
-        validationLines.map(function(l){ return "<div style='margin-bottom:4px;font-size:13px;'>"+l+"</div>"; }).join("");
-      vPanel.style.display = "block";
+      vPanel.innerHTML="<div style='font-weight:900;margin-bottom:8px;color:#92400e;'>⚠️ تحقق النصاب — يوجد فروقات يجب معالجتها:</div>"+
+        validationLines.map(function(l){return "<div style='margin-bottom:4px;font-size:13px;'>"+l+"</div>";}).join("");
+      vPanel.style.display="block";
     }
-    showToast("توليد مكتمل — " + validationLines.length + " صفوف تحتاج مراجعة النصاب ⚠️","warning");
+    showToast("توليد مكتمل — "+validationLines.length+" صفوف تحتاج مراجعة النصاب ⚠️","warning");
   } else {
-    var vPanel2 = $("validation-banner");
+    var vPanel2=$("validation-banner");
     if(vPanel2) vPanel2.style.display="none";
     showToast("الجدول مكتمل — النصاب متطابق 100% ✅","success");
   }
   switchTab("timetable");
 }
+
 
 /* ============================= عرض الجدول ============================= */
 function buildTimesSummary(stage){
