@@ -809,20 +809,12 @@ function buildValidationSummary(){
   var lines = [];
   classes.forEach(function(cls){
     var r = calcCurriculumTotal(cls);
-    if(r.gap !== 0){
-      /* فارق 1-2 حصة = ملاحظة مقبولة (DB قد يحوي حصة فلكسبل) */
-      var isMinor = Math.abs(r.gap) <= 2;
-      var icon = isMinor ? "ℹ️" : (r.gap > 0 ? "⚠️" : "🔴");
-      var msg;
-      if(isMinor && r.gap > 0){
-        msg = "فارق " + r.gap + " حصة — مقبول (يعوَّض بتكرار حصة قصيرة)";
-      } else if(isMinor && r.gap < 0){
-        msg = "فارق " + Math.abs(r.gap) + " حصة زائدة — يمكن دمجها في double period";
-      } else if(r.gap > 0){
-        msg = "ناقص " + r.gap + " حصة من النصاب الوزاري — تحقق من تعيينات المادة";
-      } else {
-        msg = "زائد " + Math.abs(r.gap) + " حصة عن النصاب — قلّل حصص مادة";
-      }
+    /* نعرض فقط النقص الحقيقي (gap > 0 يعني total < moeRequired) — لا تنبيهات زيادة */
+    if(r.gap > 0){
+      var icon = r.gap <= 2 ? "ℹ️" : "⚠️";
+      var msg = r.gap <= 2
+        ? "فارق " + r.gap + " حصة — تحقق من التعيينات"
+        : "ناقص " + r.gap + " حصة من النصاب الوزاري — تحقق من تعيينات المادة";
       lines.push(icon + " <b>" + cls.label + "</b>: مُعيَّن " + r.total + " ح / المطلوب وزارياً " + r.required + " ح — " + msg);
     }
   });
@@ -1036,6 +1028,8 @@ function _buildFromItems(items){
     var normSubj = normalizeSubject(item.s);
     /* تجاهل مواد الاستثناء (مربية الصف، السنع...) */
     if(SKIP_SUBJECTS.has(item.s) || SKIP_SUBJECTS.has(normSubj)) return;
+    /* العلوم في G1-G2 مدمجة ضمن مجال إنجليزي — لا تُضاف كمادة مستقلة */
+    if(stageId === 1 && (item.s === 'العلوم' || normSubj === 'العلوم')) return;
     var subj = subjects.find(function(s){ return s.name===normSubj && s.stageId===stageId; });
     if(!subj){
       var ppw = getPeriodsByStage(normSubj, stageId);
