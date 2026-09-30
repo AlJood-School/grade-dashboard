@@ -2099,87 +2099,163 @@ function checkConflicts(){
 function renderConflicts(){
   var list=$("conflicts-list"); list.innerHTML="";
   if(!Object.keys(schedule).length){
-    list.innerHTML="<p style='color:var(--muted);text-align:center;padding:30px;'>يجب توليد الجدول أولاً</p>";
+    list.innerHTML="<p style='color:var(--muted);text-align:center;padding:40px;font-size:16px;'>يجب توليد الجدول أولاً</p>";
     return;
   }
   var issues=checkConflicts();
-
-  /* ملخص كمي */
-  var counts={تعارض:0,شاغر:0,قيد:0,نقص:0,فراغ:0};
+  var counts={"\u062a\u0639\u0627\u0631\u0636":0,"\u0634\u0627\u063a\u0631":0,"\u0642\u064a\u062f":0,"\u0646\u0642\u0635":0,"\u0641\u0631\u0627\u063a":0};
   issues.forEach(function(i){ counts[i.type]=(counts[i.type]||0)+1; });
 
-  var summaryParts=[];
-  if(counts["تعارض"]) summaryParts.push("🔴 "+counts["تعارض"]+" تعارض DB");
-  if(counts["شاغر"])  summaryParts.push("🕳️ "+counts["شاغر"]+" شاغر وظيفي");
-  if(counts["قيد"])   summaryParts.push("🟡 "+counts["قيد"]+" قيد تقني (معلمة مشغولة)");
-  if(counts["نقص"])   summaryParts.push("📉 "+counts["نقص"]+" نقص حصص");
-  if(counts["فراغ"])  summaryParts.push("📭 "+counts["فراغ"]+" فراغ (فارق النصاب)");
+  /* ── 1. KPI CARDS ── */
+  function kpiCard(count, label, icon, color, bg){
+    var zero = count===0;
+    return "<div style='background:"+(zero?"#F0FDF4":bg)+";border:1.5px solid "+(zero?"#BBF7D0":color)+"40;border-radius:14px;padding:16px 12px;text-align:center;'>"
+      +"<div style='font-size:28px;font-weight:900;color:"+(zero?"#16A34A":color)+";'>"+(zero?"\u2705":count)+"</div>"
+      +"<div style='font-size:12px;color:#64748B;margin-top:4px;'>"+icon+" "+label+"</div>"
+      +"</div>";
+  }
+  var html = "<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;'>";
+  html += kpiCard(counts["\u0634\u0627\u063a\u0631"]||0,  "\u0634\u0627\u063a\u0631 \u0648\u0638\u064a\u0641\u064a",   "\uD83D\uDD73\uFE0F", "#D97706", "#FFFBEB");
+  html += kpiCard(counts["\u0642\u064a\u062f"]||0,   "\u0642\u064a\u062f \u062a\u0642\u0646\u064a",      "\uD83D\udfe1", "#0EA5E9", "#EFF9FF");
+  html += kpiCard(counts["\u0646\u0642\u0635"]||0,   "\u0646\u0642\u0635 \u062d\u0635\u0635",      "\uD83D\udcc9", "#7C3AED", "#F5F0FF");
+  html += kpiCard(counts["\u062a\u0639\u0627\u0631\u0636"]||0, "\u062a\u0639\u0627\u0631\u0636 DB", "\u26A0\uFE0F", "#DC2626", "#FEF2F2");
+  html += "</div>";
 
-  var summaryDiv=document.createElement("div");
-  summaryDiv.style.cssText="background:var(--cb100);border:1px solid var(--cb300);border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:15px;line-height:2;";
   if(!issues.length){
-    summaryDiv.innerHTML="<span style='color:var(--csu);font-weight:900;'>✅ لا توجد مشاكل — الجدول سليم بالكامل</span>";
-  } else {
-    summaryDiv.innerHTML="<b>ملخص التدقيق:</b> "+summaryParts.join(" &nbsp;|&nbsp; ")+
-      "<br><small style='color:var(--cbc2)'>🔴 تعارض DB = يحتاج مراجعة التعيينات · 🕳️ شاغر = لا معلمة في DB · 🟡 قيد = أعيِّن معلمة إضافية · 📭 فراغ = طبيعي (نصاب ≠ خانات فيزيائية)</small>";
+    html += "<div style='background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:24px;text-align:center;font-weight:900;color:#16A34A;font-size:17px;'>\u2705 \u0627\u0644\u062c\u062f\u0648\u0644 \u0633\u0644\u064a\u0645 \u0628\u0627\u0644\u0643\u0627\u0645\u0644 \u2014 \u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0634\u0627\u043a\u043b</div>";
+    list.innerHTML = html;
+    return;
   }
-  list.appendChild(summaryDiv);
+  list.innerHTML = html;
 
-  if(!issues.length) return;
-
-  var icons={"تعارض":"⚠️","شاغر":"🕳️","قيد":"🟡","نقص":"📉","فراغ":"📭"};
-  /* ترتيب: تعارض → شاغر → قيد → نقص → فراغ */
-  var order=["تعارض","شاغر","قيد","نقص","فراغ"];
-  var sorted=issues.slice().sort(function(a,b){ return order.indexOf(a.type)-order.indexOf(b.type); });
-
-  /* عرض الشاغرات كجدول منظم بدلاً من قائمة نصية */
-  var vacantIssues = sorted.filter(function(i){ return i.type==="شاغر"; });
-  var otherIssues  = sorted.filter(function(i){ return i.type!=="شاغر"; });
-
-  if(vacantIssues.length){
-    var secDiv = document.createElement("div");
-    secDiv.style.cssText = "margin-bottom:18px;";
-    var secTitle = document.createElement("div");
-    secTitle.style.cssText = "font-weight:900;font-size:15px;color:var(--cw);margin-bottom:10px;";
-    secTitle.textContent = "🕳️ المواد الشاغرة — تحتاج تعيين معلمة (" + vacantIssues.length + " مادة)";
-    secDiv.appendChild(secTitle);
-
-    var tbl = document.createElement("table");
-    tbl.style.cssText = "width:100%;border-collapse:collapse;font-size:14px;";
-    tbl.innerHTML = "<thead><tr style='background:color-mix(in oklab,var(--cw) 15%,var(--cb200));'>" +
-      "<th style='padding:8px 12px;text-align:right;border-radius:8px 0 0 0;'>المادة</th>" +
-      "<th style='padding:8px 12px;text-align:center;'>الصف</th>" +
-      "<th style='padding:8px 12px;text-align:center;border-radius:0 8px 0 0;'>النصاب الأسبوعي</th>" +
-      "</tr></thead><tbody>";
-
-    /* ترتيب: بالصف ثم بالمادة */
-    vacantIssues.sort(function(a,b){
-      if(a.classLabel < b.classLabel) return -1;
-      if(a.classLabel > b.classLabel) return 1;
-      return a.subjectName < b.subjectName ? -1 : 1;
+  /* ── 2. VACANCIES — مجمَّعة بالمادة، الصفوف كـ chips ── */
+  var vacancies = issues.filter(function(i){ return i.type==="\u0634\u0627\u063a\u0631"; });
+  if(vacancies.length){
+    var bySubj = {};
+    vacancies.forEach(function(v){
+      if(!bySubj[v.subjectName]) bySubj[v.subjectName]={classes:[],ppw:v.periodsPerWeek};
+      bySubj[v.subjectName].classes.push(v.classLabel);
     });
-
-    vacantIssues.forEach(function(v, idx){
-      var bg = idx%2===0 ? "var(--cb100)" : "var(--cb200)";
-      tbl.innerHTML += "<tr style='background:"+bg+";'>" +
-        "<td style='padding:8px 12px;font-weight:700;color:var(--cw);'>"+escapeHtml(v.subjectName)+"</td>" +
-        "<td style='padding:8px 12px;text-align:center;font-weight:600;'>"+escapeHtml(v.classLabel)+"</td>" +
-        "<td style='padding:8px 12px;text-align:center;'><span style='background:color-mix(in oklab,var(--cw) 20%,var(--cb300));padding:3px 10px;border-radius:20px;font-weight:900;'>"+v.periodsPerWeek+" ح</span></td>" +
-        "</tr>";
+    var vHTML = "<div style='margin-bottom:20px;'>"
+      +"<div style='display:flex;align-items:center;gap:10px;margin-bottom:12px;'>"
+      +"<span style='background:#FEF3C7;color:#92400E;font-weight:900;font-size:15px;border-radius:10px;padding:6px 14px;'>\uD83D\uDD73\uFE0F \u0627\u0644\u0645\u0648\u0627\u062f \u0627\u0644\u0634\u0627\u063a\u0631\u0629</span>"
+      +"<span style='background:#D97706;color:#fff;border-radius:20px;padding:3px 12px;font-size:13px;font-weight:700;'>"+vacancies.length+" \u062d\u0627\u0644\u0629</span>"
+      +"<span style='font-size:13px;color:#78716C;'>\u2014 \u062a\u062d\u062a\u0627\u062c \u062a\u0639\u064a\u064a\u0646 \u0645\u0639\u0644\u0645\u0629</span>"
+      +"</div>";
+    Object.keys(bySubj).sort().forEach(function(subj){
+      var info = bySubj[subj];
+      vHTML += "<div style='background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:14px 18px;margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;'>"
+        +"<span style='font-weight:900;color:#92400E;font-size:15px;min-width:160px;'>"+escapeHtml(subj)+"</span>"
+        +"<span style='color:#A16207;font-size:12px;white-space:nowrap;'>"+info.ppw+" \u062d/\u0623\u0633\u0628\u0648\u0639 \u00b7</span>"
+        +"<div style='display:flex;flex-wrap:wrap;gap:6px;'>";
+      info.classes.sort().forEach(function(cl){
+        vHTML += "<span style='background:#D97706;color:#fff;border-radius:20px;padding:3px 12px;font-size:13px;font-weight:700;'>"+escapeHtml(cl)+"</span>";
+      });
+      vHTML += "</div></div>";
     });
-    tbl.innerHTML += "</tbody>";
-    secDiv.appendChild(tbl);
-    list.appendChild(secDiv);
+    vHTML += "</div>";
+    var vDiv = document.createElement("div");
+    vDiv.innerHTML = vHTML;
+    list.appendChild(vDiv);
   }
 
-  /* باقي الأنواع كقائمة عادية */
-  otherIssues.forEach(function(issue){
-    var div=document.createElement("div");
-    div.className="conflict-item type-"+issue.type;
-    div.textContent=(icons[issue.type]||"•")+" ["+issue.type+"] "+issue.msg;
-    list.appendChild(div);
-  });
+  /* ── 3. CONSTRAINTS — مجمَّعة بالمادة، قابلة للطي ── */
+  var constraints = issues.filter(function(i){ return i.type==="\u0642\u064a\u062f"; });
+  if(constraints.length){
+    var bySubjC = {};
+    constraints.forEach(function(c){
+      var subjMatch = c.msg.match(/^"(.+?)"/);
+      var subj = subjMatch ? subjMatch[1] : "\u063a\u064a\u0631 \u0645\u062d\u062f\u062f";
+      if(!bySubjC[subj]) bySubjC[subj]=[];
+      bySubjC[subj].push(c.msg);
+    });
+    var cHTML = "<div style='margin-bottom:20px;'>"
+      +"<div style='display:flex;align-items:center;gap:10px;margin-bottom:12px;'>"
+      +"<span style='background:#E0F2FE;color:#0C4A6E;font-weight:900;font-size:15px;border-radius:10px;padding:6px 14px;'>\uD83D\udfe1 \u0627\u0644\u0642\u064a\u0648\u062f \u0627\u0644\u062a\u0642\u0646\u064a\u0629</span>"
+      +"<span style='background:#0EA5E9;color:#fff;border-radius:20px;padding:3px 12px;font-size:13px;font-weight:700;'>"+constraints.length+" \u062d\u0627\u0644\u0629</span>"
+      +"<span style='font-size:13px;color:#64748B;'>\u2014 \u0645\u0639\u0644\u0645\u0629 \u0645\u0634\u063a\u0648\u0644\u0629 \u0641\u064a \u0648\u0642\u062a \u0622\u062e\u0631</span>"
+      +"</div>";
+    Object.keys(bySubjC).sort().forEach(function(subj){
+      var msgs = bySubjC[subj];
+      cHTML += "<details style='background:#F0F9FF;border:1px solid #BAE6FD;border-radius:12px;margin-bottom:8px;overflow:hidden;'>"
+        +"<summary style='padding:12px 16px;font-weight:700;font-size:14px;color:#0369A1;cursor:pointer;display:flex;align-items:center;gap:10px;list-style:none;'>"
+        +"<span style='background:#0EA5E9;color:#fff;border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700;'>"+msgs.length+"</span>"
+        +escapeHtml(subj)
+        +"<span style='margin-right:auto;color:#94A3B8;font-size:12px;'>\u25be \u062a\u0641\u0627\u0635\u064a\u0644</span>"
+        +"</summary>"
+        +"<div style='padding:12px 16px;border-top:1px solid #BAE6FD;display:flex;flex-wrap:wrap;gap:6px;'>";
+      msgs.forEach(function(m){
+        var mid = m.match(/\u2014\s*(\S+)\s*\u00b7\s*(.+?)\s*\u00b7\s*\u062d(\d+)/);
+        var badge = mid ? (mid[1]+" \u00b7 "+mid[2]+" \u00b7 \u062d"+mid[3]) : m.substring(0,45);
+        cHTML += "<span style='background:#E0F2FE;color:#0C4A6E;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600;'>"+escapeHtml(badge)+"</span>";
+      });
+      cHTML += "</div></details>";
+    });
+    cHTML += "</div>";
+    var cDiv = document.createElement("div");
+    cDiv.innerHTML = cHTML;
+    list.appendChild(cDiv);
+  }
+
+  /* ── 4. SHORTFALLS — بطاقات بالصف + شريط تقدم ── */
+  var shortfalls = issues.filter(function(i){ return i.type==="\u0646\u0642\u0635"; });
+  if(shortfalls.length){
+    var byCls = {};
+    shortfalls.forEach(function(s){
+      var clsMatch = s.msg.match(/\u2014\s*([^:]+):/);
+      var nums = s.msg.match(/\u0645\u064f\u062c\u062f\u064e\u0648\u064e\u0644\s+(\d+)\s+\u062d\s+\u0645\u0646\s+(\d+)/);
+      var cls2 = clsMatch ? clsMatch[1].trim() : "؟";
+      var assigned = nums ? parseInt(nums[1]) : 0;
+      var required = nums ? parseInt(nums[2]) : 0;
+      if(!byCls[cls2]) byCls[cls2]={assigned:0,required:0};
+      byCls[cls2].assigned += assigned;
+      byCls[cls2].required += required;
+    });
+    var sHTML = "<div style='margin-bottom:20px;'>"
+      +"<div style='display:flex;align-items:center;gap:10px;margin-bottom:12px;'>"
+      +"<span style='background:#EDE9FE;color:#4C1D95;font-weight:900;font-size:15px;border-radius:10px;padding:6px 14px;'>\uD83D\udcc9 \u0641\u062c\u0648\u0627\u062a \u0627\u0644\u0646\u0635\u0627\u0628</span>"
+      +"<span style='background:#7C3AED;color:#fff;border-radius:20px;padding:3px 12px;font-size:13px;font-weight:700;'>"+Object.keys(byCls).length+" \u0635\u0641</span>"
+      +"</div>"
+      +"<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;'>";
+    Object.keys(byCls).sort().forEach(function(cls2){
+      var info = byCls[cls2];
+      var pct = info.required>0 ? Math.round(info.assigned/info.required*100) : 100;
+      var barCol = pct>=90?"#059669":pct>=70?"#D97706":"#DC2626";
+      var gap = info.required - info.assigned;
+      sHTML += "<div style='background:#F5F3FF;border:1px solid #DDD6FE;border-radius:12px;padding:14px;'>"
+        +"<div style='display:flex;justify-content:space-between;margin-bottom:8px;'>"
+        +"<span style='font-weight:900;font-size:15px;color:#4C1D95;'>"+escapeHtml(cls2)+"</span>"
+        +"<span style='font-size:12px;color:#EF4444;font-weight:700;background:#FEE2E2;padding:2px 8px;border-radius:20px;'>\u0646\u0642\u0635 "+gap+" \u062d</span>"
+        +"</div>"
+        +"<div style='background:#DDD6FE;border-radius:20px;height:8px;overflow:hidden;margin-bottom:6px;'>"
+        +"<div style='background:"+barCol+";height:100%;width:"+Math.min(pct,100)+"%;border-radius:20px;'></div>"
+        +"</div>"
+        +"<div style='font-size:12px;color:#64748B;'>"+info.assigned+" / "+info.required+" \u062d ("+pct+"%)</div>"
+        +"</div>";
+    });
+    sHTML += "</div></div>";
+    var sDiv = document.createElement("div");
+    sDiv.innerHTML = sHTML;
+    list.appendChild(sDiv);
+  }
+
+  /* ── 5. DB CONFLICTS ── */
+  var dbConflicts = issues.filter(function(i){ return i.type==="\u062a\u0639\u0627\u0631\u0636"; });
+  if(dbConflicts.length){
+    var xHTML = "<div style='margin-bottom:20px;'>"
+      +"<div style='display:flex;align-items:center;gap:10px;margin-bottom:12px;'>"
+      +"<span style='background:#FEE2E2;color:#7F1D1D;font-weight:900;font-size:15px;border-radius:10px;padding:6px 14px;'>\u26a0\uFE0F \u062a\u0639\u0627\u0631\u0636\u0627\u062a DB \u2014 \u0645\u0631\u0627\u062c\u0639\u0629 \u0641\u0648\u0631\u064a\u0629</span>"
+      +"</div>";
+    dbConflicts.forEach(function(c){
+      xHTML += "<div style='background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;padding:12px 16px;margin-bottom:8px;font-size:14px;color:#7F1D1D;'>"+escapeHtml(c.msg)+"</div>";
+    });
+    xHTML += "</div>";
+    var xDiv = document.createElement("div");
+    xDiv.innerHTML = xHTML;
+    list.appendChild(xDiv);
+  }
 }
+
 
 /* ============================= الطباعة ============================= */
 function printClassSchedule(classId){
