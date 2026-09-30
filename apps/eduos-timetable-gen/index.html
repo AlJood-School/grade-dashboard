@@ -1043,9 +1043,12 @@ async function importSubjectsFromDB() {
       }
     });
 
-    var subjects = Object.values(seen).map(function(s) {
-      return { name: s.name, ppw: s.ppw || 2, isDouble: s.isDouble, color: getSubjectColor(s.name), tcolor: getSubjectTColor(s.name), minPeriods: s.minPeriods, maxPeriods: s.maxPeriods, ruleId: s.ruleId, sourceDoc: s.sourceDoc, notes: s.notes };
-    });
+    var IMPORT_SKIP = ['الجيوجيتسو', 'jiujitsu', 'الجودو', 'النشاط الرياضي الخارجي'];
+    var subjects = Object.values(seen)
+      .filter(function(s) { return IMPORT_SKIP.indexOf(s.name) < 0; })
+      .map(function(s) {
+        return { name: s.name, ppw: s.ppw || 2, isDouble: s.isDouble, color: getSubjectColor(s.name), tcolor: getSubjectTColor(s.name), minPeriods: s.minPeriods, maxPeriods: s.maxPeriods, ruleId: s.ruleId, sourceDoc: s.sourceDoc, notes: s.notes };
+      });
 
     STATE.subjects = subjects;
     STATE.dbRules = data;
@@ -1258,10 +1261,26 @@ async function loadDBAssignmentsThenRender() {
     );
     var dbRows = await res.json();
     if (Array.isArray(dbRows)) {
+      /* ── توحيد أسماء المواد بين teacher_assignments وقاعدة المناهج ── */
+      var SUBJ_NORM = {
+        'التربية البدنية والصحية': 'التربية البدنية',
+        'التربية البدنية والصحه': 'التربية البدنية',
+        'الحوسبة والذكاء الاصطناعي': 'الذكاء الاصطناعي والتكنولوجيا',
+        'الحوسبة': 'الذكاء الاصطناعي والتكنولوجيا',
+        'الفنون البصرية': 'الفنون',
+        'التربية الفنية': 'الفنون',
+        'التربية الموسيقية': 'الموسيقى',
+        'اللغة الإنجليزية والرياضيات': 'اللغة الإنجليزية والرياضيات'
+      };
+      /* مواد تُتجاهل — لا تُضاف للجدول */
+      var SKIP_SUBJ = ['الجيوجيتسو', 'jiujitsu', 'الجودو', 'النشاط الرياضي الخارجي'];
+
       dbRows.forEach(function(r) {
         if (!r.subject || !r.class_name) return;
-        if (!STATE.classAssignments[r.subject]) STATE.classAssignments[r.subject] = {};
-        STATE.classAssignments[r.subject][r.class_name] = {
+        if (SKIP_SUBJ.indexOf(r.subject) > -1) return; // تجاهل مواد النشاط
+        var subj = SUBJ_NORM[r.subject] || r.subject;
+        if (!STATE.classAssignments[subj]) STATE.classAssignments[subj] = {};
+        STATE.classAssignments[subj][r.class_name] = {
           status: 'assigned',
           teacherId: r.staff_db_id,
           teacherNameAr: r.teacher_name_ar || r.staff_db_id
