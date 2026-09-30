@@ -1006,6 +1006,29 @@ function loadAljoodData(){
   }
   _buildFromItems(ALJOOD_DATA);
 }
+function fillMissingSubjectsAsVacant(cls){
+  var stageId = cls.stageId;
+  var periods = GRADE_PERIODS[stageId] || {};
+  Object.keys(periods).forEach(function(subjectName){
+    var ppw = periods[subjectName];
+    if(!ppw || ppw <= 0) return; // تجاهل الحصص صفر
+    var normSubj = normalizeSubject(subjectName);
+    var subj = subjects.find(function(s){ return s.name===normSubj && s.stageId===stageId; });
+    if(!subj){
+      subj = { id:subjectSeq++, name:normSubj, periodsPerWeek:ppw, stageId:stageId };
+      subjects.push(subj);
+    } else {
+      // تأكد أن الحصص الأسبوعية من النصاب الوزاري
+      if(subj.periodsPerWeek < ppw) subj.periodsPerWeek = ppw;
+    }
+    // هل يوجد تعيين لهذه المادة في هذا الصف؟
+    var hasAssignment = assignments.find(function(a){ return a.classId===cls.id && a.subjectId===subj.id; });
+    if(!hasAssignment){
+      // أضف كشاغر حتى يظهر في الجدول بوضوح
+      assignments.push({ id:assignmentSeq++, classId:cls.id, subjectId:subj.id, teacher:null });
+    }
+  });
+}
 function _buildFromItems(items){
   items.forEach(function(item){
     var stageId = detectStageFromLabel(item.c);
@@ -1035,6 +1058,8 @@ function _buildFromItems(items){
       assignments.push({ id:assignmentSeq++, classId:cls.id, subjectId:subj.id, teacher:item.t });
     }
   });
+  /* أكمل المواد الناقصة من النصاب الوزاري كـ "شاغر" */
+  classes.forEach(function(cls){ fillMissingSubjectsAsVacant(cls); });
   renderClasses(); renderSubjects(); renderAssignments(); updateAllSelects(); updateStats(); saveToStorage();
 
   /* جلب المعلمات الاحتياط من Supabase */
