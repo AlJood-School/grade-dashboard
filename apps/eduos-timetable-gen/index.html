@@ -1756,6 +1756,9 @@ function runGenerate(classes, days, ppd) {
   var vacantTasks = { doubles:[], singles:[] };
   classes.forEach(function(cls) {
     STATE.subjects.forEach(function(s) {
+      /* تجاهل الفصول التي ليس لها تعيين صريح (pending = لا معلمة أصلاً) */
+      var _rawCa = (STATE.classAssignments[s.name] || {})[cls];
+      if (!_rawCa || _rawCa.status === 'pending') return;
       var info = getTeacherForClass(s.name, cls);
       var ppw = s.ppw || 2;
       var pairs = s.isDouble ? Math.floor(ppw/2) : 0;
@@ -1928,8 +1931,11 @@ function runGenerate(classes, days, ppd) {
   /* ── Compliance summary (مطابقة الخطة الدراسية) ── */
   var complianceRows = [];
   STATE.subjects.forEach(function(s) {
-    /* required = عدد الفصول المُعيَّنة فعلاً × ppw — لا نحسب فصولاً بلا معلمة */
-    var assignedCount = Object.keys((STATE.classAssignments && STATE.classAssignments[s.name]) || {}).length;
+    /* required = عدد الفصول المُعيَّنة فعلاً (assigned/vacant فقط، لا pending) × ppw */
+    var _ca3 = STATE.classAssignments && STATE.classAssignments[s.name] || {};
+    var assignedCount = Object.keys(_ca3).filter(function(c3) {
+      return _ca3[c3] && _ca3[c3].status !== 'pending';
+    }).length;
     var required = (s.ppw || 0) * assignedCount;
     var actual = 0;
     classes.forEach(function(cls) {
