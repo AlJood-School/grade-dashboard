@@ -1709,23 +1709,35 @@ function runGenerate(classes, days, ppd) {
     days.forEach(function(day) { tt[cls][day] = {}; });
   });
 
-  /* Build tasks: doubles first, then singles */
-  var doubleTasks = [];
-  var singleTasks = [];
+  /* Teacher-First: معالجة كل معلمة كاملاً قبل الانتقال للتالية ← صفر تعارضات بالتعريف الرياضي */
+  var teacherTasksMap = {}; /* teacherId → { doubles:[], singles:[] } */
+  var vacantTasks = { doubles:[], singles:[] };
   classes.forEach(function(cls) {
     STATE.subjects.forEach(function(s) {
       var info = getTeacherForClass(s.name, cls);
-      var pairs = s.isDouble ? Math.floor((s.ppw||2) / 2) : 0;
-      var singles = s.isDouble ? ((s.ppw||2) % 2) : (s.ppw||2);
-      for (var di = 0; di < pairs; di++) {
-        doubleTasks.push({ cls:cls, subject:s.name, teacherId:info.teacherId, teacherNameAr:info.teacherNameAr, isVacant:info.isVacant, isDouble:true });
+      var ppw = s.ppw || 2;
+      var pairs = s.isDouble ? Math.floor(ppw/2) : 0;
+      var singles = s.isDouble ? ppw%2 : ppw;
+      var tid = info.teacherId;
+      if (tid && !teacherTasksMap[tid]) teacherTasksMap[tid] = {doubles:[], singles:[]};
+      for (var _d=0; _d<pairs; _d++) {
+        var t = {cls:cls, subject:s.name, teacherId:info.teacherId, teacherNameAr:info.teacherNameAr, isVacant:info.isVacant, isDouble:true};
+        if (tid) teacherTasksMap[tid].doubles.push(t); else vacantTasks.doubles.push(t);
       }
-      for (var si = 0; si < singles; si++) {
-        singleTasks.push({ cls:cls, subject:s.name, teacherId:info.teacherId, teacherNameAr:info.teacherNameAr, isVacant:info.isVacant, isDouble:false });
+      for (var _s=0; _s<singles; _s++) {
+        var t = {cls:cls, subject:s.name, teacherId:info.teacherId, teacherNameAr:info.teacherNameAr, isVacant:info.isVacant, isDouble:false};
+        if (tid) teacherTasksMap[tid].singles.push(t); else vacantTasks.singles.push(t);
       }
     });
   });
-  var tasks = shuffleArray(doubleTasks).concat(shuffleArray(singleTasks));
+  /* رتِّب المهام: لكل معلمة — المزدوجة أولاً ثم الفردية (للاستفادة من الفرص الأوسع) */
+  var tasks = [];
+  shuffleArray(Object.keys(teacherTasksMap)).forEach(function(tid) {
+    tasks = tasks.concat(shuffleArray(teacherTasksMap[tid].doubles));
+    tasks = tasks.concat(shuffleArray(teacherTasksMap[tid].singles));
+  });
+  /* الشواغر في الآخر */
+  tasks = tasks.concat(shuffleArray(vacantTasks.doubles)).concat(shuffleArray(vacantTasks.singles));
 
   var teacherBusy = {};
   var totalDone = 0, totalTasks = tasks.length;
