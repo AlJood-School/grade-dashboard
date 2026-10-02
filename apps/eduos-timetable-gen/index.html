@@ -917,7 +917,7 @@ async function loadClasses() {
 
 async function loadTeachers() {
   try {
-    var res = await sbFetch("staff_profiles?select=staff_db_id,username,name_ar,subject,role_key,is_coordinator&role_key=in.(teacher,sub_teacher)&is_active=eq.true&order=name_ar&limit=300");
+    var res = await sbFetch("staff_profiles?select=staff_db_id,username,name_ar,subject,role_key,is_coordinator,is_national&role_key=in.(teacher,sub_teacher)&is_active=eq.true&order=name_ar&limit=300");
     var data = await res.json();
     STATE.teachers = (data || []).filter(function(t){ return t.name_ar; });
   } catch(e) { STATE.teachers = []; }
@@ -1991,6 +1991,7 @@ function runGenerate(classes, days, ppd) {
 
   /* ── تقرير نصاب المعلمين ── */
   var teacherMap = {};
+  var _tNatMap = {}; (STATE.teachers||[]).forEach(function(t){ _tNatMap[t.name_ar] = t.is_national !== false; });
   classes.forEach(function(cls) {
     days.forEach(function(day) {
       var dayPpd4 = (day === 'الجمعة') ? (STATE.fridayPeriodsPerDay || 4) : ppd;
@@ -1998,7 +1999,7 @@ function runGenerate(classes, days, ppd) {
         var sl4 = tt[cls][day][p4];
         if (sl4 && sl4.teacherNameAr && sl4.teacherNameAr !== 'شاغر') {
           var tName = sl4.teacherNameAr;
-          if (!teacherMap[tName]) teacherMap[tName] = { name: tName, periods: 0, subjects: {} };
+          if (!teacherMap[tName]) teacherMap[tName] = { name: tName, periods: 0, subjects: {}, is_national: _tNatMap[tName] !== false };
           teacherMap[tName].periods++;
           if (sl4.subject) teacherMap[tName].subjects[sl4.subject] = true;
         }
@@ -2016,12 +2017,11 @@ function runGenerate(classes, days, ppd) {
     wkHtml += '<th style="padding:8px 12px;text-align:center;color:#6B7280;font-weight:700;border-bottom:2px solid #BAE6FD">المواد</th>';
     wkHtml += '<th style="padding:8px 12px;text-align:center;color:#6B7280;font-weight:700;border-bottom:2px solid #BAE6FD">الحالة</th>';
     wkHtml += '</tr></thead><tbody>';
-    var MAX_DEFAULT = 30;
     teacherList.forEach(function(t) {
-      var maxLoad = MAX_DEFAULT;
+      var maxLoad = (t.is_national === false) ? 30 : 24;
       var pct = t.periods / maxLoad;
-      var barColor = pct > 1 ? '#EF4444' : pct > 0.85 ? '#F59E0B' : '#10B981';
-      var status = pct > 1 ? '🔴 تجاوز الحد' : pct > 0.85 ? '🟡 قارب الحد' : '🟢 ضمن الحد';
+      var barColor = pct > 1 ? '#EF4444' : (t.is_national===false && t.periods>24 && t.periods<=30) ? '#F59E0B' : pct > 0.85 ? '#F59E0B' : '#10B981';
+      var status = pct > 1 ? '🔴 تجاوز الحد' : (t.is_national===false && t.periods>24 && t.periods<=30) ? '🟡 مرونة (غير مواطنة)' : pct > 0.85 ? '🟡 قارب الحد' : '🟢 ضمن الحد';
       var subjectNames = Object.keys(t.subjects).join('، ') || '—';
       var barW = Math.min(100, Math.round(pct * 100));
       wkHtml += '<tr style="border-bottom:1px solid #F3F4F6">';
@@ -2972,7 +2972,7 @@ async function loadTeacherWorkload() {
   var key = (window.EduOS && window.EduOS.SB_KEY) || '';
   if (!url) { el.innerHTML = '<div style="padding:16px;color:#ef4444">لا يوجد اتصال بقاعدة البيانات</div>'; return; }
   try {
-    var r1 = await fetch(url+'/rest/v1/staff_profiles?select=staff_db_id,name_ar,subject,role_key,contract_type&role_key=in.(teacher,sub_teacher)&is_active=eq.true&order=name_ar&limit=300', {headers:{apikey:key,'Authorization':'Bearer '+key}});
+    var r1 = await fetch(url+'/rest/v1/staff_profiles?select=staff_db_id,name_ar,subject,role_key,is_national&role_key=in.(teacher,sub_teacher)&is_active=eq.true&order=name_ar&limit=300', {headers:{apikey:key,'Authorization':'Bearer '+key}});
     var staff = await r1.json();
     var r2 = await fetch(url+'/rest/v1/teacher_assignments?select=staff_db_id,class_name,subject&is_active=eq.true&limit=2000', {headers:{apikey:key,'Authorization':'Bearer '+key}});
     var assigns = await r2.json();
@@ -3001,9 +3001,9 @@ async function loadTeacherWorkload() {
       });
     }
     _twAllData = (Array.isArray(staff)?staff:[]).map(function(s) {
-      var weeklyMax = (s.contract_type === 'وافد' || s.contract_type === 'وافدة') ? 30 : 24;
+      var weeklyMax = (s.is_national === false) ? 30 : 24;
       var assigned = periodCount[s.staff_db_id] || 0; /* فقط التقدير من teacher_assignments — لا double counting */
-      return { id: s.staff_db_id, name: s.name_ar||'—', subject: s.subject||'—', contract: s.contract_type||'مواطنة', weeklyMax: weeklyMax, assigned: assigned, role: s.role_key||'teacher' };
+      return { id: s.staff_db_id, name: s.name_ar||'—', subject: s.subject||'—', is_national: s.is_national !== false, weeklyMax: weeklyMax, assigned: assigned, role: s.role_key||'teacher' };
     });
     renderTeacherWorkloadTable();
   } catch(e) {
