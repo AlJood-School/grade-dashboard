@@ -1844,7 +1844,12 @@ function runGenerate(classes, days, ppd) {
         return !tt[task.cls][sl.day][sl.period] && !(task.teacherId && teacherBusy[task.teacherId+'_'+sl.day+'_'+sl.period]);
       });
       if (candidates.length > 0) {
-        var sl = candidates[Math.floor(Math.random()*candidates.length)];
+        if (task.teacherId && candidates.length > 1) {
+          var _dayLd = {}; days.forEach(function(d){ _dayLd[d]=0; });
+          Object.keys(teacherBusy).forEach(function(k){ if(!teacherBusy[k])return; var p=k.split('_'); if(p[0]!==task.teacherId||p.length<3)return; var d=p[1]; if(_dayLd[d]!==undefined)_dayLd[d]++; });
+          candidates.sort(function(a,b){ return (_dayLd[a.day]||0)-(_dayLd[b.day]||0); });
+        }
+        var sl = candidates[0];
         tt[task.cls][sl.day][sl.period] = { subject:task.subject, teacherId:task.teacherId, teacherNameAr:task.teacherNameAr, isVacant:task.isVacant };
         if (task.teacherId) teacherBusy[task.teacherId+'_'+sl.day+'_'+sl.period] = true;
         assigned = true;
@@ -1934,7 +1939,7 @@ function runGenerate(classes, days, ppd) {
     /* required = عدد الفصول المُعيَّنة فعلاً (assigned/vacant فقط، لا pending) × ppw */
     var _ca3 = STATE.classAssignments && STATE.classAssignments[s.name] || {};
     var assignedCount = Object.keys(_ca3).filter(function(c3) {
-      return _ca3[c3] && _ca3[c3].status !== 'pending';
+      return _ca3[c3] && _ca3[c3].status === 'assigned'; /* إصلاح جذري: شاغر وpending لا يُحسبان في compliance */
     }).length;
     var required = (s.ppw || 0) * assignedCount;
     var actual = 0;
@@ -1991,7 +1996,7 @@ function runGenerate(classes, days, ppd) {
 
   /* ── تقرير نصاب المعلمين ── */
   var teacherMap = {};
-  var _tNatMap = {}; (STATE.teachers||[]).forEach(function(t){ _tNatMap[t.name_ar] = t.is_national !== false; });
+  var _tNatMap = {}; var _tNatIdMap = {}; (STATE.teachers||[]).forEach(function(t){ _tNatMap[t.name_ar] = t.is_national !== false; _tNatIdMap[t.staff_db_id] = t.is_national !== false; });
   classes.forEach(function(cls) {
     days.forEach(function(day) {
       var dayPpd4 = (day === 'الجمعة') ? (STATE.fridayPeriodsPerDay || 4) : ppd;
@@ -1999,9 +2004,11 @@ function runGenerate(classes, days, ppd) {
         var sl4 = tt[cls][day][p4];
         if (sl4 && sl4.teacherNameAr && sl4.teacherNameAr !== 'شاغر') {
           var tName = sl4.teacherNameAr;
-          if (!teacherMap[tName]) teacherMap[tName] = { name: tName, periods: 0, subjects: {}, is_national: _tNatMap[tName] !== false };
-          teacherMap[tName].periods++;
-          if (sl4.subject) teacherMap[tName].subjects[sl4.subject] = true;
+          var _sl4Id = sl4.teacherId;
+          var _tKey = _sl4Id || tName;
+          if (!teacherMap[_tKey]) teacherMap[_tKey] = { name: tName, periods: 0, subjects: {}, is_national: (_sl4Id !== undefined && _tNatIdMap[_sl4Id] !== undefined) ? _tNatIdMap[_sl4Id] !== false : _tNatMap[tName] !== false };
+          teacherMap[_tKey].periods++;
+          if (sl4.subject) teacherMap[_tKey].subjects[sl4.subject] = true;
         }
       }
     });
@@ -2295,6 +2302,7 @@ function findTeacherConflicts(tt, classes, days, ppd, fridayPpd) {
         if (!tt[cls] || !tt[cls][day] || !tt[cls][day][p]) return;
         var slot = tt[cls][day][p];
         if (!slot.teacherId || slot.isVacant) return;
+        if ((slot.teacherNameAr||'').match(/\u0645\u062f\u0631\u0628|coach|trainer/i)) return; // مدرب خارجي
         if (!tidMap[slot.teacherId]) tidMap[slot.teacherId] = [];
         tidMap[slot.teacherId].push({ cls: cls, name: slot.teacherNameAr || slot.teacherId });
       });
