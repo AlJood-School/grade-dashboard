@@ -1777,7 +1777,13 @@ function runGenerate(classes, days, ppd) {
   });
   /* رتِّب المهام: لكل معلمة — المزدوجة أولاً ثم الفردية (للاستفادة من الفرص الأوسع) */
   var tasks = [];
-  shuffleArray(Object.keys(teacherTasksMap)).forEach(function(tid) {
+  /* 🔧 إصلاح: رتِّب المعلمات من الأكثر قيوداً أولاً — doubles أكثر + فصول أكثر = أولوية */
+  var sortedTeachers = Object.keys(teacherTasksMap).sort(function(a, b) {
+    var aScore = teacherTasksMap[a].doubles.length * 3 + teacherTasksMap[a].singles.length;
+    var bScore = teacherTasksMap[b].doubles.length * 3 + teacherTasksMap[b].singles.length;
+    return bScore - aScore; /* الأكثر قيوداً أولاً */
+  });
+  sortedTeachers.forEach(function(tid) {
     tasks = tasks.concat(shuffleArray(teacherTasksMap[tid].doubles));
     tasks = tasks.concat(shuffleArray(teacherTasksMap[tid].singles));
   });
@@ -1814,18 +1820,32 @@ function runGenerate(classes, days, ppd) {
           break outer;
         }
       }
-      /* Fallback: place as single if no double slot */
+      /* 🔧 إصلاح Fallback: place as single — يُفضِّل الأيام بدون نفس المادة */
       if (!assigned) {
-        for (var di2 = 0; di2 < daysShuf.length && !assigned; di2++) {
-          var day2 = daysShuf[di2];
-          var maxPd2 = maxPeriodsForDay(day2, clsPpd(task.cls), clsFridayPpd(task.cls));
-            for (var p2 = 1; p2 <= maxPd2 && !assigned; p2++) {
-            if (tt[task.cls][day2][p2]) continue;
-            if (task.teacherId && teacherBusy[task.teacherId+'_'+day2+'_'+p2]) continue;
-            tt[task.cls][day2][p2] = { subject:task.subject, teacherId:task.teacherId, teacherNameAr:task.teacherNameAr, isVacant:task.isVacant, forced:true };
-            if (task.teacherId) teacherBusy[task.teacherId+'_'+day2+'_'+p2] = true;
-            assigned = true; forcedCount++;
+        var fbSlots = [];
+        days.forEach(function(d) {
+          var mxP = maxPeriodsForDay(d, clsPpd(task.cls), clsFridayPpd(task.cls));
+          for (var p=1; p<=mxP; p++) {
+            if (tt[task.cls][d][p]) return;
+            if (task.teacherId && teacherBusy[task.teacherId+'_'+d+'_'+p]) return;
+            fbSlots.push({day:d, period:p});
           }
+        });
+        /* يُفضِّل الأيام التي لا تحتوي نفس المادة أصلاً — يُقلِّل forced */
+        fbSlots.sort(function(a, b) {
+          var aHas = false, bHas = false;
+          var mxP = clsPpd(task.cls);
+          for (var p=1; p<=mxP; p++) {
+            if (tt[task.cls][a.day][p] && tt[task.cls][a.day][p].subject === task.subject) aHas = true;
+            if (tt[task.cls][b.day][p] && tt[task.cls][b.day][p].subject === task.subject) bHas = true;
+          }
+          return (aHas ? 1 : 0) - (bHas ? 1 : 0);
+        });
+        if (fbSlots.length > 0) {
+          var fbSl = fbSlots[0];
+          tt[task.cls][fbSl.day][fbSl.period] = { subject:task.subject, teacherId:task.teacherId, teacherNameAr:task.teacherNameAr, isVacant:task.isVacant, forced:true };
+          if (task.teacherId) teacherBusy[task.teacherId+'_'+fbSl.day+'_'+fbSl.period] = true;
+          assigned = true; forcedCount++;
         }
       }
     } else {
@@ -1847,7 +1867,17 @@ function runGenerate(classes, days, ppd) {
         if (task.teacherId && candidates.length > 1) {
           var _dayLd = {}; days.forEach(function(d){ _dayLd[d]=0; });
           Object.keys(teacherBusy).forEach(function(k){ if(!teacherBusy[k])return; var p=k.split('_'); if(p[0]!==task.teacherId||p.length<3)return; var d=p[1]; if(_dayLd[d]!==undefined)_dayLd[d]++; });
-          candidates.sort(function(a,b){ return (_dayLd[a.day]||0)-(_dayLd[b.day]||0); });
+          candidates.sort(function(a,b){
+            /* 🔧 إصلاح: تجنب التتالي + تفضيل الأيام الأقل تحميلاً */
+            var aBusy = _dayLd[a.day]||0, bBusy = _dayLd[b.day]||0;
+            /* فحص التتالي: كم حصصاً متتالية ستُسبِّب الإضافة؟ */
+            var aRun = 0, bRun = 0;
+            for (var _ri=1; _ri<=ppd; _ri++) {
+              if (teacherBusy[task.teacherId+'_'+a.day+'_'+_ri]) aRun++;
+              if (teacherBusy[task.teacherId+'_'+b.day+'_'+_ri]) bRun++;
+            }
+            return (aRun >= 3 ? 100 : 0) + aBusy - ((bRun >= 3 ? 100 : 0) + bBusy);
+          });
         }
         var sl = candidates[0];
         tt[task.cls][sl.day][sl.period] = { subject:task.subject, teacherId:task.teacherId, teacherNameAr:task.teacherNameAr, isVacant:task.isVacant };
