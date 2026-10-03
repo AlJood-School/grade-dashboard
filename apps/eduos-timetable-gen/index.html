@@ -1675,6 +1675,18 @@ function calcTeacherLoad(teacherId) {
 /* ── Generator ── */
 function generateTimetable() {
   var classes = STATE.selectedClasses;
+  /* ── بناء خريطة المواطنية مرة واحدة ── */
+  var _normN2 = function(s){ return (s||'').replace(/\s+/g,' ').trim(); };
+  var _natMap = {}; /* staff_db_id → isNational (bool) */
+  var _natNameMap = {}; /* normalizedName → isNational (bool) */
+  (STATE.teachers||[]).forEach(function(t){
+    _natMap[t.staff_db_id] = t.is_national !== false;
+    _natNameMap[_normN2(t.name_ar)] = t.is_national !== false;
+  });
+  function _isNational(tid, name) {
+    if (tid && _natMap[tid] !== undefined) return _natMap[tid];
+    return _natNameMap[_normN2(name)] !== false;
+  }
   var days = STATE.selectedDays;
   var ppd = parseInt(document.getElementById('periodsPerDay').value) || 7;
   STATE.periodsPerDay = ppd;
@@ -1876,7 +1888,11 @@ function runGenerate(classes, days, ppd) {
               if (teacherBusy[task.teacherId+'_'+a.day+'_'+_ri]) aRun++;
               if (teacherBusy[task.teacherId+'_'+b.day+'_'+_ri]) bRun++;
             }
-            return (aRun >= 3 ? 100 : 0) + aBusy - ((bRun >= 3 ? 100 : 0) + bBusy);
+            /* المواطنة: تجنب التتالي بشدة. غير المواطنة: توزيع عادل فقط */
+            if (_isNational(task.teacherId, task.teacherNameAr)) {
+              return (aRun >= 3 ? 100 : 0) + aBusy - ((bRun >= 3 ? 100 : 0) + bBusy);
+            }
+            return aBusy - bBusy;
           });
         }
         var sl = candidates[0];
@@ -1909,8 +1925,12 @@ function runGenerate(classes, days, ppd) {
         for (var ri=1;ri<sorted.length;ri++) {
           if (sorted[ri]===sorted[ri-1]+1) { run++; maxRun=Math.max(maxRun,run); } else run=1;
         }
-        if (maxRun >= 5) { /* حصة مزدوجة + مفردة = 3 طبيعي — نُحذَّر فقط عند 5+ متتالية — 4 مقبول */
-          var warningType = maxRun >= 6 ? 'over' : 'high';
+        /* المواطنات: تحذير عند 4+ متتالية. غير المواطنات: لا تحذير (نصابهن عالٍ مقبول) */
+        var _tSlotName = '';
+        for (var _sp=1;_sp<=clsPpd(cls);_sp++){var _ss=tt[cls][day][_sp];if(_ss&&_ss.teacherId===tid){_tSlotName=_ss.teacherNameAr||'';break;}}
+        var _tIsNat = _isNational(tid, _tSlotName);
+        if (_tIsNat && maxRun >= 4) {
+          var warningType = maxRun >= 5 ? 'over' : 'high';
           consecutiveWarnings++;
           for (var p2=1;p2<=ppd;p2++) {
             if (tt[cls][day][p2] && tt[cls][day][p2].teacherId===tid) {
@@ -1989,7 +2009,7 @@ function runGenerate(classes, days, ppd) {
   cb.innerHTML = '';
   if (unassigned > 0) cb.innerHTML += '<div class="alert al-err">❌ ' + unassigned + ' حصة لم توزَّع — قلِّل عدد الحصص أو أعِد التوليد</div>';
   if (forcedCount > 0) cb.innerHTML += '<div class="alert al-warn">⚠️ ' + forcedCount + ' حصة وُزِّعت اضطرارياً (تكرار مادة في اليوم)</div>';
-  if (consecutiveWarnings > 0) cb.innerHTML += '<div class="alert al-warn">⚡ يوجد معلم/ة يدرِّس 5+ حصص متتالية (غير مريح) — انظر العلامة ⚠️ في الجدول</div>';
+  if (consecutiveWarnings > 0) cb.innerHTML += '<div class="alert al-warn">⚡ يوجد معلمة مواطنة تدرِّس 4+ حصص متتالية — انظر العلامة ⚠️ في الجدول</div>';
   /* ── فحص تعارضات المعلمين (نفس الوقت + فصلين مختلفين) ── */
   var teacherConflicts = findTeacherConflicts(tt, classes, days, ppd, STATE.fridayPeriodsPerDay);
   teacherConflicts.forEach(function(cf) {
