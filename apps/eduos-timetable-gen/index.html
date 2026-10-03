@@ -1784,13 +1784,24 @@ function runGenerate(classes, days, ppd) {
       var _rawCa = (STATE.classAssignments[s.name] || {})[cls];
       if (!_rawCa || _rawCa.status === 'pending') return;
       var info = getTeacherForClass(s.name, cls);
-      var ppw = s.ppw || 2;
-      var pairs = s.isDouble ? Math.floor(ppw/2) : 0;
-      var singles = s.isDouble ? ppw%2 : ppw;
+      /* ── ppw ديناميكي حسب الصف والمادة (وزاري) ── */
+      var _gradeNum = parseInt(cls) || 0; /* '3A'→3, 'KG1A'→NaN→0 */
+      var _gradePPW = (function(sname, g) {
+        if (sname === 'الفنون البصرية') return { ppw: g >= 5 ? 2 : 1, dbl: g >= 5 };
+        if (sname === 'الذكاء الاصطناعي والتكنولوجيا') return { ppw: g <= 2 ? 1 : 2, dbl: g > 2 };
+        if (sname === 'العلوم') return { ppw: g >= 7 ? 7 : g >= 5 ? 6 : 4, dbl: false };
+        if (sname === 'الرياضيات') return { ppw: g >= 5 ? 7 : 6, dbl: s.isDouble };
+        if (sname === 'اللغة العربية') return { ppw: g <= 2 ? 7 : g <= 4 ? 6 : 5, dbl: s.isDouble };
+        return { ppw: s.ppw || 2, dbl: s.isDouble };
+      })(s.name, _gradeNum);
+      var ppw = _gradePPW.ppw;
+      var _isDoubleEff = _gradePPW.dbl;
+      var pairs = _isDoubleEff ? Math.floor(ppw/2) : 0;
+      var singles = _isDoubleEff ? ppw%2 : ppw;
       var tid = info.teacherId;
       if (tid && !teacherTasksMap[tid]) teacherTasksMap[tid] = {doubles:[], singles:[]};
       for (var _d=0; _d<pairs; _d++) {
-        var t = {cls:cls, subject:s.name, teacherId:info.teacherId, teacherNameAr:info.teacherNameAr, isVacant:info.isVacant, isDouble:true};
+        var t = {cls:cls, subject:s.name, teacherId:info.teacherId, teacherNameAr:info.teacherNameAr, isVacant:info.isVacant, isDouble:true, ppwEff:ppw};
         if (tid) teacherTasksMap[tid].doubles.push(t); else vacantTasks.doubles.push(t);
       }
       for (var _s=0; _s<singles; _s++) {
@@ -2003,7 +2014,19 @@ function runGenerate(classes, days, ppd) {
     var assignedCount = Object.keys(_ca3).filter(function(c3) {
       return _ca3[c3] && _ca3[c3].status === 'assigned'; /* إصلاح جذري: شاغر وpending لا يُحسبان في compliance */
     }).length;
-    var required = (s.ppw || 0) * assignedCount;
+    /* required يحسب حسب الصف لكل مادة (وزاري) */
+    var required = 0;
+    Object.keys(_ca3).filter(function(c3){ return _ca3[c3] && _ca3[c3].status === 'assigned'; }).forEach(function(c3){
+      var _g = parseInt(c3) || 0;
+      var _pp;
+      if (s.name === 'الفنون البصرية') _pp = _g >= 5 ? 2 : 1;
+      else if (s.name === 'الذكاء الاصطناعي والتكنولوجيا') _pp = _g <= 2 ? 1 : 2;
+      else if (s.name === 'العلوم') _pp = _g >= 7 ? 7 : _g >= 5 ? 6 : 4;
+      else if (s.name === 'الرياضيات') _pp = _g >= 5 ? 7 : 6;
+      else if (s.name === 'اللغة العربية') _pp = _g <= 2 ? 7 : _g <= 4 ? 6 : 5;
+      else _pp = s.ppw || 0;
+      required += _pp;
+    });
     var actual = 0;
     classes.forEach(function(cls) {
       days.forEach(function(day) {
