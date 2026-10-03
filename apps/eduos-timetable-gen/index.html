@@ -1909,8 +1909,8 @@ function runGenerate(classes, days, ppd) {
         for (var ri=1;ri<sorted.length;ri++) {
           if (sorted[ri]===sorted[ri-1]+1) { run++; maxRun=Math.max(maxRun,run); } else run=1;
         }
-        if (maxRun >= 4) { /* حصة مزدوجة + مفردة = 3 طبيعي — نُحذَّر فقط عند 4+ متتالية */
-          var warningType = maxRun >= 4 ? 'over' : 'high';
+        if (maxRun >= 5) { /* حصة مزدوجة + مفردة = 3 طبيعي — نُحذَّر فقط عند 5+ متتالية — 4 مقبول */
+          var warningType = maxRun >= 6 ? 'over' : 'high';
           consecutiveWarnings++;
           for (var p2=1;p2<=ppd;p2++) {
             if (tt[cls][day][p2] && tt[cls][day][p2].teacherId===tid) {
@@ -1989,7 +1989,7 @@ function runGenerate(classes, days, ppd) {
   cb.innerHTML = '';
   if (unassigned > 0) cb.innerHTML += '<div class="alert al-err">❌ ' + unassigned + ' حصة لم توزَّع — قلِّل عدد الحصص أو أعِد التوليد</div>';
   if (forcedCount > 0) cb.innerHTML += '<div class="alert al-warn">⚠️ ' + forcedCount + ' حصة وُزِّعت اضطرارياً (تكرار مادة في اليوم)</div>';
-  if (consecutiveWarnings > 0) cb.innerHTML += '<div class="alert al-warn">⚡ يوجد معلم/ة يدرِّس 3+ حصص متتالية — انظر العلامة ⚠️ في الجدول</div>';
+  if (consecutiveWarnings > 0) cb.innerHTML += '<div class="alert al-warn">⚡ يوجد معلم/ة يدرِّس 5+ حصص متتالية (غير مريح) — انظر العلامة ⚠️ في الجدول</div>';
   /* ── فحص تعارضات المعلمين (نفس الوقت + فصلين مختلفين) ── */
   var teacherConflicts = findTeacherConflicts(tt, classes, days, ppd, STATE.fridayPeriodsPerDay);
   teacherConflicts.forEach(function(cf) {
@@ -2026,7 +2026,8 @@ function runGenerate(classes, days, ppd) {
 
   /* ── تقرير نصاب المعلمين ── */
   var teacherMap = {};
-  var _tNatMap = {}; var _tNatIdMap = {}; (STATE.teachers||[]).forEach(function(t){ _tNatMap[t.name_ar] = t.is_national !== false; _tNatIdMap[t.staff_db_id] = t.is_national !== false; });
+  var _normN = function(s){ return (s||''). replace(/\s+/g,' ').trim(); };
+  var _tNatMap = {}; var _tNatIdMap = {}; (STATE.teachers||[]).forEach(function(t){ _tNatMap[_normN(t.name_ar)] = t.is_national !== false; _tNatIdMap[t.staff_db_id] = t.is_national !== false; });
   classes.forEach(function(cls) {
     days.forEach(function(day) {
       var dayPpd4 = (day === 'الجمعة') ? (STATE.fridayPeriodsPerDay || 4) : ppd;
@@ -2036,7 +2037,7 @@ function runGenerate(classes, days, ppd) {
           var tName = sl4.teacherNameAr;
           var _sl4Id = sl4.teacherId;
           var _tKey = _sl4Id || tName;
-          if (!teacherMap[_tKey]) teacherMap[_tKey] = { name: tName, periods: 0, subjects: {}, is_national: (_sl4Id !== undefined && _tNatIdMap[_sl4Id] !== undefined) ? _tNatIdMap[_sl4Id] !== false : _tNatMap[tName] !== false };
+          if (!teacherMap[_tKey]) teacherMap[_tKey] = { name: tName, periods: 0, subjects: {}, is_national: (_sl4Id !== undefined && _tNatIdMap[_sl4Id] !== undefined) ? _tNatIdMap[_sl4Id] !== false : _tNatMap[_normN(tName)] !== false };
           teacherMap[_tKey].periods++;
           if (sl4.subject) teacherMap[_tKey].subjects[sl4.subject] = true;
         }
