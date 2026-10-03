@@ -784,7 +784,10 @@ function sbFetch(path, opts) {
   /* دائماً اقرأ من window.EduOS — لا تعتمد على SB_KEY المُخزَّن قبل تهيئة EduOS */
   SB_URL = (window.EduOS && window.EduOS.SB_URL) || SB_URL;
   SB_KEY = (window.EduOS && window.EduOS.SB_KEY) || SB_KEY;
-  var headers = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json', 'Range-Unit': 'items', 'Range': '0-2999' };
+  /* استخدم JWT المستخدم إذا كان موجوداً — لا الـ anon key */
+  var _sess = {}; try { _sess = JSON.parse(sessionStorage.getItem('edoos_user')||'{}'); } catch(e){}
+  var _jwt = (_sess && _sess.token) || SB_KEY;
+  var headers = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + _jwt, 'Content-Type': 'application/json', 'Range-Unit': 'items', 'Range': '0-2999' };
   if (opts && opts.headers) Object.assign(headers, opts.headers);
   return fetch(SB_URL + '/rest/v1/' + path, Object.assign({ headers: headers }, opts || {}));
 }
@@ -1680,17 +1683,14 @@ function generateTimetable() {
   var _natMap = {}; /* staff_db_id → isNational (bool) */
   var _natNameMap = {}; /* normalizedName → isNational (bool) */
   (STATE.teachers||[]).forEach(function(t){
-    if (t.staff_db_id != null) _natMap[String(t.staff_db_id)] = (t.is_national !== false);
-    _natNameMap[_normN2(t.name_ar)] = (t.is_national !== false);
+    _natMap[t.staff_db_id] = t.is_national !== false;
+    _natNameMap[_normN2(t.name_ar)] = t.is_national !== false;
   });
   STATE._natMap = _natMap;
   STATE._natNameMap = _natNameMap;
   function _isNational(tid, name) {
-    var sid = tid != null ? String(tid) : '';
-    if (sid && _natMap.hasOwnProperty(sid)) return _natMap[sid];
-    var nn = _normN2(name);
-    if (nn && _natNameMap.hasOwnProperty(nn)) return _natNameMap[nn];
-    return true; /* افتراضي مواطنة */
+    if (tid && _natMap[tid] !== undefined) return _natMap[tid];
+    return _natNameMap[_normN2(name)] !== false;
   }
   var days = STATE.selectedDays;
   var ppd = parseInt(document.getElementById('periodsPerDay').value) || 7;
@@ -1761,11 +1761,8 @@ function runGenerate(classes, days, ppd) {
   var _nnm2 = STATE._natNameMap || {};
   var _normN2 = function(s){ return (s||'').replace(/\s+/g,' ').trim(); };
   function _isNational(tid, name) {
-    var sid = tid != null ? String(tid) : '';
-    if (sid && _nm2.hasOwnProperty(sid)) return _nm2[sid];
-    var nn = _normN2(name);
-    if (nn && _nnm2.hasOwnProperty(nn)) return _nnm2[nn];
-    return true;
+    if (tid && _nm2[tid] !== undefined) return _nm2[tid];
+    return _nnm2[_normN2(name)] !== false;
   }
   var fridayPpd = STATE.fridayPeriodsPerDay || 4;
   var classPpdMap = STATE.classPpdMap || {};
@@ -2063,7 +2060,7 @@ function runGenerate(classes, days, ppd) {
   /* ── تقرير نصاب المعلمين ── */
   var teacherMap = {};
   var _normN = function(s){ return (s||''). replace(/\s+/g,' ').trim(); };
-  var _tNatMap = {}; var _tNatIdMap = {}; (STATE.teachers||[]).forEach(function(t){ _tNatMap[_normN(t.name_ar)] = (t.is_national !== false); if (t.staff_db_id != null) _tNatIdMap[String(t.staff_db_id)] = (t.is_national !== false); });
+  var _tNatMap = {}; var _tNatIdMap = {}; (STATE.teachers||[]).forEach(function(t){ _tNatMap[_normN(t.name_ar)] = t.is_national !== false; _tNatIdMap[t.staff_db_id] = t.is_national !== false; });
   classes.forEach(function(cls) {
     days.forEach(function(day) {
       var dayPpd4 = (day === 'الجمعة') ? (STATE.fridayPeriodsPerDay || 4) : ppd;
@@ -2073,7 +2070,7 @@ function runGenerate(classes, days, ppd) {
           var tName = sl4.teacherNameAr;
           var _sl4Id = sl4.teacherId;
           var _tKey = _sl4Id || tName;
-          if (!teacherMap[_tKey]) teacherMap[_tKey] = { name: tName, periods: 0, subjects: {}, is_national: (function(){ var sid = _sl4Id != null ? String(_sl4Id) : ''; if (sid && _tNatIdMap.hasOwnProperty(sid)) return _tNatIdMap[sid]; var nn = _normN(tName); if (nn && _tNatMap.hasOwnProperty(nn)) return _tNatMap[nn]; return true; })() };
+          if (!teacherMap[_tKey]) teacherMap[_tKey] = { name: tName, periods: 0, subjects: {}, is_national: (_sl4Id !== undefined && _tNatIdMap[_sl4Id] !== undefined) ? _tNatIdMap[_sl4Id] !== false : _tNatMap[_normN(tName)] !== false };
           teacherMap[_tKey].periods++;
           if (sl4.subject) teacherMap[_tKey].subjects[sl4.subject] = true;
         }
