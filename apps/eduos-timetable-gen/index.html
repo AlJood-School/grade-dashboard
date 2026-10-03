@@ -1821,20 +1821,27 @@ function runGenerate(classes, days, ppd) {
       }
     });
   });
-  /* رتِّب المهام: لكل معلمة — المزدوجة أولاً ثم الفردية (للاستفادة من الفرص الأوسع) */
+  /* رتِّب المهام: CCDI doubles أولاً (الأصعب توزيعاً) — ثم باقي doubles — ثم singles */
+  var isCCDISubj = function(s){ return s && (s.indexOf('ذكاء') >= 0 || s.indexOf('تكنولوجيا') >= 0); };
   var tasks = [];
-  /* 🔧 إصلاح: رتِّب المعلمات من الأكثر قيوداً أولاً — doubles أكثر + فصول أكثر = أولوية */
+  /* 🔧 ترتيب المعلمات: الأكثر CCDI doubles أولاً */
   var sortedTeachers = Object.keys(teacherTasksMap).sort(function(a, b) {
-    var aScore = teacherTasksMap[a].doubles.length * 3 + teacherTasksMap[a].singles.length;
-    var bScore = teacherTasksMap[b].doubles.length * 3 + teacherTasksMap[b].singles.length;
-    return bScore - aScore; /* الأكثر قيوداً أولاً */
+    var aCCD = teacherTasksMap[a].doubles.filter(function(t){ return isCCDISubj(t.subject); }).length;
+    var bCCD = teacherTasksMap[b].doubles.filter(function(t){ return isCCDISubj(t.subject); }).length;
+    var aScore = aCCD * 10 + teacherTasksMap[a].doubles.length * 3 + teacherTasksMap[a].singles.length;
+    var bScore = bCCD * 10 + teacherTasksMap[b].doubles.length * 3 + teacherTasksMap[b].singles.length;
+    return bScore - aScore;
   });
   sortedTeachers.forEach(function(tid) {
-    tasks = tasks.concat(shuffleArray(teacherTasksMap[tid].doubles));
-    tasks = tasks.concat(shuffleArray(teacherTasksMap[tid].singles));
+    /* CCDI doubles أولاً داخل كل معلمة */
+    var ccdD = teacherTasksMap[tid].doubles.filter(function(t){ return isCCDISubj(t.subject); });
+    var othD = teacherTasksMap[tid].doubles.filter(function(t){ return !isCCDISubj(t.subject); });
+    tasks = tasks.concat(ccdD).concat(shuffleArray(othD)).concat(shuffleArray(teacherTasksMap[tid].singles));
   });
-  /* الشواغر في الآخر */
-  tasks = tasks.concat(shuffleArray(vacantTasks.doubles)).concat(shuffleArray(vacantTasks.singles));
+  /* الشواغر: CCDI أولاً ثم الباقي */
+  tasks = tasks.concat(vacantTasks.doubles.filter(function(t){ return isCCDISubj(t.subject); }));
+  tasks = tasks.concat(shuffleArray(vacantTasks.doubles.filter(function(t){ return !isCCDISubj(t.subject); })));
+  tasks = tasks.concat(shuffleArray(vacantTasks.singles));
 
   var teacherBusy = {};
   var totalDone = 0, totalTasks = tasks.length;
@@ -1959,11 +1966,13 @@ function runGenerate(classes, days, ppd) {
         for (var ri=1;ri<sorted.length;ri++) {
           if (sorted[ri]===sorted[ri-1]+1) { run++; maxRun=Math.max(maxRun,run); } else run=1;
         }
-        /* المواطنات: تحذير عند 4+ متتالية. غير المواطنات: لا تحذير (نصابهن عالٍ مقبول) */
+        /* المواطنات: تحذير عند 4+ متتالية. غير المواطنات وCCDI doubles: لا تحذير */
         var _tSlotName = '';
-        for (var _sp=1;_sp<=clsPpd(cls);_sp++){var _ss=tt[cls][day][_sp];if(_ss&&_ss.teacherId===tid){_tSlotName=_ss.teacherNameAr||'';break;}}
+        var _tIsCCDIRun = true; /* هل كل الحصص المتتالية هي CCDI؟ */
+        for (var _sp=1;_sp<=clsPpd(cls);_sp++){var _ss=tt[cls][day][_sp];if(_ss&&_ss.teacherId===tid){_tSlotName=_ss.teacherNameAr||'';if(!isCCDISubj(_ss.subject))_tIsCCDIRun=false;}}
         var _tIsNat = _isNational(tid, _tSlotName);
-        if (_tIsNat && maxRun >= 4) {
+        /* CCDI doubles مقبولة للمواطنة — مصممة للتتالي */
+        if (_tIsNat && !_tIsCCDIRun && maxRun >= 4) {
           var warningType = maxRun >= 5 ? 'over' : 'high';
           consecutiveWarnings++;
           for (var p2=1;p2<=ppd;p2++) {
