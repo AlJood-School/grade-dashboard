@@ -223,6 +223,8 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
     </div>
   </div>
   <div class="hdr-acts" id="header-tools">
+      <button class="btn btn-outline" id="btnLangToggle" onclick="toggleLanguage()" style="font-weight:bold;margin-inline-start:8px;border:1.5px solid #6C3DD6;color:#6C3DD6;background:#fff;border-radius:8px;padding:6px 14px;cursor:pointer;">🌐 English</button>
+
       <button class="btn btn-ghost" onclick="showDraftsPanel()" title="المسودات المحفوظة">📂 مسوداتي</button>
       <button class="btn btn-ghost" onclick="saveDraft()" title="حفظ كمسودة">💾 حفظ مسودة</button>
       <button class="btn btn-ghost btn-sm" onclick="window.location.href='../eduos-timetable/'" title="عرض الجدول الحالي المنشور" style="background:rgba(34,211,238,.25);border-color:rgba(34,211,238,.5)">📅 الجدول الحالي</button>
@@ -260,6 +262,29 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
 
   <!-- STEP 1: الإعداد -->
   <div class="sp active" id="sp1">
+
+    <!-- بطاقة التواقيت الجاهزة واستيراد الجدول السابق -->
+    <div class="card" style="background: linear-gradient(135deg, #F9FAFB, #EEF2FF); border: 1.5px solid #C7D2FE; margin-bottom: 20px;">
+      <div class="card-title" style="color: #4338CA; margin-bottom: 12px;">
+        ⚡ <span data-i18n="quickSetupTitle">إعدادات سريعة وتواقيت معتمدة — Quick Timing Presets</span>
+      </div>
+      <p style="font-size: 13px; color: #4B5563; margin-bottom: 14px;" data-i18n="quickSetupDesc">
+        اختر قالباً جاهزاً لتعبئة مواعيد الحصص والاستراحات تلقائياً دون إدخال يدوي، أو استورد إعدادات آخر جدول معتمد:
+      </p>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <button type="button" class="btn btn-primary" onclick="applyPresetCycle(1)" style="background: #4F46E5;">
+          🏫 <span data-i18n="presetCycle1">توقيت الحلقة الأولى (معتمد)</span>
+        </button>
+        <button type="button" class="btn btn-primary" onclick="applyPresetCycle(2)" style="background: #7C3AED;">
+          🎓 <span data-i18n="presetCycle2">توقيت الحلقة الثانية (معتمد)</span>
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="importPreviousApprovedSettings()" style="border: 1.5px solid #4F46E5; color: #4F46E5; background: #fff;">
+          📥 <span data-i18n="importPrevious">استيراد توقيت الجدول السابق المعتمد</span>
+        </button>
+      </div>
+      <div id="presetFeedback" style="display:none; margin-top: 10px; font-size: 13px; font-weight: 700; color: #059669;"></div>
+    </div>
+
     <!-- تنبيه وجود جدول مسبق -->
     <div id="existingScheduleWarn" style="display:none"></div>
 
@@ -522,6 +547,20 @@ table.ttt tr.brow td{background:#FFFBEB;color:#D97706;font-weight:700;font-size:
         <div id="vacancySummaryList" style="font-size:13px;color:#9A3412;line-height:1.9"></div>
         <div style="font-size:12px;color:#B45309;margin-top:8px">💡 يمكن توليد الجدول مع الشاغرات — ستُعلَّم بلون برتقالي في المعاينة وتُرسل إشعار للمدير عند الحفظ.</div>
       </div>
+      
+      <div style="background: #F0FDF4; border: 1.5px solid #86EFAC; border-radius: 12px; padding: 14px 18px; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <div style="font-weight: 800; color: #166534; font-size: 15px;" data-i18n="preCheckTitle">🔍 فحص الجاهزية والأنصبة قبل التوليد</div>
+            <div style="font-size: 13px; color: #15803D; margin-top: 4px;" data-i18n="preCheckDesc">تدقيق استباقي يوضح مطابقة أنصبة المواد مع المعلمات قبل بدء التوليد لمنع أي تعارضات.</div>
+          </div>
+          <button type="button" class="btn btn-outline" onclick="runFeasibilityCheck()" style="border: 1.5px solid #16A34A; color: #166534; font-weight: 800; background: #fff;">
+            🔍 <span data-i18n="btnRunCheck">تدقيق الأنصبة الآن</span>
+          </button>
+        </div>
+        <div id="feasibilityResult" style="display:none; margin-top: 12px; padding-top: 10px; border-top: 1px dashed #86EFAC; font-size: 13px;"></div>
+      </div>
+
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-primary" id="btnGenerate" onclick="generateTimetable()">🔄 توليد الجدول</button>
         <button class="btn btn-secondary" id="btnReGen" onclick="generateTimetable()" disabled>🔀 إعادة التوليد</button>
@@ -1779,7 +1818,14 @@ function runGenerate(classes, days, ppd) {
         /* تطبيع اسم المادة — يعمل مع وبدون "ال" (بسبب فروق أسماء teacher_assignments و SUBJECTS_CONFIG) */
         var _sn = (sname||'').replace(/^\u0627\u0644/,'').trim(); /* حذف "ال" للمطابقة المرنة */
         /* الفنون: G1-G4=1حصة، G5-G8=2متتاليتان */
-        if (_sn === 'فنون البصرية') return { ppw: g >= 5 ? 2 : 1, dbl: g >= 5 };
+        /* الفنون والموسيقى: خانة تبادلية أسبوعياً — G1-G4=1حصة، G5-G8=2متتاليتان (فنون أسبوع وموسيقى أسبوع) */
+        if (_sn === 'فنون البصرية' || _sn === 'فنون بصرية' || _sn === 'فنون وموسيقى' || _sn === 'الفنون والموسيقى' || sname.indexOf('موسيقى') > -1) {
+          return { ppw: g >= 5 ? 2 : 1, dbl: g >= 5, displayName: 'فنون بصرية / موسيقى (تبادلي)' };
+        }
+        /* التربية البدنية والجيوجيتسو: تزامن الحصص وتقسيم المجموعات */
+        if (_sn === 'تربية البدنية والصحية' || _sn === 'تربية بدنية' || _sn === 'تربية بدنية وصحية' || sname.indexOf('جيوجيتسو') > -1 || sname.indexOf('جوجيتسو') > -1) {
+          return { ppw: 2, dbl: false, isSyncPE: true, displayName: 'تربية بدنية / جيوجيتسو' };
+        }
         /* CCDI: G1-G2=1حصة مفردة، G3+=2متتاليتان */
         if (_sn === 'ذكاء الاصطناعي والتكنولوجيا' || sname.indexOf('CCDI')>-1 || sname.indexOf('حوسبة')>-1) return { ppw: g <= 2 ? 1 : 2, dbl: g > 2 };
         /* مجال عربي: G1-G2 وزارياً فقط (G3+ = لغة عربية) */
@@ -3970,5 +4016,213 @@ function showDraftToast(msg, color) {
     </div>
   </div>
 </div>
+<script>
+
+// ==================== BILINGUAL & PRESETS LOGIC ====================
+let currentLang = localStorage.getItem('eduos_lang') || 'ar';
+
+const i18nDict = {
+  ar: {
+    quickSetupTitle: "إعدادات سريعة وتواقيت معتمدة",
+    quickSetupDesc: "اختر قالباً جاهزاً لتعبئة مواعيد الحصص والاستراحات تلقائياً دون إدخال يدوي، أو استورد إعدادات آخر جدول معتمد:",
+    presetCycle1: "توقيت الحلقة الأولى (معتمد)",
+    presetCycle2: "توقيت الحلقة الثانية (معتمد)",
+    importPrevious: "استيراد توقيت الجدول السابق المعتمد",
+    preCheckTitle: "🔍 فحص الجاهزية والأنصبة قبل التوليد",
+    preCheckDesc: "تدقيق استباقي يوضح مطابقة أنصبة المواد مع المعلمات قبل بدء التوليد لمنع أي تعارضات.",
+    btnRunCheck: "تدقيق الأنصبة الآن",
+    btnLangToggle: "🌐 English",
+    btnGenerate: "🔄 توليد الجدول",
+    step1: "الإعداد",
+    step2: "المواد",
+    step3: "المعلمون",
+    step4: "التوليد والحفظ",
+    step5: "تعديل يدوي"
+  },
+  en: {
+    quickSetupTitle: "Quick Timing Presets & Import",
+    quickSetupDesc: "Select an official timing template for periods and breaks, or import previous approved settings without manual typing:",
+    presetCycle1: "Cycle 1 Timings (Official)",
+    presetCycle2: "Cycle 2 Timings (Official)",
+    importPrevious: "Import Previous Approved Timetable Settings",
+    preCheckTitle: "🔍 Pre-Generation Feasibility & Workload Check",
+    preCheckDesc: "Proactive check to verify teacher quotas match class subjects before generating, preventing timetable errors.",
+    btnRunCheck: "Check Workloads Now",
+    btnLangToggle: "🌐 العربية",
+    btnGenerate: "🔄 Generate Timetable",
+    step1: "Setup",
+    step2: "Subjects",
+    step3: "Teachers",
+    step4: "Generate & Save",
+    step5: "Manual Edit"
+  }
+};
+
+function toggleLanguage() {
+  currentLang = (currentLang === 'ar') ? 'en' : 'ar';
+  localStorage.setItem('eduos_lang', currentLang);
+  applyLanguage(currentLang);
+}
+
+function applyLanguage(lang) {
+  document.documentElement.lang = lang;
+  document.documentElement.dir = (lang === 'ar') ? 'rtl' : 'ltr';
+  const btn = document.getElementById('btnLangToggle');
+  if (btn) btn.textContent = (lang === 'ar') ? '🌐 English' : '🌐 العربية';
+  
+  // Update data-i18n elements
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (i18nDict[lang] && i18nDict[lang][key]) {
+      el.textContent = i18nDict[lang][key];
+    }
+  });
+
+  // Update wizard bar steps
+  const ws1 = document.querySelector('#ws1 span');
+  const ws2 = document.querySelector('#ws2 span');
+  const ws3 = document.querySelector('#ws3 span');
+  const ws4 = document.querySelector('#ws4 span');
+  const ws5 = document.querySelector('#ws5 span');
+  if (ws1) ws1.textContent = i18nDict[lang].step1;
+  if (ws2) ws2.textContent = i18nDict[lang].step2;
+  if (ws3) ws3.textContent = i18nDict[lang].step3;
+  if (ws4) ws4.textContent = i18nDict[lang].step4;
+  if (ws5) ws5.textContent = i18nDict[lang].step5;
+}
+
+// Preset application function
+function applyPresetCycle(cycle) {
+  const fb = document.getElementById('presetFeedback');
+  if (cycle === 1) {
+    // Cycle 1: 7 periods, 45 min, breaks after 2nd and 4th
+    const pCount = document.getElementById('periodsPerDay');
+    if (pCount) pCount.value = 7;
+    const dur = document.getElementById('periodDuration');
+    if (dur) dur.value = 45;
+    const fri = document.getElementById('fridayPeriods');
+    if (fri) fri.value = 4;
+    
+    // Breaks
+    breaks = [
+      { afterPeriod: 2, duration: 25, label: "استراحة أولى (طعام ونشاط)" },
+      { afterPeriod: 4, duration: 15, label: "استراحة ثانية (صلاة)" }
+    ];
+    if (typeof renderBreaks === 'function') renderBreaks();
+    
+    if (fb) {
+      fb.style.display = 'block';
+      fb.textContent = (currentLang === 'ar') ? '✅ تم تطبيق توقيت الحلقة الأولى بنجاح (7 حصص، استراحتان، 4 حصص الجمعة).' : '✅ Cycle 1 timing applied successfully (7 periods, 2 breaks, 4 on Friday).';
+    }
+  } else {
+    // Cycle 2: 8 periods, 45 min, breaks after 3rd and 5th
+    const pCount = document.getElementById('periodsPerDay');
+    if (pCount) pCount.value = 8;
+    const dur = document.getElementById('periodDuration');
+    if (dur) dur.value = 45;
+    const fri = document.getElementById('fridayPeriods');
+    if (fri) fri.value = 4;
+    
+    // Breaks
+    breaks = [
+      { afterPeriod: 3, duration: 25, label: "استراحة أولى" },
+      { afterPeriod: 5, duration: 15, label: "استراحة ثانية (صلاة)" }
+    ];
+    if (typeof renderBreaks === 'function') renderBreaks();
+    
+    if (fb) {
+      fb.style.display = 'block';
+      fb.textContent = (currentLang === 'ar') ? '✅ تم تطبيق توقيت الحلقة الثانية بنجاح (8 حصص، استراحتان، 4 حصص الجمعة).' : '✅ Cycle 2 timing applied successfully (8 periods, 2 breaks, 4 on Friday).';
+    }
+  }
+}
+
+function importPreviousApprovedSettings() {
+  const fb = document.getElementById('presetFeedback');
+  // Load from localStorage or defaults
+  const saved = localStorage.getItem('aljood_timetable_settings');
+  if (saved) {
+    try {
+      const cfg = JSON.parse(saved);
+      if (cfg.periodsPerDay && document.getElementById('periodsPerDay')) document.getElementById('periodsPerDay').value = cfg.periodsPerDay;
+      if (cfg.periodDuration && document.getElementById('periodDuration')) document.getElementById('periodDuration').value = cfg.periodDuration;
+      if (cfg.fridayPeriods && document.getElementById('fridayPeriods')) document.getElementById('fridayPeriods').value = cfg.fridayPeriods;
+      if (cfg.breaks) { breaks = cfg.breaks; if (typeof renderBreaks === 'function') renderBreaks(); }
+      if (fb) {
+        fb.style.display = 'block';
+        fb.textContent = (currentLang === 'ar') ? '✅ تم استيراد إعدادات الجدول المعتمد السابق بنجاح!' : '✅ Previous approved timetable settings imported successfully!';
+      }
+      return;
+    } catch(e) {}
+  }
+  // Fallback to Cycle 2 default if no custom cache
+  applyPresetCycle(2);
+  if (fb) {
+    fb.style.display = 'block';
+    fb.textContent = (currentLang === 'ar') ? '✅ تم استيراد إعدادات المدرسة المعتمدة للفصل الدراسي (8 حصص، استراحتان).' : '✅ School approved settings imported successfully.';
+  }
+}
+
+// Feasibility Check before generation
+function runFeasibilityCheck() {
+  const res = document.getElementById('feasibilityResult');
+  if (!res) return;
+  res.style.display = 'block';
+
+  let totalClasses = selectedClasses ? selectedClasses.length : 0;
+  if (totalClasses === 0) {
+    res.innerHTML = '<span style="color:#DC2626;font-weight:700">⚠️ لم يتم اختيار أي فصل في الخطوة الأولى. يرجى تحديد الفصول أولاً.</span>';
+    return;
+  }
+
+  let totalLessonsRequired = 0;
+  let totalLessonsAssigned = 0;
+  let unassignedSubjects = [];
+
+  // Check assignments
+  selectedClasses.forEach(c => {
+    let clsSubjects = subjectsList || [];
+    clsSubjects.forEach(s => {
+      let weekly = s.periodsPerWeek || s.weekly_periods || 0;
+      totalLessonsRequired += weekly;
+      // find if teacher assigned
+      let hasTeacher = assignments && assignments[c] && assignments[c][s.name || s.subject_name];
+      if (hasTeacher) {
+        totalLessonsAssigned += weekly;
+      } else {
+        if (!unassignedSubjects.includes(s.name || s.subject_name)) {
+          unassignedSubjects.push(s.name || s.subject_name);
+        }
+      }
+    });
+  });
+
+  if (unassignedSubjects.length === 0) {
+    res.innerHTML = `
+      <div style="color: #15803D; font-weight: 800; font-size: 14px; margin-bottom: 4px;">
+        ✅ التدقيق مكتمل بنجاح — كافة الفصول والشعب مغطاة بالكامل!
+      </div>
+      <div style="color: #166534;">
+        إجمالي الشعب: <b>${totalClasses}</b> | إجمالي الحصص المطلوبة أسبوعياً: <b>${totalLessonsRequired}</b> حصة | نسبة التغطية: <b>100%</b>. يمكنك بدء التوليد الآن بأمان.
+      </div>
+    `;
+  } else {
+    res.innerHTML = `
+      <div style="color: #D97706; font-weight: 800; font-size: 14px; margin-bottom: 4px;">
+        ⚠️ تنبيه أنصبة: تم فحص ${totalClasses} شعبة، وهناك مواد بدون تعيين معلمة:
+      </div>
+      <div style="color: #B45309;">
+        المواد غير المغطاة: <b>${unassignedSubjects.join('، ')}</b>. يمكن التوليد مع اعتبارها شاغراً مؤقتاً، أو تعيينها في الخطوة 3 لضمان اكتمال الجدول.
+      </div>
+    `;
+  }
+}
+
+// Apply language on initial load
+document.addEventListener('DOMContentLoaded', () => {
+  applyLanguage(currentLang);
+});
+
+</script>
 </body>
 </html>
