@@ -1885,6 +1885,26 @@ function runGenerate(classes, days, ppd) {
   tasks = tasks.concat(shuffleArray(vacantTasks.singles));
 
   var teacherBusy = {};
+  var teacherTimeSlots = {}; /* key: teacherId + '_' + day -> [ { start, end, cls, period } ] */
+  function isTeacherBusyAt(tid, day, cls, p) {
+    if (!tid) return false;
+    if (teacherBusy[tid + '_' + day + '_' + p]) return true;
+    var slots = teacherTimeSlots[tid + '_' + day];
+    if (!slots || !slots.length) return false;
+    var itv = getSlotIntervalForClass(cls, p, day);
+    for (var _si = 0; _si < slots.length; _si++) {
+      var sl = slots[_si];
+      if (Math.max(itv.start, sl.start) < Math.min(itv.end, sl.end)) return true;
+    }
+    return false;
+  }
+  function markTeacherBusy(tid, day, cls, p) {
+    if (!tid) return;
+    teacherBusy[tid + '_' + day + '_' + p] = true;
+    if (!teacherTimeSlots[tid + '_' + day]) teacherTimeSlots[tid + '_' + day] = [];
+    var itv = getSlotIntervalForClass(cls, p, day);
+    teacherTimeSlots[tid + '_' + day].push({ start: itv.start, end: itv.end, cls: cls, period: p });
+  }
   var totalDone = 0, totalTasks = tasks.length;
   var unassigned = 0, forcedCount = 0, doubleCount = 0;
 
@@ -1901,7 +1921,7 @@ function runGenerate(classes, days, ppd) {
         for (var p = 1; p < maxPd; p++) {
           if (tt[task.cls][day][p] || tt[task.cls][day][p+1]) continue;
           if (task.teacherId) {
-            if (teacherBusy[task.teacherId+'_'+day+'_'+p] || teacherBusy[task.teacherId+'_'+day+'_'+(p+1)]) continue;
+            if (isTeacherBusyAt(task.teacherId, day, task.cls, p) || isTeacherBusyAt(task.teacherId, day, task.cls, p+1)) continue;
           }
           tt[task.cls][day][p] = { subject:task.subject, teacherId:task.teacherId, teacherNameAr:task.teacherNameAr, isVacant:task.isVacant };
           tt[task.cls][day][p+1] = { subject:task.subject, teacherId:task.teacherId, teacherNameAr:task.teacherNameAr, isVacant:task.isVacant };
@@ -1921,7 +1941,7 @@ function runGenerate(classes, days, ppd) {
           var mxP = maxPeriodsForDay(d, clsPpd(task.cls), clsFridayPpd(task.cls));
           for (var p=1; p<=mxP; p++) {
             if (tt[task.cls][d][p]) return;
-            if (task.teacherId && teacherBusy[task.teacherId+'_'+d+'_'+p]) return;
+            if (task.teacherId && isTeacherBusyAt(task.teacherId, d, task.cls, p)) return;
             fbSlots.push({day:d, period:p});
           }
         });
@@ -1938,7 +1958,7 @@ function runGenerate(classes, days, ppd) {
         if (fbSlots.length > 0) {
           var fbSl = fbSlots[0];
           tt[task.cls][fbSl.day][fbSl.period] = { subject:task.subject, teacherId:task.teacherId, teacherNameAr:task.teacherNameAr, isVacant:task.isVacant, forced:true };
-          if (task.teacherId) teacherBusy[task.teacherId+'_'+fbSl.day+'_'+fbSl.period] = true;
+          if (task.teacherId) markTeacherBusy(task.teacherId, fbSl.day, task.cls, fbSl.period);
           assigned = true; forcedCount++;
         }
       }
@@ -1949,13 +1969,13 @@ function runGenerate(classes, days, ppd) {
       /* Preferred: slot where subject not already that day */
       var preferred = allSlots.filter(function(sl) {
         if (tt[task.cls][sl.day][sl.period]) return false;
-        if (task.teacherId && teacherBusy[task.teacherId+'_'+sl.day+'_'+sl.period]) return false;
+        if (task.teacherId && isTeacherBusyAt(task.teacherId, sl.day, task.cls, sl.period)) return false;
         var hasSubj = false;
         for (var p=1;p<=ppd;p++) { if (tt[task.cls][sl.day][p] && tt[task.cls][sl.day][p].subject===task.subject) { hasSubj=true; break; } }
         return !hasSubj;
       });
       var candidates = preferred.length > 0 ? preferred : allSlots.filter(function(sl) {
-        return !tt[task.cls][sl.day][sl.period] && !(task.teacherId && teacherBusy[task.teacherId+'_'+sl.day+'_'+sl.period]);
+        return !tt[task.cls][sl.day][sl.period] && !(task.teacherId && isTeacherBusyAt(task.teacherId, sl.day, task.cls, sl.period));
       });
       if (candidates.length > 0) {
         if (task.teacherId && candidates.length > 1) {
@@ -1979,7 +1999,7 @@ function runGenerate(classes, days, ppd) {
         }
         var sl = candidates[0];
         tt[task.cls][sl.day][sl.period] = { subject:task.subject, teacherId:task.teacherId, teacherNameAr:task.teacherNameAr, isVacant:task.isVacant };
-        if (task.teacherId) teacherBusy[task.teacherId+'_'+sl.day+'_'+sl.period] = true;
+        if (task.teacherId) markTeacherBusy(task.teacherId, sl.day, task.cls, sl.period);
         assigned = true;
       }
       if (!assigned) unassigned++;
@@ -3491,13 +3511,31 @@ function parseGradeKey(cls){
 }
 
 function getStageForClass(cls){
-  if(!STATE.multiStage||!STATE.stages.length) return null;
-  var gi=gradeToIndex(parseGradeKey(cls));
-  for(var i=0;i<STATE.stages.length;i++){
-    var s=STATE.stages[i];
-    if(gi>=gradeToIndex(s.gradeFrom)&&gi<=gradeToIndex(s.gradeTo)) return s;
+  var stages = (STATE.stages && STATE.stages.length) ? STATE.stages : (typeof ANTI_CROWD_STAGES !== 'undefined' ? ANTI_CROWD_STAGES : []);
+  var gi = gradeToIndex(parseGradeKey(cls));
+  for(var i=0; i<stages.length; i++){
+    var s = stages[i];
+    if(gi >= gradeToIndex(s.gradeFrom) && gi <= gradeToIndex(s.gradeTo)) return s;
   }
   return null;
+}
+
+function getSlotIntervalForClass(cls, period, day) {
+  var st = getStageForClass(cls);
+  var sched = st ? computeScheduleForStage(st, day) : computeSchedule(day);
+  for (var i = 0; i < sched.length; i++) {
+    if (sched[i].type === 'period' && sched[i].period === period) {
+      return {
+        start: timeToMins(sched[i].startTime),
+        end: timeToMins(sched[i].endTime),
+        startStr: sched[i].startTime,
+        endStr: sched[i].endTime
+      };
+    }
+  }
+  var base = (parseInt(cls) >= 5) ? 480 : 430;
+  var sMin = base + (period - 1) * 50;
+  return { start: sMin, end: sMin + 45, startStr: minsToTime(sMin), endStr: minsToTime(sMin + 45) };
 }
 
 function getClassPpd(cls){
