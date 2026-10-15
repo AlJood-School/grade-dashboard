@@ -13,9 +13,24 @@
 // Returns: { action, params, reasoning }
 // ============================================================
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://zuyizaiugpmhmeycqton.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
+// Deployment configuration only; never fall back to another school.
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
+
+function isDatabaseConfigured() {
+  try {
+    const url = new URL(SUPABASE_URL);
+    if (url.protocol !== 'https:' || !/^[a-z0-9]+\.supabase\.co$/.test(url.hostname) ||
+        url.username || url.password || url.search || url.hash || url.pathname !== '/') return false;
+    if (typeof SUPABASE_KEY !== 'string' || !SUPABASE_KEY.trim()) return false;
+    if (SUPABASE_KEY.split('.').length === 3) {
+      const claims = JSON.parse(Buffer.from(SUPABASE_KEY.split('.')[1], 'base64url').toString('utf8'));
+      if (!['anon','service_role'].includes(claims.role) || claims.ref !== url.hostname.split('.')[0] ||
+          !Number.isFinite(claims.exp) || claims.exp <= Date.now()/1000) return false;
+    } else return false; // Opaque keys need a trusted project-binding check first.
+    return true;
+  } catch (_) { return false; }
+}
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 
@@ -369,6 +384,11 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  res.setHeader('Cache-Control', 'no-store');
+  if (!isDatabaseConfigured()) {
+    return res.status(503).json({error:'DATABASE_CONFIGURATION_REQUIRED', message:'إعداد قاعدة هذه المدرسة غير متاح أو غير متطابق؛ لم يتم استخدام اتصال بديل.'});
+  }
+
 
   const { student_id, signal_type, signal_data, sentiment, severity } = req.body || {};
   
