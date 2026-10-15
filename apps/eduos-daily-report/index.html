@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <script src="/apps/platform-config.js"></script>
   <script src="/apps/platform-agent-brain.js" defer></script>
   <script src="/apps/platform-shield.js" defer></script>
   <script src="/apps/platform-lang.js" defer></script>
@@ -15,7 +16,7 @@
     :root { color-scheme: light; --navy:#162132; --purple:#6C3DD6; --cyan:#22D3EE; --ink:#1e293b; --muted:#64748b; --line:#e2e8f0; --danger:#dc2626; --success:#15803d; }
     * { box-sizing:border-box; }
     html, body { margin:0; min-height:100%; }
-    body { background:#f1f5f9; color:var(--ink); font-family:'Tajawal',Tahoma,Arial,sans-serif; font-size:16px; }
+    body { background:#f1f5f9; color:var(--ink); font-family:'Tajawal',Tahoma,Arial,sans-serif; font-size:18px; }
     button, textarea { font:inherit; }
     .hdr { background:linear-gradient(135deg, #6C3DD6, #22D3EE); color:#fff; padding:18px 24px; display:flex; align-items:center; justify-content:space-between; gap:18px; min-height:86px; }
     .brand { display:flex; align-items:center; gap:14px; flex-shrink:0; }
@@ -85,12 +86,11 @@
     }
     .print-footer { display:none; }
     @media print { .print-footer { display:block; } }
+    .status,.print-btn,.footer,.news small{font-size:18px;}
+    .status{margin-bottom:16px;}
+    .table-wrap[hidden]{display:none;}
   </style>
-<script>
-  window.EduOS = window.EduOS || {};
-  window.EduOS.SB_URL =  + sb_url + ;
-  window.EduOS.SB_KEY =  + anon_key + ;
-</script>
+
 </head>
 <body>
   <header class="hdr">
@@ -140,7 +140,7 @@
             <tbody id="absences-body"></tbody>
           </table>
         </div>
-        <p id="absences-empty" class="empty" hidden>جميع الطالبات حاضرات اليوم 🎉</p>
+        <p id="absences-empty" class="empty" hidden>لا يوجد غياب مسجل ضمن سجلات الحضور المحمّلة — لا يثبت اكتمال تسجيل جميع الطلبة.</p>
       </article>
 
       <article class="card">
@@ -155,14 +155,15 @@
       </article>
 
       <article class="card">
-        <h3><span class="icon" aria-hidden="true">👩‍🏫</span> الكادر الغائب اليوم</h3>
+        <h3><span class="icon" aria-hidden="true">👩‍🏫</span> الكادر دون تسجيل حضور اليوم</h3>
         <div class="table-wrap">
           <table>
             <thead><tr><th>اسم الموظف/ة</th><th>المسمى الوظيفي</th></tr></thead>
             <tbody id="staff-absences-body"></tbody>
           </table>
         </div>
-        <p id="staff-absences-empty" class="empty" hidden>لا يوجد كادر غائب بحسب سجل الحضور.</p>
+        <p class="empty">عدم وجود تسجيل حضور لا يثبت الغياب؛ يلزم التحقق من السجل المعتمد.</p>
+        <p id="staff-absences-empty" class="empty" hidden>لا يوجد كادر دون تسجيل حضور ضمن السجلات المحمّلة.</p>
       </article>
 
       <article class="card wide">
@@ -184,27 +185,26 @@
   <script>
     (function () {
       'use strict';
-      var SUPABASE_URL = 'https://zuyizaiugpmhmeycqton.supabase.co';
+      var SUPABASE_URL = window.EduOS ? window.EduOS.SB_URL : ''; 
       var today = new Date();
-      var isoDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-      var dateText = new Intl.DateTimeFormat('ar-AE', { dateStyle: 'full' }).format(today);
+      var dubaiParts = new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(today);
+      var dp = {}; dubaiParts.forEach(function(p){dp[p.type]=p.value;});
+      var isoDate = dp.year + '-' + dp.month + '-' + dp.day;
+      var dateText = new Intl.DateTimeFormat('ar-AE', { dateStyle: 'full', timeZone:'Asia/Dubai' }).format(today);
       document.getElementById('today-label').textContent = dateText;
       document.getElementById('print-date').textContent = dateText;
 
       function getHeaders(extra) {
-        var anonKey = (window.EduOS && window.EduOS.SB_KEY) || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1eWl6YWl1Z3BtaG1leWNxdG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODgyNDAsImV4cCI6MjA5NDY2NDI0MH0.FqOUqiR7GfttAEI8NY3bbOwFPnupxBsHMgYJCNT68PI';
-        var bearer = anonKey;
-        try {
-          var s = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
-          var jwt = s.access_token || s.token;
-          if (jwt && jwt.split('.').length === 3) {
-            var p = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-            if (p.exp && p.exp > Date.now() / 1000 + 30) bearer = jwt;
-          }
-        } catch (e) {}
-        return Object.assign({ 'apikey': anonKey, 'Authorization': 'Bearer ' + bearer }, extra || {});
+        if (!window.EduOS || !SUPABASE_URL) throw new Error('إعداد المدرسة غير متاح');
+        var s = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+        var token = s.access_token || s.token;
+        if (!token) throw new Error('يلزم تسجيل الدخول');
+        var p = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        if (!p.sub || p.role !== 'authenticated' || !Number.isFinite(p.exp) || p.exp <= Date.now()/1000 + 30 || p.iss !== SUPABASE_URL + '/auth/v1') throw new Error('جلسة غير صالحة لهذه المدرسة');
+        if (s.school_id && s.school_id !== window.EduOS.school.id) throw new Error('نطاق المدرسة غير متطابق');
+        return Object.assign({'apikey': window.EduOS.SB_KEY, 'Authorization':'Bearer ' + token}, extra || {});
       }
-      window.getHeaders = getHeaders;
+      // Authentication headers stay local to this report.
 
       function escapeHtml(value) {
         return String(value === null || value === undefined ? '' : value).replace(/[&<>'"]/g, function (c) {
@@ -217,16 +217,31 @@
         return fallback || '';
       }
       function startOfTomorrow() {
-        var d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-        return d.toISOString();
+        return new Date(new Date(isoDate + 'T00:00:00+04:00').getTime() + 86400000).toISOString();
       }
       function endOfTodayUtc() { return startOfTomorrow(); }
-      function dayStartIso() { return new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString(); }
+      function dayStartIso() { return new Date(isoDate + 'T00:00:00+04:00').toISOString(); }
+      var verifiedHeadersPromise;
+      function verifiedHeaders() {
+        if (!verifiedHeadersPromise) verifiedHeadersPromise = (async function(){
+          var headers = getHeaders({'Accept':'application/json'});
+          var response = await fetch(SUPABASE_URL + '/auth/v1/user',{headers:headers});
+          if (!response.ok) throw new Error('تعذر التحقق من جلسة المدرسة');
+          var user = await response.json();
+          var session = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
+          var payload = JSON.parse(atob((session.access_token || session.token).split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+          if (!user || !user.id || user.id !== payload.sub) throw new Error('هوية الجلسة غير متطابقة');
+          return headers;
+        })();
+        return verifiedHeadersPromise;
+      }
       async function query(table, params) {
         var url = SUPABASE_URL + '/rest/v1/' + table + '?' + params;
-        var response = await fetch(url, { headers: getHeaders({ 'Accept': 'application/json' }) });
+        var response = await fetch(url, { headers: await verifiedHeaders() });
         if (!response.ok) throw new Error(table + ': ' + response.status);
-        return response.json();
+        var rows = await response.json();
+        if (!Array.isArray(rows)) throw new Error('استجابة بيانات غير صالحة');
+        return rows;
       }
       function setText(id, value) { document.getElementById(id).textContent = String(value); }
       function degreeText(value) {
@@ -252,7 +267,7 @@
         if (!hasData) {
           emptyEl.textContent = 'لا توجد بيانات حضور الطلاب لهذا اليوم بعد — يتطلب تسجيل الحضور الرقمي.';
         } else {
-          emptyEl.textContent = 'جميع الطالبات حاضرات اليوم 🎉';
+          emptyEl.textContent = 'لا يوجد غياب مسجل ضمن سجلات الحضور المحمّلة — لا يثبت اكتمال تسجيل جميع الطلبة.';
         }
         emptyEl.hidden = (rows || []).length > 0;
         body.parentElement.parentElement.hidden = !(rows || []).length;
@@ -270,12 +285,12 @@
         var emptyEl = document.getElementById('staff-absences-empty');
         if (noCheckinData) {
           body.innerHTML = '';
-          emptyEl.textContent = 'بيانات تسجيل حضور الكادر عبر الباركود غير متوفرة اليوم — لا يمكن تحديد الغائبين/ات حالياً.';
+          emptyEl.textContent = 'بيانات تسجيل حضور الكادر غير متوفرة اليوم — لا يمكن تحديد حالة الحضور.';
           emptyEl.hidden = false;
           body.parentElement.parentElement.hidden = false;
           return;
         }
-        emptyEl.textContent = 'لا يوجد كادر غائب بحسب سجل الحضور.';
+        emptyEl.textContent = 'لا يوجد كادر دون تسجيل حضور ضمن السجلات المحمّلة.';
         body.innerHTML = (rows || []).map(function (r) {
           return '<tr><td>' + escapeHtml(getField(r, ['name_ar', 'name', 'full_name'], 'غير محدد')) + '</td><td>' + escapeHtml(getField(r, ['job_title', 'role', 'position'], '')) + '</td></tr>';
         }).join('');
@@ -315,12 +330,19 @@
         var checkedIds = {};
         checked.forEach(function (r) { if (r.staff_db_id !== null && r.staff_db_id !== undefined) checkedIds[String(r.staff_db_id)] = true; });
         var allStaff = staffParts[0] || [];
-        var noCheckinData = checked.length === 0 && allStaff.length > 0;
+        var noCheckinData = results[3].status !== 'fulfilled' || checked.length === 0 || allStaff.length === 0;
         var absentStaff = noCheckinData ? [] : allStaff.filter(function (r) {
           var id = getField(r, ['staff_db_id', 'id'], '');
           return id && !checkedIds[String(id)];
         });
         renderStaff(absentStaff, noCheckinData);
+        if (results[0].status !== 'fulfilled') {
+          document.getElementById('attendance-empty').textContent = 'تعذر تحميل سجل الحضور — لا يمكن تحديد الحضور أو الغياب.';
+          document.getElementById('absences-empty').textContent = 'تعذر تحميل سجل الحضور — لا يمكن تحديد الغائبين.';
+        }
+        if (results[1].status !== 'fulfilled') document.getElementById('incidents-empty').textContent = 'تعذر تحميل سجل الحوادث — ليست نتيجة خلو السجل.';
+        if (results[2].status !== 'fulfilled') document.getElementById('news-content').textContent = 'تعذر تحميل الأخبار.';
+        if (results[3].status !== 'fulfilled') document.getElementById('staff-absences-empty').textContent = 'تعذر تحميل سجل حضور الكادر — لا يمكن تحديد حالة الحضور.';
         var status = errors.length ? 'تعذر تحميل: ' + errors.join('، ') : 'تم تحديث التقرير بتاريخ ' + dateText;
         setText('load-status', status);
         if (errors.length) document.getElementById('load-status').className = 'status error';

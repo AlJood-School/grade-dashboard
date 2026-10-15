@@ -405,7 +405,8 @@ window.EduLang = (function () {
   /* ─────────────────────────────────────────────────────────────
    * جمع TextNodes التي تحتوي عربي
    * ──────────────────────────────────────────────────────────── */
-  const _originals = new WeakMap();
+  const _originals = new Map();
+  const _lastTranslations = new WeakMap();
 
   function snapshotTextNodes(root) {
     const walker = document.createTreeWalker(
@@ -435,15 +436,19 @@ window.EduLang = (function () {
   function applyDictionary(lang) {
     if (lang === 'ar') {
       _originals.forEach((orig, node) => {
-        if (node.parentNode) node.nodeValue = orig;
+        if (node.isConnected && node.nodeValue === _lastTranslations.get(node)) node.nodeValue = orig;
+        _originals.delete(node);
+        _lastTranslations.delete(node);
       });
       return;
     }
+    _originals.forEach(function(_, node){ if (!node.isConnected) _originals.delete(node); });
     const nodes = snapshotTextNodes(document.body);
     nodes.forEach(node => {
-      if (!_originals.has(node)) _originals.set(node, node.nodeValue);
+      if (!_originals.has(node) || node.nodeValue !== _lastTranslations.get(node)) _originals.set(node, node.nodeValue);
       const translated = translateTextNode(node.nodeValue);
       if (translated !== node.nodeValue) node.nodeValue = translated;
+      _lastTranslations.set(node, node.nodeValue);
     });
   }
 
@@ -471,11 +476,12 @@ window.EduLang = (function () {
     if (document.querySelector('[data-lang-toggle]')) return;
 
     const target =
+      document.querySelector('#header-tools') ||
       document.querySelector('.header-right') ||
       document.querySelector('.header-actions') ||
       document.querySelector('#headerRight') ||
       document.querySelector('.top-actions') ||
-      document.querySelector('header');
+      document.querySelector('.top-bar, header, .hdr, .header');
 
     if (!target) return;
 
@@ -509,7 +515,7 @@ window.EduLang = (function () {
 
     btn.style.cssText = `
       font-family: 'Tajawal', Arial, sans-serif;
-      font-size: 13px;
+      font-size: 18px;
       font-weight: 700;
       padding: 6px 14px;
       border-radius: 20px;
@@ -692,146 +698,132 @@ window.EduLang = (function () {
     var path = window.location.pathname;
     var skip = ['login','set-password','forgot','landing','pitch','welcome','demo','offline','showcase','change-password'];
     if (skip.some(function(s){return path.includes(s);})) return;
-    var hdr = document.querySelector('header, .hdr');
+    var hdr = document.querySelector('.top-bar, header, .hdr, .header');
     if (!hdr) return;
-
-    // 1. عرض badge المستخدم
-    if (!hdr.querySelector('[data-user-display]')) {
-      try {
-        var u = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
-        var name = u.username || u.name || '';
-        var rk = u.role_key || u.role || '';
-        var roleMap = {teacher:'معلم/ة',principal:'مدير/ة',vice_principal:'نائب/ة مدير/ة',admin:'مسؤول/ة',coach:'مدرب/ة',counselor:'مرشد/ة',specialist:'أخصائي/ة',nurse:'ممرض/ة',security:'أمن',secretary:'سكرتير/ة',technician:'تقني/ة',registrar:'مسجّلة',financial_coordinator:'منسق/ة مالية',coordinator:'منسق/ة'};
-        var roleLabel = roleMap[rk] || rk;
-        if (name) {
-          var badge = document.createElement('div');
-          badge.setAttribute('data-user-display','1');
-          badge.style.cssText = 'display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.15);border-radius:20px;padding:4px 10px 4px 6px;margin:0 4px;flex-shrink:0;cursor:default;';
-          var initial = (name[0]||'م').toUpperCase();
-          badge.innerHTML = '<div style="width:28px;height:28px;background:rgba(255,255,255,0.25);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:0.82rem;flex-shrink:0;">'+initial+'</div><div style="line-height:1.2;"><div style="color:#fff;font-size:0.78rem;font-weight:700;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+name+'</div><div style="color:rgba(255,255,255,0.75);font-size:0.63rem;">'+roleLabel+'</div></div>';
-          hdr.insertBefore(badge, hdr.firstChild);
-        }
-      } catch(e) {}
+    hdr.classList.add('eduos-unified-header');
+    if (!document.getElementById('eduos-unified-header-style')) {
+      var style = document.createElement('style');
+      style.id = 'eduos-unified-header-style';
+      style.textContent = '.eduos-unified-header{display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:12px!important;height:auto!important;min-height:76px;overflow:visible!important;padding:14px 20px!important;font-family:Tajawal,Arial,sans-serif!important;font-size:18px!important;isolation:isolate}.eduos-unified-header>div{min-width:0}.eduos-unified-header .top-bar-left,.eduos-unified-header .top-bar-right{display:flex;align-items:center;flex-wrap:wrap;gap:10px;min-width:0}.eduos-unified-header .top-bar-left,.eduos-unified-header .top-bar-right{flex:1 1 260px}.eduos-unified-header #header-tools{display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:8px!important;min-width:0;max-width:100%}.eduos-unified-header .user-name,.eduos-unified-header .user-role,.eduos-unified-header .page-sub,.eduos-unified-header .brand p,.eduos-unified-header [data-user-display],.eduos-unified-header [data-lang-toggle],.eduos-unified-header .context-pill,.eduos-unified-header [data-week-label],.eduos-unified-header [data-live-time]{font-size:18px!important;line-height:1.5!important}.eduos-unified-header .eduos-context{display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:100%;position:static!important;transform:none!important;pointer-events:auto!important}.eduos-unified-header .eduos-week-bubble{display:flex;align-items:center;gap:8px;border:1px solid currentColor;border-radius:20px;padding:5px 12px;background:rgba(127,127,127,.1);min-width:0;max-width:100%;white-space:normal!important}.eduos-unified-header [data-week-label]{white-space:normal!important;overflow-wrap:anywhere}.eduos-unified-header .eduos-pulse-dot{width:8px;height:8px;background:#15803d;border-radius:50%;flex-shrink:0;animation:eduosHeaderPulse 2s infinite}.eduos-unified-header .eduos-header-clock{direction:ltr;white-space:nowrap;font-variant-numeric:tabular-nums;padding:5px 10px;border:1px solid currentColor;border-radius:12px}.eduos-unified-header .eduos-user-badge{display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:20px;background:rgba(127,127,127,.1);max-width:100%;overflow-wrap:anywhere}.eduos-unified-header .eduos-back-button{display:inline-flex!important;align-items:center!important;justify-content:center!important;width:44px!important;height:44px!important;min-width:44px!important;border-radius:50%!important;background:#b91c1c!important;color:#fff!important;border:1px solid #fff!important;padding:0!important;text-decoration:none!important;font-size:18px!important}.eduos-unified-header button{min-height:44px}.eduos-unified-header button:focus-visible,.eduos-unified-header a:focus-visible{outline:3px solid #6C3DD6;outline-offset:3px}.eduos-unified-header .eduos-demo-label{color:inherit;border:1px solid currentColor;border-radius:10px;padding:3px 8px;font-size:18px}@keyframes eduosHeaderPulse{50%{opacity:.55;transform:scale(.82)}}@media(prefers-reduced-motion:reduce){.eduos-unified-header .eduos-pulse-dot{animation:none}}@media(max-width:600px){.eduos-unified-header{padding:12px!important;gap:10px!important}.eduos-unified-header .top-bar-left,.eduos-unified-header .top-bar-right{flex-basis:100%}.eduos-unified-header .eduos-context{width:100%}.eduos-unified-header .user-chip{min-width:0;max-width:100%}.eduos-unified-header .user-name{white-space:normal!important;overflow-wrap:anywhere}}';
+      style.textContent += '.eduos-unified-header>div{max-width:100%}.eduos-unified-header .h-title,.eduos-unified-header .h-sub,.eduos-unified-header .h-week,.eduos-unified-header .h-user,.eduos-unified-header .header-brand .b1,.eduos-unified-header .header-brand .b2,.eduos-unified-header #todayDate,.eduos-unified-header .eduos-user-role{font-size:18px!important;line-height:1.5!important;overflow-wrap:anywhere}.eduos-unified-header .eduos-user-badge{flex-wrap:wrap}.eduos-unified-header .h-week{white-space:normal!important;flex-shrink:1}.eduos-unified-header .h-sub{color:#fff!important}.eduos-unified-header.app-header .b2,.eduos-unified-header.top-bar .page-sub{color:#475569!important}.eduos-unified-header.hdr,.eduos-unified-header.header{color:#fff!important}.eduos-unified-header.hdr .brand h1,.eduos-unified-header.hdr .brand p,.eduos-unified-header.header .h-title{color:#fff!important}.eduos-unified-header .top-bar-left,.eduos-unified-header .top-bar-right{max-width:100%}.eduos-unified-header [data-live-clock] .eduos-live-clock{font-size:18px!important;white-space:normal!important}.eduos-unified-header [data-center-info]{position:static!important;transform:none!important;pointer-events:auto!important}.eduos-unified-header .h-user{flex-wrap:wrap}.eduos-unified-header .header-brand{flex-shrink:1;min-width:0}.eduos-unified-header [data-lang-toggle]{max-width:100%;white-space:normal!important;background:#fff!important;color:#4c1d95!important;border-color:#6C3DD6!important}@media(max-width:600px){.eduos-unified-header>div{max-width:100%}.eduos-unified-header .brand{flex-shrink:1}.eduos-unified-header .brand h1{overflow-wrap:anywhere}}';
+      document.head.appendChild(style);
     }
-
-    // 2. إنشاء header-tools
-    if (!document.getElementById('header-tools')) {
-      var tools = document.createElement('div');
+    var tools = hdr.querySelector('#header-tools');
+    if (!tools) {
+      tools = document.createElement('div');
       tools.id = 'header-tools';
-      tools.style.cssText = 'display:flex;align-items:center;gap:6px;';
-      var langBtn = hdr.querySelector('[data-lang-toggle]');
-      var btns = Array.from(hdr.querySelectorAll('button'));
-      var logoutBtn = btns.find(function(b){return b.textContent.includes('خروج')||b.textContent.includes('Logout')||(b.getAttribute('onclick')||'').includes('ogout');});
-      var insertBefore = langBtn || logoutBtn || null;
-      if (insertBefore) hdr.insertBefore(tools, insertBefore);
-      else hdr.appendChild(tools);
+      var group = hdr.querySelector('.header-actions, .header-right, .top-bar-left') || hdr;
+      group.appendChild(tools);
     }
-
-    // 2b. زر تغيير كلمة المرور — retry loop حتى يتأكد من وجود #header-tools
-    (function tryAddPwdBtn(attempts) {
-      attempts = attempts || 0;
-      if (attempts > 12) return; // max 6 seconds
-      var ht = document.getElementById('header-tools');
-      if (!ht) { setTimeout(function(){ tryAddPwdBtn(attempts+1); }, 500); return; }
-      if (ht.querySelector('[data-change-pwd]')) return;
-      try {
-        var su = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
-        if (!su.username) { setTimeout(function(){ tryAddPwdBtn(attempts+1); }, 500); return; }
-        // 🔐 يظهر فقط عند الحاجة لتغيير كلمة المرور
-        if (!su.must_change_password) return;
-      } catch(e) { return; }
-      var cpBtn = document.createElement('button');
-      cpBtn.setAttribute('data-change-pwd', '1');
-      cpBtn.title = 'تغيير كلمة المرور';
-      cpBtn.innerHTML = '🔐';
-      cpBtn.style.cssText = 'width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.12);color:#fff;cursor:pointer;font-size:14px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .2s;';
-      cpBtn.onmouseover = function(){this.style.background='rgba(255,255,255,0.22)';};
-      cpBtn.onmouseout = function(){this.style.background='rgba(255,255,255,0.12)';};
-      cpBtn.onclick = function() { window.location.href = '../eduos-change-password/'; };
-      ht.appendChild(cpBtn);
-    })(0);
-
-    // 3. فقاعة الأسبوع + الوقت الحي في المنتصف
-    if (!hdr.querySelector('[data-center-info]')) {
-      // CSS animation للنبضة
-      if (!document.getElementById('_eduos_hdr_anim')) {
-        var s = document.createElement('style');
-        s.id = '_eduos_hdr_anim';
-        s.textContent = '@keyframes _eduosPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.82)}}';
-        document.head.appendChild(s);
-      }
-      // الهيدر يحتاج position:relative
-      if (getComputedStyle(hdr).position === 'static') hdr.style.position = 'relative';
-
-      var center = document.createElement('div');
-      center.setAttribute('data-center-info','1');
-      center.style.cssText = 'display:flex;align-items:center;gap:8px;position:absolute;left:50%;transform:translateX(-50%);top:50%;margin-top:-16px;pointer-events:none;z-index:2;';
-
-      // فقاعة الأسبوع
-      var wb = document.createElement('div');
-      wb.setAttribute('data-week-badge','1');
-      wb.style.cssText = 'background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.35);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:20px;padding:5px 14px;display:flex;align-items:center;gap:6px;pointer-events:auto;';
-      var dot = document.createElement('div');
-      dot.style.cssText = 'width:8px;height:8px;background:#4ade80;border-radius:50%;box-shadow:0 0 6px #4ade80;flex-shrink:0;animation:_eduosPulse 2s infinite;';
-      var wl = document.createElement('span');
-      wl.setAttribute('data-week-label','1');
-      wl.style.cssText = 'color:#fff;font-size:13px;font-weight:600;font-family:Tajawal,Arial,sans-serif;white-space:nowrap;';
-      wl.textContent = '...';
-      wb.appendChild(dot); wb.appendChild(wl);
-
-      // الوقت الحي
-      var tb = document.createElement('div');
-      tb.style.cssText = 'background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);border-radius:10px;padding:4px 10px;display:flex;align-items:center;gap:5px;pointer-events:auto;';
-      var tspan = document.createElement('span');
-      tspan.setAttribute('data-live-time','1');
-      tspan.style.cssText = 'color:#fff;font-size:13px;font-weight:700;font-family:Tajawal,Arial,sans-serif;font-variant-numeric:tabular-nums;';
-      tspan.textContent = '--:--';
-      tb.innerHTML = '<span style="font-size:13px;">&#128336;</span>';
-      tb.appendChild(tspan);
-
-      center.appendChild(wb); center.appendChild(tb);
-      hdr.appendChild(center);
-
-      // تحديث الوقت كل ثانية
-      (function tickTime() {
-        var el = hdr.querySelector('[data-live-time]');
-        if (!el) return;
-        var n = new Date();
-        el.textContent = String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');
-        setTimeout(tickTime, 1000);
-      })();
-
-      // تحديث الأسبوع من platform-week.js
-      (function updateWeek() {
-        var lbl = hdr.querySelector('[data-week-label]');
-        if (!lbl) return;
-        if (window.EduWeek && window.EduWeek.current) {
-          var w = window.EduWeek.current;
-          lbl.textContent = 'الأسبوع '+(w.week_number||w.weekNumber||'')+' · الفصل '+(w.term||'1');
-          return;
+    var user = {};
+    try { user = JSON.parse(sessionStorage.getItem('edoos_user') || '{}'); } catch (_) {}
+    if (!hdr.querySelector('[data-user-display], .user-chip, #userName') && (user.name || user.username)) {
+      var badge = document.createElement('div');
+      badge.className = 'eduos-user-badge';
+      badge.setAttribute('data-user-display','1');
+      // Identity is text, never interpolated into HTML.
+      var nameLine = document.createElement('span');
+      nameLine.textContent = user.name || user.username;
+      badge.appendChild(nameLine);
+      var roleMap = {teacher:'معلم/ة',principal:'مدير/ة',vice_principal:'نائب/ة مدير/ة',admin:'مسؤول/ة',official:'مسؤول/ة',coach:'مدرب/ة',counselor:'مرشد/ة',specialist:'أخصائي/ة',nurse:'ممرض/ة',security:'أمن',secretary:'سكرتير/ة',technician:'تقني/ة',registrar:'مسجّل/ة',financial_coordinator:'منسق/ة مالية',coordinator:'منسق/ة',student:'طالب/ة',parent:'ولي أمر'};
+      var role = document.createElement('span');
+      role.className = 'eduos-user-role';
+      role.textContent = roleMap[user.role_key || user.role] || '';
+      if (role.textContent) badge.appendChild(role);
+      tools.appendChild(badge);
+    }
+    if (user.username && user.must_change_password && !tools.querySelector('[data-change-pwd]')) {
+      var cp = document.createElement('button');
+      cp.setAttribute('data-change-pwd','1');
+      cp.textContent = '🔐';
+      cp.title = 'تغيير كلمة المرور';
+      cp.setAttribute('aria-label', cp.title);
+      cp.style.cssText = 'border:1px solid currentColor;background:transparent;color:inherit;border-radius:50%;width:44px;height:44px;cursor:pointer;font-size:18px;';
+      cp.onclick = function(){ window.location.href = '/apps/eduos-change-password/'; };
+      tools.appendChild(cp);
+    }
+    var existingWeek = hdr.querySelector('.context-pill, [data-week-badge], #hWeek');
+    var context = hdr.querySelector('.eduos-context');
+    if (!context) {
+      context = document.createElement('div');
+      context.className = 'eduos-context';
+      if (!hdr.querySelector('[data-center-info]')) context.setAttribute('data-center-info','1');
+      hdr.appendChild(context);
+    }
+    // Preserve page-owned week fields and IDs instead of creating duplicates.
+    if (!existingWeek) {
+      existingWeek = document.createElement('div');
+      existingWeek.className = 'eduos-week-bubble';
+      existingWeek.setAttribute('data-week-badge','1');
+      var dot = document.createElement('span');
+      dot.className = 'eduos-pulse-dot';
+      dot.setAttribute('aria-hidden','true');
+      var label = document.createElement('span');
+      label.setAttribute('data-week-label','1');
+      existingWeek.appendChild(dot);
+      existingWeek.appendChild(label);
+      context.appendChild(existingWeek);
+    } else {
+      existingWeek.classList.add('eduos-week-bubble');
+    }
+    var weekLabel = existingWeek.id === 'hWeek' ? null : existingWeek.querySelector('[data-week-label], #pillText, #weekInfo, .week-badge-text');
+    if (weekLabel && !weekLabel.dataset.eduosWeekOwned) {
+      weekLabel.dataset.eduosWeekOwned = '1';
+      (function updateWeek(attempt) {
+        var info = typeof window.getEduOSWeekInfo === 'function' ? window.getEduOSWeekInfo() : null;
+        var year = window.EduOS && window.EduOS.calendar && window.EduOS.calendar.year;
+        if (info) {
+          weekLabel.textContent = (year ? year + ' · ' : '') + info.label;
+          weekLabel.title = 'السنة والفصل والأسبوع الدراسي — النبضة عنصر عرض وليست فحص اتصال';
+          setTimeout(function(){updateWeek(0);},60000);
+        } else if (attempt < 12) {
+          if (!weekLabel.textContent.trim() || weekLabel.textContent.trim() === '...') weekLabel.textContent = 'التقويم غير متاح';
+          setTimeout(function(){updateWeek(attempt+1);},500);
         }
-        var existing = document.querySelector('[data-week-display],[data-week-num],#weekInfo,#weekDisplay,.week-badge-text');
-        if (existing && existing.textContent.trim()) { lbl.textContent = existing.textContent.trim(); return; }
-        setTimeout(updateWeek, 2000);
+      })(0);
+    }
+    if (!hdr.querySelector('[data-live-time], [data-live-clock]')) {
+      var clock = document.createElement('time');
+      clock.className = 'eduos-header-clock';
+      clock.setAttribute('data-live-time','1');
+      clock.title = 'توقيت الإمارات';
+      context.appendChild(clock);
+      (function tick(){
+        clock.textContent = new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Dubai',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
+        setTimeout(tick,1000);
       })();
     }
-
-    // 4. أزرار الرجوع — دائرية حمراء
-    hdr.querySelectorAll('a,button').forEach(function(btn) {
-      if (btn.getAttribute('data-back-styled')) return;
-      var txt = (btn.textContent||'').trim();
-      var oc  = btn.getAttribute('onclick') || '';
-      var hr  = btn.getAttribute('href') || '';
-      var isBack = txt==='رجوع'||txt==='Back'||txt==='←'||txt==='→'||txt==='‹'||
-                   oc.includes('history.back')||hr==='#back'||
-                   (btn.getAttribute('title')||'').includes('رجوع');
-      if (!isBack) return;
-      btn.setAttribute('data-back-styled','1');
-      btn.style.cssText = 'width:34px!important;height:34px!important;min-width:34px!important;background:rgba(239,68,68,0.85)!important;border:1px solid rgba(255,255,255,0.3)!important;border-radius:50%!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;cursor:pointer!important;font-size:16px!important;color:#fff!important;text-decoration:none!important;flex-shrink:0!important;padding:0!important;transition:background .2s,transform .15s!important;';
-      btn.addEventListener('mouseover', function(){this.style.background='rgba(239,68,68,1)';this.style.transform='scale(1.08)';});
-      btn.addEventListener('mouseout',  function(){this.style.background='rgba(239,68,68,0.85)';this.style.transform='scale(1)';});
+    if (window.EduOS && window.EduOS.school && window.EduOS.school.isDemo && !hdr.querySelector('[data-demo-label]')) {
+      var demo = document.createElement('span');
+      demo.className = 'eduos-demo-label';
+      demo.setAttribute('data-demo-label','1');
+      demo.textContent = 'بيئة تجريبية — ليست بيانات المدرسة الحقيقية';
+      context.appendChild(demo);
+    }
+    hdr.querySelectorAll('a,button').forEach(function(btn){
+      var txt = (btn.textContent || '').trim();
+      var onclick = btn.getAttribute('onclick') || '';
+      if (['رجوع','Back','←','→','‹'].includes(txt) || onclick.includes('history.back') || btn.getAttribute('href') === '#back' || (btn.title || '').includes('رجوع')) {
+        btn.classList.add('eduos-back-button');
+        if (!btn.getAttribute('aria-label')) btn.setAttribute('aria-label','رجوع');
+        btn.title = 'رجوع';
+      }
     });
+    if (!hdr.querySelector('.eduos-back-button')) {
+      var back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'eduos-back-button';
+      back.textContent = '←';
+      back.title = 'رجوع';
+      back.setAttribute('aria-label','رجوع');
+      back.onclick = function(){
+        if (window.history.length > 1) window.history.back();
+        else window.location.href = '/apps/eduos-hub/';
+      };
+      tools.appendChild(back);
+    }
   }
+
 
   function init() {
     injectHeaderTools();
