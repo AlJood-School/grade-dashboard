@@ -153,17 +153,17 @@
   // ══════════════════════════════════════════════════════════════
   const hostname = window.location.hostname;
 
-  // ابحث عن تطابق مباشر أولاً، ثم جزئي، ثم افتراضي Demo
-  let matchedConfig = SCHOOL_REGISTRY[hostname];
-
-  if (!matchedConfig) {
-    // تطابق جزئي: aljood → aljood.eduos.ae
-    const key = Object.keys(SCHOOL_REGISTRY).find(k => hostname.includes(k.split('.')[0]));
-    matchedConfig = key ? SCHOOL_REGISTRY[key] : null;
+  // Exact configured hostname only. Never infer a school from a partial
+  // name, and never connect an unconfigured deployment to the demo school.
+  const cfg = Object.prototype.hasOwnProperty.call(SCHOOL_REGISTRY, hostname)
+    ? SCHOOL_REGISTRY[hostname] : null;
+  if (!cfg) {
+    window.EduOSConfigStatus = {ready:false, code:'UNCONFIGURED_HOST', message:'إعداد هذا النطاق غير متاح — لم تُختَر مدرسة بديلة'};
+    window.EduOS = undefined;
+    console.error('[EduOS] Unconfigured school hostname; connection disabled.');
+    return;
   }
-
-  // fallback للـ Demo إذا لم يُوجد تطابق (localhost / تطوير)
-  const cfg = matchedConfig || SCHOOL_REGISTRY['demo.eduos.ae'];
+  window.EduOSConfigStatus = {ready:true};
 
   // ══════════════════════════════════════════════════════════════
   // 🔑 بناء الكائن العام window.EduOS
