@@ -5868,6 +5868,11 @@ document.querySelectorAll('[data-panel]').forEach(btn => {
 // ──
 
 // ===== PRINT TIMETABLE FUNCTIONS =====
+function escapeTimetablePrintText(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, function(c) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
 function printTimetableByTeacher() {
   // Collect all unique teachers from the schedule
   var schedMap = window._fttSchedMap || {};
@@ -5894,7 +5899,7 @@ function printTimetableByTeacher() {
   html += '@media print{body{margin:10px;font-size:11px;}h2{page-break-before:auto;}}</style>';
   html += '<title>جداول المعلمين</title></head><body>';
   html += '<h1>📋 جداول المعلمين</h1>';
-  html += '<p style="color:#64748B;font-size:12px">تاريخ الطباعة: ' + new Date().toLocaleDateString('ar-AE') + '</p>';
+  html += '<p style="color:#64748B;font-size:12px">تاريخ الطباعة: ' + escapeTimetablePrintText(new Date().toLocaleDateString('ar-AE')) + '</p>';
 
   var sortedTeachers = Object.keys(teacherMap).sort(function(a,b){
     return (teacherMap[a].name || '').localeCompare(teacherMap[b].name || '');
@@ -5903,32 +5908,17 @@ function printTimetableByTeacher() {
   sortedTeachers.forEach(function(tid) {
     var t = teacherMap[tid];
     var sorted = t.slots.sort(function(a,b){ return a.period - b.period; });
-    html += '<h2>👤 ' + t.name + '</h2>';
+    html += '<h2>👤 ' + escapeTimetablePrintText(t.name) + '</h2>';
     html += '<table><thead><tr><th>الصف</th><th>الحصة</th><th>المادة</th></tr></thead><tbody>';
     sorted.forEach(function(s) {
-      html += '<tr><td>' + s.cls + '</td><td>ح' + s.period + '</td><td>' + s.subject + '</td></tr>';
+      html += '<tr><td>' + escapeTimetablePrintText(s.cls) + '</td><td>ح' + escapeTimetablePrintText(s.period) + '</td><td>' + escapeTimetablePrintText(s.subject) + '</td></tr>';
     });
     html += '</tbody></table>';
   });
 
-  html += '
-// Set Arabic role label from session
-(function(){
-  try {
-    var u = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
-    var MAP = {
-      admin: 'مسؤول/ة النظام', principal: 'مدير/ة المدرسة',
-      vice_principal: 'نائب/ة المدير/ة', teacher: 'معلم/ة',
-      coordinator: 'منسق/ة المادة', counselor: 'مرشد/ة',
-      social_worker: 'أخصائي/ة اجتماعي/ة', registrar: 'مسجّل/ة',
-      financial_coordinator: 'منسق/ة مالي/ة', coach: 'مدرّب/ة'
-    };
-    var el = document.getElementById('userRole');
-    if (el && u.role_key) el.textContent = MAP[u.role_key] || u.role_key;
-  } catch(e){}
-})();
-</body></html>';
+  html += "</body></html>";
   var w = window.open('', '_blank');
+  if (!w) { alert('تعذر فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة ثم إعادة المحاولة.'); return; }
   w.document.write(html);
   w.document.close();
   w.focus();
@@ -5954,42 +5944,27 @@ function printTimetableByClass() {
   html += '@media print{body{margin:10px;font-size:11px;}h2{page-break-before:auto;}}</style>';
   html += '<title>جداول الصفوف</title></head><body>';
   html += '<h1>📚 جداول الصفوف</h1>';
-  html += '<p style="color:#64748B;font-size:12px">تاريخ الطباعة: ' + new Date().toLocaleDateString("ar-AE") + '</p>';
+  html += '<p style="color:#64748B;font-size:12px">تاريخ الطباعة: ' + escapeTimetablePrintText(new Date().toLocaleDateString("ar-AE")) + '</p>';
 
   sortedClasses.forEach(function(cls) {
     var slots = schedMap[cls];
     var periods = Object.keys(slots).map(Number).sort(function(a,b){return a-b;});
-    html += '<h2>🏫 الصف ' + cls + '</h2>';
+    html += '<h2>🏫 الصف ' + escapeTimetablePrintText(cls) + '</h2>';
     html += '<table><thead><tr><th>الحصة</th><th>المادة</th><th>المعلم/ة</th></tr></thead><tbody>';
     periods.forEach(function(p) {
       var slot = slots[p];
       if (!slot) return;
-      var subj = slot.subject || '—';
+      var subj = String(slot.subject || '—');
       var tchr = slot.teacher_name || '—';
-      if (subj.includes('شاغر') || subj.includes('Vacancy')) subj = '<span style="color:#EF4444">⚠️ شاغر</span>';
-      html += '<tr><td>ح' + p + '</td><td>' + subj + '</td><td>' + tchr + '</td></tr>';
+      var subjHtml = (subj.includes('شاغر') || subj.includes('Vacancy')) ? '<span style="color:#EF4444">⚠️ شاغر</span>' : escapeTimetablePrintText(subj);
+      html += '<tr><td>ح' + escapeTimetablePrintText(p) + '</td><td>' + subjHtml + '</td><td>' + escapeTimetablePrintText(tchr) + '</td></tr>';
     });
     html += '</tbody></table>';
   });
 
-  html += '
-// Set Arabic role label from session
-(function(){
-  try {
-    var u = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
-    var MAP = {
-      admin: 'مسؤول/ة النظام', principal: 'مدير/ة المدرسة',
-      vice_principal: 'نائب/ة المدير/ة', teacher: 'معلم/ة',
-      coordinator: 'منسق/ة المادة', counselor: 'مرشد/ة',
-      social_worker: 'أخصائي/ة اجتماعي/ة', registrar: 'مسجّل/ة',
-      financial_coordinator: 'منسق/ة مالي/ة', coach: 'مدرّب/ة'
-    };
-    var el = document.getElementById('userRole');
-    if (el && u.role_key) el.textContent = MAP[u.role_key] || u.role_key;
-  } catch(e){}
-})();
-</body></html>';
+  html += "</body></html>";
   var w = window.open('', '_blank');
+  if (!w) { alert('تعذر فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة ثم إعادة المحاولة.'); return; }
   w.document.write(html);
   w.document.close();
   w.focus();
@@ -6080,20 +6055,5 @@ async function reviewVacApp(id, status) {
 
 </script>
 
-// Set Arabic role label from session
-(function(){
-  try {
-    var u = JSON.parse(sessionStorage.getItem('edoos_user') || '{}');
-    var MAP = {
-      admin: 'مسؤول/ة النظام', principal: 'مدير/ة المدرسة',
-      vice_principal: 'نائب/ة المدير/ة', teacher: 'معلم/ة',
-      coordinator: 'منسق/ة المادة', counselor: 'مرشد/ة',
-      social_worker: 'أخصائي/ة اجتماعي/ة', registrar: 'مسجّل/ة',
-      financial_coordinator: 'منسق/ة مالي/ة', coach: 'مدرّب/ة'
-    };
-    var el = document.getElementById('userRole');
-    if (el && u.role_key) el.textContent = MAP[u.role_key] || u.role_key;
-  } catch(e){}
-})();
 </body>
 </html>
