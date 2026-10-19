@@ -1,0 +1,9 @@
+-- LOCAL TEST ONLY. Never run on a school project. Synthetic auth table, no Auth server.
+-- EduOS · NAFAS FOR ARTIFICIAL INTELLIGENCE · CN-6573712 · © 2026.
+CREATE ROLE anon NOLOGIN NOSUPERUSER NOBYPASSRLS;
+CREATE ROLE authenticated NOLOGIN NOSUPERUSER NOBYPASSRLS;
+CREATE ROLE eduos_identity_reader NOLOGIN NOSUPERUSER NOBYPASSRLS;
+CREATE ROLE eduos_test_browser NOLOGIN NOSUPERUSER NOBYPASSRLS;
+GRANT anon, authenticated TO eduos_test_browser;
+CREATE SCHEMA auth;
+CREATE TABLE auth.users (id uuid PRIMARY KEY);
