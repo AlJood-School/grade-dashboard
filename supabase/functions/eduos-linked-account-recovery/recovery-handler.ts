@@ -16,13 +16,16 @@ export function createRecoveryHandler(deps:any){
   if(!target)return result();
   let state='failed';
   try{
+   state='link_generation_failed';
    const {data:generated,error:linkError}=await supabase.auth.admin.generateLink({type:'recovery',email:target.auth_email,options:{redirectTo:origin+'/apps/eduos-account-recovery/'}});
    if(linkError||generated?.user?.id!==target.auth_user_id)throw Error('recovery_link_failed');
+   state='link_validation_failed';
    const link=new URL(generated.properties.action_link);
    if(link.origin!==new URL(projectUrl).origin||link.pathname!=='/auth/v1/verify'||link.searchParams.get('type')!=='recovery'||link.searchParams.get('redirect_to')!==origin+'/apps/eduos-account-recovery/')throw Error('recovery_link_invalid');
    const safeLink=link.href.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;');
-   const sent=await sendEmail({from:'بوابة الجود <noreply@'+new URL(siteUrl).hostname+'>',to:[target.destination],subject:'استعادة الدخول إلى بوابة الجود الذكية',html:'<div dir="rtl" style="font-family:Arial,sans-serif"><h2>🎓 بوابة الجود الذكية</h2><p>ورد طلب استعادة الحساب المعتمد. اختر كلمة مرور جديدة عبر الرابط الرسمي الآتي. لا ترسل كلمة المرور في المحادثة.</p><p><a href="'+safeLink+'">تعيين كلمة مرور جديدة</a></p><p>إذا لم تطلب الاستعادة فتجاهل الرسالة.</p><hr><p dir="ltr">NAFAS FOR ARTIFICIAL INTELLIGENCE · CN-6573712</p><p>© 2026 جميع الحقوق محفوظة.</p></div>'});
-   if(!sent.ok)throw Error('delivery_failed');
+   state='provider_unknown';
+   const sent=await sendEmail({from:'بوابة الجود <noreply@'+new URL(siteUrl).hostname+'>',to:[target.destination],subject:'استعادة الدخول إلى بوابة الجود الذكية',html:'<div dir="rtl" style="font-family:Arial,sans-serif"><h2>🎓 بوابة الجود الذكية</h2><p>ورد طلب استعادة الحساب المعتمد. اختر كلمة مرور جديدة عبر الرابط الرسمي الآتي. لا ترسل كلمة المرور في المحادثة.</p><p><a href="'+safeLink+'">تعيين كلمة مرور جديدة</a></p><p>إذا لم تطلب الاستعادة فتجاهل الرسالة.</p><hr><p dir="ltr">NAFAS FOR ARTIFICIAL INTELLIGENCE · CN-6573712</p><p>© 2026 جميع الحقوق محفوظة.</p></div>'},{idempotencyKey:'eduos-recovery/'+target.request_id});
+   if(!sent.ok){state='provider_rejected';console.warn('eduos_recovery_provider_rejected',Number(sent.status)||0);throw Error('delivery_failed');}
    state='sent';
   }catch{/* Never return/log a link, destination, password, or token. */}
   await supabase.rpc('eduos_finish_linked_recovery',{p_auth_id:target.auth_user_id,p_request_id:target.request_id,p_status:state});
