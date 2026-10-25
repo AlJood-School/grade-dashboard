@@ -25,7 +25,7 @@
 (function () {
   "use strict";
 
-  const SHIELD_VERSION = "1.1.0";
+  const SHIELD_VERSION = "1.1.1";
   const _sbUrl = window.EduOS?.SB_URL || '';
   const REPORT_ENDPOINT = _sbUrl ? _sbUrl + "/functions/v1/report-bug" : '';
   const ANON_KEY = window.EduOS?.SB_KEY || '';
@@ -49,16 +49,43 @@
     } catch { return { id: "unknown", role: "unknown" }; }
   }
 
+  // Diagnostics must not retain URL queries/fragments (login/recovery state).
+  function diagnosticUrl(value) {
+    try {
+      const url = new URL(value, window.location.href);
+      if (url.protocol !== "https:" && url.protocol !== "http:") return "[url omitted]";
+      return url.origin + url.pathname;
+    } catch { return "[url omitted]"; }
+  }
+
+  function diagnosticValue(value, depth = 0) {
+    if (depth > 6) return "[details omitted]";
+    if (typeof value === "string") {
+      return value
+        .replace(/(?:https?:)?\/\/[^\s<>]+/gi, url => diagnosticUrl(url))
+        // Also remove query/fragment suffixes from relative or quoted references.
+        .replace(/[?#][^\s<>]*/g, "");
+    }
+    if (Array.isArray(value)) return value.map(item => diagnosticValue(item, depth + 1));
+    if (value && typeof value === "object") {
+      const clean = Object.create(null);
+      for (const [key, item] of Object.entries(value)) clean[key] = diagnosticValue(item, depth + 1);
+      return clean;
+    }
+    return value;
+  }
+
   async function sendReport(data) {
     if (_isRateLimited()) return;
     try {
       const user = getCurrentUser();
       const payload = {
-        page_url: window.location.href,
         page_name: document.title || window.location.pathname,
         user_role: user.role,
         user_id: user.id,
-        ...data,
+        ...diagnosticValue(data),
+        // Apply after caller data so page_url cannot override the safe location.
+        page_url: diagnosticUrl(window.location.href),
       };
       if (!REPORT_ENDPOINT) return;
       await fetch(REPORT_ENDPOINT, {
@@ -80,7 +107,7 @@
     sendReport({
       report_type: "auto_js_error",
       description: `خطأ JS تلقائي: ${e.message}`,
-      error_details: { message: e.message, filename: e.filename, line: e.lineno, col: e.colno },
+      error_details: { message: e.message, filename: diagnosticUrl(e.filename), line: e.lineno, col: e.colno },
     });
   });
 
